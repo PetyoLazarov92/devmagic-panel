@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.0.3-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.0.4-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -644,6 +644,13 @@ only through sudo; answer `c` to make the panel's own account with
 
 **Local sites send no mail.** Local mode sends it to Mailpit. Install or start
 Mailpit on the Services or Mail page, then read it on the Mail page.
+
+**The installer stops at `apt-get update`.** apt fails as a whole when any
+one package source on the machine fails, often one another app added (an
+editor, a browser). The installer names that source, the file it is in and
+why, and when its key is on the machine already, the `signed-by=` that points
+the source at it. Fix that source, or move its file out of
+`/etc/apt/sources.list.d` for now, then run the installer again.
 
 **An update says to run `install.sh` in a terminal.** That release changes the
 root scripts, which only its installer may put in place with your password.

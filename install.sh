@@ -29,6 +29,10 @@ SYSTEM_CA_FILE="/usr/local/share/ca-certificates/devmagic-panel-ca.crt"
 OS_RELEASE="${DMP_INSTALL_OS_RELEASE:-/etc/os-release}"
 # Overridable so the tests can stand in for an encrypted home folder.
 MOUNTS_FILE="${DMP_INSTALL_MOUNTS:-/proc/mounts}"
+# Where apt keeps its sources and keys, read to explain a failed apt-get update.
+# Overridable for the tests.
+APT_DIR="${DMP_INSTALL_APT_DIR:-/etc/apt}"
+APT_KEYRING_DIRS="${DMP_INSTALL_APT_KEYRINGS:-$APT_DIR/keyrings /usr/share/keyrings}"
 AUTOSTART_FILE="$HOME/.config/autostart/devmagic-panel.desktop"
 # The panel's data folder. The panel runs from a release in releases/<name>
 # (v0.6.0, or v0.6.0-dev.1a2b3c4 built from a checkout), the one current
@@ -668,7 +672,7 @@ check_dependencies() {
 install_dependencies() {
   if (( ${#APT_PKGS[@]} > 0 || WANT_PHPMYADMIN )); then
     dmp_step "Installing packages"
-    as_root apt-get update -qq
+    apt_update
     (( ${#APT_PKGS[@]} > 0 )) && as_root apt-get install -y -qq "${APT_PKGS[@]}"
     # phpMyAdmin asks its own questions (web server, database).
     (( WANT_PHPMYADMIN )) && as_root apt-get install -y phpmyadmin
@@ -680,6 +684,92 @@ install_dependencies() {
   (( WANT_NODE )) && install_node
   (( WANT_CLAUDE )) && install_claude_code
   return 0
+}
+
+# apt-get update, which fails as a whole when any one source on the machine
+# fails. Then it says which source it was, in which file and why, since it is
+# usually one another app added, not the panel's.
+apt_update() {
+  if (( DRY_RUN )); then
+    as_root apt-get update -qq
+    return 0
+  fi
+  local out
+  # English messages, whatever the system language, so they can be read below.
+  if out="$(root_run env LC_ALL=C apt-get update -qq 2>&1)"; then
+    [[ -z "$out" ]] || printf '%s\n' "$out"
+    return 0
+  fi
+  printf '%s\n' "$out" >&2
+  explain_apt_failure "$out"
+  exit 1
+}
+
+# Usage: explain_apt_failure <the output of apt-get update>
+explain_apt_failure() {
+  local line url key file
+  local -a urls=()
+  local -A why=() keys=()
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[EW]:\  && "$line" =~ (https?://[^\ \']+) ]] || continue
+    url="${BASH_REMATCH[1]%/}"
+    [[ -n "${why[$url]+x}" ]] || { urls+=("$url"); why[$url]=""; }
+    if [[ "$line" =~ NO_PUBKEY\ ([0-9A-F]+) ]]; then
+      keys[$url]="${BASH_REMATCH[1]}"
+    elif [[ "$line" == *"is not signed"* && -z "${why[$url]}" ]]; then
+      why[$url]="it is not signed with a key apt knows"
+    elif [[ "$line" == *"does not have a Release file"* || "$line" == *" 404 "* ]]; then
+      why[$url]="it has no packages for this system's release"
+    elif [[ "$line" == *"Could not resolve"* || "$line" == *"Failed to fetch"* ]]; then
+      [[ -n "${why[$url]}" ]] || why[$url]="it could not be reached"
+    fi
+  done <<< "$1"
+
+  if (( ${#urls[@]} == 0 )); then
+    dmp_error "apt-get update failed: run sudo apt-get update to see why, fix it, then run install.sh again"
+    return 0
+  fi
+  dmp_error "apt-get update failed on a package source on this machine, not on the panel:"
+  for url in "${urls[@]}"; do
+    file="$(grep -rlF -- "$url" "$APT_DIR/sources.list" "$APT_DIR/sources.list.d" 2>/dev/null | head -n 1 || true)"
+    key="${keys[$url]:-}"
+    printf '   %s\n' "$url" >&2
+    [[ -z "$file" ]] || printf '     in %s\n' "$file" >&2
+    if [[ -n "$key" ]]; then
+      printf '     its signing key is missing (NO_PUBKEY %s)\n' "$key" >&2
+      local ring
+      ring="$(keyring_with "$key")"
+      if [[ -n "$ring" && -n "$file" ]]; then
+        printf '     The key is on this machine, in %s, but that source does not point at it.\n' "$ring" >&2
+        printf '     Add signed-by=%s to its options, as in:\n' "$ring" >&2
+        printf '       deb [signed-by=%s] %s ...\n' "$ring" "$url" >&2
+      fi
+    elif [[ -n "${why[$url]}" ]]; then
+      printf '     %s\n' "${why[$url]}" >&2
+    fi
+  done
+  printf 'Fix it (reinstalling the app that added it often brings its key back), or turn\n' >&2
+  printf 'it off for now, then run install.sh again:\n' >&2
+  for url in "${urls[@]}"; do
+    file="$(grep -rlF -- "$url" "$APT_DIR/sources.list.d" 2>/dev/null | head -n 1 || true)"
+    [[ -z "$file" ]] || printf '   sudo mv %s %s.disabled\n' "$file" "$file" >&2
+  done
+  return 0
+}
+
+# The keyring file that holds a key, by its last 16 hex digits; empty when none does.
+keyring_with() {
+  command -v gpg >/dev/null 2>&1 || return 0
+  local dir ring
+  for dir in $APT_KEYRING_DIRS; do
+    for ring in "$dir"/*.gpg "$dir"/*.asc; do
+      [[ -f "$ring" ]] || continue
+      if gpg --show-keys --with-colons "$ring" 2>/dev/null | grep -q "^fpr:.*$1:\$"; then
+        printf '%s\n' "$ring"
+        return 0
+      fi
+    done
+  done
 }
 
 install_wpcli() {
@@ -1553,6 +1643,9 @@ main() {
   printf '     sudo %s/bin/dmp-restore            (restores the newest backup)\n' "$DMP_PREFIX"
   org_sign_in_hints
 }
+
+# Sourced (by the tests), it only defines its functions.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 if (( UNINSTALL )); then
   uninstall_main

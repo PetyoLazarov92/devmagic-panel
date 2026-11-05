@@ -423,3 +423,64 @@ fresh_machine() {
   [ "$status" -eq 0 ]
   [ "$output" = $'==> step\nwarn: careful' ]
 }
+
+# A failed apt-get update names the source that failed, its file and why.
+apt_fixture() {
+  export DMP_INSTALL_APT_DIR="$BATS_TEST_TMPDIR/apt"
+  export DMP_INSTALL_APT_KEYRINGS="$BATS_TEST_TMPDIR/keyrings"
+  mkdir -p "$DMP_INSTALL_APT_DIR/sources.list.d" "$DMP_INSTALL_APT_KEYRINGS"
+  : > "$DMP_INSTALL_APT_DIR/sources.list"
+  printf 'deb [arch=amd64] https://apt.spellbook.test/repo stable main\n' > "$DMP_INSTALL_APT_DIR/sources.list.d/spellbook.list"
+  printf 'Types: deb\nURIs: https://pkgs.shop.test/debian/\nSuites: nowhere\n' > "$DMP_INSTALL_APT_DIR/sources.list.d/shop.sources"
+  : > "$DMP_INSTALL_APT_KEYRINGS/spellbook.gpg"
+  # gpg knows only the spellbook key.
+  printf '#!/bin/sh\ncase "$*" in *spellbook.gpg*) echo "fpr:::::::::380FF4BCDC34A4BD92A3565342A1772E62E492D6:" ;; esac\n' > "$STUBS/gpg"
+  chmod +x "$STUBS/gpg"
+}
+
+NO_KEY="W: GPG error: https://apt.spellbook.test/repo stable InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 42A1772E62E492D6
+E: The repository 'https://apt.spellbook.test/repo stable InRelease' is not signed."
+
+@test "a failed apt-get update names the source, its file, the missing key and the keyring that has it" {
+  apt_fixture
+  run bash -c 'i=$1; o=${2:-}; set --; source "$i"; explain_apt_failure "$o"' _ "$INSTALL" "$NO_KEY"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not on the panel"* ]]
+  [[ "$output" == *"   https://apt.spellbook.test/repo"$'\n'"     in $DMP_INSTALL_APT_DIR/sources.list.d/spellbook.list"* ]]
+  [[ "$output" == *"its signing key is missing (NO_PUBKEY 42A1772E62E492D6)"* ]]
+  [[ "$output" == *"deb [signed-by=$DMP_INSTALL_APT_KEYRINGS/spellbook.gpg] https://apt.spellbook.test/repo ..."* ]]
+  [[ "$output" == *"sudo mv $DMP_INSTALL_APT_DIR/sources.list.d/spellbook.list $DMP_INSTALL_APT_DIR/sources.list.d/spellbook.list.disabled"* ]]
+  # Each source once, though apt names it twice.
+  [ "$(grep -c '^   https://apt.spellbook.test/repo$' <<< "$output")" -eq 1 ]
+}
+
+@test "a source in a .sources file without a release for this system is named with the reason" {
+  apt_fixture
+  run bash -c 'i=$1; o=${2:-}; set --; source "$i"; explain_apt_failure "$o"' _ "$INSTALL" "E: The repository 'https://pkgs.shop.test/debian nowhere Release' does not have a Release file."
+  [[ "$output" == *"     in $DMP_INSTALL_APT_DIR/sources.list.d/shop.sources"$'\n'"     it has no packages for this system's release"* ]]
+  [[ "$output" != *"signed-by"* ]]
+}
+
+@test "apt output it cannot read still says what to run" {
+  apt_fixture
+  run bash -c 'i=$1; o=${2:-}; set --; source "$i"; explain_apt_failure "E: Could not get lock /var/lib/apt/lists/lock"' _ "$INSTALL"
+  [[ "$output" == *"apt-get update failed: run sudo apt-get update to see why"* ]]
+}
+
+@test "apt_update stops the install with the explanation when apt-get update fails, and runs in English" {
+  apt_fixture
+  printf '#!/bin/sh\nexec "$@"\n' > "$STUBS/sudo"
+  printf '#!/bin/sh\necho "LC_ALL=$LC_ALL $*" > "%s"\nprintf "%%s\\n" "$APT_OUT"\nexit 100\n' "$BATS_TEST_TMPDIR/apt.log" > "$STUBS/apt-get"
+  chmod +x "$STUBS/sudo" "$STUBS/apt-get"
+  APT_OUT="$NO_KEY" run bash -c 'i=$1; o=${2:-}; set --; source "$i"; apt_update; echo "went on"' _ "$INSTALL"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO_PUBKEY 42A1772E62E492D6"*"not on the panel"* ]]
+  [[ "$output" != *"went on"* ]]
+  [ "$(cat "$BATS_TEST_TMPDIR/apt.log")" = "LC_ALL=C update -qq" ]
+}
+
+@test "apt_update in a dry run only prints the command" {
+  run bash -c 'i=$1; o=${2:-}; set --; source "$i"; DRY_RUN=1; apt_update' _ "$INSTALL"
+  [ "$status" -eq 0 ]
+  [ "$output" = "   [dry-run] sudo apt-get update -qq" ]
+}
