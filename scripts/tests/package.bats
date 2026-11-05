@@ -13,6 +13,7 @@ setup() {
   printf '#!/bin/sh\necho restore\n' > "$SRC/scripts/bin/dmp-restore"
   printf '#!/bin/sh\necho wpcore\n' > "$SRC/scripts/bin/wpcore"
   printf '<?php\n' > "$SRC/scripts/php/info.php"
+  printf '<!doctype html>\n' > "$SRC/scripts/php/starting.html"
   printf '{}\n' > "$SRC/scripts/php-compat/composer.json"
   printf '{}\n' > "$SRC/scripts/php-compat/composer.lock"
   printf 'echo test\n' > "$SRC/scripts/tests/never.bats"
@@ -66,6 +67,7 @@ setup() {
   [[ "$output" == *"devmagic-panel-v9.8.7/release.json"* ]]
   [[ "$output" == *"devmagic-panel-v9.8.7/scripts/bin/dmp-root"* ]]
   [[ "$output" == *"devmagic-panel-v9.8.7/scripts/php/info.php"* ]]
+  [[ "$output" == *"devmagic-panel-v9.8.7/scripts/php/starting.html"* ]]
   [[ "$output" == *"devmagic-panel-v9.8.7/scripts/php-compat/composer.lock"* ]]
   [[ "$output" == *"devmagic-panel-v9.8.7/server/dist/index.js"* ]]
   [[ "$output" == *"devmagic-panel-v9.8.7/web/dist/index.html"* ]]

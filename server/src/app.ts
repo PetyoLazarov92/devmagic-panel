@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import type { ActionRunResult, ApacheReport, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
@@ -522,7 +522,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   if (deps.webRoot && existsSync(deps.webRoot)) {
-    await app.register(fastifyStatic, { root: deps.webRoot });
+    // The build's files under /assets/ have their hash in the name and never
+    // change, so the browser keeps them; the page itself is checked on each
+    // load. A tab restored after a reboot then still gets the app from the
+    // cache while the panel starts, and the app waits for it.
+    await app.register(fastifyStatic, {
+      root: deps.webRoot,
+      cacheControl: false,
+      setHeaders: (reply, file) => reply.header('cache-control', file.startsWith(join(deps.webRoot as string, 'assets') + sep) ? 'public, max-age=31536000, immutable' : 'no-cache'),
+    });
     // Page routes (which can end in a domain, like /sites/local.a.com) get the
     // app shell; a missing build file under /assets/ stays a 404.
     app.setNotFoundHandler((request, reply) => {

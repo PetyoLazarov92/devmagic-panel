@@ -168,6 +168,30 @@ setup() { setup_tree; }
   grep -q 'ProxyPass /api/ws ws://127.0.0.1:4710/api/ws' "$T/sites-available/local.devmagic-ssl.conf"
 }
 
+@test "vhost-write-panel answers with a waiting page while the panel starts, and asks it again at once" {
+  dmp ca-create
+  dmp cert-issue local.devmagic
+  run dmp vhost-write-panel
+  [ "$status" -eq 0 ]
+  local file="$T/sites-available/local.devmagic-ssl.conf" php
+  php="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/php"
+  [ -f "$php/starting.html" ]
+  grep -q "Alias /.devmagic-panel-starting.html $php/starting.html" "$file"
+  grep -q 'ErrorDocument 502 /.devmagic-panel-starting.html' "$file"
+  grep -q 'ErrorDocument 503 /.devmagic-panel-starting.html' "$file"
+  # The page is not passed to the panel, and comes before the catch-all.
+  grep -n 'ProxyPass ' "$file" | head -n 1 | grep -q 'ProxyPass /.devmagic-panel-starting.html !'
+  # No minute of 503s after the panel is up again.
+  grep -q 'ProxyPass / http://127.0.0.1:4710/ retry=0' "$file"
+  grep -q 'ProxyPass /api/ws ws://127.0.0.1:4710/api/ws retry=0' "$file"
+  # The 443 vhost serves it to this computer only.
+  sed -n '/<VirtualHost \*:443>/,/<\/VirtualHost>/p' "$file" | grep -q 'Require local'
+  # Only the panel's vhost: a site's has no such page.
+  dmp cert-issue local.site.com
+  dmp vhost-write local.site.com
+  ! grep -q 'devmagic-panel-starting' "$T/sites-available/local.site.com-ssl.conf"
+}
+
 @test "vhost-write-panel serves the PHP info script on port 80 to this computer only" {
   dmp ca-create
   dmp cert-issue local.devmagic

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>devmagic-panel is starting</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 0; }
+      main { max-width: 400px; margin: 20vh auto 0; padding: 0 24px; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      p { margin: 0 0 12px; opacity: 0.75; }
+      code { font-size: 12px; }
+      button { font: inherit; padding: 4px 12px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Apache answers with this page while the panel does not (its user service
+      starts after you log in, so a tab the browser restores right then comes
+      here). It asks the panel again, sooner at first, and opens it once it answers.
+    -->
+    <main role="status">
+      <h1>Waiting for the panel to start</h1>
+      <p>The panel is not answering yet. Right after you log in it can take a few seconds to start. This page opens it by itself once it answers.</p>
+      <p id="hint" hidden>Still not answering. Check the service with <code>systemctl --user status devmagic-panel</code>, or start it with <code>systemctl --user start devmagic-panel</code>.</p>
+      <button type="button" id="now">Try now</button>
+    </main>
+    <script>
+      (function () {
+        var tries = 0;
+        var timer = null;
+        var busy = false;
+        function poll() {
+          if (busy) return;
+          clearTimeout(timer);
+          busy = true;
+          fetch('/healthz', { cache: 'no-store' })
+            .then(function (res) {
+              if (!res.ok) throw res;
+              location.reload();
+            })
+            .catch(function () {
+              busy = false;
+              tries += 1;
+              if (tries >= 6) document.getElementById('hint').hidden = false;
+              timer = setTimeout(poll, Math.min(1000 * Math.pow(2, tries - 1), 10000));
+            });
+        }
+        document.getElementById('now').addEventListener('click', poll);
+        addEventListener('online', poll);
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') poll();
+        });
+        timer = setTimeout(poll, 1000);
+      })();
+    </script>
+  </body>
+</html>

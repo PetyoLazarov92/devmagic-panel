@@ -66,7 +66,7 @@ install -d "$PKG/scripts/bin" "$PKG/scripts/lib" "$PKG/scripts/php" "$PKG/script
 cp -p "$REPO/package.json" "$REPO/package-lock.json" "$REPO/.nvmrc" "$REPO/install.sh" "$REPO/get.sh" "$REPO/README.md" "$REPO/CHANGELOG.md" "$REPO/LICENSE" "$PKG/"
 cp -p "$REPO/scripts/bin/dmp-root" "$REPO/scripts/bin/dmp-restore" "$REPO/scripts/bin/wpcore" "$PKG/scripts/bin/"
 cp -p "$REPO"/scripts/lib/*.sh "$PKG/scripts/lib/"
-cp -p "$REPO"/scripts/php/*.php "$PKG/scripts/php/"
+cp -p "$REPO"/scripts/php/*.php "$REPO/scripts/php/starting.html" "$PKG/scripts/php/"
 cp -p "$REPO/scripts/php-compat/composer.json" "$REPO/scripts/php-compat/composer.lock" "$PKG/scripts/php-compat/"
 for part in shared server web; do
   cp -p "$REPO/$part/package.json" "$PKG/$part/"

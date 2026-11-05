@@ -898,8 +898,9 @@ install_scripts() {
   as_root install -d -m 0755 -o root -g root "$dest/bin" "$dest/lib" "$dest/php"
   as_root install -m 0755 -o root -g root "$SRC/scripts/bin/dmp-root" "$SRC/scripts/bin/dmp-restore" "$SRC/scripts/bin/wpcore" "$dest/bin/"
   as_root install -m 0644 -o root -g root "$SRC"/scripts/lib/*.sh "$dest/lib/"
-  # PHP's view of itself for the PHP tab, served by the panel's vhost to this computer only.
-  as_root install -m 0644 -o root -g root "$SRC"/scripts/php/*.php "$dest/php/"
+  # PHP's view of itself for the PHP tab, and the page Apache answers with
+  # while the panel starts, served by the panel's vhost to this computer only.
+  as_root install -m 0644 -o root -g root "$SRC"/scripts/php/*.php "$SRC/scripts/php/starting.html" "$dest/php/"
   if (( FROM_PANEL )); then
     TXN_SCRIPTS=1
     as_root mv -T -- "$DMP_PREFIX" "$TXN_DIR/old"
@@ -917,6 +918,7 @@ install_scripts() {
   for file in "$SRC"/scripts/php/*.php; do
     record file "$DMP_PREFIX/php/$(basename "$file")" remove "PHP info script for the panel's PHP tab"
   done
+  record file "$DMP_PREFIX/php/starting.html" remove "the page Apache shows while the panel starts"
 
   if [[ ! -e /usr/local/bin/wpcore ]]; then
     as_root ln -s "$DMP_PREFIX/bin/wpcore" /usr/local/bin/wpcore

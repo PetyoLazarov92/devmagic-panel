@@ -4,9 +4,12 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { AppShell } from '@/components/app-shell';
 import { CommandPalette } from '@/components/command-palette';
 import { SessionDialog } from '@/components/session-dialog';
+import { StartingScreen } from '@/components/starting-screen';
+import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { match, navigate, usePath } from '@/lib/router';
 import { isSessionLost, listenToOtherTabs, onSessionChange, sessionBack, sessionLost, startSessionWatch, tellOtherTabs } from '@/lib/session-watch';
+import { type PanelStart, retryOnWake, startPanel } from '@/lib/startup';
 import { useAsync } from '@/lib/use-async';
 import { AuraPage } from '@/pages/aura';
 import { CoresPage } from '@/pages/cores';
@@ -66,19 +69,35 @@ function Routes({ path }: { path: string }) {
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Tries so far while the panel does not answer (it is still starting), or null. */
+  const [waiting, setWaiting] = useState<number | null>(null);
+  const start = useRef<PanelStart | null>(null);
   const path = usePath();
 
-  const refresh = useCallback(async () => {
-    try {
-      setSession(await api.session());
-      setError(null);
-    } catch (err) {
-      setError((err as Error).message);
-    }
+  // Asks for the session until the panel answers: a tab restored after a reboot opens before the panel has started.
+  const refresh = useCallback(() => {
+    start.current?.stop();
+    setError(null);
+    start.current = startPanel(() => api.session(), {
+      ready: (value) => {
+        setSession(value);
+        setWaiting(null);
+      },
+      waiting: setWaiting,
+      failed: (err) => {
+        setWaiting(null);
+        setError(err.message);
+      },
+    });
   }, []);
 
   useEffect(() => {
-    void refresh();
+    refresh();
+    const stopWake = retryOnWake(() => start.current?.retryNow());
+    return () => {
+      stopWake();
+      start.current?.stop();
+    };
   }, [refresh]);
 
   const lost = useSyncExternalStore(onSessionChange, isSessionLost);
@@ -111,11 +130,15 @@ export function App() {
 
   if (error) {
     return (
-      <div className="flex min-h-svh items-center justify-center px-4 text-sm text-danger" role="alert">
-        Cannot reach the panel: {error}
+      <div className="flex min-h-svh flex-col items-center justify-center gap-3 px-4 text-sm" role="alert">
+        <p className="text-danger">Cannot reach the panel: {error}</p>
+        <Button variant="outline" size="sm" onClick={refresh}>
+          Try again
+        </Button>
       </div>
     );
   }
+  if (!session && waiting !== null) return <StartingScreen attempt={waiting} onRetry={() => start.current?.retryNow()} />;
   if (!session) {
     return (
       <div className="flex min-h-svh items-center justify-center text-muted-foreground">
@@ -131,7 +154,7 @@ export function App() {
         onLogin={() => {
           tellOtherTabs('logged-in');
           sessionBack();
-          void refresh();
+          refresh();
         }}
       />
     );
@@ -140,7 +163,7 @@ export function App() {
   async function logout() {
     await api.logout();
     tellOtherTabs('logged-out');
-    await refresh();
+    refresh();
   }
 
   return (

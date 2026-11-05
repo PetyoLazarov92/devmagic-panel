@@ -333,12 +333,16 @@ export const snapshotUrl = (domain: string, name: string, path?: string) =>
 export const isMockup = import.meta.env.VITE_MOCK === '1';
 
 /**
- * The mockup's own session: logging out and in works, and ?session=ends ends
- * it 15 seconds after the page opens, to show the login dialog.
+ * The mockup's own session: logging out and in works, ?session=ends ends
+ * it 15 seconds after the page opens, to show the login dialog, and
+ * ?panel=starting answers 503 for the first 8 seconds, like Apache while the
+ * panel starts, to show the waiting page.
  */
 function withMockSession(mock: Api): Api {
   let signedIn = true;
-  if (new URLSearchParams(window.location.search).get('session') === 'ends') window.setTimeout(() => (signedIn = false), 15_000);
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('session') === 'ends') window.setTimeout(() => (signedIn = false), 15_000);
+  const startsAt = params.get('panel') === 'starting' ? Date.now() + 8000 : 0;
   const guarded = Object.fromEntries(
     Object.entries(mock).map(([name, fn]) => [
       name,
@@ -354,7 +358,10 @@ function withMockSession(mock: Api): Api {
   ) as unknown as Api;
   return {
     ...guarded,
-    session: async () => ({ ...(await mock.session()), authenticated: signedIn }),
+    session: async () => {
+      if (Date.now() < startsAt) throw new ApiError(503, 'Request failed (503)');
+      return { ...(await mock.session()), authenticated: signedIn };
+    },
     // Open without a session, like the server's own routes for a forgotten password.
     resetWays: mock.resetWays,
     resetPassword: mock.resetPassword,

@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -62,6 +63,29 @@ describe('static files', () => {
     expect(page.body).toContain('shell');
     const asset = await web.inject({ method: 'GET', url: '/assets/index-missing.js', headers: { host: HOST } });
     expect(asset.statusCode).toBe(404);
+    await web.close();
+  });
+
+  it('let the browser keep hashed assets and check the page on each load', async () => {
+    const tree = tempTree();
+    tree.write('index.html', '<!doctype html><title>shell</title>');
+    mkdirSync(join(tree.root, 'assets'));
+    tree.write('assets/index-a1b2c3.js', 'console.log(1)');
+    tree.write('favicon.svg', '<svg/>');
+    const web = await buildApp({
+      config: tree.config, exec: fakeExec().exec, store, secrets: () => secrets, hostPaths: tree.hostPaths,
+      dmpRoot: DMP, version: '9.9.9', uploadsDir: join(tree.root, 'uploads'), production: true, webRoot: tree.root,
+    });
+    const get = (url: string) => web.inject({ method: 'GET', url, headers: { host: HOST } });
+    // A tab restored after a reboot loads these from the cache while the panel starts.
+    const asset = await get('/assets/index-a1b2c3.js');
+    expect(asset.statusCode).toBe(200);
+    expect(asset.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    for (const url of ['/', '/index.html', '/sites/local.a.com', '/favicon.svg']) {
+      const res = await get(url);
+      expect(res.statusCode, url).toBe(200);
+      expect(res.headers['cache-control'], url).toBe('no-cache');
+    }
     await web.close();
   });
 });

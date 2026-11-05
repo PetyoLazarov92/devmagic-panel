@@ -15,6 +15,42 @@
         document.documentElement.classList.toggle('dark', dark);
       })();
     </script>
+    <script>
+      // A tab the browser restores before the panel has started can get this page
+      // from its cache but not the app's script or styles, which leaves it blank.
+      // Then say so, and load the page again once the panel answers.
+      (function () {
+        var shown = false;
+        addEventListener('error', function (e) {
+          var el = e.target;
+          if (shown || !el || !(el.tagName === 'SCRIPT' || (el.tagName === 'LINK' && el.rel === 'stylesheet'))) return;
+          shown = true;
+          // Loaded again a moment ago and still missing: reloading again would not help.
+          var again = false;
+          try { again = Date.now() - Number(sessionStorage.getItem('dmp-reloaded')) < 30000; } catch (err) {}
+          var title = again ? 'The panel page did not load' : 'Waiting for the panel to start';
+          var text = again
+            ? 'The panel answers, but its files did not load. Refresh the page, or restart the panel with <code>systemctl --user restart devmagic-panel</code>.'
+            : 'The panel is not answering yet. Right after you log in it can take a few seconds to start. This page opens by itself once it answers.';
+          var show = function () {
+            document.body.innerHTML = '<main role="status" style="font:14px/1.5 system-ui,sans-serif;max-width:400px;margin:20vh auto 0;padding:0 24px"><h1 style="font-size:20px;margin:0 0 8px">' + title + '</h1><p style="margin:0;opacity:.7">' + text + '</p></main>';
+          };
+          if (document.body) show(); else addEventListener('DOMContentLoaded', show);
+          if (again) return;
+          var delay = 1000;
+          (function poll() {
+            fetch('/healthz', { cache: 'no-store' }).then(function (res) {
+              if (!res.ok) throw res;
+              try { sessionStorage.setItem('dmp-reloaded', String(Date.now())); } catch (err) {}
+              location.reload();
+            }).catch(function () {
+              setTimeout(poll, delay);
+              delay = Math.min(delay * 2, 10000);
+            });
+          })();
+        }, true);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -11,6 +11,8 @@
 DMP_VHOST_MARKER="# Managed by devmagic-panel. Edits here are overwritten."
 # Where the panel's vhost serves PHP's info script (INFO_PATH in server/src/php/info.ts).
 DMP_PHP_INFO_PATH="/.devmagic-panel-php"
+# The page Apache answers with while the panel starts.
+DMP_STARTING_PATH="/.devmagic-panel-starting.html"
 
 dmp_vhost_file() { printf '%s/%s-ssl.conf' "$APACHE_SITES_AVAILABLE" "$1"; }
 
@@ -113,10 +115,25 @@ $DMP_VHOST_MARKER
     SSLCertificateFile $(dmp_cert_file "$domain")
     SSLCertificateKeyFile $(dmp_cert_key_file "$domain")
 
+    # While the panel does not answer (its user service starts after you log
+    # in, so a tab the browser restores right then gets here first), Apache
+    # answers with a page that opens the panel once it answers.
+    Alias $DMP_STARTING_PATH $DMP_HOME/php/starting.html
+    <Directory $DMP_HOME/php>
+        Require local
+        Options None
+        AllowOverride None
+    </Directory>
+    ErrorDocument 502 $DMP_STARTING_PATH
+    ErrorDocument 503 $DMP_STARTING_PATH
+
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
-    ProxyPass /api/ws ws://127.0.0.1:$port/api/ws
-    ProxyPass / http://127.0.0.1:$port/
+    ProxyPass $DMP_STARTING_PATH !
+    # retry=0: ask the panel again on the next request; Apache could otherwise
+    # hold it as down for up to a minute after it did not answer.
+    ProxyPass /api/ws ws://127.0.0.1:$port/api/ws retry=0
+    ProxyPass / http://127.0.0.1:$port/ retry=0
     ProxyPassReverse / http://127.0.0.1:$port/
 
     ErrorLog \${APACHE_LOG_DIR}/$domain-error.log

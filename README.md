@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.0.2-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.0.3-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -626,6 +626,11 @@ systemctl --user status devmagic-panel
 journalctl --user -u devmagic-panel -n 50
 sudo apache2ctl configtest
 ```
+
+**The panel says "Waiting for the panel to start".** Its service starts after
+you log in, so a tab the browser restores right then waits for it and opens
+the panel by itself once it answers. If it keeps waiting, check the service as
+above, or start it with `systemctl --user start devmagic-panel`.
 
 **Another web server holds ports 80 and 443.** The installer warns when nginx
 is installed. Stop the other server or move it to other ports, then restart
