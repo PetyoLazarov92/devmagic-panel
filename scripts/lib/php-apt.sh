@@ -58,26 +58,50 @@ dmp_php_cli() {
   dmp_ok "php on the command line is PHP $version"
 }
 
+# The packages a simulated apt-get run (apt-get -s on stdin) would bring in
+# that belong to another PHP version or are mod_php, one line: new installs
+# only, since an update of a package already installed (php8.3-imagick from
+# the PPA) brings in nothing.
+dmp_php_apt_new_other() {
+  awk '$1 == "Inst" && $3 !~ /^\[/ { print $2 }' \
+    | grep -E '^(php[0-9]\.[0-9]+(-|$)|libapache2-mod-php)' | grep -vE "^$1(-|$)" | paste -sd' ' - || true
+}
+
 # Runs apt-get -s first (nothing changes) and stops when the real run would
 # bring in another PHP or mod_php, or take out more than PHP packages. Packages
-# without a version (php-imagick, php-xdebug) follow the newest PHP the apt
-# sources have, so an update of php-common can pull a whole other version in.
+# without a version (php, libapache2-mod-php, php-xdebug) follow the newest PHP
+# the apt sources have, so an update of php-common can pull a whole other
+# version in. The advice names the ones that can go: never php-common, which
+# every php<version>-common needs, nor one another package needs (phpMyAdmin
+# needs php-mysql and php-xml).
 # Usage: dmp_php_apt_check <version> install|remove <apt-get arguments...>
 dmp_php_apt_check() {
-  local version="$1" how="$2" out extra pulled auto own="php${1//./\\.}"
+  local version="$1" how="$2" out extra auto still pkg gone own="php${1//./\\.}"
+  local -a pulled=() removable=() kept=()
   shift 2
   out="$(DEBIAN_FRONTEND=noninteractive apt-get -s -q "$@" 2>&1)" || { printf '%s\n' "$out" >&2; dmp_die "apt-get refuses this: see above"; }
   if [[ "$how" == install ]]; then
-    extra="$(awk '$1 == "Inst" { print $2 }' <<<"$out" | grep -E '^(php[0-9]\.[0-9]+(-|$)|libapache2-mod-php)' | grep -vE "^$own-" | paste -sd' ' - || true)"
+    extra="$(dmp_php_apt_new_other "$own" <<<"$out")"
     [[ -z "$extra" ]] && return 0
-    pulled="$(awk '$1 == "Inst" { print $2 }' <<<"$out" | grep -E '^php-[a-z0-9.+-]+$' | paste -sd' ' - || true)"
-    auto="$(apt-mark showauto 2>/dev/null | grep -E '^php[0-9]\.[0-9]+-' | paste -sd' ' - || true)"
     printf 'apt would also install %s.\n' "$extra" >&2
-    if [[ -n "$pulled" ]]; then
-      printf 'They come with an update of %s: packages without a version follow the newest PHP your apt sources have.\n' "$pulled" >&2
-      printf 'Remove those on a terminal, keeping the php<version>-* packages you use, then try again:\n' >&2
+    mapfile -t pulled < <(awk '$1 == "Inst" && $3 ~ /^\[/ { print $2 }' <<<"$out" \
+      | grep -E '^(php|libapache2-mod-php|php-[a-z0-9.+-]+)$' | grep -vx 'php-common' || true)
+    # One at a time, each tried with the ones before it and the install itself:
+    # a package goes only when apt then takes out nothing else.
+    for pkg in "${pulled[@]}"; do
+      gone="$(DEBIAN_FRONTEND=noninteractive apt-get -s -q "$@" "${removable[@]/%/-}" "$pkg-" 2>/dev/null \
+        | awk '$1 == "Remv" { print $2 }' | grep -vxF -e "$pkg" "${removable[@]/#/-e}" | paste -sd' ' - || true)"
+      if [[ -z "$gone" ]]; then removable+=("$pkg"); else kept+=("$pkg"); fi
+    done
+    (( ${#pulled[@]} == 0 )) || printf 'They come with an update of %s: packages without a version follow the newest PHP your apt sources have.\n' "${pulled[*]}" >&2
+    (( ${#kept[@]} == 0 )) || printf 'Keep %s, which other packages need.\n' "${kept[*]}" >&2
+    if (( ${#removable[@]} )); then
+      still="$(DEBIAN_FRONTEND=noninteractive apt-get -s -q "$@" "${removable[@]/%/-}" 2>/dev/null | dmp_php_apt_new_other "$own")"
+      auto="$(apt-mark showauto 2>/dev/null | grep -E '^(php[0-9]\.[0-9]+(-|$)|libapache2-mod-php[0-9])' | grep -vE "^$own-" | paste -sd' ' - || true)"
+      printf 'On a terminal, keep the PHP packages you have and remove the ones nothing else needs, then try again:\n' >&2
       [[ -z "$auto" ]] || printf '  sudo apt-mark manual %s\n' "$auto" >&2
-      printf '  sudo apt-get remove %s\n' "$pulled" >&2
+      printf '  sudo apt-get remove %s\n' "${removable[*]}" >&2
+      [[ -z "$still" ]] || printf 'Even then apt would install %s: check what apt lists for this on a terminal.\n' "$still" >&2
     fi
     dmp_die "not installing: it would bring in another PHP version or mod_php"
   fi

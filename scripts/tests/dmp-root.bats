@@ -888,16 +888,47 @@ apt_tree() {
   [ "$status" -eq 2 ]
 }
 
-@test "php-install stops before apt brings in another PHP version or mod_php, naming the php-* packages behind it" {
+@test "php-install stops before apt brings in another PHP version or mod_php, naming the php-* packages that can go" {
   apt_tree
-  stub apt-get 'if [[ "$1" == -s ]]; then printf "Inst php-common [2:93] (2:101 x)\nInst php-imagick [3.7] (3.8 x)\nInst php8.5-common (8.5.1 x)\nInst libapache2-mod-php8.4 (8.4.1 x)\nInst php8.4-fpm (8.4.1 x)\n"; fi'
+  # php and php-imagick follow the newest PHP; phpMyAdmin needs php-mysql. Without
+  # php and php-imagick, apt brings in only PHP 8.4 and updates php8.1-imagick.
+  stub apt-get 'if [[ "$1" == -s ]]; then
+    [[ " $* " == *" php-mysql- "* ]] && printf "Remv phpmyadmin [5.2]\n"
+    printf "Inst php-common [2:93] (2:101 x)\nInst php8.1-imagick [3.7] (3.8 x)\nInst php8.4-fpm (8.4.1 x)\nInst php8.4 (8.4.1 x)\n"
+    [[ " $* " == *" php- "* && " $* " == *" php-imagick- "* ]] \
+      || printf "Inst php-imagick [3.7] (3.8 x)\nInst php [8.3] (8.4 x)\nInst php-mysql [8.3] (8.4 x)\nInst php8.5-common (8.5.1 x)\nInst libapache2-mod-php8.4 (8.4.1 x)\n"
+  fi'
   run dmp php-install 8.4
   [ "$status" -eq 1 ]
   [[ "$output" == *"apt would also install php8.5-common libapache2-mod-php8.4."* ]]
-  [[ "$output" == *"an update of php-common php-imagick"* ]]
+  [[ "$output" == *"an update of php-imagick php php-mysql:"* ]]
+  [[ "$output" == *"Keep php-mysql, which other packages need."* ]]
   [[ "$output" == *"sudo apt-mark manual php8.3-imagick php8.1-xdebug"* ]]
-  [[ "$output" == *"sudo apt-get remove php-common php-imagick"* ]]
+  [[ "$output" == *"sudo apt-get remove php-imagick php"$'\n'* ]]
+  [[ "$output" != *"php-common"$'\n'* && "$output" != *"remove php-common"* ]]
+  [[ "$output" != *"Even then"* ]]
   [ "$(grep -c '^apt-get -y' "$STUB_LOG")" -eq 0 ]
+}
+
+@test "php-install says when removing packages would not be enough, and never advises one others need" {
+  apt_tree
+  stub apt-get 'if [[ "$1" == -s ]]; then
+    [[ " $* " == *" php-mysql- "* ]] && printf "Remv phpmyadmin [5.2]\n"
+    printf "Inst php-imagick [3.7] (3.8 x)\nInst php-mysql [8.3] (8.4 x)\nInst php8.5-common (8.5.1 x)\nInst php8.4-fpm (8.4.1 x)\n"
+  fi'
+  run dmp php-install 8.4
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sudo apt-get remove php-imagick"$'\n'* ]]
+  [[ "$output" == *"Even then apt would install php8.5-common"* ]]
+  [ "$(grep -c '^apt-get -y' "$STUB_LOG")" -eq 0 ]
+}
+
+@test "php-install goes ahead when apt only updates another version's packages already there" {
+  apt_tree
+  stub apt-get 'if [[ "$1" == -s ]]; then printf "Inst php-common [2:93] (2:101 x)\nInst php8.1-imagick [3.7] (3.8 x)\nInst libapache2-mod-php8.1 [8.1.1] (8.1.2 x)\nInst php8.4-fpm (8.4.1 x)\n"; fi'
+  run dmp php-install 8.4
+  [ "$status" -eq 0 ]
+  grep -q '^apt-get -y -q .* install php8.4-fpm' "$STUB_LOG"
 }
 
 @test "php-install keeps php on the command line where it was, and php-cli moves it" {
