@@ -1,0 +1,79 @@
+name: release
+
+# A tag like v0.7.0 builds the release package, after the same checks as the
+# test workflow, and publishes it twice: as a GitHub release, its changelog
+# section as the notes, and as the package tag pkg/v0.7.0 for git. The panel
+# and get.sh read either, through whichever way can reach the repository.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Check the tag is the version in package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+
+      - name: Release notes from the changelog
+        run: |
+          awk -v head="### $GITHUB_REF_NAME" 'index($0, head) == 1 { on = 1; next } /^### v/ { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no section for $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint:scripts
+      - run: npm run test:scripts
+      - run: npm run build
+
+      - name: Pack the release
+        run: npm run package -- --out "$RUNNER_TEMP/out" --name "$GITHUB_REF_NAME"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out="$RUNNER_TEMP/out"
+          base="devmagic-panel-$GITHUB_REF_NAME"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" \
+            "$out/$base.tar.gz" "$out/$base.tar.gz.sha256" "$out/$base.json" get.sh
+
+      # The same files on a commit with no history, as the annotated tag
+      # pkg/vX.Y.Z (its message the notes) and the pkg/latest branch, for
+      # installs and updates over git when the repository is private. The
+      # last five package tags stay, so the repository does not keep growing.
+      - name: Publish the package tag
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          out="$RUNNER_TEMP/out"
+          base="devmagic-panel-$GITHUB_REF_NAME"
+          entry() { printf '%s blob %s\t%s\n' "$1" "$(git hash-object -w "$2")" "$(basename "$2")"; }
+          tree="$( { entry 100644 "$out/$base.tar.gz"; entry 100644 "$out/$base.tar.gz.sha256"; entry 100644 "$out/$base.json"; entry 100755 get.sh; } | git mktree )"
+          commit="$(git commit-tree "$tree" -m "$GITHUB_REF_NAME package")"
+          git tag -a "pkg/$GITHUB_REF_NAME" -F "$RUNNER_TEMP/notes.md" "$commit"
+          git push origin "refs/tags/pkg/$GITHUB_REF_NAME" "+$commit:refs/heads/pkg/latest"
+          git ls-remote --tags --refs origin 'refs/tags/pkg/v*' | sed -E 's#^.*refs/tags/##' | sort -V | head -n -5 | while read -r old; do
+            git push origin --delete "refs/tags/$old"
+          done

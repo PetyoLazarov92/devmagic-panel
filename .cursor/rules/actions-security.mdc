@@ -1,0 +1,55 @@
+---
+description: Rules for anything that runs a command, touches the system or handles input
+alwaysApply: true
+---
+
+# Actions and security
+
+- Every change the panel makes is an entry in `shared/src/actions.ts` with a
+  zod input schema, and a handler in `server/src/actions.ts`. No route runs a
+  command outside `runAction()`.
+- Commands go through the `Executor` with an argument array. Never a shell,
+  never string concatenation into a command line.
+- Root: `runRoot(exec, dmpRoot, [...])`, which is `sudo -n dmp-root ...`. `-n`
+  means it never prompts; a missing sudoers rule fails fast.
+- `dmp-root` trusts nothing from the caller: it validates each name with
+  `dmp_require_local_name`, refuses unknown commands and wrong argument counts
+  (exit 2), and reads paths only from `config.env`. It ignores `DMP_CONFIG`
+  when running as root.
+- Domains and aliases are local names only (`local.*`, `www.local.*`, `*.test`,
+  `*.localhost`). This is a security boundary, not a style choice.
+- Secrets never go on a command line, where any local process can read them:
+  the MySQL admin password through `MYSQL_PWD`, new database passwords and
+  WordPress passwords through stdin (`input`, `--prompt=...`), and
+  `wp-config.php` values written by Node (`server/src/sites/wpconfig-edit.ts`).
+  Never log request bodies, secrets or the contents of `wp-config.php`.
+- The sudo password for an update (`panel.installRelease`) goes to
+  `install.sh --from-panel` through a FIFO that systemd opens as its stdin
+  (`StandardInput=file:`), no shell; the job's closure drops it once handed
+  over. install.sh renews sudo's credential from it with `sudo -S -v` (which
+  runs no command, so the password never reaches another program) and runs
+  every root step with `sudo -n`, so nothing ever waits for a terminal. The
+  action is in `ASSISTANT_EXCLUDED_ACTIONS` and offered only for a release
+  whose install.sh has `--from-panel`.
+- Git URLs and branches are validated (`gitUrl`, `branchName`) and passed after
+  `--`, so nothing can be read as a git option.
+- Root deletes need proof of ownership: `site-dir-remove` only removes a folder
+  whose root-owned registry entry (`$STATE_DIR/sites/<domain>`, written by
+  `site-dir-create`) names that path and its device:inode; `cert-remove`
+  refuses while a vhost uses the cert; `trash-remove` only removes a site
+  whose archive in `$STATE_DIR/trash` exists and matches its checksums.
+- The trash is root-owned and private: `trash-restore` writes Apache config,
+  so only root may write what it restores from, and it refuses an archive
+  holding anything but that site's vhost and certificate.
+- The server binds `127.0.0.1` and checks `Host` (421) and `Origin` on unsafe
+  methods (403). New routes inherit both checks; protected routes go inside the
+  authenticated `register` block in `app.ts`.
+- Destructive fixes carry a `confirm` text so the UI asks first.
+- Never let the panel replace the root scripts without the user's password:
+  a passwordless self-update would make anything running as the user root.
+- Never add a passwordless command that writes free-form Apache config or
+  restores files: Apache config can run programs as root (piped logs). That is
+  why `dmp-restore` is outside the sudoers rule and checks every archive member,
+  link and file type before writing.
+- Never touch what the panel did not create: vhosts without the marker line,
+  hosts lines outside the block, wpcore's config.

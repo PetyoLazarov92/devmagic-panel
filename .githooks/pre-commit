@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Blocks the commit if a type check, test or lint fails.
+# Matches .github/workflows/test.yml. Skip with: git commit --no-verify
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+if [[ ! -d node_modules ]]; then
+  echo "pre-commit: node_modules missing; run npm install first" >&2
+  exit 1
+fi
+
+# Run history needs node:sqlite (Node 22.13+). Git GUIs and shells often start
+# with another default Node, so pick the .nvmrc version when nvm is installed.
+node_ok() {
+  node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit((a===22&&b>=13)||(a===23&&b>=4)||a>=24?0:1)'
+}
+if ! node_ok && [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+  # shellcheck disable=SC1091
+  . "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+  nvm use --silent >/dev/null 2>&1 || true
+fi
+if ! node_ok; then
+  echo "pre-commit: Node $(node --version) cannot run the tests; use Node 22.13+ (nvm install 22 && nvm use)" >&2
+  exit 1
+fi
+echo "pre-commit: node $(node --version)"
+
+echo "pre-commit: npm run typecheck"
+npm run typecheck --silent
+echo "pre-commit: npm test"
+npm test --silent
+echo "pre-commit: npm run test:scripts"
+npm run test:scripts --silent
+echo "pre-commit: npm run lint:scripts"
+npm run lint:scripts --silent

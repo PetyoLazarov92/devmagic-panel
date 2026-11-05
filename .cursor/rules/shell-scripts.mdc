@@ -1,0 +1,27 @@
+---
+description: Bash style for dmp-root, its libraries and install.sh
+globs: ["scripts/**", "install.sh"]
+---
+
+# Shell scripts
+
+- `#!/usr/bin/env bash` and `set -euo pipefail` in entry points; libraries in
+  `scripts/lib/` start with `# shellcheck shell=bash` and only define functions.
+- Function names start with `dmp_`. Log with `dmp_step`, `dmp_ok`, `dmp_warn`,
+  `dmp_error`; exit with `dmp_die` (1, operation failed) or `dmp_usage_error`
+  (2, bad input).
+- Quote every expansion. Use arrays for argument lists. No `eval`, no
+  `source` of anything but the shipped libraries.
+- Replace files atomically: write a temp file in the same folder, then `mv`.
+  Keep the previous version when a later check (configtest) can still fail.
+- Private keys are created 0600 before they are written to.
+- Check that a file is the panel's before changing it (`dmp_vhost_require_managed`,
+  the hosts block markers); refuse with exit 1 and leave it as is otherwise.
+- Under `set -e`, a final `cond && cmd` returns 1 when `cond` is false and can
+  end the script; use `if` for anything that is not the last word.
+- `shellcheck -x` must pass with no warnings (`wpcore` is a verbatim copy and is
+  checked at error level only).
+- Every `dmp-root` command has bats coverage in `scripts/tests/`, running against
+  `setup_tree` with stubbed `a2ensite`, `apache2ctl`, `systemctl` and friends.
+- `!` before a command does not fail a bats test; assert with `[ ... ]` or
+  `run` and check `$status`.

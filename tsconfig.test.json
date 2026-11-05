@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["server/src", "server/test", "shared/src", "shared/test", "vitest.config.ts"]
+}

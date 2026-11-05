@@ -1,0 +1,40 @@
+import { randomBytes } from 'node:crypto';
+import { pingMysql } from './environment.js';
+import type { ExecResult, Executor } from './exec.js';
+import type { Secrets } from './secrets.js';
+
+/** The MySQL account setup can make for the panel when no account you have works. */
+export const PANEL_MYSQL_USER = 'devmagic_panel';
+
+/** The SQL that makes the account, or gives it a new password when it is there. */
+export function panelAccountSql(password: string, user = PANEL_MYSQL_USER): string {
+  if (!/^[A-Za-z0-9_-]{16,}$/.test(password)) throw new Error('unsafe password for SQL');
+  const account = `'${user}'@'localhost'`;
+  return [
+    `CREATE USER IF NOT EXISTS ${account} IDENTIFIED BY '${password}';`,
+    `ALTER USER ${account} IDENTIFIED BY '${password}';`,
+    // The panel makes and drops site databases and their users, and grants them rights.
+    `GRANT ALL PRIVILEGES ON *.* TO ${account} WITH GRANT OPTION;`,
+    'FLUSH PRIVILEGES;',
+    '',
+  ].join('\n');
+}
+
+/**
+ * Makes (or resets) the panel's own MySQL admin account, for setup. On a new
+ * MySQL or MariaDB, root signs in only through the socket as the system
+ * root, so this runs `sudo mysql` once: sudo asks for your password on the
+ * terminal, never through the sudoers rule. The password is generated and
+ * goes to MySQL over stdin only.
+ */
+export async function createPanelAccount(
+  exec: Executor,
+  password = randomBytes(24).toString('base64url'),
+): Promise<{ account: NonNullable<Secrets['mysql']> } | { problem: string }> {
+  const firstLine = (r: ExecResult) => (r.stderr || r.stdout).trim().split('\n')[0] || `exit ${r.code}`;
+  const made = await exec('sudo', ['mysql'], { input: panelAccountSql(password), timeoutMs: 120_000 });
+  if (made.code !== 0) return { problem: firstLine(made) };
+  const account = { user: PANEL_MYSQL_USER, host: 'localhost', password };
+  const ping = await pingMysql(exec, account);
+  return ping.code === 0 ? { account } : { problem: `made ${PANEL_MYSQL_USER}, but cannot sign in with it: ${firstLine(ping)}` };
+}

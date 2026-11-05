@@ -1,0 +1,454 @@
+import type { ActionId, MysqlBackup, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
+import { Archive, Database, Gauge, KeyRound, LoaderCircle, RotateCcw, Trash2, Users, Wand2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { settled, StepList, useJob } from '@/components/job-steps';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { ConfirmField } from '@/components/ui/confirm-field';
+import { Dialog } from '@/components/ui/dialog';
+import { Menu, type MenuItem } from '@/components/ui/menu';
+import { api } from '@/lib/api';
+import { bytes, shortDate, timeAgo } from '@/lib/format';
+import { Link, navigate } from '@/lib/router';
+import { lastLine, runWithToast } from '@/lib/site-actions';
+import { siteHref, siteName } from '@/lib/site-ref';
+import { toast } from '@/lib/toast';
+import { useAsync } from '@/lib/use-async';
+import { cn } from '@/lib/utils';
+
+const DB_KIND: Record<MysqlDatabaseKind, { label: string; tone: 'neutral' | 'primary' | 'success' | 'warning' }> = {
+  site: { label: 'Site', tone: 'success' },
+  kept: { label: 'Kept for a site', tone: 'primary' },
+  unused: { label: 'Not used by a site', tone: 'neutral' },
+  system: { label: "MySQL's own", tone: 'neutral' },
+};
+
+const USER_KIND: Record<MysqlUserKind, { label: string; tone: 'neutral' | 'primary' | 'success' | 'warning' }> = {
+  site: { label: 'Site', tone: 'success' },
+  panel: { label: "The panel's account", tone: 'primary' },
+  leftover: { label: 'Left behind', tone: 'warning' },
+  other: { label: 'Not used by a site', tone: 'neutral' },
+  system: { label: "MySQL's own", tone: 'neutral' },
+};
+
+type DbFilter = 'all' | MysqlDatabaseKind;
+const DB_FILTERS: Array<{ value: DbFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'site', label: 'Sites' },
+  { value: 'unused', label: 'Not used by a site' },
+  { value: 'kept', label: 'Kept' },
+  { value: 'system', label: "MySQL's own" },
+];
+
+const account = (u: Pick<MysqlUser, 'user' | 'host'>) => `${u.user}@${u.host}`;
+
+function SiteLinks({ sites, tab }: { sites?: MysqlSiteRef[]; tab?: string }) {
+  if (!sites?.length) return null;
+  return (
+    <>
+      {sites.map((s, i) => (
+        <span key={siteName(s)}>
+          {i > 0 && ', '}
+          <Link href={`${siteHref(s)}${tab ? `?tab=${tab}` : ''}`} className="font-medium text-foreground hover:underline">{siteName(s)}</Link>
+        </span>
+      ))}
+    </>
+  );
+}
+
+/**
+ * The Services page's MySQL tab: the server, every database and every
+ * account, with what each is to the panel. A site's database and user stay
+ * with the site; the rest can be analyzed, optimized or deleted, and
+ * deletions are saved first so the job's Undo puts them back.
+ */
+export function MysqlTab({ refresh, onLoading }: { refresh: number; onLoading: (loading: boolean) => void }) {
+  const report = useAsync(() => api.mysql(), [refresh]);
+  const runner = useJob();
+  const [filter, setFilter] = useState<DbFilter>('all');
+  const [dropping, setDropping] = useState<MysqlDatabase | null>(null);
+  const [optimizing, setOptimizing] = useState<MysqlDatabase | null>(null);
+  const [droppingUsers, setDroppingUsers] = useState<MysqlUser[] | null>(null);
+  const [resetting, setResetting] = useState<MysqlUser | null>(null);
+  const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const busy = runner.job !== null && !settled(runner.job);
+  const lastDone = useRef<string | null>(null);
+  const jobCard = useRef<HTMLDivElement>(null);
+
+  useEffect(() => onLoading(report.loading), [report.loading, onLoading]);
+  const { job } = runner;
+  // A job started from far down the page shows at the top of the tab: it comes into view.
+  const jobId = job?.id;
+  useEffect(() => {
+    if (jobId) jobCard.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [jobId]);
+  useEffect(() => {
+    if (!job || !settled(job) || lastDone.current === job.id) return;
+    lastDone.current = job.id;
+    report.reload();
+    if (job.status === 'done') toast({ tone: 'success', title: `${job.title}: done` });
+  }, [job, report]);
+
+  function start(id: ActionId, input: Record<string, unknown>) {
+    void runner.follow(api.startJob(id, input));
+  }
+
+  async function analyze(database?: string) {
+    setAnalyzing(database ?? '*');
+    await runWithToast('mysql.analyze', database ? { database } : {}, database ? `${database} analyzed` : 'Every database analyzed');
+    setAnalyzing(null);
+    report.reload();
+  }
+
+  const data: MysqlReport | undefined = report.data;
+  if (report.loading && !data) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
+  if (report.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
+  if (!data) return null;
+  if (!data.server) {
+    return (
+      <div className="grid gap-4">
+        <p role="alert" className="rounded-lg border border-warning/30 bg-warning/8 px-4 py-3 text-sm">
+          {data.error ?? 'MySQL cannot be read.'} <Link href="/environment" className="font-medium hover:underline">Environment</Link>
+        </p>
+        {data.backups.length > 0 && <BackupsCard backups={data.backups} dir={data.backupsDir} onDeleted={report.reload} />}
+      </div>
+    );
+  }
+
+  const databases = data.databases.filter((d) => (filter === 'all' ? d.kind !== 'system' : d.kind === filter));
+  const count = (f: DbFilter) => data.databases.filter((d) => (f === 'all' ? d.kind !== 'system' : d.kind === f)).length;
+  const leftovers = data.users.filter((u) => u.kind === 'leftover');
+
+  const dbMenu = (d: MysqlDatabase): MenuItem[] => {
+    if (d.kind === 'system') return [];
+    const site = d.sites?.[0];
+    return [
+      ...(site ? [{ label: d.kind === 'kept' ? 'Open the site it is kept for' : "Open the site's Database tab", icon: <Database />, onSelect: () => navigate(`${siteHref(site)}?tab=database`) }] : []),
+      { label: 'Analyze', icon: <Gauge />, disabled: analyzing !== null, onSelect: () => void analyze(d.name) },
+      { label: 'Optimize...', icon: <Wand2 />, disabled: busy, onSelect: () => setOptimizing(d) },
+      ...(d.kind === 'unused' ? [{ label: 'Delete...', icon: <Trash2 />, danger: true, disabled: busy, onSelect: () => setDropping(d) }] : []),
+    ];
+  };
+
+  const userMenu = (u: MysqlUser): MenuItem[] => [
+    ...(u.kind === 'site' && u.sites?.length === 1 ? [{ label: 'Reset password...', icon: <KeyRound />, onSelect: () => setResetting(u) }] : []),
+    ...(u.kind === 'leftover' || u.kind === 'other' ? [{ label: 'Delete...', icon: <Trash2 />, danger: true, disabled: busy, onSelect: () => setDroppingUsers([u]) }] : []),
+  ];
+
+  return (
+    <div className="grid gap-4">
+      {(runner.job || runner.error) && (
+        <div ref={jobCard} className="scroll-mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>{runner.job?.title ?? 'Job'}</CardTitle>
+              {busy && <LoaderCircle className="size-4 animate-spin text-primary" />}
+            </CardHeader>
+            <div className="grid gap-3 p-5">
+              {runner.job && <JobSteps steps={runner.job.steps} />}
+              {runner.job?.status === 'failed' && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="flex-1 text-sm text-danger">{lastLine(runner.job.steps.find((s) => s.status === 'failed')?.output ?? '')}</p>
+                  <Button variant="outline" onClick={() => void runner.retry()}><RotateCcw />Retry</Button>
+                </div>
+              )}
+              {runner.job && settled(runner.job) && runner.job.undoable.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  To take it back, use Undo on <Link href={`/jobs/${encodeURIComponent(runner.job.id)}`} className="font-medium text-foreground hover:underline">the job&apos;s page</Link>.
+                </p>
+              )}
+              {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle>{data.server.product} server</CardTitle><Database className="size-4 text-muted-foreground" /></CardHeader>
+        <div className="flex flex-wrap items-end gap-4 p-5">
+          <dl className="grid flex-1 grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+            <dt className="text-muted-foreground">Version</dt>
+            <dd className="break-all">{data.server.version}</dd>
+            <dt className="text-muted-foreground">Signed in as</dt>
+            <dd className="font-mono text-[13px] break-all">{data.server.account}</dd>
+            {data.server.datadir && (
+              <>
+                <dt className="text-muted-foreground">Data folder</dt>
+                <dd className="font-mono text-[13px] break-all">{data.server.datadir}</dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">Size</dt>
+            <dd>{bytes(data.server.totalBytes)} in {data.databases.length} databases, read {timeAgo(data.checkedAt)}</dd>
+          </dl>
+          <Button variant="outline" disabled={analyzing !== null} onClick={() => void analyze()} title="ANALYZE TABLE on every table, so sizes and row counts are current">
+            {analyzing === '*' ? <LoaderCircle className="animate-spin" /> : <Gauge />}
+            Analyze all
+          </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Databases</CardTitle><Database className="size-4 text-muted-foreground" /></CardHeader>
+        <div className="flex flex-wrap gap-1.5 px-5 pt-4" role="group" aria-label="Show">
+          {DB_FILTERS.filter((f) => f.value === 'all' || count(f.value) > 0).map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              aria-pressed={filter === f.value}
+              onClick={() => setFilter(f.value)}
+              className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === f.value ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
+            >
+              {f.label} <span className="tabular-nums">{count(f.value)}</span>
+            </button>
+          ))}
+        </div>
+        <ul className="mt-2 divide-y">
+          {databases.map((d) => (
+            <li key={d.name} className="flex items-center gap-3 px-5 py-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-[13px] break-all">{d.name}</span>
+                  <Badge tone={DB_KIND[d.kind].tone}>{DB_KIND[d.kind].label}</Badge>
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {bytes(d.sizeBytes)} in {d.tables} {d.tables === 1 ? 'table' : 'tables'}
+                  {d.sites?.length ? <>{' · '}<SiteLinks sites={d.sites} tab="database" /></> : null}
+                </p>
+              </div>
+              {analyzing === d.name && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+              {dbMenu(d).length > 0 && <Menu items={dbMenu(d)} label={`Actions for ${d.name}`} />}
+            </li>
+          ))}
+          {databases.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">No databases here.</li>}
+        </ul>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Users</CardTitle><Users className="size-4 text-muted-foreground" /></CardHeader>
+        {data.usersError && <p role="alert" className="mx-5 mt-4 text-sm text-danger">{data.usersError}</p>}
+        {leftovers.length > 0 && (
+          <div className="mx-5 mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-warning/30 bg-warning/6 px-4 py-3 text-sm">
+            <p className="min-w-0 flex-[1_1_18rem]">
+              {leftovers.length === 1 ? '1 user has' : `${leftovers.length} users have`} access to no database that exists, like a site&apos;s user left after its database went. A new install that needs the name takes the next free one.
+            </p>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setDroppingUsers(leftovers)}>
+              <Trash2 />
+              Delete {leftovers.length === 1 ? 'it' : `all ${leftovers.length}`}
+            </Button>
+          </div>
+        )}
+        <ul className="mt-2 divide-y">
+          {data.users.map((u) => (
+            <li key={account(u)} className="flex items-center gap-3 px-5 py-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-[13px] break-all">{account(u)}</span>
+                  <Badge tone={USER_KIND[u.kind].tone}>{USER_KIND[u.kind].label}</Badge>
+                </p>
+                <p className="mt-0.5 text-xs break-words text-muted-foreground">
+                  {u.global ? 'Rights on every database' : u.databases.length ? <>Access to <span className="font-mono">{u.databases.join(', ')}</span></> : 'Access to no database'}
+                  {u.missing.length > 0 && <>{'; had access to '}<span className="font-mono">{u.missing.join(', ')}</span>{u.missing.length === 1 ? ', which is gone' : ', which are gone'}</>}
+                  {u.sites?.length ? <>{' · used by '}<SiteLinks sites={u.sites} /></> : null}
+                </p>
+              </div>
+              {userMenu(u).length > 0 && <Menu items={userMenu(u)} label={`Actions for ${account(u)}`} />}
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <BackupsCard backups={data.backups} dir={data.backupsDir} onDeleted={report.reload} />
+
+      <DropDatabaseDialog database={dropping} onClose={() => setDropping(null)} onConfirm={(d) => start('mysql.dropDatabase', { database: d.name })} />
+      <OptimizeDialog database={optimizing} onClose={() => setOptimizing(null)} onConfirm={(d) => start('mysql.optimize', { database: d.name })} />
+      <DropUsersDialog users={droppingUsers} onClose={() => setDroppingUsers(null)} onConfirm={(list) => start('mysql.dropUsers', { accounts: list.map((u) => ({ user: u.user, host: u.host })) })} />
+      <ResetUserDialog user={resetting} onClose={() => setResetting(null)} onDone={report.reload} />
+    </div>
+  );
+}
+
+/** What deleted databases and users left for Undo: listed with when each goes, and deleted sooner on request. */
+function BackupsCard({ backups, dir, onDeleted }: { backups: MysqlBackup[]; dir: string; onDeleted: () => void }) {
+  const [deleting, setDeleting] = useState<MysqlBackup | null>(null);
+  const [busy, setBusy] = useState(false);
+  const total = backups.reduce((n, b) => n + b.sizeBytes, 0);
+
+  async function remove(backup: MysqlBackup) {
+    setBusy(true);
+    const result = await runWithToast('mysql.deleteBackup', { name: backup.name }, `${backup.subject}: saved copy deleted`);
+    setBusy(false);
+    setDeleting(null);
+    if (result?.ok) onDeleted();
+  }
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Saved copies</CardTitle><Archive className="size-4 text-muted-foreground" /></CardHeader>
+      <p className="px-5 pt-4 text-xs text-muted-foreground">
+        What deleted databases and users left for Undo, in <span className="font-mono break-all">{dir}</span>. Each goes 14 days after it was saved{backups.length > 0 ? `; ${bytes(total)} now` : ''}.
+      </p>
+      {backups.length === 0 ? (
+        <p className="px-5 pt-2 pb-4 text-sm text-muted-foreground">Nothing saved. Deleting a database or a user here saves it first.</p>
+      ) : (
+        <ul className="mt-2 divide-y">
+          {backups.map((b) => (
+            <li key={b.name} className="flex items-center gap-3 px-5 py-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-[13px] break-all">{b.subject}</span>
+                  <Badge>{b.kind === 'database' ? 'Database' : b.subject.includes(',') ? 'Users' : 'User'}</Badge>
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {bytes(b.sizeBytes)} · saved {timeAgo(b.savedAt)} · goes {shortDate(b.purgeAt)} · <span className="font-mono break-all">{b.name}</span>
+                </p>
+              </div>
+              <Button size="sm" variant="ghost" aria-label={`Delete the saved copy ${b.name}`} disabled={busy} onClick={() => setDeleting(b)}>
+                <Trash2 />
+                Delete
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Dialog
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title={`Delete the saved copy of ${deleting?.subject ?? ''}?`}
+        description={`${deleting?.name ?? ''} goes now instead of on ${deleting ? shortDate(deleting.purgeAt) : ''}. Undo on the job that deleted ${deleting?.kind === 'database' ? 'the database' : 'the users'} cannot put ${deleting?.kind === 'database' ? 'it' : 'them'} back afterwards.`}
+      >
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="danger" disabled={busy} onClick={() => deleting && void remove(deleting)}>
+            {busy ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+            Delete for good
+          </Button>
+        </div>
+      </Dialog>
+    </Card>
+  );
+}
+
+function JobSteps({ steps }: { steps: Parameters<typeof StepList>[0]['steps'] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  return <StepList steps={steps} open={open} setOpen={setOpen} />;
+}
+
+function DropDatabaseDialog({ database, onClose, onConfirm }: { database: MysqlDatabase | null; onClose: () => void; onConfirm: (d: MysqlDatabase) => void }) {
+  const [typed, setTyped] = useState('');
+  const close = () => {
+    setTyped('');
+    onClose();
+  };
+  return (
+    <Dialog
+      open={database !== null}
+      onClose={close}
+      title={`Delete ${database?.name ?? ''}?`}
+      description={`No site on this machine uses it, but another project might. It is exported to the panel's MySQL backups first (${bytes(database?.sizeBytes ?? 0)} of tables) and kept 14 days, so Undo on the job puts it back.`}
+    >
+      <ConfirmField id="mysql-drop-confirm" expected={database?.name ?? ''} value={typed} onChange={setTyped} />
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={close}>Cancel</Button>
+        <Button
+          variant="danger"
+          disabled={typed !== database?.name}
+          onClick={() => {
+            if (database) onConfirm(database);
+            close();
+          }}
+        >
+          <Trash2 />
+          Export and delete
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+function OptimizeDialog({ database, onClose, onConfirm }: { database: MysqlDatabase | null; onClose: () => void; onConfirm: (d: MysqlDatabase) => void }) {
+  return (
+    <Dialog
+      open={database !== null}
+      onClose={onClose}
+      title={`Optimize ${database?.name ?? ''}?`}
+      description={`Rebuilds each of its ${database?.tables ?? 0} tables, which gives the space of deleted rows back to the disk, as after cleared logs. On ${bytes(database?.sizeBytes ?? 0)} this can take a while, and each table is busy while it is rebuilt.`}
+    >
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button
+          onClick={() => {
+            if (database) onConfirm(database);
+            onClose();
+          }}
+        >
+          <Wand2 />
+          Optimize
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+function DropUsersDialog({ users, onClose, onConfirm }: { users: MysqlUser[] | null; onClose: () => void; onConfirm: (list: MysqlUser[]) => void }) {
+  const list = users ?? [];
+  return (
+    <Dialog
+      open={users !== null}
+      onClose={onClose}
+      title={list.length === 1 ? `Delete ${account(list[0] as MysqlUser)}?` : `Delete ${list.length} users?`}
+      description="No site on this machine signs in with them. Each account and its rights are saved to the panel's MySQL backups first and kept 14 days, so Undo on the job makes them again."
+    >
+      {list.length > 1 && (
+        <ul className="mt-3 max-h-48 overflow-y-auto rounded-lg border bg-muted/40 px-3 py-2 font-mono text-[13px]">
+          {list.map((u) => <li key={account(u)}>{account(u)}</li>)}
+        </ul>
+      )}
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button
+          variant="danger"
+          onClick={() => {
+            onConfirm(list);
+            onClose();
+          }}
+        >
+          <Trash2 />
+          Save and delete
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+function ResetUserDialog({ user, onClose, onDone }: { user: MysqlUser | null; onClose: () => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const site = user?.sites?.[0];
+  async function reset() {
+    if (!site) return;
+    setBusy(true);
+    const result = await runWithToast('mysql.resetSiteUser', { domain: site.domain, ...(site.path ? { path: site.path } : {}) }, `${user?.user ?? 'The user'} has a new password`);
+    setBusy(false);
+    if (result?.ok) {
+      onClose();
+      onDone();
+    }
+  }
+  return (
+    <Dialog
+      open={user !== null}
+      onClose={onClose}
+      title={`Reset ${user?.user ?? ''}?`}
+      description={`${user?.user ?? ''} gets a new password, written to the wp-config.php of ${site ? siteName(site) : 'its site'} first. Anything else that signs in as ${user?.user ?? 'it'} with the old one stops working.`}
+    >
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button disabled={busy} onClick={() => void reset()}>
+          {busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
+          Reset password
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+

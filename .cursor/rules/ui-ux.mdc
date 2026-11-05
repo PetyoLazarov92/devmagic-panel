@@ -1,0 +1,48 @@
+---
+description: UI and UX rules for the web app
+globs: ["web/**"]
+---
+
+# UI and UX
+
+- Calm developer-tool look: neutral surfaces, one accent (`primary`), status
+  colours only for status (`success`, `warning`, `danger`).
+- Colours come from the tokens in `web/src/index.css` (`bg-card`,
+  `text-muted-foreground`, `border`...). No raw hex or Tailwind palette colours
+  in components. Both light and dark must read well; check both.
+- Components follow shadcn/ui patterns: `cva` variants, `cn()` for classes,
+  files in `web/src/components/ui/`.
+- Every icon-only button has an accessible name (`sr-only` text or
+  `aria-label`). Status icons have labels. Errors use `role="alert"`.
+- Long jobs show progress steps and keep the output one click away. Never a
+  blocking modal during a run.
+- Destructive or risky actions ask inline before running, with the fix's
+  `confirm` text.
+- Layouts work from 375 px wide: stack on small screens, no horizontal scroll.
+- Keyboard first: visible focus, Enter submits, actions reachable by Tab.
+
+## One pattern on every page
+
+- **A job shows where it was started**: under (or inside) the card whose
+  button started it, scrolled into view, with its steps, Retry when it failed
+  and the link to Undo once it settled (`JobBox` in
+  `web/src/components/job-box.tsx`). A job started from a row's menu in a
+  long list shows at the top of that list. The header's jobs indicator is the
+  view of every job; a page never adds a second place for the same job.
+- **A form with several fields saves through `SaveBar`**: it sticks to the
+  bottom of the window while there are changes ("2 unsaved changes",
+  Discard, and the one button that saves or applies, named for what it does:
+  "Save and restart Apache", "Apply"). A single switch or button acts at once.
+- **Every card that changes something says what it applies to** with
+  `ScopeLabel` in its header: "all sites", "PHP 8.3", "this site".
+- **An inherited value always shows its number and where it comes from**:
+  "Inherit: 128M (php.ini)", "Inherit: 2M (PHP's built-in default)". Never a
+  bare "default".
+- **Global things sit above per-item things.** A page about many items (PHP
+  versions, databases) starts with what applies to all of them, then the item
+  you picked, under its own heading.
+- **One word for one thing.** A site with a PHP version or settings of its
+  own has its "own PHP"; the version every other site runs is "the default".
+- **Confirm dialogs**: the title asks the question, the description says
+  what happens and what Undo does, Cancel on the left, the action named for
+  what it does on the right.

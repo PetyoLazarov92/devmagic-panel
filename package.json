@@ -1,0 +1,36 @@
+{
+  "name": "devmagic-panel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local WordPress control panel for Ubuntu/Debian: create sites from git and DB dumps, local SSL, Apache vhosts, WP core management, logs and cache tools, with an optional Claude assistant.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "workspaces": [
+    "shared",
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w web",
+    "package": "bash scripts/package.sh",
+    "dev:server": "npm run build -w shared && npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "typecheck": "npm run build -w shared && npm run typecheck -w server && npm run typecheck -w web && tsc -p tsconfig.test.json",
+    "test": "npm run build -w shared && NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest run",
+    "test:watch": "NODE_OPTIONS=--disable-warning=ExperimentalWarning vitest",
+    "test:scripts": "bats scripts/tests",
+    "lint:scripts": "shellcheck -x install.sh get.sh scripts/package.sh scripts/bin/dmp-root scripts/bin/dmp-restore scripts/lib/*.sh && shellcheck -S error scripts/bin/wpcore",
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
+    "mockup": "npm run build -w shared && npm run mockup -w web"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "bats": "^1.13.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

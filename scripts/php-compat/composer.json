@@ -1,0 +1,19 @@
+{
+    "name": "devmagic-panel/php-compat",
+    "description": "The PHP compatibility scanner the panel installs into its data folder on first use.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "phpcompatibility/phpcompatibility-wp": "3.0.0-alpha2"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "platform": {
+            "php": "7.4"
+        }
+    }
+}

@@ -1,0 +1,26 @@
+---
+description: Version bump and changelog rules
+alwaysApply: true
+---
+
+# Versioning
+
+Semver in the root `package.json`. The server reports it on `/healthz` and in
+the UI, so bump it with every shipped change, once per chat session.
+
+Keep three places in sync:
+
+- root `package.json` `"version"`
+- `README.md` badge on line 3: `![Version](https://img.shields.io/badge/version-X.Y.Z-6d5dfc)`
+- `CHANGELOG.md`: new section at the top
+
+| Bump | When |
+| --- | --- |
+| patch | fix, refactor, docs, tests, CI, dependency update |
+| minor | new action, page, check or `dmp-root` command |
+| major | breaking change to `config.env`, the sudoers rule, `dmp-root` commands or stored data |
+
+Changelog format: `### vX.Y.Z (YYYY-MM-DD)`, `*` bullets, a bolded area ending
+with a colon, present tense, user-visible effect. Areas: `Installer:`,
+`Scripts:`, `Panel:`, `Sites:`, `AI:`, `Fix:`, `Docs:`, `Repo:`, `Internal:`.
+No em dashes.

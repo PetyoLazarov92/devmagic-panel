@@ -1,0 +1,538 @@
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import cookie from '@fastify/cookie';
+import fastifyStatic from '@fastify/static';
+import type { ActionRunResult, ApacheReport, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import { isActionId, localConstants, localName, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import { ActionBusyError, ActionInputError, runAction } from './actions.js';
+import { GlobalLock, LoginLimiter, SESSION_COOKIE, Sessions } from './auth.js';
+import { checkSystemPassword, newPasswordProblem, resetWays, type ResetWays, setPanelPassword } from './panel-password.js';
+import { WPCORE_BIN, type SystemConfig } from './config.js';
+import type { CoreStatusSource } from './core-status.js';
+import { defaultLogsDir, developerReport, type DeveloperContext, listFolder, readLog, REPO_DIR, startupLog } from './developer.js';
+import { panelCli, UpdateChecker, type UpdateContext } from './update.js';
+import { settleInstall } from './update-install.js';
+import { DraftRefused, draftId, draftInput, Drafts } from './drafts.js';
+import { checkEnvironment, type HostPaths } from './environment.js';
+import type { Executor } from './exec.js';
+import { DEFAULT_UPDATE_REPO, defaultSources, gitUrlFor, type ReleaseSource } from './release-source.js';
+import { githubTokenNotice, verifyPassword, type Secrets } from './secrets.js';
+import { servicesReport } from './services.js';
+import { apacheErrorLog, apacheReport } from './apache.js';
+import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
+import { Jobs } from './jobs.js';
+import { defaultClaude, type ClaudeFactory } from './assistant/briefing.js';
+import { defaultConventions, readConventions } from './assistant/conventions.js';
+import { readLocalConstants, saveLocalConstants } from './local-constants.js';
+import { registerAssistantRoutes } from './assistant/routes.js';
+import { registerCreateRoutes } from './sites/create-routes.js';
+import { purgeKept } from './sites/kept.js';
+import { registerSiteRoutes } from './sites/routes.js';
+import { sitesByVersion } from './php/pools.js';
+import { registerPhpRoutes } from './php/routes.js';
+import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
+import { registerOrgRoutes } from './org/routes.js';
+import { listTrash } from './sites/trash.js';
+import type { RunStore } from './store.js';
+import { installedCores, readWpcoreConfig } from './wpcore.js';
+import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPaths, readMail, unreadMail } from './mailpit.js';
+
+export interface AppDeps {
+  config: SystemConfig;
+  exec: Executor;
+  store: RunStore;
+  /** Read on demand so `cli.js setup` takes effect without a restart. */
+  secrets: () => Secrets | null;
+  hostPaths: HostPaths;
+  dmpRoot: string;
+  /** The bundled wpcore that the sudoers rule allows. */
+  wpcoreBin?: string;
+  version: string;
+  production: boolean;
+  webRoot?: string;
+  /** Where uploaded dumps wait for the install that uses them. */
+  uploadsDir: string;
+  /** Where the API key is saved and the panel's settings live; the assistant routes need both. */
+  secretsFile?: string;
+  settingsFile?: string;
+  /** Makes the Anthropic client; tests pass a fake. */
+  claude?: ClaudeFactory;
+  /** WordPress.org's status per core version; tests leave it out and get none. */
+  coreStatus?: CoreStatusSource;
+  /** Mailpit's API and the Mailpit release download; tests pass fakes. */
+  mailpit?: MailpitFetch;
+  download?: Downloader;
+  /** Where install.sh writes its logs; tests pass a temp folder. */
+  logsDir?: string;
+  /** The folder the panel runs from (a release, or a checkout), for updates and the self-check; tests pass a temp one. */
+  repo?: string;
+  /** fetch, for the public way to the releases; tests pass a fake. */
+  fetch?: typeof fetch;
+  /** The ways to the releases; tests pass their own. */
+  updateSources?: ReleaseSource[];
+  /** Look for a newer release at start and every six hours; off in tests. */
+  checkUpdates?: boolean;
+  /** Prunes Run history (RUN_KEEP_DAYS, RUN_KEEP_MAX) and dumps nothing needs (a day old) at start and every hour. */
+  housekeeping?: boolean;
+  logger?: boolean;
+}
+
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+/** The meta row that holds the preferences. */
+const PREFERENCES_KEY = 'preferences';
+
+/** Hosts the panel answers to; anything else is refused (DNS rebinding). */
+export function allowedHosts(config: SystemConfig, production: boolean): Set<string> {
+  const hosts = new Set([config.PANEL_DOMAIN, `127.0.0.1:${config.PANEL_PORT}`, `localhost:${config.PANEL_PORT}`]);
+  if (!production) ['localhost:5173', '127.0.0.1:5173'].forEach((h) => hosts.add(h));
+  return hosts;
+}
+
+export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: deps.logger ?? false,
+    trustProxy: '127.0.0.1',
+    bodyLimit: 1024 * 1024,
+  });
+  const sessions = new Sessions(deps.store, () => deps.secrets()?.panelPasswordHash);
+  const jobs = new Jobs(deps.store);
+  const limiter = new LoginLimiter();
+  const resetLock = new GlobalLock();
+  // Too many wrong passwords: when to try again, for the login page's countdown, and as Retry-After.
+  const tooMany = (reply: FastifyReply, client: string) => {
+    const at = limiter.retryAt(client);
+    return reply
+      .code(429)
+      .header('retry-after', String(Math.max(1, Math.ceil((at - Date.now()) / 1000))))
+      .send({ error: 'Too many attempts. Try again in a few minutes.', retryAt: new Date(at).toISOString() });
+  };
+  // Whether the computer password can reset the panel's: asked of sudo at most every few minutes.
+  let ways: { at: number; value: Promise<ResetWays> } | undefined;
+  const currentWays = () => {
+    if (!ways || Date.now() - ways.at > 5 * 60_000) ways = { at: Date.now(), value: resetWays(deps.exec) };
+    return ways.value;
+  };
+  const hosts = allowedHosts(deps.config, deps.production);
+  const logsDir = deps.logsDir ?? defaultLogsDir(deps.hostPaths.home);
+  const update: UpdateContext = {
+    exec: deps.exec,
+    appDir: deps.repo ?? REPO_DIR,
+    dataDir: dirname(deps.uploadsDir),
+    version: deps.version,
+    logsDir,
+    dmpRoot: deps.dmpRoot,
+    sources: deps.updateSources ?? defaultSources(deps.exec, deps.config.UPDATE_REPO ?? DEFAULT_UPDATE_REPO, deps.config.UPDATE_GIT_URL ?? gitUrlFor(deps.config.UPDATE_REPO ?? DEFAULT_UPDATE_REPO), dirname(deps.uploadsDir), deps.fetch),
+    memory: {},
+    notice: () => githubTokenNotice(join(dirname(deps.uploadsDir), 'github-token-removed')),
+  };
+  const updates = new UpdateChecker(update);
+  // An install from the Updates page that ended while no job of this panel followed it (it restarted): its run is finished here.
+  const following = (runId: number) => ['running', 'queued'].includes(jobs.forRun(runId)?.status ?? '');
+  const install = () => settleInstall({ exec: deps.exec, dataDir: update.dataDir, store: deps.store }, following);
+  const drafts = new Drafts(deps.store, deps.uploadsDir);
+  if (deps.housekeeping) {
+    const running = (jobId: string) => ['running', 'queued', 'undoing'].includes(jobs.get(jobId)?.status ?? '');
+    const sweep = () => {
+      try {
+        const gone = drafts.sweep(running);
+        if (gone) app.log.info(`housekeeping: ${gone} install drafts ran out`);
+      } catch (error) {
+        app.log.warn(`housekeeping: ${(error as Error).message}`);
+      }
+    };
+    // The panel may have just restarted in the middle of an install from the Updates page; its installer goes on for up to a minute.
+    void install().catch(() => undefined);
+    setTimeout(() => void install().catch(() => undefined), 90_000).unref();
+    // Uploads and downloads a stopped panel left half way go at start: nothing can still be writing them.
+    const unfinished = removeUnfinishedUploads(deps.uploadsDir);
+    if (unfinished.length) app.log.info(`housekeeping: removed ${unfinished.length} unfinished downloads`);
+    sweep();
+    setInterval(sweep, 10 * 60_000).unref();
+    const tidy = () => {
+      try {
+        const runs = deps.store.prune(RUN_KEEP_DAYS, RUN_KEEP_MAX);
+        const dumps = pruneUploads(deps.uploadsDir, UPLOAD_KEEP_MS, new Set([...jobs.uploadsInUse(), ...drafts.uploadsInUse()]));
+        if (runs || dumps.length) app.log.info(`housekeeping: pruned ${runs} runs and ${dumps.length} dumps`);
+        const saved = pruneMysqlBackups(mysqlBackupsDir(deps.uploadsDir));
+        if (saved.length) app.log.info(`housekeeping: removed ${saved.length} MySQL backups older than 14 days`);
+      } catch (error) {
+        app.log.warn(`housekeeping: ${(error as Error).message}`);
+      }
+    };
+    // Kept databases go after their 7 days, except a site's a job is working on.
+    const purge = () =>
+      // A record's site is its key (local.shop.com@learn); jobs lock local.shop.com/learn.
+      void purgeKept(deps.store, deps.exec, deps.secrets()?.mysql, (site) => jobs.busyFor(site.replaceAll('@', '/')) !== undefined)
+        .then((dropped) => dropped.length && app.log.info(`housekeeping: dropped ${dropped.length} kept databases: ${dropped.join(', ')}`))
+        .catch((error: Error) => app.log.warn(`housekeeping: ${error.message}`));
+    tidy();
+    purge();
+    setInterval(() => {
+      tidy();
+      purge();
+    }, 60 * 60_000).unref();
+  }
+  if (deps.checkUpdates) {
+    const check = () => void updates.status(true).catch((error: Error) => app.log.warn(`update check: ${error.message}`));
+    setTimeout(check, 30_000).unref();
+    setInterval(check, 6 * 60 * 60_000).unref();
+  }
+
+  await app.register(cookie);
+
+  app.addHook('onRequest', async (request, reply) => {
+    const host = (request.headers.host ?? '').toLowerCase();
+    if (!hosts.has(host)) return reply.code(421).send({ error: 'unknown host' });
+    if (UNSAFE_METHODS.has(request.method)) {
+      const origin = request.headers.origin;
+      let originHost = '';
+      try {
+        originHost = origin ? new URL(origin).host.toLowerCase() : '';
+      } catch {
+        originHost = '';
+      }
+      if (!hosts.has(originHost)) return reply.code(403).send({ error: 'cross-origin request refused' });
+    }
+  });
+
+  const authenticated = (request: FastifyRequest) => sessions.touch(request.cookies[SESSION_COOKIE]);
+
+  app.get('/healthz', async () => ({ status: 'ok', version: deps.version }));
+
+  app.get('/api/session', async (request): Promise<SessionInfo & { setupRequired: boolean }> => ({
+    authenticated: authenticated(request),
+    user: deps.config.PANEL_USER,
+    version: deps.version,
+    setupRequired: !deps.secrets()?.panelPasswordHash,
+  }));
+
+  app.post<{ Body: { password?: unknown } }>('/api/login', async (request, reply) => {
+    const client = request.ip;
+    if (limiter.blocked(client)) return tooMany(reply, client);
+    const hash = deps.secrets()?.panelPasswordHash;
+    if (!hash) return reply.code(409).send({ error: 'No panel password yet. Run: node ~/.local/share/devmagic-panel/current/server/dist/cli.js setup' });
+    const password = typeof request.body?.password === 'string' ? request.body.password : '';
+    if (!password || !(await verifyPassword(password, hash))) {
+      limiter.fail(client);
+      return reply.code(401).send({ error: 'Wrong password' });
+    }
+    limiter.reset(client);
+    reply.setCookie(SESSION_COOKIE, sessions.create(), {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: 'auto',
+      path: '/',
+    });
+    return reply.code(204).send();
+  });
+
+  // A forgotten panel password: the ways back in, and a reset with the computer password.
+  app.get('/api/password/reset', async () => {
+    const until = resetLock.until();
+    return { ...(await currentWays()), ...(until ? { lockedUntil: new Date(until).toISOString() } : {}) };
+  });
+
+  app.post<{ Body: { system?: unknown; next?: unknown } }>('/api/password/reset', async (request, reply) => {
+    const current = deps.secrets();
+    if (!current?.panelPasswordHash || !deps.secretsFile) return reply.code(409).send({ error: 'No panel password yet: run the setup command on a terminal' });
+    const until = resetLock.until();
+    if (until) return reply.code(429).send({ error: `Too many attempts: try again after ${new Date(until).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}, or use the terminal`, lockedUntil: new Date(until).toISOString() });
+    if (!(await currentWays()).system) return reply.code(409).send({ error: 'Your computer password cannot reset the panel password here: use the terminal' });
+    const problem = newPasswordProblem(request.body?.next, deps.config.PANEL_USER);
+    if (problem) return reply.code(400).send({ error: problem, field: 'next' });
+    const system = typeof request.body?.system === 'string' ? request.body.system : '';
+    if (!system || !(await checkSystemPassword(deps.exec, system))) {
+      resetLock.fail();
+      // 403, not 401: the page is not signed out, only this answer is wrong.
+      return reply.code(403).send({ error: 'Your computer password was not accepted', field: 'system' });
+    }
+    await setPanelPassword(deps.secretsFile, current, request.body?.next as string);
+    return reply.code(204).send();
+  });
+
+  app.post('/api/logout', async (request, reply) => {
+    sessions.destroy(request.cookies[SESSION_COOKIE]);
+    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    return reply.code(204).send();
+  });
+
+  // Everything below needs a session.
+  app.register(async (api) => {
+    api.addHook('onRequest', async (request, reply) => {
+      if (!authenticated(request)) return reply.code(401).send({ error: 'Log in first' });
+    });
+
+    // The panel password: when it was set, and changing it with the current one.
+    api.get('/api/password', async () => {
+      const changedAt = deps.secrets()?.panelPasswordChangedAt;
+      return changedAt ? { changedAt } : {};
+    });
+
+    api.post<{ Body: { current?: unknown; next?: unknown } }>('/api/password', async (request, reply) => {
+      const current = deps.secrets();
+      if (!current?.panelPasswordHash || !deps.secretsFile) return reply.code(409).send({ error: 'The panel cannot write its secrets file here' });
+      const client = request.ip;
+      if (limiter.blocked(client)) return tooMany(reply, client);
+      const given = typeof request.body?.current === 'string' ? request.body.current : '';
+      if (!given || !(await verifyPassword(given, current.panelPasswordHash))) {
+        limiter.fail(client);
+        // 403, not 401: the session is fine, so the page must not open the login dialog.
+        return reply.code(403).send({ error: 'The current password is not right', field: 'current' });
+      }
+      const problem = newPasswordProblem(request.body?.next, deps.config.PANEL_USER);
+      if (problem) return reply.code(400).send({ error: problem, field: 'next' });
+      await setPanelPassword(deps.secretsFile, current, request.body?.next as string);
+      // Every other session ended with the old password; this browser gets a new one.
+      reply.setCookie(SESSION_COOKIE, sessions.create(), { httpOnly: true, sameSite: 'strict', secure: 'auto', path: '/' });
+      return reply.code(204).send();
+    });
+
+    api.get('/api/environment', async (): Promise<EnvironmentReport> =>
+      checkEnvironment({
+        config: deps.config,
+        exec: deps.exec,
+        secrets: deps.secrets(),
+        paths: deps.hostPaths,
+        dmpRoot: deps.dmpRoot,
+        ...(deps.production ? { self: { repo: deps.repo ?? REPO_DIR, version: deps.version } } : {}),
+      }),
+    );
+
+    api.post<{ Params: { id: string }; Body: unknown }>('/api/actions/:id', async (request, reply): Promise<ActionRunResult | undefined> => {
+      const { id } = request.params;
+      if (!isActionId(id)) return reply.code(404).send({ error: `unknown action: ${id}` });
+      try {
+        return await runAction(
+          {
+            config: deps.config, exec: deps.exec, store: deps.store, dmpRoot: deps.dmpRoot,
+            wpcoreBin: deps.wpcoreBin ?? WPCORE_BIN, wpcoreConf: deps.hostPaths.wpcoreConf, home: deps.hostPaths.home,
+            jobs, uploadsDir: deps.uploadsDir, secrets: deps.secrets(), ...(deps.coreStatus ? { coreStatus: deps.coreStatus } : {}),
+            ...(deps.mailpit ? { mailpit: deps.mailpit } : {}), ...(deps.download ? { download: deps.download } : {}), update, drafts,
+            claudeCode: { home: deps.hostPaths.home, searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '', workDir: join(deps.uploadsDir, '..', 'tmp') },
+          },
+          id,
+          request.body,
+        );
+      } catch (error) {
+        if (error instanceof ActionInputError) return reply.code(400).send({ error: error.message });
+        if (error instanceof ActionBusyError) return reply.code(409).send({ error: error.message, ...(error.jobId ? { jobId: error.jobId } : {}) });
+        throw error;
+      }
+    });
+
+    const mailpitBin = mailpitPaths(dirname(deps.uploadsDir), deps.hostPaths.home).bin;
+    api.get('/api/services', async (): Promise<ServicesReport> => servicesReport(deps.config, deps.exec, Date.now, mailpitBin));
+    // The Services page's MySQL and Apache tabs, read only; their changes are registry actions.
+    api.get('/api/mysql', async (): Promise<MysqlReport> =>
+      mysqlReport({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases(), backupsDir: mysqlBackupsDir(deps.uploadsDir) }));
+    api.get('/api/apache', async (): Promise<ApacheReport> => apacheReport(deps.config, deps.exec, deps.dmpRoot));
+    api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));
+    registerPhpRoutes(api, { config: deps.config, exec: deps.exec, dmpRoot: deps.dmpRoot, sitesByVersion: sitesByVersion(deps.config), store: deps.store, dataDir: dirname(deps.uploadsDir) });
+
+    // The hidden Developer options: versions, services, settings, installed files and logs.
+    const developer: DeveloperContext = {
+      config: deps.config,
+      exec: deps.exec,
+      version: deps.version,
+      home: deps.hostPaths.home,
+      dataDir: dirname(deps.uploadsDir),
+      configDir: deps.secretsFile ? dirname(deps.secretsFile) : join(deps.hostPaths.home, '.config', 'devmagic-panel'),
+      logsDir,
+      runningJobs: () => jobs.list().filter((j) => j.status === 'running' || j.status === 'queued' || j.status === 'undoing').length,
+    };
+    api.get('/api/developer', async (): Promise<DeveloperReport> => developerReport(developer));
+    api.get<{ Params: { name: string } }>('/api/developer/logs/:name', async (request, reply) => {
+      const text = readLog(developer.logsDir, request.params.name);
+      return text === null ? reply.code(404).send({ error: 'No such log' }) : { name: request.params.name, text };
+    });
+    api.get('/api/developer/startup', async () => ({ text: await startupLog(deps.exec) }));
+    // One folder of the two file lists, opened in the tree: names and sizes only, never contents.
+    api.get<{ Querystring: { path?: string } }>('/api/developer/folder', async (request, reply) => {
+      const listing = listFolder(developer, String(request.query.path ?? ''));
+      return listing ?? reply.code(403).send({ error: 'Only the folders the Developer options list can be opened' });
+    });
+
+    // Install drafts: the wizard's answers, kept a day after the last change. No registry actions: they change only the panel's own data.
+    api.get('/api/drafts', async (): Promise<InstallDraft[]> => drafts.list());
+    api.get<{ Params: { id: string } }>('/api/drafts/:id', async (request, reply): Promise<InstallDraft | undefined> => {
+      const draft = draftId.safeParse(request.params.id).success ? drafts.get(request.params.id) : undefined;
+      return draft ?? reply.code(404).send({ error: 'No such draft: it ran out or was finished' });
+    });
+    api.put<{ Params: { id: string }; Body: unknown }>('/api/drafts/:id', async (request, reply): Promise<InstallDraft | undefined> => {
+      const body = draftInput.safeParse(request.body);
+      if (!draftId.safeParse(request.params.id).success || !body.success) return reply.code(400).send({ error: body.error?.issues[0]?.message ?? 'Not a draft id' });
+      try {
+        return drafts.save(request.params.id, body.data);
+      } catch (error) {
+        if (error instanceof DraftRefused) return reply.code(409).send({ error: error.message });
+        throw error;
+      }
+    });
+    api.delete<{ Params: { id: string } }>('/api/drafts/:id', async (request, reply) => {
+      if (!draftId.safeParse(request.params.id).success) return reply.code(400).send({ error: 'Not a draft id' });
+      try {
+        drafts.discard(request.params.id);
+        return { ok: true };
+      } catch (error) {
+        if (error instanceof DraftRefused) return reply.code(409).send({ error: error.message });
+        throw error;
+      }
+    });
+
+    // How the panel looks (theme, the sites' view and order), kept in its database. Not an action: it changes nothing on the machine.
+    const readPreferences = (): Preferences => {
+      try {
+        const saved = preferences.safeParse(JSON.parse(deps.store.getMeta(PREFERENCES_KEY) ?? '{}'));
+        return saved.success ? saved.data : preferences.parse({});
+      } catch {
+        return preferences.parse({});
+      }
+    };
+    api.get('/api/preferences', async (): Promise<Preferences> => readPreferences());
+    api.put<{ Body: unknown }>('/api/preferences', async (request, reply): Promise<Preferences | undefined> => {
+      const update = preferencesUpdate.safeParse(request.body);
+      if (!update.success) return reply.code(400).send({ error: update.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ') });
+      const next = preferences.parse({ ...readPreferences(), ...update.data });
+      deps.store.setMeta(PREFERENCES_KEY, JSON.stringify(next));
+      return next;
+    });
+
+    // The constants every local site should have, written on new installs and checked by Aura. Panel settings, not an action.
+    api.get('/api/local-constants', async () => readLocalConstants(deps.store));
+    api.put<{ Body: unknown }>('/api/local-constants', async (request, reply) => {
+      const list = localConstants.safeParse(request.body);
+      if (!list.success) return reply.code(400).send({ error: list.error.issues.map((i) => `${i.path.join('.') || 'list'}: ${i.message}`).join('; ') });
+      saveLocalConstants(deps.store, list.data);
+      return list.data;
+    });
+
+    // Whether a newer release is out; ?refresh=1 reads the releases again.
+    api.get<{ Querystring: { refresh?: string } }>('/api/update', async (request): Promise<UpdateStatus> => {
+      const [status, last] = await Promise.all([updates.status(request.query.refresh === '1'), install()]);
+      return last ? { ...status, install: last } : status;
+    });
+
+    // Mail the sites sent, read from Mailpit on 127.0.0.1; 503 while Mailpit is not running.
+    const mailpit = deps.mailpit ?? mailpitFetch;
+    api.get<{ Querystring: { site?: string; start?: string } }>('/api/mail', async (request, reply): Promise<MailPage | undefined> => {
+      const site = request.query.site ? localName.safeParse(request.query.site) : null;
+      if (site && !site.success) return reply.code(400).send({ error: 'Give a local site name' });
+      const start = Math.max(0, Math.min(100_000, Number(request.query.start ?? 0) || 0));
+      try {
+        return await listMail(mailpit, site?.data, start);
+      } catch (error) {
+        return reply.code(503).send({ error: `Mailpit is not reachable: ${(error as Error).message}` });
+      }
+    });
+    // For the sidebar's dot: null while Mailpit is not running, so no dot then.
+    api.get('/api/mail/unread', async (): Promise<{ unread: number | null }> => {
+      try {
+        return { unread: await unreadMail(mailpit) };
+      } catch {
+        return { unread: null };
+      }
+    });
+    api.get<{ Params: { id: string } }>('/api/mail/:id', async (request, reply): Promise<MailMessage | undefined> => {
+      if (!/^[\w-]{1,64}$/.test(request.params.id)) return reply.code(400).send({ error: 'Not a message id' });
+      try {
+        return (await readMail(mailpit, request.params.id)) ?? reply.code(404).send({ error: 'No such message' });
+      } catch (error) {
+        return reply.code(503).send({ error: `Mailpit is not reachable: ${(error as Error).message}` });
+      }
+    });
+
+    // Changes MCP clients like Claude Code suggested; each runs only when clicked in the panel.
+    api.get('/api/proposals', async (): Promise<QueuedProposal[]> => deps.store.pendingProposals());
+    api.post<{ Params: { id: string }; Body: { status?: unknown } }>('/api/proposals/:id/close', async (request, reply) => {
+      const status = request.body?.status;
+      if (status !== 'ran' && status !== 'dismissed') return reply.code(400).send({ error: 'status must be ran or dismissed' });
+      return deps.store.closeProposal(request.params.id, status) ? reply.code(204).send() : reply.code(404).send({ error: 'no such pending proposal' });
+    });
+
+    // The command that adds the panel's MCP server to Claude Code, with this machine's node and paths:
+    // through current for a release, so it keeps working after updates.
+    api.get('/api/mcp', async () => {
+      return { command: `claude mcp add devmagic-panel -- ${process.execPath} --disable-warning=ExperimentalWarning ${panelCli(update)} mcp` };
+    });
+
+    registerCreateRoutes(api, { exec: deps.exec, jobs, uploadsDir: deps.uploadsDir });
+    const siteRoutes = registerSiteRoutes(api, {
+      config: deps.config,
+      exec: deps.exec,
+      secrets: deps.secrets,
+      wpcoreConf: deps.hostPaths.wpcoreConf,
+      store: deps.store,
+      coreStatus: deps.coreStatus ?? (async () => null),
+      workDir: join(deps.uploadsDir, '..', 'tmp'),
+      jobs,
+      dmpRoot: deps.dmpRoot,
+    });
+    registerOrgRoutes(api, {
+      exec: deps.exec,
+      store: deps.store,
+      home: deps.hostPaths.home,
+      searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '',
+      workDir: join(deps.uploadsDir, '..', 'tmp'),
+      settingsFile: join(deps.settingsFile ? dirname(deps.settingsFile) : join(deps.hostPaths.home, '.config', 'devmagic-panel'), 'organizations.json'),
+      sites: siteRoutes.sites,
+      installs: () => deps.store.installs(),
+      trash: async () => (await listTrash(deps.exec, deps.dmpRoot)).map((e) => {
+        const install = deps.store.archivedInstall(e.id);
+        return install ? { ...e, install } : e;
+      }),
+      drafts: () => drafts.list(),
+    });
+    if (deps.secretsFile && deps.settingsFile) {
+      const conventionsFile = join(dirname(deps.settingsFile), 'conventions.md');
+      const conventions = () => readConventions(conventionsFile, deps.config, deps.hostPaths.wpcoreConf).text;
+      registerAssistantRoutes(api, {
+        secrets: deps.secrets,
+        secretsFile: deps.secretsFile,
+        settingsFile: deps.settingsFile,
+        claude: deps.claude ?? defaultClaude,
+        aura: siteRoutes.aura,
+        chat: {
+          config: deps.config,
+          exec: deps.exec,
+          store: deps.store,
+          wpcoreConf: deps.hostPaths.wpcoreConf,
+          sites: siteRoutes.sites,
+          aura: siteRoutes.aura,
+          environment: () => checkEnvironment({ config: deps.config, exec: deps.exec, secrets: deps.secrets(), paths: deps.hostPaths, dmpRoot: deps.dmpRoot }),
+          coreStatus: deps.coreStatus ?? (async () => null),
+          conventions,
+        },
+        wizard: {
+          exec: deps.exec,
+          workDir: join(deps.uploadsDir, '..', 'tmp'),
+          uploadsDir: deps.uploadsDir,
+          sites: siteRoutes.sites,
+          cores: () => {
+            const conf = readWpcoreConfig(deps.hostPaths.wpcoreConf);
+            return conf ? installedCores(conf.coresDir) : [];
+          },
+          conventions,
+          preset: (repo) => deps.store.preset(repo),
+        },
+        conventionsFile,
+        defaultConventions: () => defaultConventions(deps.config, deps.hostPaths.wpcoreConf),
+      });
+    }
+  });
+
+  if (deps.webRoot && existsSync(deps.webRoot)) {
+    await app.register(fastifyStatic, { root: deps.webRoot });
+    // Page routes (which can end in a domain, like /sites/local.a.com) get the
+    // app shell; a missing build file under /assets/ stays a 404.
+    app.setNotFoundHandler((request, reply) => {
+      const path = request.url.split('?')[0] ?? '';
+      if (request.method === 'GET' && !path.startsWith('/api/') && !path.startsWith('/assets/')) {
+        return reply.sendFile('index.html');
+      }
+      return reply.code(404).send({ error: 'not found' });
+    });
+  }
+
+  return app;
+}

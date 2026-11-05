@@ -1,0 +1,48 @@
+---
+description: Rules for the Claude assistant (Phase 3) and anything sent to an AI
+alwaysApply: false
+---
+
+# AI assistant
+
+- The assistant uses the action registry as its tool list. It cannot do
+  anything the panel buttons cannot do.
+- Read tools (`server/src/assistant/chat.ts`) run directly and only read.
+  Every registry action is a proposal tool: calling it only adds a card, and
+  the card runs through `/api/actions/:id` when the user clicks Run.
+- Actions that delete data or need the user's own typed confirmation or
+  upload are in `ASSISTANT_EXCLUDED_ACTIONS` and never become tools.
+- The assistant's own settings (enabled, model, key) are plain routes, never
+  registry actions, so it cannot change them.
+- Every tool result goes through `redact()` and is capped in size.
+- Never send to the model: database contents, `wp-config.php` secrets (DB
+  password, salts, keys), `secrets.json`, private keys, full log files. Log
+  excerpts are short and redacted.
+- Each teammate uses their own Anthropic API key or `ant auth login`; it is
+  stored outside the repo, readable only by them.
+- The assistant is optional and off by default; every page must work without
+  it.
+- The MCP server (`server/src/mcp.ts`, `devmagic-panel mcp`) exposes the same
+  read tools and the same proposals as `propose_*` tools. Proposals go to the
+  `proposals` table and run only from the panel; MCP clients can run with
+  their own approvals switched off, so they never get a tool that changes the
+  system.
+- Installing from an organization runs Claude Code headless
+  (`server/src/org/claude-code.ts`) with the user's own claude.ai sign-in and
+  connectors. Every run gets a fixed list of read-only tools (file reads in
+  its own folder, Asana reads, Drive metadata and search, Docs reads; never
+  Drive file contents), `--disallowedTools` for anything that writes or runs
+  commands, a model, an effort (`--effort`) and a spending cap, and a JSON
+  schema; the answer is checked again with zod (`shared/src/org.ts`: links,
+  Drive ids, dump names) before use. Reading a repo and checking its links
+  are the registry actions `org.readRepo` and `org.checkAccess`
+  (`changesSystem: false`, kept from the assistant): jobs that note
+  themselves on the install draft with what they are for, and keep their
+  answer there (`Drafts.noteJob`, `saveResult`).
+- A repo is read from a folder holding only its doc and build files
+  (`docPaths`), never `wp-config.php` or `.env`. Dumps are downloaded by the
+  panel with rclone or taken from Downloads; their contents never reach
+  Claude.
+- The wizard's answers from an organization follow the local setup first
+  (`prefillFromFacts`): local.* names, wpcore, the cores installed here.
+  Where the docs differ it says so; what nothing answers stays empty.

@@ -1,0 +1,42 @@
+import type { JobView } from '@devmagic-panel/shared';
+import { LoaderCircle, RotateCcw, Undo2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { settled, StepList } from '@/components/job-steps';
+import { Button } from '@/components/ui/button';
+import { Link } from '@/lib/router';
+import { lastLine } from '@/lib/site-actions';
+
+/**
+ * A job where it was started: under the card whose button started it (or at
+ * the top of a list for a row's menu), scrolled into view, with its steps,
+ * Retry when it failed and the way to Undo once it settled. The header's jobs
+ * indicator is the view of every job.
+ */
+export function JobBox({ job, onRetry }: { job: JobView; onRetry: () => void }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  // A new job comes into view where it was started, clear of a sticky strip at the top (the PHP tab's).
+  useEffect(() => {
+    // A block, not an expression: newer browsers return a promise from scrollIntoView, which an effect must not return.
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [job.id]);
+  return (
+    <div ref={ref} className="grid scroll-mt-24 gap-2">
+      <p className="flex items-center gap-2 text-sm font-medium">{!settled(job) && <LoaderCircle className="size-4 animate-spin text-primary" />}{job.title}</p>
+      <StepList steps={job.steps} open={open} setOpen={setOpen} />
+      {job.status === 'failed' && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="flex-1 text-sm text-danger">{lastLine(job.steps.find((s) => s.status === 'failed')?.output ?? '')}</p>
+          <Button variant="outline" size="sm" onClick={onRetry}><RotateCcw />Retry</Button>
+        </div>
+      )}
+      {settled(job) && job.undoable.length > 0 && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Undo2 className="size-3.5" />
+          To take it back, use Undo on <Link href={`/jobs/${encodeURIComponent(job.id)}`} className="font-medium text-foreground hover:underline">the job&apos;s page</Link>.
+        </p>
+      )}
+    </div>
+  );
+}
+

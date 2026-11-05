@@ -1,0 +1,23 @@
+---
+description: How tests are written and what they must never do
+globs: ["**/test/**", "scripts/tests/**"]
+---
+
+# Testing
+
+- Vitest for `shared/` and `server/` (`*/test/*.test.ts`), bats for
+  `dmp-root` and `install.sh` (`scripts/tests/*.bats`).
+- Tests never touch the real system: no real `sudo`, Apache, `/etc` or home
+  folder. Server tests use `fakeExec()` and `tempTree()` from
+  `server/test/helpers.ts`; HTTP tests use `app.inject`.
+- bats: `setup_tree` builds a temp tree and stubs; `DMP_CONFIG` points at it.
+  The installer is tested with `--dry-run` and a `sudo` stub that fails
+  (`install.bats`), and `--from-panel` runs for real against stubs that record
+  what sudo, systemctl and apt would do (`install-from-panel.bats`): each step
+  that can fail has a test proving the rollback. In bats a bare `! cmd` does not
+  fail a test; use `refute cmd` (or `run !`).
+- A change in logic means a new or updated test in the same change. Security
+  rules (local names, host/origin checks, no shell) each have a test that
+  proves the refusal.
+- The same local-name cases are tested in `shared/test/actions.test.ts` and
+  `scripts/tests/dmp-root.bats`, so both sides agree.

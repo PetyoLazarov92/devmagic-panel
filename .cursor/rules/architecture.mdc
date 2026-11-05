@@ -1,0 +1,69 @@
+---
+description: How the panel is put together and where things live
+alwaysApply: true
+---
+
+# Architecture
+
+```
+browser ─https─> Apache (local.devmagic, local CA cert) ─proxy─> Fastify on 127.0.0.1:PANEL_PORT
+                                                                   ├─ action registry (shared/src/actions.ts)
+                                                                   ├─ as the user: wp-cli, git, mysql, certutil
+                                                                   ├─ as root: sudo -n dmp-root <command>
+                                                                   └─ run history: node:sqlite
+```
+
+| Path | Holds |
+| --- | --- |
+| `shared/src/` | Action registry (zod schemas), check and session types, `isLocalName` |
+| `server/src/app.ts` | Fastify app: host/origin checks, login, protected API, static web |
+| `server/src/actions.ts` | One handler per registry action, `runAction()` validates and records |
+| `server/src/environment.ts` | Environment checks, each returning ok/warn/fail plus fixes |
+| `server/src/exec.ts` | `Executor` (no shell) and `runRoot()` for `sudo -n dmp-root` |
+| `server/src/config.ts` | `config.env` parser (same rules as `scripts/lib/config.sh`), user paths |
+| `server/src/cli.ts` | `setup`, `set-password` and `mcp`, run by install.sh and MCP clients |
+| `server/src/org/` | Installing from an organization: Claude Code runs (`claude-code.ts`), the GitHub CLI (`github-cli.ts`), repo scans (`scan.ts`), reading a repo and its links (`read.ts`), dump downloads (`dumps.ts`), routes |
+| `server/src/drafts.ts` | Install drafts: the wizard's answers for 24 hours after the last change, kept while their install runs |
+| `server/src/sites/archive.ts` | Archiving the current site before a reinstall or a restore over it, with an Undo that puts it back |
+| `server/src/release-source.ts` | The ways to the releases, tried in order: public HTTPS, the GitHub CLI, git on the `pkg/vX.Y.Z` package tags; no token |
+| `server/src/update.ts` | Updates: check through the first way that works, notes from the releases, download, checksum, unpack into `releases/`, switch `current`, restart; switching back to an installed release |
+| `server/src/update-install.ts` | `panel.installRelease`: a release's `install.sh --from-panel` in a transient user unit, the sudo password through a FIFO, the job following `update-status.json`, and the run finished by the panel that runs after the restart |
+| `web/src/` | React UI; `lib/api.ts` is the only place that calls the server |
+| `scripts/bin/dmp-root` | Root entry point; libraries in `scripts/lib/*.sh` |
+| `scripts/bin/dmp-restore` | Restores a backup; run by hand with `sudo`, never passwordless |
+| `server/src/wpcore.ts` | Reads the shared `/etc/wpcore.conf` and lists installed cores |
+| `server/src/sites/discover.ts` | Builds the site list from vhosts, certs, wp-config, cores, git and MySQL |
+| `server/src/sites/site-actions.ts` | Site actions: login, caches, rewrites, debug, core switch |
+| `server/src/sites/create.ts` | The new site steps; each one registers its undo |
+| `server/src/self-check.ts` | The Environment page's Panel installation group: install.sh's listed files, root scripts against the panel's code, build against the code. The panel runs from a release in `~/.local/share/devmagic-panel/releases/<name>`, the one `current` points at; `install.sh` puts it there (`prepare_release`), built from the checked out commit when run from a checkout |
+| `server/src/jobs.ts` | Long installs as steps with output, retry and undo; the browser polls them. Also the lock: `runAction` refuses any action on a site (domain, or domain and path), a Deleted sites entry's domain or a core version while a job or another action works on it (`lockKey`, `busyFor`) |
+| `server/src/sites/uploads.ts`, `dump.ts` | Dump uploads and what is read from them without importing. A job that reads a dump names it (`upload`), so the hourly prune (`pruneUploads`) keeps it while the job may retry |
+| `install.sh` | Installer; `--dry-run` prints every system change |
+| `scripts/package.sh` | Packs the build into a release (`npm run package`), as `.github/workflows/release.yml` does for a tag |
+| `get.sh` | First install from GitHub: downloads, checks and unpacks a release, runs its `install.sh` |
+
+Files on a machine:
+
+| Path | Owner | Holds |
+| --- | --- | --- |
+| `/etc/devmagic-panel/config.env` | root, 0644 | Paths and panel settings, plain `KEY=value` |
+| `/usr/local/lib/devmagic-panel/` | root | Installed `dmp-root`, its libraries, `wpcore` |
+| `/etc/sudoers.d/devmagic-panel` | root, 0440 | NOPASSWD for `dmp-root` and `wpcore` only |
+| `/usr/local/lib/devmagic-panel.update/` | root, 0700 | Only while `install.sh --from-panel` runs: the root scripts, config.env and sudoers rule as they were (`prev/`) and the new scripts while staged (`new/`); put back on failure, removed on success |
+| `/etc/wpcore.conf` | root | Shared with the wpcore CLI: cores folder, sites folder |
+| `/etc/hosts` | root | The panel's lines sit between `# BEGIN devmagic-panel` and `# END devmagic-panel` |
+| `~/devmagic-panel-backups/` | user, 0700 | Backups (0600 each, they hold private keys) |
+| `~/.config/devmagic-panel/secrets.json` | user, 0600 | Panel password hash, MySQL admin account, Anthropic key |
+| `~/.local/share/devmagic-panel/releases/` | user | Installed releases (built code and runtime dependencies); `current` points at the running one |
+| `~/.local/share/devmagic-panel/update-status.json` | user | How the last `install.sh --from-panel` went (release, step, state, rolled back, log); `update-run.json` next to it names its run and unit until a panel finishes the run |
+| `~/.local/share/devmagic-panel/node/` | user | Node.js for the panel only, when install.sh found none; `current` points at it and the service runs it |
+| `~/.local/share/devmagic-panel/panel.db` | user | Run history |
+| `~/.config/systemd/user/devmagic-panel.service` | user | Starts the server |
+
+Root work and user work are split on purpose: files a site owns (clone,
+`wp-config.php`, database) are made as the user; system files (certs, vhosts,
+hosts, CA trust) only through `dmp-root`.
+
+Existing setup: vhosts without the panel's marker line are read, never
+written or removed; hosts lines outside the panel's block are never changed;
+wpcore's config and cores folder are shared with the CLI. See AGENTS.md rule 12.

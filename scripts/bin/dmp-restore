@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# dmp-restore: put certs, vhosts, /etc/hosts and the system CA folder back
+# the way a devmagic-panel backup recorded them.
+#
+#   sudo /usr/local/lib/devmagic-panel/bin/dmp-restore --list
+#   sudo /usr/local/lib/devmagic-panel/bin/dmp-restore            newest backup
+#   sudo /usr/local/lib/devmagic-panel/bin/dmp-restore <archive>
+#
+# Deliberately NOT in the passwordless sudoers rule: restoring writes Apache
+# config, which can run programs as root, so sudo asks for your password.
+# The archive must come from the backup folder and may only hold the paths a
+# backup covers; links are allowed only where a2ensite makes them.
+set -euo pipefail
+
+DMP_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+for lib in log config backup; do
+  # shellcheck source=/dev/null
+  source "$DMP_HOME/lib/$lib.sh"
+done
+
+ARCHIVE_PATTERN='^devmagic-panel-backup-[0-9]{8}-[0-9]{6}\.tar\.gz$'
+
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+
+list_archives() {
+  [[ -d "$BACKUP_DIR" ]] || return 0
+  find "$BACKUP_DIR" -maxdepth 1 -type f -name 'devmagic-panel-backup-*.tar.gz' -printf '%f\n' \
+    | grep -E "$ARCHIVE_PATTERN" | sort -r || true
+}
+
+# The paths a backup covers, as tar stores them (no leading slash).
+allowed_paths() {
+  local p
+  for p in "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$HOSTS_FILE" "$SYSTEM_CA_DIR"; do
+    printf '%s\n' "${p#/}"
+  done
+}
+
+is_allowed_member() {
+  local member="${1%/}" allowed
+  [[ "/$member/" != */../* && "/$member/" != */./* && "$member" != /* ]] || return 1
+  while IFS= read -r allowed; do
+    [[ "$member" == "$allowed" || "$member" == "$allowed"/* ]] && return 0
+  done < <(allowed_paths)
+  return 1
+}
+
+resolve_archive() {
+  local arg="${1:-}" name real_dir
+  if [[ -z "$arg" ]]; then
+    name="$(list_archives | head -n 1)"
+    [[ -n "$name" ]] || dmp_die "no backups in $BACKUP_DIR"
+    arg="$BACKUP_DIR/$name"
+  fi
+  [[ -f "$arg" && ! -L "$arg" ]] || dmp_usage_error "not a backup file: $arg"
+  name="$(basename "$arg")"
+  [[ "$name" =~ $ARCHIVE_PATTERN ]] || dmp_usage_error "not a devmagic-panel backup name: $name"
+  real_dir="$(cd "$(dirname "$arg")" && pwd -P)"
+  [[ "$real_dir" == "$(cd "$BACKUP_DIR" && pwd -P)" ]] || dmp_usage_error "backups are restored only from $BACKUP_DIR"
+  printf '%s/%s' "$real_dir" "$name"
+}
+
+check_members() {
+  local archive="$1" member line kind name enabled="${APACHE_SITES_ENABLED#/}"
+  while IFS= read -r member; do
+    is_allowed_member "$member" || dmp_die "refusing $archive: it holds $member, which a backup never contains"
+  done < <(tar -tzf "$archive")
+
+  # Before unpacking: a link followed by a file written through it could land
+  # outside the temp folder, so links may only sit in sites-enabled and hard
+  # links are refused outright.
+
+  while IFS= read -r line; do
+    kind="${line:0:1}"
+    case "$kind" in
+      h) dmp_die "refusing $archive: it holds hard links" ;;
+      l)
+        # "lrwxrwxrwx user/group   0 2026-10-24 09:13 path -> target"; read
+        # splits on runs of spaces, so the padded size column is fine.
+        read -r _ _ _ _ _ name <<< "$line"
+        name="${name%% -> *}"
+        [[ "$(dirname "$name")" == "$enabled" ]] || dmp_die "refusing $archive: link outside sites-enabled: $name"
+        ;;
+    esac
+  done < <(tar -tvzf "$archive")
+}
+
+# After extraction: only regular files, folders, and a2ensite-style links.
+check_tree() {
+  local root="$1" enabled="${APACHE_SITES_ENABLED#/}" path target
+  if [[ -n "$(find "$root" ! -type f ! -type d ! -type l -print -quit)" ]]; then
+    dmp_die "refusing the backup: it holds special files"
+  fi
+  if [[ -n "$(find "$root" -type f -perm /6000 -print -quit)" ]]; then
+    dmp_die "refusing the backup: it holds setuid or setgid files"
+  fi
+  local name
+  while IFS= read -r path; do
+    target="$(readlink "$path")"
+    [[ "$(dirname "${path#"$root"/}")" == "$enabled" ]] || dmp_die "refusing the backup: link outside sites-enabled: ${path#"$root"/}"
+    case "$target" in
+      ../sites-available/*) name="${target#../sites-available/}" ;;
+      "$APACHE_SITES_AVAILABLE"/*) name="${target#"$APACHE_SITES_AVAILABLE"/}" ;;
+      *) name="" ;;
+    esac
+    [[ "$name" =~ ^[A-Za-z0-9._-]+$ && "$name" != .* ]] || dmp_die "refusing the backup: ${path#"$root"/} points to $target"
+  done < <(find "$root" -type l)
+}
+
+restore_from() {
+  local root="$1" p rel
+  for p in "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$SYSTEM_CA_DIR"; do
+    rel="${p#/}"
+    [[ -d "$root/$rel" ]] || continue
+    rm -rf "$p"
+    mkdir -p "$(dirname "$p")"
+    cp -a "$root/$rel" "$p"
+    dmp_ok "restored $p"
+  done
+  rel="${HOSTS_FILE#/}"
+  if [[ -f "$root/$rel" ]]; then
+    cat "$root/$rel" > "$HOSTS_FILE"
+    dmp_ok "restored $HOSTS_FILE"
+  fi
+}
+
+main() {
+  local yes=0 list=0 arg=""
+  while (( $# > 0 )); do
+    case "$1" in
+      --list) list=1 ;;
+      --yes) yes=1 ;;
+      -h | --help) usage; exit 0 ;;
+      -*) dmp_usage_error "unknown option: $1" ;;
+      *) [[ -z "$arg" ]] || dmp_usage_error "only one archive"; arg="$1" ;;
+    esac
+    shift
+  done
+
+  dmp_load_config
+  if (( list )); then
+    list_archives
+    return 0
+  fi
+
+  local archive
+  archive="$(resolve_archive "$arg")"
+  check_members "$archive"
+
+  dmp_step "Restoring $archive"
+  printf '   This replaces %s, %s, %s, %s and %s with the backed-up versions.\n' \
+    "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$SYSTEM_CA_DIR" "$HOSTS_FILE"
+  if (( ! yes )); then
+    local answer
+    read -r -p "Continue? [y/N] " answer
+    [[ "$answer" =~ ^[Yy] ]] || { dmp_warn "nothing restored"; exit 1; }
+  fi
+
+  local work
+  work="$(mktemp -d)"
+  chmod 0700 "$work"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$work'" EXIT
+  tar -xzf "$archive" -C "$work" || dmp_die "could not unpack $archive"
+  check_tree "$work"
+
+  # Keep the current state too, so a restore can itself be undone.
+  dmp_backup
+
+  restore_from "$work"
+  update-ca-certificates --fresh >/dev/null || dmp_warn "update-ca-certificates failed"
+  if apache2ctl configtest >/dev/null 2>&1; then
+    systemctl reload apache2 && dmp_ok "apache reloaded"
+  else
+    dmp_warn "apache configtest fails with the restored config; Apache was not reloaded"
+  fi
+  dmp_ok "restore finished. If the panel's own site is gone, run install.sh again."
+}
+
+main "$@"

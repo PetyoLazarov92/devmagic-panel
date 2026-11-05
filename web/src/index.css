@@ -1,0 +1,252 @@
+@import 'tailwindcss';
+
+/* Dark mode follows the .dark class set by the theme toggle (see index.html). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Components use these names only, never raw colours, so the
+ * whole panel changes theme in one place. Shapes follow shadcn/ui.
+ */
+:root {
+  --background: oklch(0.985 0.002 270);
+  --foreground: oklch(0.2 0.02 270);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --muted: oklch(0.955 0.005 270);
+  --muted-foreground: oklch(0.5 0.02 270);
+  --border: oklch(0.91 0.008 270);
+  --input: oklch(0.88 0.01 270);
+  --ring: oklch(0.6 0.19 285);
+  --primary: oklch(0.55 0.21 285);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.01 285);
+  --secondary-foreground: oklch(0.3 0.06 285);
+  --success: oklch(0.6 0.15 155);
+  --warning: oklch(0.72 0.16 70);
+  --danger: oklch(0.58 0.21 25);
+  --radius: 0.625rem;
+  /* The colours of the Claude border, a slow turn through them. */
+  --ai-1: oklch(0.65 0.25 340);
+  --ai-2: oklch(0.6 0.23 300);
+  --ai-3: oklch(0.6 0.2 265);
+  --ai-4: oklch(0.72 0.14 200);
+  --ai-5: oklch(0.72 0.18 150);
+  --ai-6: oklch(0.82 0.16 90);
+}
+
+.dark {
+  --background: oklch(0.16 0.01 275);
+  --foreground: oklch(0.95 0.005 270);
+  --card: oklch(0.2 0.012 275);
+  --card-foreground: var(--foreground);
+  --muted: oklch(0.25 0.012 275);
+  --muted-foreground: oklch(0.7 0.015 270);
+  --border: oklch(0.28 0.012 275);
+  --input: oklch(0.33 0.015 275);
+  --ring: oklch(0.68 0.17 285);
+  --primary: oklch(0.66 0.18 285);
+  --primary-foreground: oklch(0.15 0.02 285);
+  --secondary: oklch(0.27 0.03 285);
+  --secondary-foreground: oklch(0.9 0.03 285);
+  --success: oklch(0.72 0.15 155);
+  --warning: oklch(0.8 0.15 75);
+  --danger: oklch(0.68 0.19 25);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * The Claude border: a gradient that turns slowly around a card, for the
+ * options Claude Code takes part in. Still for people who turn off animations.
+ */
+@property --ai-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@utility ai-border {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--ai-fill, var(--card)), var(--ai-fill, var(--card))) padding-box,
+    conic-gradient(from var(--ai-angle), var(--ai-1), var(--ai-2), var(--ai-3), var(--ai-4), var(--ai-5), var(--ai-6), var(--ai-1)) border-box;
+  animation: ai-border-turn 6s linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* The Claude card when picked: the same light tint as the other cards, inside its border. */
+@utility ai-picked {
+  --ai-fill: color-mix(in oklab, var(--primary) 6%, var(--card));
+}
+
+@keyframes ai-border-turn {
+  to {
+    --ai-angle: 360deg;
+  }
+}
+
+/*
+ * The open list of a dropdown (Select), in the panel's colours where the
+ * browser lets a page style it (Chrome and Edge); elsewhere it stays the
+ * browser's own. Outside any layer, so it wins over appearance-none.
+ */
+@supports (appearance: base-select) {
+  select.dmp-select,
+  select.dmp-select::picker(select) {
+    appearance: base-select;
+  }
+  select.dmp-select {
+    display: flex;
+    align-items: center;
+  }
+  select.dmp-select::picker-icon {
+    display: none;
+  }
+  select.dmp-select::picker(select) {
+    margin-block: 4px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--foreground);
+    box-shadow: 0 12px 32px -12px oklch(0.2 0.02 270 / 0.3);
+  }
+  select.dmp-select option {
+    padding: 6px 10px;
+    border-radius: calc(var(--radius) - 4px);
+    font-size: 0.875rem;
+  }
+  select.dmp-select option:hover,
+  select.dmp-select option:focus-visible {
+    background: var(--muted);
+    outline: none;
+  }
+  select.dmp-select option:checked {
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+    font-weight: 500;
+  }
+  select.dmp-select option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--primary);
+  }
+}
+
+/*
+ * The login page's brand panel: sites around this machine, each name getting
+ * its certificate and lighting its node. The same deep purple in light and
+ * dark mode; moving only opacity and transforms, and none of it with reduced
+ * motion, which shows the finished picture.
+ */
+.login-art {
+  --la-bg: oklch(0.25 0.09 285);
+  --la-line: oklch(0.36 0.12 285);
+  --la-line-lit: oklch(0.62 0.16 285);
+  --la-node: oklch(0.45 0.17 285);
+  --la-hub: oklch(0.5 0.19 285);
+  --la-glow: oklch(0.62 0.16 285);
+  --la-text: oklch(0.86 0.06 285);
+  --la-title: oklch(0.96 0.02 285);
+  --la-muted: oklch(0.74 0.09 285);
+  --la-badge: oklch(0.33 0.12 285);
+  --la-live: oklch(0.78 0.11 170);
+  --la-live-soft: oklch(0.86 0.08 170);
+}
+.login-art .la-row { animation: la-row 12s infinite backwards; }
+.login-art .la-on { animation: la-on 12s infinite backwards; }
+.login-art .la-req { animation: la-req 12s infinite backwards; }
+.login-art .la-breath {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: la-breath 3s ease-in-out infinite;
+}
+.login-art[data-paused] * {
+  animation-play-state: paused;
+}
+/* Held: the requests' motion stops too (SMIL), so they hide rather than freeze mid-line. */
+.login-art[data-paused] .la-req {
+  visibility: hidden;
+}
+@keyframes la-row {
+  0% { opacity: 0; transform: translateX(-8px); }
+  5%, 78% { opacity: 1; transform: none; }
+  86%, 100% { opacity: 0; }
+}
+@keyframes la-on {
+  0%, 6% { opacity: 0; }
+  9%, 78% { opacity: 1; }
+  86%, 100% { opacity: 0; }
+}
+@keyframes la-req {
+  0%, 10% { opacity: 0; }
+  12%, 75% { opacity: 1; }
+  78%, 100% { opacity: 0; }
+}
+@keyframes la-breath {
+  0%, 100% { transform: scale(1); opacity: 0.35; }
+  50% { transform: scale(1.4); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-art * { animation: none !important; }
+  .login-art .la-req { display: none; }
+}
+
+/* A wrong password: the form shakes once, unless motion is reduced. */
+@keyframes login-shake {
+  0%, 100% { transform: none; }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.login-shake { animation: login-shake 0.4s ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  .login-shake { animation: none; }
+}

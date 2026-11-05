@@ -1,0 +1,20 @@
+---
+description: TypeScript style for shared, server and web
+globs: ["**/*.ts", "**/*.tsx"]
+---
+
+# TypeScript style
+
+- Strict mode with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
+  Handle the `undefined`; do not silence it with `!`.
+- ES modules with `.js` extensions in relative server and shared imports;
+  `@/` alias in web.
+- `import type` for types (`verbatimModuleSyntax`).
+- Use the types `shared` exports (`ActionId`, `CheckResult`, `SessionInfo`)
+  instead of redefining shapes on either side.
+- Small named functions over classes, except for stateful pieces (`RunStore`,
+  `Sessions`).
+- Errors that reach the user carry a plain message; no stack traces in API
+  responses.
+- Comments explain why, not what. File headers state the file's job in one or
+  two lines when it is not obvious.

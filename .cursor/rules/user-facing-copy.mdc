@@ -1,0 +1,12 @@
+---
+description: Wording for UI text, check details, errors and docs
+alwaysApply: true
+---
+
+# User-facing copy
+
+- Short, plain, specific: say what is wrong and what to do ("not in hosts:
+  local.a.de", "run install.sh"), not that "an error occurred".
+- Sentence case for labels and buttons. Buttons are verbs ("Add to hosts").
+- Name real things: paths, commands, domains, in `code` style in docs.
+- No em dashes. No exclamation marks. No emoji.
