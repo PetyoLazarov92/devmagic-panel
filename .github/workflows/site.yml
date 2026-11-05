@@ -1,0 +1,30 @@
+name: Site
+
+# Tells webtimeless.cloud that a release is out, so the site rebuilds and shows it at once.
+# The release workflow calls this after publishing; run it by hand to test the token. It never
+# fails: without SITE_DISPATCH_TOKEN, or when GitHub refuses it, the site's daily build picks
+# the release up.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tell the site
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::SITE_DISPATCH_TOKEN is not set: the site shows $GITHUB_REF_NAME with its daily build"
+            exit 0
+          fi
+          if gh api repos/PetyoLazarov92/webtimeless-tools-website/dispatches \
+            -f event_type=release -f 'client_payload[tool]=devmagic-panel' -f "client_payload[version]=$GITHUB_REF_NAME"; then
+            echo "The site rebuilds with devmagic-panel $GITHUB_REF_NAME."
+          else
+            echo "::warning::the site did not take the ping: check that SITE_DISPATCH_TOKEN is valid and can write to webtimeless-tools-website"
+          fi

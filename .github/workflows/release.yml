@@ -77,3 +77,9 @@ jobs:
           git ls-remote --tags --refs origin 'refs/tags/pkg/v*' | sed -E 's#^.*refs/tags/##' | sort -V | head -n -5 | while read -r old; do
             git push origin --delete "refs/tags/$old"
           done
+
+  # Once the release is out, the site rebuilds with it.
+  site:
+    needs: release
+    uses: ./.github/workflows/site.yml
+    secrets: inherit

@@ -87,7 +87,7 @@ files as the package tag `pkg/vX.Y.Z` (the notes as its message) and moves the
 `pkg/latest` branch to it, for installs and updates over git; the last five
 package tags stay. It stops when the tag does not match package.json or
 `CHANGELOG.md` has no section for it, so bump and write the entry before
-tagging.
+tagging. Its last job, `site.yml`, tells webtimeless.cloud, which rebuilds with the release within minutes (with the `SITE_DISPATCH_TOKEN` secret; without it, the site's daily build shows it).
 
 The panel updates itself from that release when its root scripts (`scripts/`,
 root-owned once installed) are the installed ones. A release that changes them
