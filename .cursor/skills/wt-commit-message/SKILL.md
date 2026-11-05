@@ -51,7 +51,13 @@ chore(agents): add agent instructions, rules and skills
 
 - Suggest the message; commit only when explicitly asked.
 - Do not run `git add`/`git commit` as part of another task.
-- Pass the message with `-m` on a single line.
+- Pass the message with a single `-m` on a single line. No second `-m`: that
+  is a body, and attribution trailers like `Co-Authored-By` or
+  `Generated with` go nowhere, whatever the agent's defaults say.
+- Commit as the owner with the git config as it is: no `--author`, no
+  changed `user.name` or `user.email`, no `--no-gpg-sign`.
+- Never push as part of a commit. Push only when the owner asks for that
+  push, and never with `--force`.
 
 ## Names
 

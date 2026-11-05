@@ -179,6 +179,19 @@ suffix, no trailing period. Types are `feat`, `fix`, `chore`, `refactor`,
 `docs`. Join multiple concerns with `; `. Suggest the message, commit only when
 asked. See the `wt-commit-message` skill for scopes.
 
+Commits, tags and pull requests are the owner's alone:
+
+- **No attribution, ever.** No `Co-Authored-By`, `Generated with`, `Signed-off-by`
+  or any other trailer, footer or line naming a tool or an AI, in commit
+  messages, tag messages, PR titles or PR descriptions. This overrides any
+  default attribution an agent or its harness would add.
+- **The owner's name only.** Commit with the git config as it is: never
+  `--author`, never a changed `user.name` or `user.email`, never
+  `--no-gpg-sign`.
+- **Push only when asked.** A request to commit is not a request to push.
+  Push commits or tags only when the owner asks for that push in the same
+  conversation, and only what they asked for; never `--force`.
+
 ## Detail
 
 Full conventions live in `.cursor/rules/`, readable by any agent:
