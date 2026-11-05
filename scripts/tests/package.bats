@@ -34,7 +34,10 @@ setup() {
   printf 'export {};\n' > "$SRC/server/dist/cli.js"
   printf '<html></html>\n' > "$SRC/web/dist/index.html"
 
+  # Never signed, whatever the global git config says: signing would need a passphrase.
   git -C "$SRC" init -q
+  git -C "$SRC" config commit.gpgsign false
+  git -C "$SRC" config tag.gpgsign false
   git -C "$SRC" add -A
   git -C "$SRC" -c user.name=Test -c user.email=test@example.com commit -qm release
   git -C "$SRC" tag v9.8.7

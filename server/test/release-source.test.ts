@@ -73,7 +73,8 @@ describe('ghSource', () => {
 function packageRepo() {
   const root = mkdtempSync(join(tmpdir(), 'dmp-git-'));
   const repo = join(root, 'origin');
-  const git = (...args: string[]) => execFileSync('git', ['-C', repo, '-c', 'user.name=Alex Morgan', '-c', 'user.email=alex@example.com', ...args], { encoding: 'utf8' });
+  // Never signed, whatever the global git config says: signing would need a passphrase.
+  const git = (...args: string[]) => execFileSync('git', ['-C', repo, '-c', 'user.name=Alex Morgan', '-c', 'user.email=alex@example.com', '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', ...args], { encoding: 'utf8' });
   mkdirSync(repo);
   execFileSync('git', ['init', '-q', repo]);
   git('config', 'uploadpack.allowFilter', 'true');
