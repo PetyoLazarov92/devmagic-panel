@@ -412,22 +412,39 @@ detect_settings() {
   BACKUP_DIR="$HOME/devmagic-panel-backups"
   # Overridable so the tests never read this machine's state (its default PHP) when no config.env says where.
   STATE_DIR="${DMP_INSTALL_STATE_DIR:-/var/lib/devmagic-panel}"
+  # Where the panel updates from, like a fork; empty means its own repository.
+  UPDATE_REPO=""
+  UPDATE_GIT_URL=""
 
   if [[ -r "$CONFIG_DIR/config.env" ]]; then
     local line
     # An if, not &&: a last line that does not match must not fail the step under set -e.
     while IFS= read -r line; do
-      if [[ "$line" =~ ^(PANEL_PORT|PANEL_DOMAIN|WEB_DIR|WEB_GROUP|CERTS_DIR|CA_DIR|BACKUP_DIR|STATE_DIR)=([A-Za-z0-9._/@:-]*)$ ]]; then
+      if [[ "$line" =~ ^(PANEL_PORT|PANEL_DOMAIN|WEB_DIR|WEB_GROUP|CERTS_DIR|CA_DIR|BACKUP_DIR|STATE_DIR|UPDATE_REPO|UPDATE_GIT_URL)=([A-Za-z0-9._/@:-]*)$ ]]; then
         printf -v "${BASH_REMATCH[1]}" '%s' "${BASH_REMATCH[2]}"
       fi
     done < "$CONFIG_DIR/config.env"
+  fi
+
+  # Kept only in the form the panel accepts (REPO_SLUG and GIT_URL in
+  # server/src/config.ts), since the panel does not start with any other.
+  local slug='^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$'
+  local remote='^([A-Za-z0-9_.-]+@[A-Za-z0-9.-]+:[A-Za-z0-9_./-]+|(ssh|https|file)://[A-Za-z0-9_.@:/-]+|/[A-Za-z0-9_./-]+)$'
+  if [[ -n "$UPDATE_REPO" && ! "$UPDATE_REPO" =~ $slug ]]; then
+    dmp_warn "UPDATE_REPO in $CONFIG_DIR/config.env is not owner/name; the panel updates from its own repository"
+    UPDATE_REPO=""
+  fi
+  if [[ -n "$UPDATE_GIT_URL" && ! "$UPDATE_GIT_URL" =~ $remote ]]; then
+    dmp_warn "UPDATE_GIT_URL in $CONFIG_DIR/config.env is not a git remote; the panel reads git from UPDATE_REPO"
+    UPDATE_GIT_URL=""
   fi
 }
 
 write_config() {
   dmp_step "Writing $CONFIG_DIR/config.env"
   as_root install -d -m 0755 -o root -g root "$CONFIG_DIR"
-  write_root_file "$CONFIG_DIR/config.env" 0644 <<EOF
+  {
+    cat <<EOF
 # devmagic-panel system settings, written by install.sh.
 # Read by dmp-root (as root) and by the panel. Plain KEY=value only.
 PANEL_USER=$PANEL_USER
@@ -448,6 +465,10 @@ PHP_CONF_DIR=/etc/php
 PHP_LIB_DIR=/usr/lib/php
 STATE_DIR=$STATE_DIR
 EOF
+    # Only when set: without them the panel updates from its own repository.
+    if [[ -n "$UPDATE_REPO" ]]; then printf 'UPDATE_REPO=%s\n' "$UPDATE_REPO"; fi
+    if [[ -n "$UPDATE_GIT_URL" ]]; then printf 'UPDATE_GIT_URL=%s\n' "$UPDATE_GIT_URL"; fi
+  } | write_root_file "$CONFIG_DIR/config.env" 0644
   record dir "$CONFIG_DIR" remove "settings folder"
   record file "$CONFIG_DIR/config.env" remove "settings read by dmp-root and the panel"
 }

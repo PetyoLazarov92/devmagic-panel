@@ -22,8 +22,12 @@ npm run dev:web       # Vite on 127.0.0.1:5173, proxies /api to the server
 ```
 
 Node 22.13+ (see `.nvmrc`). `npm install` sets `core.hooksPath` to
-`.githooks/`; the pre-commit hook runs typecheck, Vitest, bats and shellcheck.
-Skip with `git commit --no-verify`.
+`.githooks/`; the pre-commit hook runs the checks the staged files can affect:
+typecheck and Vitest for TypeScript, bats and shellcheck for the scripts,
+everything for `package.json`, the lockfile, `.nvmrc`, `scripts/php*` and any
+file it does not know, nothing for docs only. `DMP_PRECOMMIT=all git commit`
+runs everything; the test workflow always does. bats runs in parallel where
+GNU parallel is installed. Skip with `git commit --no-verify`.
 
 ## Non-negotiables
 

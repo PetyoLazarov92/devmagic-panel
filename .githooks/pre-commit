@@ -1,9 +1,34 @@
 #!/usr/bin/env bash
 # Blocks the commit if a type check, test or lint fails.
-# Matches .github/workflows/test.yml. Skip with: git commit --no-verify
+# Runs the checks the staged files can affect; the test workflow runs them all
+# on every push. Every check: DMP_PRECOMMIT=all git commit
+# Skip with: git commit --no-verify
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
+
+# ts: typecheck and Vitest. sh: bats and shellcheck. Docs need neither; a file
+# none of the patterns knows runs both.
+ts=0 sh=0
+if [[ "${DMP_PRECOMMIT:-}" == all ]]; then
+  ts=1 sh=1
+else
+  while IFS= read -r file; do
+    case "$file" in
+      package.json | package-lock.json | .nvmrc) ts=1 sh=1 ;;
+      # server/test/php.test.ts reads these.
+      scripts/php/* | scripts/php-compat/*) ts=1 sh=1 ;;
+      *.md | *.mdc | LICENSE | assets/* | .github/* | .cursor/* | .claude/*) ;;
+      install.sh | get.sh | scripts/* | .githooks/*) sh=1 ;;
+      shared/* | server/* | web/* | tsconfig*.json | vitest.config.ts) ts=1 ;;
+      *) ts=1 sh=1 ;;
+    esac
+  done < <(git diff --cached --name-only --no-renames)
+fi
+if (( !ts && !sh )); then
+  echo "pre-commit: only docs staged, no checks"
+  exit 0
+fi
 
 if [[ ! -d node_modules ]]; then
   echo "pre-commit: node_modules missing; run npm install first" >&2
@@ -26,11 +51,15 @@ if ! node_ok; then
 fi
 echo "pre-commit: node $(node --version)"
 
-echo "pre-commit: npm run typecheck"
-npm run typecheck --silent
-echo "pre-commit: npm test"
-npm test --silent
-echo "pre-commit: npm run test:scripts"
-npm run test:scripts --silent
-echo "pre-commit: npm run lint:scripts"
-npm run lint:scripts --silent
+if (( ts )); then
+  echo "pre-commit: npm run typecheck"
+  npm run typecheck --silent
+  echo "pre-commit: npm test"
+  npm test --silent
+fi
+if (( sh )); then
+  echo "pre-commit: npm run lint:scripts"
+  npm run lint:scripts --silent
+  echo "pre-commit: npm run test:scripts"
+  npm run test:scripts --silent
+fi

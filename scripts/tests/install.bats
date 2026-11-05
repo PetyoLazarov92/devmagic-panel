@@ -72,6 +72,30 @@ fake_release() {
   [[ "$output" == *"| PANEL_PORT=4799"* ]]
   [[ "$output" == *"| BACKUP_DIR=/srv/backups"* ]]
   [[ "$output" == *"devmagic-panel is installed"* ]]
+  # No update source of its own: the panel's repository.
+  [[ "$output" != *"UPDATE_REPO="* ]]
+  [[ "$output" != *"UPDATE_GIT_URL="* ]]
+}
+
+@test "a second run keeps the repository the panel updates from, like a fork" {
+  mkdir -p "$DMP_INSTALL_CONFIG_DIR"
+  printf 'PANEL_PORT=4799\nUPDATE_REPO=acme/devmagic-panel\nUPDATE_GIT_URL=git@github.com:acme/devmagic-panel.git\n' > "$DMP_INSTALL_CONFIG_DIR/config.env"
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"| UPDATE_REPO=acme/devmagic-panel"* ]]
+  [[ "$output" == *"| UPDATE_GIT_URL=git@github.com:acme/devmagic-panel.git"* ]]
+  [[ "$output" == *"| PANEL_PORT=4799"* ]]
+}
+
+@test "an update source the panel would refuse is dropped with a warning" {
+  mkdir -p "$DMP_INSTALL_CONFIG_DIR"
+  printf 'UPDATE_REPO=no-owner\nUPDATE_GIT_URL=--upload-pack\n' > "$DMP_INSTALL_CONFIG_DIR/config.env"
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"UPDATE_REPO in $DMP_INSTALL_CONFIG_DIR/config.env is not owner/name"* ]]
+  [[ "$output" == *"UPDATE_GIT_URL in $DMP_INSTALL_CONFIG_DIR/config.env is not a git remote"* ]]
+  [[ "$output" != *"| UPDATE_REPO="* ]]
+  [[ "$output" != *"| UPDATE_GIT_URL="* ]]
 }
 
 @test "dry run lists what it would install and writes no log" {
