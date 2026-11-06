@@ -41,6 +41,12 @@ globs: ["web/**"]
 - **Global things sit above per-item things.** A page about many items (PHP
   versions, databases) starts with what applies to all of them, then the item
   you picked, under its own heading.
+- **Tabs come in groups and keep their place.** Related tabs sit together
+  (a site: Overview and Logs; WordPress and its data; the server) with a line
+  between groups, and a tab an item lacks leaves the rest where they are. A
+  tab's badge counts only what needs a look, colored by how bad it is, never
+  how many things the tab lists. An Overview shows a fact from each other tab
+  and opens it; a setting lives in its tab, next to what it changes.
 - **One word for one thing.** A site with a PHP version or settings of its
   own has its "own PHP"; the version every other site runs is "the default".
 - **Confirm dialogs**: the title asks the question, the description says

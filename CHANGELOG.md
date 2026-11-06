@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.3.0 (2026-11-06)
+* **Sites:** a site's tabs come in a fixed order, in three groups with a line between them: Overview and Logs; WordPress and its data (Network, Plugins, Database, Cron, Config); the server (PHP, Domains and SSL). A tab a site lacks leaves the rest in place, and links like `?tab=database` open the same tab as before
+* **Sites:** a tab's badge counts only what needs a look, colored by how bad it is: errors in debug.log, late WP-Cron events and failed cron tasks, local constants wp-config.php does not have yet, names the certificate or the hosts file leaves out. Config and Domains and SSL no longer show how many constants or names they list
+* **Sites:** Overview starts with a tile for each other tab (debug mode and errors, the network, the database, WP-Cron, PHP, domains and the certificate) that opens it, then Git, quick actions and the WordPress core, then Local mode, uploads and the site's folders. Open in VS Code and Copy folder path are no longer in quick actions: they are in the header and its menu
+* **Sites:** debug mode moved to the Logs tab, above debug.log: where errors go now, Log only and Off, and each constant behind Each constant. Local constants are on the Config tab only, and a network's sites have a Network tab of their own. An update installs this release from the panel as usual
+
 ### v1.2.0 (2026-11-06)
 * **Sites:** the new site wizard installs from GitLab groups next to GitHub organizations, on gitlab.com and on your own GitLab, listed through the GitLab CLI (`glab`, 1.36 or newer) with its own sign-in, which the panel never reads. A group is scanned with its subgroups, only projects you can clone are listed, and two projects of one name in different subgroups stay apart. Add your own GitLab hosts under Organizations and groups to scan
 * **Sites:** a pasted repo URL in a GitLab subgroup (`git@gitlab.com:acme/web/site.git`) keeps its whole path, and the manual repo start says it takes any git host

@@ -1,7 +1,7 @@
-import type { ActionId, JobView, Site, SiteGit, SiteLocalMode, WpDebugConstant } from '@devmagic-panel/shared';
-import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, subjectLinks, WP_DEBUG_CONSTANTS, WP_DEBUG_DEFAULTS } from '@devmagic-panel/shared';
+import type { ActionId, JobView, Site, SiteGit, SiteLocalMode, WpCronReport, WpDebugConstant } from '@devmagic-panel/shared';
+import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import {
-  ArrowDownToLine, ArrowLeft, Check, Code2, Copy, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LoaderCircle, LogIn, Network, RefreshCw,
+  ArrowDownToLine, ArrowLeft, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LoaderCircle, LogIn, Network, RefreshCw,
   ShieldCheck, SkipForward, SquareTerminal, Trash2, Wrench, X,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -30,20 +30,14 @@ import { Link, navigate, useQueryParam } from '@/lib/router';
 import { useReloadWhileBusy } from '@/lib/jobs';
 import { loadThroughRestart } from '@/lib/startup';
 import { useAsync } from '@/lib/use-async';
-import { ConfigTab, LocalConstants, SaltsConfirm, saltsSummary, setConstant } from '@/pages/site-config';
+import { ConfigTab, SaltsConfirm, saltsSummary } from '@/pages/site-config';
 import { CronTab } from '@/pages/site-cron';
 import { DatabaseTab } from '@/pages/site-database';
 import { PhpTab } from '@/pages/site-php';
 import { PluginsTab } from '@/pages/site-plugins';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
+import { debugLabel, debugValues, siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
 import { cn } from '@/lib/utils';
-
-type Tab = 'overview' | 'plugins' | 'php' | 'logs' | 'cron' | 'database' | 'config' | 'domains';
-
-/** The tabs a site has: Plugins needs WordPress, Database a database, Config wp-config.php; a site under a path shares its parent's domains. */
-function siteTabs(site: Site): Tab[] {
-  return ['overview', ...(site.core.kind !== 'none' ? ['plugins' as const, 'php' as const] : []), 'logs', ...(site.core.kind !== 'none' ? ['cron' as const] : []), ...(site.db ? ['database' as const] : []), ...(site.constants ? ['config' as const] : []), ...(site.path ? [] : ['domains' as const])];
-}
 
 /** A tab's address: the site's page with ?tab=, nothing for Overview. Not a path segment, which a site under that path would own. */
 const tabHref = (site: { domain: string; path?: string }, tab: Tab, extra = '') => `${siteHref(site)}${tab === 'overview' ? '' : `?tab=${tab}${extra}`}`;
@@ -64,7 +58,9 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
   const reloadCron = (url?: string) => (url === cronUrl ? wpCron.reload() : setCronUrl(url));
   useReloadWhileBusy(Boolean(site?.installing || site?.busy), reload);
   // The tab is in the address, so a reload or a link opens it; one this site lacks shows Overview.
-  const tab: Tab = site && siteTabs(site).includes(requested as Tab) ? (requested as Tab) : 'overview';
+  const tab: Tab = site && siteTabItems(site).some((t) => t.value === requested) ? (requested as Tab) : 'overview';
+  // The constants every local site should have, from Settings, for the Config tab's count.
+  const locals = useAsync(() => api.localConstants(), []);
   const setTab = (next: Tab) => navigate(tabHref({ domain, ...(path ? { path } : {}) }, next), { scroll: false });
   useEffect(() => {
     if (site && requested !== null && requested !== tab) navigate(tabHref({ domain, ...(path ? { path } : {}) }, tab), { replace: true });
@@ -100,6 +96,11 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
   const problems = (logs.data?.lines ?? []).filter((l) => l.level === 'fatal' || l.level === 'error').length;
   // Late events, and the panel's cron tasks for the site whose last run failed.
   const cronProblems = wpCron.data ? wpCron.data.overdue + [wpCron.data.task, ...wpCron.data.tasks].filter((t) => t?.last?.status === 'failed').length : 0;
+  // Local constants wp-config.php does not have yet, and keys and salts to fix as one.
+  const configProblems = site.constants
+    ? (locals.data ?? []).filter((c) => site.constants?.find((s) => s.name === c.name)?.value !== c.value).length + (site.salts && saltsSummary(site.salts).bad.length > 0 ? 1 : 0)
+    : 0;
+  const counts: TabCounts = { logs: problems, cron: cronProblems, config: configProblems, domains: site.path ? 0 : uncoveredNames(site).length };
 
   return (
     <div className="pt-2">
@@ -182,23 +183,15 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         className="mt-6"
         value={tab}
         onChange={setTab}
-        items={[
-          { value: 'overview', label: 'Overview' },
-          ...(site.core.kind !== 'none' ? [{ value: 'plugins' as const, label: 'Plugins' }, { value: 'php' as const, label: 'PHP' }] : []),
-          { value: 'logs', label: 'Logs', ...(problems ? { count: problems } : {}) },
-          ...(site.core.kind !== 'none' ? [{ value: 'cron' as const, label: 'Cron', ...(cronProblems ? { count: cronProblems } : {}) }] : []),
-          ...(site.db ? [{ value: 'database' as const, label: 'Database' }] : []),
-          ...(site.constants ? [{ value: 'config' as const, label: 'Config', count: site.constants.length }] : []),
-          // A site under a path shares its parent's domains and certificate.
-          ...(site.path ? [] : [{ value: 'domains' as const, label: 'Domains and SSL', count: site.aliases.length + 1 }]),
-        ]}
+        items={siteTabItems(site, counts)}
       />
 
       <div className="mt-5">
-        {tab === 'overview' && <Overview site={site} onChanged={reload} onOpenConfig={() => setTab('config')} />}
+        {tab === 'overview' && <Overview site={site} onChanged={reload} onOpen={setTab} cron={wpCron.data ?? null} logErrors={problems} />}
+        {tab === 'logs' && <LogsTab site={site} onChanged={reload} />}
+        {tab === 'network' && <NetworkCard site={site} />}
         {tab === 'plugins' && <PluginsTab site={site} />}
         {tab === 'php' && <PhpTab site={site} />}
-        {tab === 'logs' && <LogsTab site={site} />}
         {tab === 'cron' && <CronTab site={site} report={wpCron} onReload={reloadCron} />}
         {tab === 'database' && <DatabaseTab site={site} />}
         {tab === 'config' && <ConfigTab site={site} onChanged={reload} />}
@@ -223,86 +216,163 @@ const DEBUG_PRESETS: Array<{ label: string; constants: Partial<Record<WpDebugCon
   { label: 'Off', constants: { WP_DEBUG: false } },
 ];
 
-/** Each debug constant on its own, as wp-config.php has it now; Apply sends only what changed. */
-function DebugSettings({ site, busy, onApply, onChanged, onOpenConfig }: { site: Site; busy: string | null; onApply: (constants: Partial<Record<WpDebugConstant, boolean>>) => void; onChanged: () => void; onOpenConfig: () => void }) {
-  const locals = useAsync(() => api.localConstants(), []);
-  const [setting, setSetting] = useState(false);
-  const current = Object.fromEntries(WP_DEBUG_CONSTANTS.map((n) => [n, site.debug.constants[n] ?? WP_DEBUG_DEFAULTS[n]])) as Record<WpDebugConstant, boolean>;
+/**
+ * Debug mode for the Logs tab, next to the log it fills: where errors go now, the two presets, and each
+ * constant on its own, as wp-config.php has it. Apply sends only what changed.
+ */
+function DebugSettings({ site, onChanged }: { site: Site; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ name: string; ok: boolean; output: string } | null>(null);
+  const current = debugValues(site);
   const key = JSON.stringify(current);
   const [wanted, setWanted] = useState(current);
   useEffect(() => setWanted(JSON.parse(key) as Record<WpDebugConstant, boolean>), [key]);
   const changed = Object.fromEntries(WP_DEBUG_CONSTANTS.filter((n) => wanted[n] !== current[n]).map((n) => [n, wanted[n]]));
 
+  async function apply(constants: Partial<Record<WpDebugConstant, boolean>>) {
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await api.runAction('site.setDebug', { ...siteTarget(site), constants });
+      setResult({ name: 'Debug mode', ok: r.ok, output: r.output });
+      if (r.ok) onChanged();
+    } catch (error) {
+      setResult({ name: 'Debug mode', ok: false, output: (error as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="grid gap-3 border-t pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium">Debug</p>
-          <p className="text-xs text-muted-foreground">Constants in wp-config.php. Ones it leaves out use WordPress's default.</p>
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">
+            Debug: <span className={cn(!site.debug.enabled && 'text-warning')}>{debugLabel(site)}</span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {site.debug.enabled ? 'Constants in wp-config.php. Ones it leaves out use WordPress\'s default.' : 'WordPress writes nothing new to debug.log while debug mode is off.'}
+          </p>
         </div>
         <span className="flex items-center gap-2">
-          {busy === 'Debug mode' && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+          {busy && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
           {DEBUG_PRESETS.map((p) => (
-            <Button key={p.label} size="sm" variant="outline" disabled={busy !== null} onClick={() => onApply(p.constants)}>{p.label}</Button>
+            <Button key={p.label} size="sm" variant="outline" disabled={busy || p.label === debugLabel(site)} onClick={() => void apply(p.constants)}>{p.label}</Button>
           ))}
         </span>
       </div>
-      <fieldset className="grid gap-2.5 sm:grid-cols-2" disabled={busy !== null}>
-        <legend className="sr-only">Debug constants</legend>
-        {WP_DEBUG_CONSTANTS.map((n) => (
-          <Checkbox
-            key={n}
-            id={`debug-${n}`}
-            checked={wanted[n]}
-            onChange={(v) => setWanted((w) => ({ ...w, [n]: v }))}
-            label={<code className="font-mono text-[13px]">{n}</code>}
-            hint={`${DEBUG_HINT[n]}${site.debug.constants[n] === null ? ' (default)' : ''}`}
-          />
-        ))}
-      </fieldset>
-      {Object.keys(changed).length > 0 && (
-        <div className="flex gap-2">
-          <Button size="sm" disabled={busy !== null} onClick={() => onApply(changed)}>Apply</Button>
-          <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => setWanted(current)}>Reset</Button>
-        </div>
+      <details className="border-t px-5 py-3">
+        <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">Each constant</summary>
+        <fieldset className="mt-3 grid gap-2.5 sm:grid-cols-2" disabled={busy}>
+          <legend className="sr-only">Debug constants</legend>
+          {WP_DEBUG_CONSTANTS.map((n) => (
+            <Checkbox
+              key={n}
+              id={`debug-${n}`}
+              checked={wanted[n]}
+              onChange={(v) => setWanted((w) => ({ ...w, [n]: v }))}
+              label={<code className="font-mono text-[13px]">{n}</code>}
+              hint={`${DEBUG_HINT[n]}${site.debug.constants[n] === null ? ' (default)' : ''}`}
+            />
+          ))}
+        </fieldset>
+        {Object.keys(changed).length > 0 && (
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" disabled={busy} onClick={() => void apply(changed)}>Apply</Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setWanted(current)}>Reset</Button>
+          </div>
+        )}
+      </details>
+      {result && <div className="border-t px-5 py-3"><RunOutput result={result} /></div>}
+    </Card>
+  );
+}
+
+/** One fact from another tab, and the way there. */
+function Tile({ label, value, detail, tone, onOpen }: { label: string; value: string; detail?: string; tone?: 'warning' | 'danger'; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        'grid min-w-0 gap-0.5 rounded-xl border bg-card px-4 py-3 text-left transition-colors hover:bg-muted/60',
+        tone === 'danger' && 'border-danger/30',
+        tone === 'warning' && 'border-warning/40',
       )}
-      {site.constants && (locals.data?.length ?? 0) > 0 && (
-        <div className="grid gap-2 border-t pt-3">
-          <p className="text-xs text-muted-foreground">Local constants from Settings</p>
-          <LocalConstants
-            site={site}
-            list={locals.data ?? []}
-            busy={busy !== null || setting}
-            onSet={(name, value) => {
-              setSetting(true);
-              void setConstant(site, name, value).then((ok) => {
-                setSetting(false);
-                if (ok) onChanged();
-              });
-            }}
-          />
-        </div>
-      )}
-      {site.constants && (
-        <button type="button" onClick={onOpenConfig} className="justify-self-start text-xs font-medium text-primary hover:underline">
-          All {site.constants.length} constants in wp-config.php
-        </button>
-      )}
+    >
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="truncate text-sm font-medium">{value}</span>
+      {detail && <span className={cn('truncate text-xs', tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-muted-foreground')}>{detail}</span>}
+    </button>
+  );
+}
+
+/** The facts from the other tabs a site has, each opening its tab. */
+function SiteTiles({ site, cron, logErrors, onOpen }: { site: Site; cron: WpCronReport | null; logErrors: number; onOpen: (tab: Tab) => void }) {
+  const tabs = new Set(siteTabItems(site).map((t) => t.value));
+  const uncovered = uncoveredNames(site);
+  const names = site.aliases.length + 1;
+  const tiles: Array<Parameters<typeof Tile>[0] & { key: string }> = [];
+  tiles.push({
+    key: 'logs',
+    label: 'Debug',
+    value: debugLabel(site),
+    detail: logErrors > 0 ? `${logErrors} error${logErrors === 1 ? '' : 's'} in debug.log` : site.debug.logBytes ? `debug.log ${bytes(site.debug.logBytes)}` : 'debug.log empty',
+    ...(logErrors > 0 ? { tone: 'danger' as const } : {}),
+    onOpen: () => onOpen('logs'),
+  });
+  if (tabs.has('network') && site.network) {
+    tiles.push({ key: 'network', label: 'Network', value: site.network.sites.length > 0 ? `${site.network.sites.length} sites` : NETWORK_TYPE_LABEL[site.network.type], detail: site.network.sites.length > 0 ? NETWORK_TYPE_LABEL[site.network.type] : 'Sites need the MySQL admin', onOpen: () => onOpen('network') });
+  }
+  if (tabs.has('database') && site.db) {
+    tiles.push({ key: 'database', label: 'Database', value: site.db.name, ...(site.db.tables > 0 ? { detail: `${bytes(site.db.sizeBytes)} · ${site.db.tables} tables` } : { detail: 'No tables yet' }), onOpen: () => onOpen('database') });
+  }
+  if (tabs.has('cron') && cron) {
+    const running = cron.disabled ? (cron.task ? 'Runs from cron' : 'Not running: DISABLE_WP_CRON') : 'Runs on page loads';
+    tiles.push({
+      key: 'cron',
+      label: 'WP-Cron',
+      value: `${cron.events.length} event${cron.events.length === 1 ? '' : 's'}`,
+      detail: cron.overdue > 0 ? `${cron.overdue} late` : running,
+      ...(cron.overdue > 0 || (cron.disabled && !cron.task) ? { tone: 'warning' as const } : {}),
+      onOpen: () => onOpen('cron'),
+    });
+  }
+  if (tabs.has('php') && site.php) {
+    tiles.push({ key: 'php', label: 'PHP', value: site.php.version, detail: site.php.own ? 'Its own version' : 'The default version', onOpen: () => onOpen('php') });
+  }
+  if (tabs.has('domains')) {
+    tiles.push({
+      key: 'domains',
+      label: 'Domains and SSL',
+      value: `${names} name${names === 1 ? '' : 's'}`,
+      detail: !site.cert ? 'No certificate' : uncovered.length > 0 ? `${uncovered.length} not covered` : `Certificate until ${shortDate(site.cert.expiresAt)}`,
+      ...(!site.cert || uncovered.length > 0 ? { tone: 'warning' as const } : {}),
+      onOpen: () => onOpen('domains'),
+    });
+  }
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      {tiles.map(({ key, ...tile }) => <Tile key={key} {...tile} />)}
     </div>
   );
 }
 
-function Overview({ site, onChanged, onOpenConfig }: { site: Site; onChanged: () => void; onOpenConfig: () => void }) {
-  const coreVersions = useAsync(() => api.cores(), []).data ?? [];
+/**
+ * A site at a glance: the facts from its other tabs, then what you do most (git, quick actions, the core),
+ * Local mode and uploads, and where its files are. Settings live in their tabs.
+ */
+function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; onChanged: () => void; onOpen: (tab: Tab) => void; cron: WpCronReport | null; logErrors: number }) {
+  const coreVersions = useAsync(() => (site.core.kind === 'wpcore' ? api.cores() : Promise.resolve([])), [site.core.kind]).data ?? [];
   const [core, setCore] = useState(site.core.version ?? '');
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<{ name: string; ok: boolean; output: string } | null>(null);
-  const [copied, setCopied] = useState(false);
   const [marking, setMarking] = useState<string | null>(null);
   // Writing keys logs people out, so both ways ask first: the ones WordPress does not use while there are any, else all of them.
   const [salting, setSalting] = useState<'missing' | 'all' | null>(null);
   const salts = site.salts ? saltsSummary(site.salts) : null;
   const saltsName = salts && salts.bad.length > 0 ? salts.fixLabel : 'Make keys and salts new';
+  const hasGit = Boolean(site.git || site.mounts?.some((m) => m.git));
 
   async function markDone(label: string) {
     setMarking(label);
@@ -328,13 +398,13 @@ function Overview({ site, onChanged, onOpenConfig }: { site: Site; onChanged: ()
   }
 
   const terminalName = 'Open in terminal';
-  const wordpressResult = result && ['Debug mode', 'Switch core'].includes(result.name) ? result : null;
-  const quickResult = result && !wordpressResult ? result : null;
+  const coreResult = result?.name === 'Switch core' ? result : null;
+  const quickResult = result && !coreResult ? result : null;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4">
       {site.install?.skipped && site.install.skipped.length > 0 && (
-        <div className="rounded-xl border border-warning/40 bg-warning/6 px-4 py-3 text-sm lg:col-span-2">
+        <div className="rounded-xl border border-warning/40 bg-warning/6 px-4 py-3 text-sm">
           <p className="flex items-center gap-2 font-medium"><SkipForward className="size-4 text-warning" />Skipped when it was installed</p>
           <p className="mt-0.5 text-xs text-muted-foreground">Did one yourself? Mark it done to take it off this list. The job and Run history keep it as skipped.</p>
           <ul className="mt-2 grid gap-2">
@@ -353,114 +423,104 @@ function Overview({ site, onChanged, onOpenConfig }: { site: Site; onChanged: ()
         </div>
       )}
 
-      <Card>
-        <CardHeader><CardTitle>WordPress</CardTitle><Layers className="size-4 text-muted-foreground" /></CardHeader>
-        <div className="grid gap-4 p-5">
-          <p className="text-sm">{coreLabel(site)}</p>
-          {site.core.kind === 'wpcore' ? (
-            <Field label="Core version" htmlFor="core" hint="Switches the symlinks to another shared core, then updates the database. Files in wp-content stay as they are.">
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Select id="core" value={core} onChange={(e) => setCore(e.target.value)} disabled={busy !== null}>
-                    {coreVersions.map((v) => {
-                      const notes = [v === coreVersions[0] ? 'latest' : null, v === site.core.version ? 'current' : null].filter(Boolean);
-                      return <option key={v} value={v}>{v}{notes.length ? ` (${notes.join(', ')})` : ''}</option>;
-                    })}
-                  </Select>
-                </div>
-                {core && core !== site.core.version && (
-                  <Button variant="outline" className="h-10" disabled={busy !== null} onClick={() => void run('Switch core', 'core.switch', { ...siteTarget(site), version: core })}>
-                    {busy === 'Switch core' ? <LoaderCircle className="animate-spin" /> : <Layers />}
-                    Switch to {core}
-                  </Button>
+      <SiteTiles site={site} cron={cron} logErrors={logErrors} onOpen={onOpen} />
+
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        {hasGit && (
+          <Card>
+            <CardHeader><CardTitle>Git</CardTitle><GitBranch className="size-4 text-muted-foreground" /></CardHeader>
+            <div className="divide-y">
+              {site.git && <RepoSection domain={site.domain} {...(site.path ? { mount: site.path } : {})} label="Site" folder={site.docroot} git={site.git} onChanged={onChanged} />}
+              {site.mounts?.map((m) =>
+                m.git ? <RepoSection key={m.path} domain={site.domain} mount={m.path} label={m.path} folder={m.docroot} git={m.git} onChanged={onChanged} /> : null,
+              )}
+            </div>
+          </Card>
+        )}
+
+        <div className="grid gap-4">
+          <Card>
+            <CardHeader><CardTitle>Quick actions</CardTitle><Wrench className="size-4 text-muted-foreground" /></CardHeader>
+            <div className="grid gap-2 p-5 sm:grid-cols-2">
+              {([
+                { name: 'Clear all caches', icon: <Eraser />, id: 'site.clearCache' },
+                { name: 'Flush rewrite rules', icon: <RefreshCw />, id: 'site.flushRewrites' },
+              ] as const).map(({ name, icon, id }) => (
+                <Button key={name} variant="outline" className="justify-start" disabled={busy !== null} onClick={() => void run(name, id, siteTarget(site))}>
+                  {busy === name ? <LoaderCircle className="animate-spin" /> : quickResult?.name === name && quickResult.ok ? <Check className="text-success" /> : icon}
+                  {name}
+                </Button>
+              ))}
+              {salts && (
+                <Button variant="outline" className="justify-start" disabled={busy !== null} onClick={() => setSalting(salts.bad.length > 0 ? 'missing' : 'all')}>
+                  {busy === saltsName ? <LoaderCircle className="animate-spin" /> : quickResult?.name === saltsName && quickResult.ok ? <Check className="text-success" /> : <KeyRound />}
+                  {saltsName}
+                </Button>
+              )}
+              <Button variant="outline" className="justify-start" disabled={busy !== null} onClick={() => void run(terminalName, 'site.openTerminal', siteTarget(site))}>
+                {busy === terminalName ? <LoaderCircle className="animate-spin" /> : <SquareTerminal />}
+                {terminalName}
+              </Button>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Clearing caches runs <code className="font-mono">wp cache flush</code>, deletes transients and reloads Apache to reset OPcache.
+              </p>
+              {quickResult && <div className="sm:col-span-2"><RunOutput result={quickResult} /></div>}
+            </div>
+          </Card>
+
+          {site.core.kind !== 'none' && (
+            <Card>
+              <CardHeader><CardTitle>WordPress</CardTitle><Layers className="size-4 text-muted-foreground" /></CardHeader>
+              <div className="grid gap-4 p-5">
+                <p className="text-sm">{coreLabel(site)}</p>
+                {site.core.kind === 'wpcore' ? (
+                  <Field label="Core version" htmlFor="core" hint="Switches the symlinks to another shared core, then updates the database. Files in wp-content stay as they are.">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <Select id="core" value={core} onChange={(e) => setCore(e.target.value)} disabled={busy !== null}>
+                          {coreVersions.map((v) => {
+                            const notes = [v === coreVersions[0] ? 'latest' : null, v === site.core.version ? 'current' : null].filter(Boolean);
+                            return <option key={v} value={v}>{v}{notes.length ? ` (${notes.join(', ')})` : ''}</option>;
+                          })}
+                        </Select>
+                      </div>
+                      {core && core !== site.core.version && (
+                        <Button variant="outline" className="h-10" disabled={busy !== null} onClick={() => void run('Switch core', 'core.switch', { ...siteTarget(site), version: core })}>
+                          {busy === 'Switch core' ? <LoaderCircle className="animate-spin" /> : <Layers />}
+                          Switch to {core}
+                        </Button>
+                      )}
+                    </div>
+                  </Field>
+                ) : (
+                  <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
+                    This site has its own copy of WordPress. Update it with wp core update; shared cores are on the WordPress page.
+                  </p>
                 )}
+                {coreResult && <RunOutput result={coreResult} />}
               </div>
-            </Field>
-          ) : site.core.kind === 'standalone' ? (
-            <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">
-              This site has its own copy of WordPress. Update it with wp core update; shared cores are on the WordPress page.
-            </p>
-          ) : null}
-          <DebugSettings site={site} busy={busy} onApply={(constants) => void run('Debug mode', 'site.setDebug', { ...siteTarget(site), constants })} onChanged={onChanged} onOpenConfig={onOpenConfig} />
-          {wordpressResult && <RunOutput result={wordpressResult} />}
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Quick actions</CardTitle><Wrench className="size-4 text-muted-foreground" /></CardHeader>
-        <div className="grid gap-2 p-5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          {([
-            { name: 'Clear all caches', icon: <Eraser />, id: 'site.clearCache' },
-            { name: 'Flush rewrite rules', icon: <RefreshCw />, id: 'site.flushRewrites' },
-          ] as const).map(({ name, icon, id }) => (
-            <Button key={name} variant="outline" className="justify-start" disabled={busy !== null} onClick={() => void run(name, id, siteTarget(site))}>
-              {busy === name ? <LoaderCircle className="animate-spin" /> : quickResult?.name === name && quickResult.ok ? <Check className="text-success" /> : icon}
-              {name}
-            </Button>
-          ))}
-          {salts && (
-            <Button variant="outline" className="justify-start" disabled={busy !== null} onClick={() => setSalting(salts.bad.length > 0 ? 'missing' : 'all')}>
-              {busy === saltsName ? <LoaderCircle className="animate-spin" /> : quickResult?.name === saltsName && quickResult.ok ? <Check className="text-success" /> : <KeyRound />}
-              {saltsName}
-            </Button>
+            </Card>
           )}
-          <ButtonLink variant="outline" className="justify-start" href={vscodeUrl(site.docroot)}>
-            <Code2 />
-            Open in VS Code
-          </ButtonLink>
-          <Button variant="outline" className="justify-start" disabled={busy !== null} onClick={() => void run(terminalName, 'site.openTerminal', siteTarget(site))}>
-            {busy === terminalName ? <LoaderCircle className="animate-spin" /> : <SquareTerminal />}
-            {terminalName}
-          </Button>
-          <Button variant="outline" className="justify-start" onClick={() => void copyPath(site.docroot, () => setCopied(true))}>
-            {copied ? <Check className="text-success" /> : <Copy />}
-            {copied ? 'Copied' : 'Copy folder path'}
-          </Button>
-          <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-1 xl:col-span-2">
-            Clearing caches runs <code className="font-mono">wp cache flush</code>, deletes transients and reloads Apache to reset OPcache.
-          </p>
-          {quickResult && <div className="sm:col-span-2 lg:col-span-1 xl:col-span-2"><RunOutput result={quickResult} /></div>}
         </div>
-      </Card>
 
-      <SaltsConfirm mode={salting} onClose={() => setSalting(null)} onConfirm={(only) => void run(saltsName, 'site.shuffleSalts', { ...siteTarget(site), only })} />
+        <SaltsConfirm mode={salting} onClose={() => setSalting(null)} onConfirm={(only) => void run(saltsName, 'site.shuffleSalts', { ...siteTarget(site), only })} />
 
-      {site.localMode && <LocalModeCard site={site} localMode={site.localMode} onChanged={onChanged} />}
+        {site.localMode && <LocalModeCard site={site} localMode={site.localMode} onChanged={onChanged} />}
 
-      {site.localMode && <UploadsCard site={site} onChanged={onChanged} />}
+        {site.localMode && <UploadsCard site={site} onChanged={onChanged} />}
 
-      {site.network && <NetworkCard site={site} />}
-
-      {(site.git || site.mounts?.some((m) => m.git)) && (
         <Card>
-          <CardHeader><CardTitle>Git</CardTitle><GitBranch className="size-4 text-muted-foreground" /></CardHeader>
-          <div className="divide-y">
-            {site.git && <RepoSection domain={site.domain} {...(site.path ? { mount: site.path } : {})} label="Site" folder={site.docroot} git={site.git} onChanged={onChanged} />}
-            {site.mounts?.map((m) =>
-              m.git ? <RepoSection key={m.path} domain={site.domain} mount={m.path} label={m.path} folder={m.docroot} git={m.git} onChanged={onChanged} /> : null,
-            )}
-          </div>
+          <CardHeader><CardTitle>Files</CardTitle><FolderOpen className="size-4 text-muted-foreground" /></CardHeader>
+          <dl className="grid gap-3 p-5 text-sm">
+            <Row label="Installed">{installLabel(site.install)}</Row>
+            <Row label="Folder"><FolderLine path={site.docroot} /></Row>
+            {site.mounts?.map((m) => (
+              <Row key={m.path} label={m.path}><FolderLine path={m.docroot} /></Row>
+            ))}
+            {site.prodUrl && <Row label="Production"><a href={site.prodUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{site.prodUrl}</a></Row>}
+          </dl>
         </Card>
-      )}
-
-      <Card>
-        <CardHeader><CardTitle>Files and database</CardTitle><Database className="size-4 text-muted-foreground" /></CardHeader>
-        <dl className="grid gap-3 p-5 text-sm">
-          <Row label="Installed">{installLabel(site.install)}</Row>
-          <Row label="Folder"><FolderLine path={site.docroot} /></Row>
-          {site.mounts?.map((m) => (
-            <Row key={m.path} label={m.path}><FolderLine path={m.docroot} /></Row>
-          ))}
-          {site.db && (
-            <Row label="Database">
-              <span className="font-mono text-[13px]">{site.db.name}</span>
-              {site.db.tables > 0 && <span className="text-muted-foreground"> · {bytes(site.db.sizeBytes)} · {site.db.tables} tables</span>}
-            </Row>
-          )}
-          {site.prodUrl && <Row label="Production"><a href={site.prodUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{site.prodUrl}</a></Row>}
-          <Row label="debug.log">{site.debug.logBytes ? bytes(site.debug.logBytes) : 'empty'}</Row>
-        </dl>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -658,7 +718,7 @@ function NetworkCard({ site }: { site: Site }) {
     { value: 'deleted' as const, label: 'Deleted', count: deleted.length },
   ];
   return (
-    <Card className="lg:col-span-2">
+    <Card>
       <CardHeader>
         <CardTitle>Network</CardTitle>
         <span className="flex items-center gap-3">
@@ -976,16 +1036,6 @@ function RunOutput({ result }: { result: { name: string; ok: boolean; output: st
   );
 }
 
-/** Copies a path; where the clipboard is refused, selecting the text by hand still works. */
-async function copyPath(path: string, onDone: (name: string) => void) {
-  try {
-    await navigator.clipboard.writeText(path);
-    onDone('Copy folder path');
-  } catch {
-    // Clipboard refused (older app views); the path is shown on the Files card.
-  }
-}
-
 function FolderLine({ path }: { path: string }) {
   return (
     <span className="flex items-start justify-between gap-2">
@@ -1011,12 +1061,13 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function LogsTab({ site }: { site: Site }) {
+function LogsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
   const source = useQueryParam('log') === 'apache' ? 'apache' : 'debug';
   const setSource = (next: 'debug' | 'apache') => navigate(tabHref(site, 'logs', next === 'apache' ? '&log=apache' : ''), { scroll: false });
   const log = useAsync(() => api.logs(site.domain, source, site.path), [site.domain, site.path, source]);
   return (
     <div className="grid gap-3">
+      {site.core.kind !== 'none' && <DebugSettings site={site} onChanged={onChanged} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="radiogroup" aria-label="Log" className="inline-flex rounded-lg border bg-muted p-0.5 text-sm">
           {([['debug', 'debug.log'], ['apache', 'Apache errors']] as const).map(([value, label]) => (
@@ -1034,9 +1085,6 @@ function LogsTab({ site }: { site: Site }) {
         </div>
         {log.data && <p className="font-mono text-xs break-all text-muted-foreground">{log.data.file}</p>}
       </div>
-      {!site.debug.enabled && source === 'debug' && (
-        <p className="rounded-lg border border-warning/30 bg-warning/6 px-4 py-2.5 text-sm">Debug mode is off, so WordPress is not writing new entries. Turn it on in Overview.</p>
-      )}
       {log.data?.shared && (
         <p className="rounded-lg border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
           This site writes to Apache&apos;s shared error log, so only lines that mention its folder or domains are shown.
