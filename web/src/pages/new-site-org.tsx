@@ -1,5 +1,5 @@
 import type { AccessReport, AccessResult, ClaudeEffort, ClaudeUsage, ClaudeModel, ClaudeRun, ClaudeStep, OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, Prefill, ReadResult, RepoFacts, Site, UploadResult } from '@devmagic-panel/shared';
-import { accessKey, CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE_STEPS, gitlabHost, namespaceLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, REPO_KIND_LABELS, gitUrl, repoWeb } from '@devmagic-panel/shared';
+import { accessKey, CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE_STEPS, gitlabHost, isShared, namespaceLabel, namespaceShortLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, REPO_KIND_LABELS, gitUrl, repoWeb } from '@devmagic-panel/shared';
 import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, ExternalLink, FileArchive, LoaderCircle, RefreshCw, Search, Sparkles, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BranchPicker } from '@/components/branch-picker';
@@ -148,7 +148,7 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
         current && !signedIn && shownNs && (
           <Notice tone="warning">
             {shownNs.provider === 'github' ? (
-              <>The GitHub CLI checks for new repos of {shownNs.path}: {status.gh.problem ?? 'it is not set up'}. Sign in with <code className="font-mono">gh auth login</code>.</>
+              <>The GitHub CLI checks for new repos of {namespaceShortLabel(current)}: {status.gh.problem ?? 'it is not set up'}. Sign in with <code className="font-mono">gh auth login</code>.</>
             ) : (
               <>The GitLab CLI checks for new projects on {shownNs.host}: {status.glab.hosts.find((h) => h.host === shownNs.host)?.problem ?? 'it is not set up'}. Sign in with <code className="font-mono">glab auth login{shownNs.host === 'gitlab.com' ? '' : ` --hostname ${shownNs.host}`}</code>.</>
             )}{' '}
@@ -186,7 +186,7 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Filter the repos of ${shownNs?.path ?? current}`} aria-label="Filter repos" className="pl-9" />
+                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isShared(shownNs ?? { path: '' }) ? 'Filter the repos shared with you' : `Filter the repos of ${namespaceShortLabel(current)}`} aria-label="Filter repos" className="pl-9" />
                 </div>
                 <Checkbox id="sites-only" checked={sitesOnly} onChange={setSitesOnly} label="WordPress sites only" />
               </div>
@@ -198,12 +198,12 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
                 </p>
               )}
               {scanning && !stored ? (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the repos of {shownNs?.path ?? current}; the first scan looks into each one, later ones only into new pushes...</p>
+                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the repos of {namespaceShortLabel(current)}; the first scan looks into each one, later ones only into new pushes...</p>
               ) : (
                 (scanning || list?.checkedAt) && (
                   <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
                     {scanning && <LoaderCircle className="size-3.5 animate-spin" />}
-                    {scanning === 'full' ? 'Reading every repo of ' + (shownNs?.path ?? current) + '...' : scanning ? 'Checking for new repos...' : `${list?.repos.length ?? 0} repos, checked for new ones ${ago(list?.checkedAt as string)}`}
+                    {scanning === 'full' ? 'Reading every repo of ' + namespaceShortLabel(current) + '...' : scanning ? 'Checking for new repos...' : `${list?.repos.length === 1 ? '1 repo' : `${list?.repos.length ?? 0} repos`}, checked for new ones ${ago(list?.checkedAt as string)}`}
                     {!scanning && list?.listedAt && `, all listed ${ago(list.listedAt)}`}
                   </p>
                 )
@@ -219,7 +219,7 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
                       className={cn('grid w-full gap-1 rounded-lg border bg-card py-3 pr-11 pl-4 text-left text-sm transition-colors hover:border-primary/50', org.repo?.fullName === r.fullName && 'border-primary ring-3 ring-primary/15')}
                     >
                       <span className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[13px] font-medium">{shownNs && r.fullName.toLowerCase().startsWith(`${shownNs.path.toLowerCase()}/`) ? r.fullName.slice(shownNs.path.length + 1) : r.name}</span>
+                        <span className="font-mono text-[13px] font-medium">{shownNs && isShared(shownNs) ? r.fullName : shownNs && r.fullName.toLowerCase().startsWith(`${shownNs.path.toLowerCase()}/`) ? r.fullName.slice(shownNs.path.length + 1) : r.name}</span>
                         <Badge>{REPO_KIND_LABELS[r.kind]}</Badge>
                         {r.local?.installed?.map((i) => <Badge key={`${i.domain}${i.path ?? ''}`} tone="warning">installed as {i.domain}{i.path ?? ''}</Badge>)}
                         {r.local?.archived && <Badge>{r.local.archived.count === 1 ? '1 archived copy' : `${r.local.archived.count} archived copies`}</Badge>}
@@ -379,12 +379,12 @@ function OrgPicker({ status }: { status: OrgStatus }) {
   }
   // One block per host, GitHub first, then gitlab.com and yours.
   const byHost = new Map<string, Array<{ ref: string; label: string }>>();
-  for (const n of orgs.data?.namespaces ?? []) byHost.set(n.host, [...(byHost.get(n.host) ?? []), { ref: n.ref, label: n.provider === 'github' ? n.ref : parseNamespaceRef(n.ref)?.path ?? n.ref }]);
+  for (const n of orgs.data?.namespaces ?? []) byHost.set(n.host, [...(byHost.get(n.host) ?? []), { ref: n.ref, label: namespaceShortLabel(n.ref) }]);
   return (
     <div className="grid gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
       <div>
         <p className="font-medium">Organizations and groups to scan {saving && <LoaderCircle className="inline size-3.5 animate-spin" />}</p>
-        <p className="text-muted-foreground">The GitHub organizations and GitLab groups you belong to, and your own accounts. A GitLab group is scanned with its subgroups.</p>
+        <p className="text-muted-foreground">The GitHub organizations and GitLab groups you belong to, your own accounts, and the repos shared with you: ones you were added to outside those. A GitLab group is scanned with its subgroups.</p>
       </div>
       {orgs.error && <p role="alert" className="text-danger">{orgs.error}</p>}
       {orgs.data?.problems.map((p) => <p key={p} role="alert" className="text-warning">{p}</p>)}

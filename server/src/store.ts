@@ -107,6 +107,12 @@ export class RunStore {
         record TEXT NOT NULL,
         PRIMARY KEY (org, name)
       );
+      CREATE TABLE IF NOT EXISTS git_hosts (
+        host TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        real_host TEXT,
+        checked_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS org_scans (
         org TEXT PRIMARY KEY,
         checked_at TEXT NOT NULL,
@@ -456,6 +462,18 @@ export class RunStore {
    * Saves what a scan found. A full list replaces the organization's repos, so
    * deleted, renamed and transferred ones go; a check only adds and updates.
    */
+  /** What the panel found out about the git hosts in the sites' remotes, by asking each over SSH. */
+  gitHosts(): Array<{ host: string; provider: string; realHost?: string; checkedAt: string }> {
+    const rows = this.db.prepare('SELECT host, provider, real_host AS realHost, checked_at AS checkedAt FROM git_hosts').all() as Array<{ host: string; provider: string; realHost: string | null; checkedAt: string }>;
+    return rows.map(({ realHost, ...r }) => (realHost ? { ...r, realHost } : r));
+  }
+
+  saveGitHost(host: string, provider: string, realHost: string | undefined, at: string): void {
+    this.db
+      .prepare('INSERT INTO git_hosts (host, provider, real_host, checked_at) VALUES (?, ?, ?, ?) ON CONFLICT(host) DO UPDATE SET provider = excluded.provider, real_host = excluded.real_host, checked_at = excluded.checked_at')
+      .run(host, provider, realHost ?? null, at);
+  }
+
   /** keyOf names a repo within its namespace: its name on GitHub, its full path in a GitLab group, where subgroups can repeat a name. */
   saveOrgScan<R extends { name: string }>(org: string, repos: R[], full: boolean, at: string, keyOf: (r: R) => string = (r) => r.name): void {
     const key = org.toLowerCase();

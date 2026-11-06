@@ -1,11 +1,16 @@
 import type { GitPullRequest, Namespace, OrgNamespace, OrgSettings, OrgStatus, Site } from '@devmagic-panel/shared';
-import { GITHUB_HOST, gitlabHostsWith, namespaceLabel, parseNamespaceRef, repoWeb } from '@devmagic-panel/shared';
+import { GITHUB_HOST, gitlabHostsWith, isShared, namespaceLabel, parseNamespaceRef, repoWeb, SHARED } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { ghLogin, ghOpenPulls, ghOrgs, ghRepoPage, ghStatus, ghTopNames } from './github.js';
-import { glabNamespaces, glabOpenMerges, glabProjectPage, glabStatus, glabTopNames, glabVersion } from './gitlab.js';
+import { glabNamespaces, glabOpenMerges, glabProjectPage, glabSharedFilter, glabStatus, glabTopNames, glabVersion } from './gitlab.js';
 import { HostRefused, type RepoHost } from './types.js';
 
 export { HostRefused, type HostRepo, type RepoHost } from './types.js';
+export { GitHostDetector } from './detect.js';
+
+/** Every git remote of the sites, mounts under a path included. */
+export const remotesOf = (sites: Site[]): string[] =>
+  sites.flatMap((s) => [s.git?.remote, ...(s.mounts ?? []).map((m) => m.git?.remote)]).filter((r): r is string => Boolean(r));
 
 /** A check reads back this far before the last one, for clocks that differ a little. */
 const GITHUB_OVERLAP_MS = 10 * 60_000;
@@ -19,9 +24,9 @@ export function githubHost(exec: Executor, sleep?: (ms: number) => Promise<void>
     checkOverlapMs: GITHUB_OVERLAP_MS,
     status: () => ghStatus(exec),
     login: () => ghLogin(exec),
-    namespaces: () => ghOrgs(exec),
+    namespaces: async () => [...(await ghOrgs(exec)), SHARED],
     repoPage: async (ns, self, page) =>
-      (await ghRepoPage(exec, self ? { self: true } : { org: ns.path }, page, sleep)).map((r) => ({ ...r, path: `${ns.path}/${r.name}` })),
+      (await ghRepoPage(exec, isShared(ns) ? { shared: true } : self ? { self: true } : { org: ns.path }, page, sleep)).map(({ fullName, ...r }) => ({ ...r, path: fullName ?? `${ns.path}/${r.name}` })),
     topNames: (path) => ghTopNames(exec, path),
     openPulls: (path) => ghOpenPulls(exec, path),
   };
@@ -39,6 +44,7 @@ export function gitlabHost(exec: Executor, host: string, sleep?: (ms: number) =>
     },
     namespaces: () => glabNamespaces(exec, host),
     repoPage: (ns, self, page) => glabProjectPage(exec, ns, self, page, sleep),
+    keepFor: async (ns) => (isShared(ns) ? glabSharedFilter(exec, host) : null),
     topNames: (path) => glabTopNames(exec, host, path),
     openPulls: (path) => glabOpenMerges(exec, host, path),
   };
@@ -67,9 +73,8 @@ export function gitlabHostsInUse(settings: Pick<OrgSettings, 'selected' | 'gitla
     const ns = parseNamespaceRef(ref);
     if (ns?.provider === 'gitlab') found.add(ns.host);
   }
-  const remotes = sites.flatMap((s) => [s.git?.remote, ...(s.mounts ?? []).map((m) => m.git?.remote)]);
-  for (const remote of remotes) {
-    const web = remote ? repoWeb(remote) : null;
+  for (const remote of remotesOf(sites)) {
+    const web = repoWeb(remote);
     if (web?.provider === 'GitLab') found.add(new URL(web.repoUrl).hostname);
   }
   if (found.size === 0) return [];

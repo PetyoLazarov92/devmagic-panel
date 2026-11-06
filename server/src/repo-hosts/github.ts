@@ -40,6 +40,7 @@ const ghRepo = z.object({
   default_branch: z.string().nullable().optional(),
   ssh_url: z.string(),
   html_url: z.string(),
+  full_name: z.string().optional(),
 });
 
 export interface GhRepo {
@@ -50,6 +51,8 @@ export interface GhRepo {
   defaultBranch?: string;
   sshUrl: string;
   url: string;
+  /** owner/name, given for the repos shared with you, which have many owners. */
+  fullName?: string;
 }
 
 /** The REST API's largest page. */
@@ -66,10 +69,11 @@ const busy = (stderr: string) => /HTTP 5\d\d|timed? ?out|connection reset|unexpe
  * gh repo list uses times out on large organizations. A timeout or a busy
  * GitHub is tried again twice.
  */
-export async function ghRepoPage(exec: Executor, owner: { org: string } | { self: true }, page: number, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<GhRepo[]> {
-  const base = 'self' in owner ? 'user/repos?affiliation=owner&' : `orgs/${owner.org}/repos?type=all&`;
-  const args = ['api', `${base}per_page=${REPO_PAGE_SIZE}&sort=pushed&direction=desc&page=${page}`, '--jq', 'map({name, description, archived, pushed_at, default_branch, ssh_url, html_url})'];
-  const whose = 'self' in owner ? 'your account' : owner.org;
+export async function ghRepoPage(exec: Executor, owner: { org: string } | { self: true } | { shared: true }, page: number, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<GhRepo[]> {
+  // Shared with you: the repos of others you were added to as a collaborator.
+  const base = 'self' in owner ? 'user/repos?affiliation=owner&' : 'shared' in owner ? 'user/repos?affiliation=collaborator&' : `orgs/${owner.org}/repos?type=all&`;
+  const args = ['api', `${base}per_page=${REPO_PAGE_SIZE}&sort=pushed&direction=desc&page=${page}`, '--jq', 'map({name, description, archived, pushed_at, default_branch, ssh_url, html_url, full_name})'];
+  const whose = 'self' in owner ? 'your account' : 'shared' in owner ? 'the repos shared with you' : owner.org;
   for (let attempt = 0; ; attempt++) {
     const r = await gh(exec, args, 60_000);
     if (r.code === 0) {
@@ -89,6 +93,7 @@ export async function ghRepoPage(exec: Executor, owner: { org: string } | { self
         ...(x.default_branch ? { defaultBranch: x.default_branch } : {}),
         sshUrl: x.ssh_url,
         url: x.html_url,
+        ...('shared' in owner && x.full_name ? { fullName: x.full_name } : {}),
       }));
     }
     const wait = RETRY_WAITS_MS[attempt];

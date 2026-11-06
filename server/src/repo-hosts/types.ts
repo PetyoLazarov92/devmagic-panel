@@ -36,6 +36,8 @@ export interface RepoHost {
   namespaces(): Promise<string[]>;
   /** One page of a namespace's repos, newest first. */
   repoPage(ns: Namespace, self: boolean, page: number): Promise<HostRepo[]>;
+  /** Which listed repos to keep, when a listing gives more than the namespace holds; applied after paging, so a short page still ends the listing. */
+  keepFor?(ns: Namespace): Promise<((r: HostRepo) => boolean) | null>;
   /** The names at a repo's top level: none for an empty repo, null when the host did not answer. */
   topNames(path: string): Promise<string[] | null>;
   /** Open pull or merge requests from the repo's own branches, or null when the CLI cannot say. */

@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.3.0-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.4.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -418,8 +418,11 @@ animated border: that sign-in is what reaches the linked tasks and files.
    GitLab groups you can clone from, on gitlab.com and on the hosts you add
    under Your own GitLab hosts; tick the ones to scan. A GitLab group is
    scanned with its subgroups, so only the top group you belong to is offered,
-   and a project shows with its path in the group (`clients/site`). The panel
-   only runs `gh` and `glab`; it never reads their tokens. Their repos
+   and a project shows with its path in the group (`clients/site`). Your own
+   account on each host is listed too, ticked for you the first time a CLI is
+   signed in, and **Shared with you** lists the repos you were added to outside
+   those: GitHub repos you collaborate on, GitLab projects outside your groups.
+   The panel only runs `gh` and `glab`; it never reads their tokens. Their repos
    show what each holds (WordPress site, theme, plugin) and whether this
    machine has it installed, archived or as an unfinished install. The list
    is kept in the panel's database and shows at once; opening the page checks
@@ -427,7 +430,12 @@ animated border: that sign-in is what reaches the linked tasks and files.
    of GitHub's REST API), and once a week, or with Rescan all, every repo is
    listed again so deleted and renamed ones go. A repo is looked into again
    only after a push (on GitLab, after any activity; checks read 70 minutes
-   back, as GitLab moves that time about once an hour). Without the CLI the
+   back, as GitLab moves that time about once an hour). Your installed sites
+   need none of this: their Git card reads the site's own `.git`, whatever the
+   host, and a host whose name does not say what it runs (`git.acme.test`, or
+   an SSH alias like `gitlab-work`) is found once a week with `ssh -G` and the
+   same SSH hello `git fetch` makes, so its links and merge requests are right
+   without a setting. Without the CLI the
    last list still shows and installs, as cloning uses git, or you paste a
    repo URL from any git host.
 2. **Read the repo**: Claude Code reads only the repo's docs and build files

@@ -1,5 +1,5 @@
 import type { CliStatus, GitPullRequest, Namespace } from '@devmagic-panel/shared';
-import { coveringGroups } from '@devmagic-panel/shared';
+import { coveringGroups, isShared, SHARED } from '@devmagic-panel/shared';
 import { z } from 'zod';
 import type { Executor } from '../exec.js';
 import { HostRefused, type HostRepo } from './types.js';
@@ -89,7 +89,7 @@ const group = z.object({ full_path: z.string() });
  * private project's code), cut to the smallest set that covers them, as each
  * is scanned with its subgroups, and your own account. As namespace refs.
  */
-export async function glabNamespaces(exec: Executor, host: string): Promise<string[]> {
+async function glabGroupPaths(exec: Executor, host: string): Promise<string[]> {
   const paths: string[] = [];
   for (let page = 1; page <= MAX_GROUP_PAGES; page++) {
     const r = await glab(exec, host, `groups?min_access_level=20&per_page=${PROJECT_PAGE_SIZE}&page=${page}`);
@@ -99,8 +99,27 @@ export async function glabNamespaces(exec: Executor, host: string): Promise<stri
     paths.push(...list.data.map((g) => g.full_path));
     if (list.data.length < PROJECT_PAGE_SIZE) break;
   }
+  return paths;
+}
+
+/** The groups as below, your own account, and the projects shared with you, as namespace refs. */
+export async function glabNamespaces(exec: Executor, host: string): Promise<string[]> {
+  const paths = await glabGroupPaths(exec, host);
   const me = await glabLogin(exec, host);
-  return [...coveringGroups(paths), ...(me ? [me] : [])].map((p) => `${host}/${p}`).filter((ref, i, all) => all.indexOf(ref) === i);
+  return [...coveringGroups(paths), ...(me ? [me] : []), SHARED].map((p) => `${host}/${p}`).filter((ref, i, all) => all.indexOf(ref) === i);
+}
+
+/**
+ * Which of the projects you are a member of count as shared with you: not the
+ * ones in a group you belong to or in your own account, which those entries
+ * list already.
+ */
+export async function glabSharedFilter(exec: Executor, host: string): Promise<(r: HostRepo) => boolean> {
+  const own = [...(await glabGroupPaths(exec, host)), ...[await glabLogin(exec, host)].filter((u): u is string => Boolean(u))].map((p) => p.toLowerCase());
+  return (r) => {
+    const path = r.path.toLowerCase();
+    return !own.some((p) => path.startsWith(`${p}/`));
+  };
 }
 
 /** One project as the REST API lists it. Older servers leave some fields out. */
@@ -124,9 +143,11 @@ const project = z.object({
  */
 export async function glabProjectPage(exec: Executor, ns: Namespace, self: boolean, page: number, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<HostRepo[]> {
   const order = `order_by=last_activity_at&sort=desc&per_page=${PROJECT_PAGE_SIZE}&page=${page}`;
-  const path = self
-    ? `users/${enc(ns.path)}/projects?${order}`
-    : `groups/${enc(ns.path)}/projects?include_subgroups=true&with_shared=false&min_access_level=20&${order}`;
+  const path = isShared(ns)
+    ? `projects?membership=true&min_access_level=20&${order}`
+    : self
+      ? `users/${enc(ns.path)}/projects?${order}`
+      : `groups/${enc(ns.path)}/projects?include_subgroups=true&with_shared=false&min_access_level=20&${order}`;
   for (let attempt = 0; ; attempt++) {
     const r = await glab(exec, ns.host, path);
     if (r.code === 0) {
@@ -145,7 +166,7 @@ export async function glabProjectPage(exec: Executor, ns: Namespace, self: boole
       }));
     }
     const wait = GLAB_RETRY_WAITS_MS[attempt];
-    if (wait === undefined || !busy(r.stderr)) throw new GlabRefused(`the GitLab CLI cannot list the projects of ${ns.path} on ${ns.host}: ${firstLine(r.stderr) || 'no answer'}`);
+    if (wait === undefined || !busy(r.stderr)) throw new GlabRefused(`the GitLab CLI cannot list the projects ${isShared(ns) ? 'shared with you' : `of ${ns.path}`} on ${ns.host}: ${firstLine(r.stderr) || 'no answer'}`);
     await sleep(wait);
   }
 }

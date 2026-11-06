@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Site } from '@devmagic-panel/shared';
-import { DEFAULT_CLAUDE_STEPS, orgSettingsInput } from '@devmagic-panel/shared';
+import { DEFAULT_CLAUDE_STEPS, DEFAULT_ORG_SETTINGS, orgSettingsInput } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { runAction, type ActionContext } from '../src/actions.js';
 import { Drafts } from '../src/drafts.js';
@@ -10,6 +10,7 @@ import { ClaudeCodeError, claudeStatus, DENIED_TOOLS, findClaude, runClaude } fr
 import { DumpRefused, planUseDownloaded, recentDownloads, uploadIdOf } from '../src/org/dumps.js';
 import { ghOrgs, ghRepoPage, ghStatus } from '../src/repo-hosts/github.js';
 import { checkAccess, docPaths, readRepo } from '../src/org/read.js';
+import { withAccountsTicked } from '../src/org/routes.js';
 import { CHECK_EVERY_MS, LIST_EVERY_MS, localOf, OrgScanner } from '../src/org/scan.js';
 import { readUpload } from '../src/sites/uploads.js';
 import { RunStore } from '../src/store.js';
@@ -124,7 +125,7 @@ describe('the GitHub CLI', () => {
     });
     expect(await ghOrgs(fake.exec)).toEqual(['acme', 'acme-labs', 'alex']);
     expect(await ghRepoPage(fake.exec, { org: 'acme' }, 2)).toEqual([{ name: 'site', archived: false, pushedAt: '2026-10-01T00:00:00Z', defaultBranch: 'main', sshUrl: 'git@github.com:acme/site.git', url: 'https://github.com/acme/site' }]);
-    expect(fake.calls.at(-1)?.args.slice(2)).toEqual(['--jq', 'map({name, description, archived, pushed_at, default_branch, ssh_url, html_url})']);
+    expect(fake.calls.at(-1)?.args.slice(2)).toEqual(['--jq', 'map({name, description, archived, pushed_at, default_branch, ssh_url, html_url, full_name})']);
     expect(fake.calls.every((c) => c.env?.GH_PROMPT_DISABLED === '1')).toBe(true);
   });
 
@@ -590,8 +591,17 @@ describe('Claude Code steps as jobs', () => {
 });
 
 describe('organization settings', () => {
+  it('tick your own accounts the first time a CLI is signed in, and never after you saved a list', () => {
+    const glab = { installed: true, hosts: [{ host: 'gitlab.com', installed: true, signedIn: true, user: 'alex' }, { host: 'git.acme.test', installed: true, signedIn: false }] };
+    const gh = { installed: true, signedIn: true, user: 'alex' };
+    expect(withAccountsTicked(DEFAULT_ORG_SETTINGS, gh, glab)).toMatchObject({ selected: ['alex', 'gitlab.com/alex'], accountsTicked: true });
+    expect(withAccountsTicked(DEFAULT_ORG_SETTINGS, { installed: false, signedIn: false }, { installed: false, hosts: [] })).toBeNull();
+    expect(withAccountsTicked({ ...DEFAULT_ORG_SETTINGS, accountsTicked: true }, gh, glab)).toBeNull();
+    expect(withAccountsTicked({ ...DEFAULT_ORG_SETTINGS, selected: ['acme'] }, gh, glab)).toBeNull();
+  });
+
   it('start from the recommended model and effort for each step', () => {
-    expect(orgSettingsInput.parse({ selected: [] })).toEqual({ selected: [], gitlabHosts: [], ...DEFAULT_CLAUDE_STEPS });
+    expect(orgSettingsInput.parse({ selected: [] })).toEqual({ selected: [], gitlabHosts: [], accountsTicked: false, ...DEFAULT_CLAUDE_STEPS });
     expect(DEFAULT_CLAUDE_STEPS).toEqual({ read: { model: 'sonnet', effort: 'medium', budgetUsd: 0.5 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } });
   });
 
@@ -599,6 +609,7 @@ describe('organization settings', () => {
     expect(orgSettingsInput.parse({ selected: ['acme'], model: 'opus', budgetUsd: 1 })).toEqual({
       selected: ['acme'],
       gitlabHosts: [],
+      accountsTicked: false,
       read: { model: 'opus', effort: 'medium', budgetUsd: 1 },
       access: { model: 'opus', effort: 'low', budgetUsd: 1 },
     });

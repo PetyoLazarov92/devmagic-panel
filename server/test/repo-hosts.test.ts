@@ -1,5 +1,9 @@
 import type { Site } from '@devmagic-panel/shared';
+import { branchWebUrl, registerGitHosts, registerHostAliases, repoWeb } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
+import { OrgScanner } from '../src/org/scan.js';
+import { GitHostDetector } from '../src/repo-hosts/detect.js';
+import { RunStore } from '../src/store.js';
 import { glabNamespaces, glabProjectPage, glabStatus, glabTooOld, glabTopNames, glabVersion } from '../src/repo-hosts/gitlab.js';
 import { gitlabHostsInUse, glabOverview, listNamespaces } from '../src/repo-hosts/index.js';
 import { fakeExec } from './helpers.js';
@@ -39,7 +43,7 @@ describe('the GitLab CLI', () => {
   it('lists the groups you can clone from, a subgroup only when its parent is not there, and your own account', async () => {
     const groups = [{ full_path: 'acme' }, { full_path: 'acme/web' }, { full_path: 'acme/web/shops' }, { full_path: 'partners/acme-team' }];
     const fake = glabFake({ 'gitlab.com groups': { stdout: JSON.stringify(groups) }, 'gitlab.com user': user('alex') });
-    expect(await glabNamespaces(fake.exec, 'gitlab.com')).toEqual(['gitlab.com/acme', 'gitlab.com/partners/acme-team', 'gitlab.com/alex']);
+    expect(await glabNamespaces(fake.exec, 'gitlab.com')).toEqual(['gitlab.com/acme', 'gitlab.com/partners/acme-team', 'gitlab.com/alex', 'gitlab.com/~shared']);
     expect(fake.calls[0]?.args).toEqual(['api', '--hostname', 'gitlab.com', 'groups?min_access_level=20&per_page=100&page=1']);
     await expect(glabNamespaces(fakeExec({ glab: { code: 1, stderr: '403 Forbidden' } }).exec, 'gitlab.com')).rejects.toThrow('the GitLab CLI cannot list your groups on gitlab.com: 403 Forbidden');
   });
@@ -88,8 +92,10 @@ describe('organizations and groups to scan', () => {
     expect(found.namespaces.map((n) => [n.ref, n.label])).toEqual([
       ['acme', 'acme (GitHub)'],
       ['alex', 'alex (GitHub)'],
+      ['~shared', 'Shared with you (GitHub)'],
       ['gitlab.com/acme/web', 'acme/web (gitlab.com)'],
       ['gitlab.com/alex', 'alex (gitlab.com)'],
+      ['gitlab.com/~shared', 'Shared with you (gitlab.com)'],
     ]);
     expect(found.problems).toEqual(['the GitLab CLI cannot list your groups on git.acme.test: 500 Internal Server Error']);
   });
@@ -106,5 +112,93 @@ describe('GitLab hosts in use', () => {
   it('come from the settings, the selected groups and the remotes of sites made by hand, gitlab.com first', () => {
     expect(gitlabHostsInUse({ selected: ['acme'], gitlabHosts: ['git.acme.test'] }, [])).toEqual(['git.acme.test']);
     expect(gitlabHostsInUse({ selected: ['gitlab.acme.test/acme'], gitlabHosts: [] }, [site(undefined, ['https://gitlab.com/acme/learn.git'])])).toEqual(['gitlab.com', 'gitlab.acme.test']);
+  });
+});
+
+describe('git hosts found over SSH', () => {
+  const sshG = (host: string, real: string) => ({ [`ssh -G ${host}`]: { stdout: `user git\nhostname ${real}\nport 22\n` } });
+
+  it('asks an unknown host once with ssh -T, keeps the answer a week, and registers GitLab and Gitea hosts for links', async () => {
+    const store = new RunStore(':memory:');
+    let now = Date.parse('2026-11-06T09:00:00Z');
+    const fake = fakeExec({
+      ...sshG('git.acme.test', 'git.acme.test'),
+      ...sshG('code.acme.test', 'code.acme.test'),
+      'ssh -T -o BatchMode=yes -o ConnectTimeout=5 git@git.acme.test': { code: 0, stdout: 'Welcome to GitLab, @alex!\n' },
+      'ssh -T -o BatchMode=yes -o ConnectTimeout=5 -p 2222 forge@code.acme.test': { code: 1, stderr: "Hi there, alex! You've successfully authenticated with the key named work, but Forgejo does not provide shell access.\n" },
+      'ssh -T -o BatchMode=yes -o ConnectTimeout=5 git@plain.acme.test': { code: 255, stderr: 'Permission denied (publickey).\n' },
+    });
+    const detector = new GitHostDetector(fake.exec, store, () => now);
+    const remotes = ['git@git.acme.test:acme/web/site.git', 'ssh://forge@code.acme.test:2222/acme/shop.git', 'https://plain.acme.test/acme/blog.git', 'git@github.com:acme/site.git', 'git@gitlab.com:acme/x.git'];
+    try {
+      await detector.refresh(remotes);
+      expect(repoWeb('git@git.acme.test:acme/web/site.git')?.provider).toBe('GitLab');
+      expect(branchWebUrl('ssh://forge@code.acme.test:2222/acme/shop.git', 'main')).toBe('https://code.acme.test/acme/shop/src/branch/main');
+      expect(repoWeb('https://plain.acme.test/acme/blog.git')?.provider).toBe('Git');
+      // Public hosts are never asked; an HTTPS remote is not resolved as an alias.
+      expect(fake.calls.some((c) => c.args.some((a) => /github\.com|gitlab\.com/.test(a)))).toBe(false);
+      expect(fake.calls.some((c) => c.args[0] === '-G' && c.args[1] === 'plain.acme.test')).toBe(false);
+      // No host key is ever accepted for you here.
+      expect(fake.calls.every((c) => !c.args.join(' ').includes('StrictHostKeyChecking'))).toBe(true);
+      const asked = fake.calls.length;
+      now += 3 * 24 * 3_600_000;
+      await detector.refresh(remotes);
+      expect(fake.calls.length).toBe(asked);
+      now += 5 * 24 * 3_600_000;
+      await detector.refresh(remotes);
+      expect(fake.calls.length).toBe(asked * 2);
+    } finally {
+      registerGitHosts('detected', {});
+    }
+  });
+
+  it('resolves an SSH alias to its real host, so links and merge requests go there, and keeps it after a restart', async () => {
+    const store = new RunStore(':memory:');
+    const fake = fakeExec({ ...sshG('gitlab-work', 'gitlab.com'), ...sshG('company', 'git.acme.test'), 'ssh -T -o BatchMode=yes -o ConnectTimeout=5 git@company': { stdout: 'Welcome to GitLab, @alex!' } });
+    try {
+      await new GitHostDetector(fake.exec, store).refresh(['git@gitlab-work:acme/web/site.git', 'git@company:acme/shop.git']);
+      expect(repoWeb('git@gitlab-work:acme/web/site.git')).toEqual({ provider: 'GitLab', name: 'GitLab', repoUrl: 'https://gitlab.com/acme/web/site' });
+      expect(repoWeb('git@company:acme/shop.git')).toEqual({ provider: 'GitLab', name: 'git.acme.test', repoUrl: 'https://git.acme.test/acme/shop' });
+      // gitlab.com behind the alias is known by name: only the alias was resolved, no hello sent.
+      expect(fake.calls.filter((c) => c.args[0] === '-T').map((c) => c.args.at(-1))).toEqual(['git@company']);
+      registerHostAliases({});
+      registerGitHosts('detected', {});
+      new GitHostDetector(fakeExec({}).exec, store).apply();
+      expect(repoWeb('git@company:acme/shop.git')?.repoUrl).toBe('https://git.acme.test/acme/shop');
+      expect(new GitHostDetector(fakeExec({}).exec, store).known()).toEqual({ hosts: { 'git.acme.test': 'GitLab' }, aliases: { 'gitlab-work': 'gitlab.com', company: 'git.acme.test' } });
+    } finally {
+      registerHostAliases({});
+      registerGitHosts('detected', {});
+    }
+  });
+});
+
+describe('repos shared with you', () => {
+  it('on GitHub are the repos you collaborate on, with their owners in the path', async () => {
+    const fake = fakeExec({
+      'gh api user': { stdout: 'alex\n' },
+      'gh api user/repos?affiliation=collaborator&per_page=100&sort=pushed&direction=desc&page=1': {
+        stdout: JSON.stringify([{ name: 'site', archived: false, pushed_at: '2026-10-01T00:00:00Z', default_branch: 'main', ssh_url: 'git@github.com:north/site.git', html_url: 'https://github.com/north/site', full_name: 'north/site' }, { name: 'site', archived: false, pushed_at: '2026-09-01T00:00:00Z', default_branch: 'main', ssh_url: 'git@github.com:south/site.git', html_url: 'https://github.com/south/site', full_name: 'south/site' }]),
+      },
+      'gh api repos/north/site/contents': { stdout: 'wp-content\n' },
+      'gh api repos/south/site/contents': { stdout: 'style.css\nfunctions.php\n' },
+    });
+    const store = new RunStore(':memory:');
+    const { repos } = await new OrgScanner(fake.exec, store).repos('~shared', { sites: [], installs: new Map(), trash: [], drafts: [] }, 'auto');
+    expect(repos.map((r) => [r.org, r.fullName, r.kind])).toEqual([['~shared', 'north/site', 'site'], ['~shared', 'south/site', 'theme']]);
+    expect(store.orgRepos('~shared')).toHaveLength(2);
+  });
+
+  it('on GitLab are the projects you were added to outside your groups and your own account', async () => {
+    const project = (path: string) => ({ name: path.split('/').at(-1), path_with_namespace: path, archived: false, last_activity_at: '2026-10-01T00:00:00Z', default_branch: 'main', ssh_url_to_repo: `git@gitlab.com:${path}.git`, web_url: `https://gitlab.com/${path}` });
+    const fake = glabFake({
+      'gitlab.com user': user('alex'),
+      'gitlab.com groups': { stdout: JSON.stringify([{ full_path: 'acme' }]) },
+      'gitlab.com projects?membership=true': { stdout: JSON.stringify([project('acme/web/site'), project('alex/notes'), project('partner/client-site'), project('acmeco/site')]) },
+      'gitlab.com projects/': { stdout: JSON.stringify([{ name: 'wp-content' }]) },
+    });
+    const { repos } = await new OrgScanner(fake.exec, new RunStore(':memory:')).repos('gitlab.com/~shared', { sites: [], installs: new Map(), trash: [], drafts: [] }, 'auto');
+    expect(repos.map((r) => r.fullName)).toEqual(['partner/client-site', 'acmeco/site']);
+    expect(fake.calls.find((c) => (c.args[3] as string).startsWith('projects?'))?.args[3]).toBe('projects?membership=true&min_access_level=20&order_by=last_activity_at&sort=desc&per_page=100&page=1');
   });
 });

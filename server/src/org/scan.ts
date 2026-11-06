@@ -1,5 +1,5 @@
 import type { InstallDraft, Namespace, OrgRepo, OrgRepoList, OrgScanMode, RepoKind, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
-import { classifyRepo, parseNamespaceRef, repoKey } from '@devmagic-panel/shared';
+import { classifyRepo, isShared, parseNamespaceRef, repoKey } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { HostRefused, type HostRepo, hostFor, type RepoHost } from '../repo-hosts/index.js';
 import type { RunStore } from '../store.js';
@@ -123,7 +123,7 @@ export class OrgScanner {
     const since = what === 'check' ? Date.parse(this.store.orgScan(org)?.checkedAt ?? '') - host.checkOverlapMs : NaN;
     if (!this.logins.has(host.host)) this.logins.set(host.host, await host.login());
     const login = this.logins.get(host.host);
-    const self = Boolean(login && login.toLowerCase() === ns.path.toLowerCase());
+    const self = !isShared(ns) && Boolean(login && login.toLowerCase() === ns.path.toLowerCase());
     const listed: HostRepo[] = [];
     for (let page = 1; page <= MAX_PAGES; page++) {
       const repos = await host.repoPage(ns, self, page);
@@ -133,9 +133,11 @@ export class OrgScanner {
       const oldest = Date.parse(repos.at(-1)?.pushedAt ?? '');
       if (what === 'check' && !(oldest >= since)) break;
     }
+    const keep = await host.keepFor?.(ns);
+    const kept = keep ? listed.filter(keep) : listed;
     const stored = new Map((this.store.orgRepos(org) as StoredRepo[]).map((r) => [r.fullName.toLowerCase(), r]));
-    const repos = await pooled(listed, 8, (r) => this.withKind(host, org, r, stored.get(r.path.toLowerCase())));
-    this.store.saveOrgScan(org, repos, what === 'full', new Date(started).toISOString(), (r) => (ns.provider === 'github' ? r.name : r.fullName.toLowerCase()));
+    const repos = await pooled(kept, 8, (r) => this.withKind(host, org, r, stored.get(r.path.toLowerCase())));
+    this.store.saveOrgScan(org, repos, what === 'full', new Date(started).toISOString(), (r) => (ns.provider === 'github' && !isShared(ns) ? r.name : r.fullName.toLowerCase()));
   }
 
   /** A listed repo with its kind: the stored one while no push came since, else read from its top-level names. */

@@ -34,7 +34,7 @@ import { sitesByVersion } from './php/pools.js';
 import { registerPhpRoutes } from './php/routes.js';
 import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
 import { readOrgSettings, registerOrgRoutes } from './org/routes.js';
-import { gitlabHostsInUse } from './repo-hosts/index.js';
+import { GitHostDetector, gitlabHostsInUse, remotesOf } from './repo-hosts/index.js';
 import { listTrash } from './sites/trash.js';
 import type { RunStore } from './store.js';
 import { installedCores, readWpcoreConfig } from './wpcore.js';
@@ -264,8 +264,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Everything below needs a session.
   app.register(async (api) => {
     const orgSettingsFile = join(deps.settingsFile ? dirname(deps.settingsFile) : join(deps.hostPaths.home, '.config', 'devmagic-panel'), 'organizations.json');
+    // What runs the hosts in the sites' remotes, when their name does not say: asked over SSH once a week.
+    const gitHosts = new GitHostDetector(deps.exec, deps.store);
+    gitHosts.apply();
     // Read at request time, once the site routes below exist.
-    const gitlabHosts = async () => gitlabHostsInUse(readOrgSettings(orgSettingsFile), await siteRoutes.sites());
+    const gitlabHosts = async () => {
+      const sites = await siteRoutes.sites();
+      await gitHosts.refresh(remotesOf(sites)).catch(() => undefined);
+      return gitlabHostsInUse(readOrgSettings(orgSettingsFile), sites);
+    };
     api.addHook('onRequest', async (request, reply) => {
       if (!authenticated(request)) return reply.code(401).send({ error: 'Log in first' });
     });
@@ -493,6 +500,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerOrgRoutes(api, {
       exec: deps.exec,
       store: deps.store,
+      gitHosts,
       home: deps.hostPaths.home,
       searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '',
       workDir: join(deps.uploadsDir, '..', 'tmp'),

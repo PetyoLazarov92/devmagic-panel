@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.4.0 (2026-11-06)
+* **Sites:** installed sites on your own GitLab whose name does not say so (`git.acme.test`), on Gitea or Forgejo, or cloned through an SSH alias (`git@gitlab-work:acme/site.git`) get the right branch, commit and repository links and their merge requests with no setting. The panel resolves aliases with `ssh -G` and asks each unknown host once a week with the same SSH hello `git fetch` makes; no token, and no new host key is accepted for you
+* **Sites:** From an organization or group ticks your own account on each signed-in host the first time, so its repos list without a visit to Organizations and groups to scan. A list you saved stays as you left it
+* **Sites:** a Shared with you entry per host lists the repos you were added to outside your organizations, groups and account: GitHub repos you collaborate on, GitLab projects outside your groups. Two repos of one name from different owners stay apart
+* **Panel:** the Environment page's GitLab checks also cover the hosts found this way. The root scripts do not change: the Updates page installs this release as usual
+
 ### v1.3.0 (2026-11-06)
 * **Sites:** a site's tabs come in a fixed order, in three groups with a line between them: Overview and Logs; WordPress and its data (Network, Plugins, Database, Cron, Config); the server (PHP, Domains and SSL). A tab a site lacks leaves the rest in place, and links like `?tab=database` open the same tab as before
 * **Sites:** a tab's badge counts only what needs a look, colored by how bad it is: errors in debug.log, late WP-Cron events and failed cron tasks, local constants wp-config.php does not have yet, names the certificate or the hosts file leaves out. Config and Domains and SSL no longer show how many constants or names they list

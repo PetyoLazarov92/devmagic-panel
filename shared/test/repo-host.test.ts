@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { repoFullName, actions } from '../src/actions.js';
-import { coveringGroups, gitlabHost, gitlabHostsWith, gitlabPath, namespaceLabel, namespaceRefOf, parseNamespaceRef } from '../src/repo-host.js';
+import { coveringGroups, gitlabHost, gitlabHostsWith, gitlabPath, isShared, namespaceLabel, namespaceRefOf, namespaceShortLabel, parseNamespaceRef } from '../src/repo-host.js';
 
 describe('namespace refs', () => {
   it('keep a GitHub organization as its bare name and put the host before a GitLab group', () => {
@@ -10,6 +10,14 @@ describe('namespace refs', () => {
     expect(namespaceRefOf({ provider: 'gitlab', host: 'gitlab.com', path: 'acme/web' })).toBe('gitlab.com/acme/web');
     expect(namespaceRefOf({ provider: 'github', host: 'github.com', path: 'acme' })).toBe('acme');
     expect([namespaceLabel('acme'), namespaceLabel('gitlab.com/acme/web')]).toEqual(['acme (GitHub)', 'acme/web (gitlab.com)']);
+  });
+
+  it('name the repos shared with you on each host with a ~, which no real name has', () => {
+    expect(parseNamespaceRef('~shared')).toEqual({ provider: 'github', host: 'github.com', path: '~shared' });
+    expect(parseNamespaceRef('gitlab.com/~shared')).toEqual({ provider: 'gitlab', host: 'gitlab.com', path: '~shared' });
+    expect(isShared({ path: '~shared' })).toBe(true);
+    expect([namespaceLabel('~shared'), namespaceLabel('git.acme.test/~shared'), namespaceShortLabel('gitlab.com/~shared')]).toEqual(['Shared with you (GitHub)', 'Shared with you (git.acme.test)', 'Shared with you']);
+    for (const bad of ['~other', 'gitlab.com/~shared/x', 'gitlab.com/acme/~shared']) expect(parseNamespaceRef(bad)).toBeNull();
   });
 
   it.each(['', 'acme/web', '-acme', 'gitlab.com', 'gitlab.com/', 'gitlab.com/../x', 'gitlab.com/acme/site.git', 'gitlab.com/acme.', 'github.com/acme', 'localhost/acme', 'gitlab.com/a b'])('refuses %j', (ref) => {

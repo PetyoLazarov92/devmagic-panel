@@ -147,7 +147,7 @@ function advance(job: JobView, list: 'steps' | 'undo', failAt?: string, outputs:
 
 // An organization in the mockup: its repos, what Claude reads from one, and the dumps its links point to.
 const MOCK_DUMP_UPLOAD = '00000000-0000-4000-8000-0000000000d1';
-let mockOrgSettings: OrgSettings = { selected: ['acme', 'gitlab.com/acme-web'], gitlabHosts: ['git.acme.test'], ...structuredClone(DEFAULT_CLAUDE_STEPS) };
+let mockOrgSettings: OrgSettings = { selected: ['acme', 'gitlab.com/acme-web', 'gitlab.com/~shared'], gitlabHosts: ['git.acme.test'], accountsTicked: true, ...structuredClone(DEFAULT_CLAUDE_STEPS) };
 // A GitLab group in the mockup, its projects in subgroups: two of one name, kept apart by their path.
 const mockGitlabRepos: OrgRepo[] = [
   { org: 'gitlab.com/acme-web', name: 'site', fullName: 'acme-web/clients/site', description: 'Client site on WordPress', sshUrl: 'git@gitlab.com:acme-web/clients/site.git', url: 'https://gitlab.com/acme-web/clients/site', defaultBranch: 'main', pushedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), archived: false, kind: 'site' },
@@ -1548,14 +1548,21 @@ export const mockApi: Api = {
         ns('acmeco', 'acmeco (GitHub)', 'github', 'github.com'),
         ns('gitlab.com/acme-web', 'acme-web (gitlab.com)', 'gitlab', 'gitlab.com'),
         ns('gitlab.com/partners/acme-team', 'partners/acme-team (gitlab.com)', 'gitlab', 'gitlab.com'),
+        ns('~shared', 'Shared with you (GitHub)', 'github', 'github.com'),
         ns('gitlab.com/acmeco', 'acmeco (gitlab.com)', 'gitlab', 'gitlab.com'),
+        ns('gitlab.com/~shared', 'Shared with you (gitlab.com)', 'gitlab', 'gitlab.com'),
       ],
       problems: [],
     };
   },
-  gitHosts: async () => ({ gitlab: mockOrgSettings.gitlabHosts }),
+  gitHosts: async () => ({ gitlab: mockOrgSettings.gitlabHosts, detected: { 'code.acme.test': 'Gitea' as const }, aliases: { 'gitlab-work': 'gitlab.com' } }),
   orgRepos: async (org, scan) => {
     // The stored list comes at once; a check finds one new repo, a full list takes longer. ?scan=fail shows GitHub timing out.
+    if (org === 'gitlab.com/~shared') {
+      await wait(scan === 'none' ? 150 : 700);
+      const at = new Date(Date.now() - 6 * 86_400_000).toISOString();
+      return { repos: [{ org, name: 'client-site', fullName: 'partner/client-site', description: 'A partner agency site you were added to', sshUrl: 'git@gitlab.com:partner/client-site.git', url: 'https://gitlab.com/partner/client-site', defaultBranch: 'main', pushedAt: at, archived: false, kind: 'site' }], ...mockOrgScan };
+    }
     if (org === 'gitlab.com/acme-web') {
       await wait(scan === 'none' ? 150 : 900);
       return { repos: structuredClone(mockGitlabRepos), ...mockOrgScan };

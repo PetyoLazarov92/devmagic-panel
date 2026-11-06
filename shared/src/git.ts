@@ -14,17 +14,40 @@ export interface RepoWeb {
 }
 
 /**
- * Hosts that run GitLab but do not say so in their name (gitlab.acme.test
- * does, git.acme.test does not). The panel registers the GitLab hosts from
- * its organization settings once they are read, on the server and in the
- * browser, so every link helper below knows them without passing them around.
+ * Hosts whose kind their name does not tell (git.acme.test runs GitLab,
+ * gitlab.acme.test says so), and SSH aliases from ~/.ssh/config
+ * (gitlab-work for gitlab.com). The panel registers them on the server and in
+ * the browser, by source: the GitLab hosts in its settings, and the ones it
+ * found by asking each host once over SSH. Every link helper below knows them
+ * without passing them around.
  */
-const knownGitlabHosts = new Set<string>();
+const knownBySource = new Map<string, Map<string, WebProvider>>();
+const known = new Map<string, WebProvider>();
+const aliases = new Map<string, string>();
 
-export function registerGitlabHosts(hosts: readonly string[]): void {
-  knownGitlabHosts.clear();
-  for (const host of hosts) knownGitlabHosts.add(host.toLowerCase());
+function rebuildKnown(): void {
+  known.clear();
+  for (const hosts of knownBySource.values()) for (const [host, provider] of hosts) known.set(host, provider);
 }
+
+/** The hosts of one source and what they run, replacing that source's earlier list. */
+export function registerGitHosts(source: string, hosts: Readonly<Record<string, 'GitLab' | 'Gitea'>>): void {
+  knownBySource.set(source, new Map(Object.entries(hosts).map(([h, p]) => [h.toLowerCase(), p])));
+  rebuildKnown();
+}
+
+export function registerGitlabHosts(hosts: readonly string[], source = 'settings'): void {
+  registerGitHosts(source, Object.fromEntries(hosts.map((h) => [h, 'GitLab' as const])));
+}
+
+/** SSH aliases and the real host each stands for, as `ssh -G` resolves them. */
+export function registerHostAliases(map: Readonly<Record<string, string>>): void {
+  aliases.clear();
+  for (const [alias, host] of Object.entries(map)) aliases.set(alias.toLowerCase(), host.toLowerCase());
+}
+
+/** The real host behind an SSH alias, or the host itself. */
+export const realHost = (host: string): string => aliases.get(host.toLowerCase()) ?? host.toLowerCase();
 
 const PUBLIC_NAMES: Record<string, string> = {
   'github.com': 'GitHub',
@@ -33,12 +56,14 @@ const PUBLIC_NAMES: Record<string, string> = {
   'codeberg.org': 'Codeberg',
 };
 
-/** The kind of a git host by its name, and the registered GitLab hosts. */
-export function providerOfHost(host: string): WebProvider {
-  const h = host.toLowerCase();
+/** The kind of a git host by its name, its alias and the registered hosts; `except` leaves one source out, to ask again. */
+export function providerOfHost(host: string, except?: string): WebProvider {
+  const h = realHost(host);
   if (h === 'github.com') return 'GitHub';
   if (h === 'bitbucket.org') return 'Bitbucket';
-  if (knownGitlabHosts.has(h) || /(^|[.-])gitlab([.-]|$)/.test(h)) return 'GitLab';
+  const registered = except === undefined ? known.get(h) : [...knownBySource].find(([source, hosts]) => source !== except && hosts.has(h))?.[1].get(h);
+  if (registered) return registered;
+  if (/(^|[.-])gitlab([.-]|$)/.test(h)) return 'GitLab';
   if (h === 'codeberg.org' || /(^|[.-])(gitea|forgejo)([.-]|$)/.test(h)) return 'Gitea';
   return 'Git';
 }
@@ -51,7 +76,8 @@ export function repoWeb(remote: string): RepoWeb | null {
   let path: string;
   const scp = /^[\w.-]+@([\w.-]+):(.+)$/.exec(trimmed);
   if (scp?.[1] && scp[2] && !trimmed.includes('://')) {
-    host = scp[1];
+    // An SSH alias (git@gitlab-work:acme/site.git) links to its real host.
+    host = realHost(scp[1]);
     webHost = host;
     path = scp[2];
   } else {
@@ -62,9 +88,9 @@ export function repoWeb(remote: string): RepoWeb | null {
       return null;
     }
     if (!['ssh:', 'https:', 'http:', 'git:'].includes(url.protocol)) return null;
-    host = url.hostname;
+    host = url.protocol === 'ssh:' ? realHost(url.hostname) : url.hostname;
     // An HTTPS port is the web's port too (gitlab.acme.test:8443); an SSH port is not.
-    webHost = url.protocol === 'https:' || url.protocol === 'http:' ? url.host : url.hostname;
+    webHost = url.protocol === 'https:' || url.protocol === 'http:' ? url.host : host;
     path = url.pathname;
   }
   path = path.replace(/^\/+/, '').replace(/\.git$/, '').replace(/\/+$/, '');
@@ -177,4 +203,24 @@ export function fuzzyMatch(query: string, text: string): { score: number; positi
   if (t.startsWith(q)) best.score += 5;
   best.score -= t.length * 0.01;
   return best;
+}
+
+/**
+ * Where a remote reaches its host: the host as written (an SSH alias stays an
+ * alias, so ssh uses its settings), the user and port for SSH, and whether it
+ * is SSH at all. Null for anything that is not a git remote.
+ */
+export function remoteEndpoint(remote: string): { host: string; user: string; port?: number; ssh: boolean } | null {
+  const trimmed = remote.trim();
+  const scp = /^([\w.-]+)@([\w.-]+):(.+)$/.exec(trimmed);
+  if (scp?.[1] && scp[2] && !trimmed.includes('://')) return { host: scp[2].toLowerCase(), user: scp[1], ssh: true };
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (!['ssh:', 'https:', 'http:', 'git:'].includes(url.protocol) || !url.hostname) return null;
+  const ssh = url.protocol === 'ssh:';
+  return { host: url.hostname.toLowerCase(), user: (ssh && url.username) || 'git', ...(ssh && url.port ? { port: Number(url.port) } : {}), ssh };
 }

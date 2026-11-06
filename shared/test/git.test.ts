@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { branchWebUrl, commitWebUrl, fuzzyMatch, registerGitlabHosts, repoWeb, sameRepo, subjectLinks } from '../src/git.js';
+import { branchWebUrl, commitWebUrl, fuzzyMatch, providerOfHost, registerGitHosts, registerGitlabHosts, registerHostAliases, remoteEndpoint, repoWeb, sameRepo, subjectLinks } from '../src/git.js';
 
 describe('repoWeb', () => {
   it.each([
@@ -29,12 +29,44 @@ describe('repoWeb', () => {
     expect(repoWeb('git@git.acme.test:acme/shop.git')?.provider).toBe('Git');
   });
 
+  it('follows an SSH alias to its real host, so an alias and the real URL are one repo', () => {
+    registerHostAliases({ 'gitlab-work': 'gitlab.com' });
+    try {
+      expect(repoWeb('git@gitlab-work:acme/web/site.git')).toEqual({ provider: 'GitLab', name: 'GitLab', repoUrl: 'https://gitlab.com/acme/web/site' });
+      expect(sameRepo('git@gitlab-work:acme/web/site.git', 'https://gitlab.com/acme/web/site.git')).toBe(true);
+    } finally {
+      registerHostAliases({});
+    }
+  });
+
+  it('keeps hosts by source, so the detected ones never replace your settings, and can leave one source out', () => {
+    registerGitlabHosts(['git.acme.test']);
+    registerGitHosts('detected', { 'code.acme.test': 'Gitea' });
+    try {
+      expect([providerOfHost('git.acme.test'), providerOfHost('code.acme.test')]).toEqual(['GitLab', 'Gitea']);
+      expect(providerOfHost('code.acme.test', 'detected')).toBe('Git');
+      expect(providerOfHost('git.acme.test', 'detected')).toBe('GitLab');
+    } finally {
+      registerGitlabHosts([]);
+      registerGitHosts('detected', {});
+    }
+  });
+
   it('does not take a host that only contains gitlab inside a word', () => {
     expect(repoWeb('git@notgitlabby.acme.test:a/b.git')?.provider).toBe('Git');
   });
 
   it.each(['', '/var/www/local.site.com', 'file:///srv/repo.git', 'javascript:alert(1)', 'git@github.com:'])('rejects %s', (remote) => {
     expect(repoWeb(remote)).toBeNull();
+  });
+});
+
+describe('remoteEndpoint', () => {
+  it('says how ssh reaches a remote: host as written, user and port', () => {
+    expect(remoteEndpoint('git@gitlab-work:acme/site.git')).toEqual({ host: 'gitlab-work', user: 'git', ssh: true });
+    expect(remoteEndpoint('ssh://forge@Code.Acme.Test:2222/acme/shop.git')).toEqual({ host: 'code.acme.test', user: 'forge', port: 2222, ssh: true });
+    expect(remoteEndpoint('https://git.acme.test/acme/blog.git')).toEqual({ host: 'git.acme.test', user: 'git', ssh: false });
+    expect(remoteEndpoint('/srv/repo.git')).toBeNull();
   });
 });
 

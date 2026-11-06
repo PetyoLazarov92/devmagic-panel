@@ -34,9 +34,17 @@ export const gitlabHost = z
 export interface Namespace {
   provider: RepoProvider;
   host: string;
-  /** The organization (GitHub) or group or user path (GitLab). */
+  /** The organization (GitHub) or group or user path (GitLab); SHARED for the repos shared with you. */
   path: string;
 }
+
+/**
+ * The repos shared with you on a host: GitHub repos you collaborate on, GitLab
+ * projects you were added to outside your groups. A ~ is valid in neither
+ * host's names, so it never collides with a real one.
+ */
+export const SHARED = '~shared';
+export const isShared = (ns: Pick<Namespace, 'path'>): boolean => ns.path === SHARED;
 
 /**
  * How a namespace is written in settings, the panel's database and how a site
@@ -46,12 +54,12 @@ export interface Namespace {
  * starts with a hostname, which has a dot.
  */
 export function parseNamespaceRef(ref: string): Namespace | null {
-  if (GITHUB_ORG.test(ref)) return { provider: 'github', host: GITHUB_HOST, path: ref };
+  if (GITHUB_ORG.test(ref) || ref === SHARED) return { provider: 'github', host: GITHUB_HOST, path: ref };
   const slash = ref.indexOf('/');
   if (slash < 1) return null;
   const host = ref.slice(0, slash);
   const path = ref.slice(slash + 1);
-  if (!HOST.test(host) || host === GITHUB_HOST || !isGitlabPath(path)) return null;
+  if (!HOST.test(host) || host === GITHUB_HOST || !(isGitlabPath(path) || path === SHARED)) return null;
   return { provider: 'gitlab', host, path };
 }
 
@@ -59,11 +67,18 @@ export const namespaceRefOf = (ns: Namespace): string => (ns.provider === 'githu
 
 export const namespaceRef = z.string().max(300).refine((ref) => parseNamespaceRef(ref) !== null, 'An organization like acme or a GitLab group like gitlab.com/acme/web');
 
-/** acme (GitHub), acme/web (gitlab.com) */
+/** A namespace on its own host: acme, acme/web, Shared with you. */
+export function namespaceShortLabel(ref: string): string {
+  const ns = parseNamespaceRef(ref);
+  if (!ns) return ref;
+  return isShared(ns) ? 'Shared with you' : ns.path;
+}
+
+/** acme (GitHub), acme/web (gitlab.com), Shared with you (gitlab.com) */
 export function namespaceLabel(ref: string): string {
   const ns = parseNamespaceRef(ref);
   if (!ns) return ref;
-  return ns.provider === 'github' ? `${ns.path} (GitHub)` : `${ns.path} (${ns.host})`;
+  return `${namespaceShortLabel(ref)} (${ns.provider === 'github' ? 'GitHub' : ns.host})`;
 }
 
 /** The GitLab hosts the panel lists from: gitlab.com and the ones you added, without duplicates. */

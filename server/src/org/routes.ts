@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { InstallDraft, OrgNamespace, OrgRepoList, OrgSettings, OrgStatus, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
+import type { GitHosts, InstallDraft, OrgNamespace, OrgRepoList, OrgSettings, OrgStatus, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
 import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Executor } from '../exec.js';
@@ -9,7 +9,7 @@ import { RepoRefused } from '../sites/repo.js';
 import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } from './claude-code.js';
 import { recentDownloads, rcloneRemote } from './dumps.js';
 import { ghStatus } from '../repo-hosts/github.js';
-import { glabOverview, HostRefused, listNamespaces } from '../repo-hosts/index.js';
+import { type GitHostDetector, glabOverview, HostRefused, listNamespaces, remotesOf } from '../repo-hosts/index.js';
 import { OrgScanner } from './scan.js';
 
 /** The organization settings in ~/.config/devmagic-panel/organizations.json; nothing secret. */
@@ -28,10 +28,24 @@ export function writeOrgSettings(file: string, settings: OrgSettings): void {
   registerGitlabHosts(settings.gitlabHosts);
 }
 
+/**
+ * The first time a CLI is signed in and nothing is picked, your own accounts
+ * on each signed-in host are ticked, once; after that, or once you saved a
+ * list, the list is yours. Null when nothing changes.
+ */
+export function withAccountsTicked(settings: OrgSettings, gh: OrgStatus['gh'], glab: OrgStatus['glab']): OrgSettings | null {
+  if (settings.accountsTicked || settings.selected.length > 0) return null;
+  const mine = [...(gh.signedIn && gh.user ? [gh.user] : []), ...glab.hosts.flatMap((h) => (h.signedIn && h.user ? [`${h.host}/${h.user}`] : []))];
+  const parsed = orgSettingsInput.safeParse({ ...settings, selected: mine, accountsTicked: true });
+  return mine.length > 0 && parsed.success ? parsed.data : null;
+}
+
 export interface OrgRouteDeps {
   exec: Executor;
   /** Where the scanned repos are kept. */
   store: RunStore;
+  /** What runs the hosts in the sites' remotes, found over SSH. */
+  gitHosts?: GitHostDetector;
   home: string;
   /** Where to look for claude besides the usual places. */
   searchPath: string;
@@ -62,24 +76,39 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
   const refused = (error: unknown) => error instanceof ClaudeCodeError || error instanceof HostRefused || error instanceof RepoRefused;
 
   api.get('/api/org/status', async (): Promise<OrgStatus> => {
-    const settings = readOrgSettings(deps.settingsFile);
+    let settings = readOrgSettings(deps.settingsFile);
     const [claude, gh, glab, rclone] = await Promise.all([
       claudeStatus(deps.exec, deps.home, deps.searchPath),
       ghStatus(deps.exec),
       glabOverview(deps.exec, gitlabHostsWith(settings.gitlabHosts)),
       rcloneRemote(deps.exec),
     ]);
+    const ticked = withAccountsTicked(settings, gh, glab);
+    if (ticked) {
+      settings = ticked;
+      writeOrgSettings(deps.settingsFile, settings);
+    }
     return { claude, gh, glab, rclone, settings };
   });
 
   // The GitLab hosts that are not called gitlab-something, so the browser links them as GitLab too.
-  api.get('/api/git-hosts', async (): Promise<{ gitlab: string[] }> => ({ gitlab: readOrgSettings(deps.settingsFile).gitlabHosts }));
+  // The detected ones too, and SSH aliases with their real host; hosts not asked this week are asked behind the answer.
+  api.get('/api/git-hosts', async (): Promise<GitHosts> => {
+    const known = deps.gitHosts?.known() ?? { hosts: {}, aliases: {} };
+    if (deps.gitHosts) {
+      const detector = deps.gitHosts;
+      void deps.sites().then((sites) => detector.refresh(remotesOf(sites))).catch(() => undefined);
+    }
+    return { gitlab: readOrgSettings(deps.settingsFile).gitlabHosts, detected: known.hosts, aliases: known.aliases };
+  });
 
   api.put<{ Body: unknown }>('/api/org/settings', async (request, reply): Promise<OrgSettings | undefined> => {
     const parsed = orgSettingsInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Not organization settings' });
-    writeOrgSettings(deps.settingsFile, parsed.data);
-    return parsed.data;
+    // A list you saved is yours: your accounts are never ticked again for you.
+    const settings = { ...parsed.data, accountsTicked: true };
+    writeOrgSettings(deps.settingsFile, settings);
+    return settings;
   });
 
   // The connector tools Claude Code reaches, for Check connectors: one small Haiku run of at most $0.10.
