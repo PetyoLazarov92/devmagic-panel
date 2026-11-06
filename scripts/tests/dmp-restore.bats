@@ -105,3 +105,28 @@ craft() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"points to /etc/shadow"* ]]
 }
+
+@test "restores nginx's sites and keeps Debian's default site off while the panel has nginx next to Apache" {
+  printf 'server {}\n' > "$T/nginx/sites-available/default"
+  ln -s "$T/nginx/sites-available/default" "$T/nginx/sites-enabled/default"
+  printf 'server {}\n' > "$T/nginx/sites-available/manual"
+  dmp backup
+  archive="$(ls -t "$T"/backups/devmagic-panel-backup-*.tar.gz | head -n 1)"
+  sleep 1
+  dmp nginx-setup
+  rm "$T/nginx/sites-available/manual"
+
+  run restore --yes "$archive"
+  [ "$status" -eq 0 ]
+  [ -f "$T/nginx/sites-available/manual" ]
+  [ ! -e "$T/nginx/sites-enabled/default" ]
+  grep -qx 'systemctl reload nginx' "$STUB_LOG"
+}
+
+@test "refuses an nginx link to anything but nginx's sites-available" {
+  ln -s /etc/shadow "$T/nginx/sites-enabled/evil"
+  archive="$(craft "${T#/}/nginx/sites-enabled/evil")"
+  run restore --yes "$archive"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"points to"* || "$output" == *"refusing"* ]]
+}

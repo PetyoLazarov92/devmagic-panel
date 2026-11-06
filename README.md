@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.5.1-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.6.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -47,6 +47,7 @@ listens on localhost.
 - ✅ **New site wizard**: from a git repo and a database dump, a fresh WordPress, an empty site, or from your GitHub organization with Claude Code reading the docs; multisite and sites under a path of another site included
 - ✅ **SSL from a local CA**: one certificate covers every domain of a site, trusted in the system, Chrome, Edge and Firefox
 - ✅ **Apache and hosts**: vhosts with the panel's marker, and one marked block in `/etc/hosts`; what you made by hand stays as it is
+- ✅ **nginx next to Apache**: both on ports 80 and 443, each on its own loopback address, set up and turned off in one click; the panel, phpMyAdmin and your sites stay on Apache
 - ✅ **Shared WordPress cores** through `wpcore`: add a release, switch sites to it, remove unused ones
 - ✅ **Local mode**: mail goes to Mailpit, search engines are told not to index, logins work from this computer only
 - ✅ **One click**: wp-admin login, clear caches, flush rewrite rules, debug constants, `debug.log`, open in VS Code, switch branches, pull
@@ -242,21 +243,25 @@ change, switch branches or rebuild freely.
    - **Recommended**, asked with yes as the default: Composer, Imagick,
      Mailpit (the panel's own copy, as on the Services page) and, where mod_php
      runs, PHP-FPM so a site can have its own PHP.
-   - **Optional**, asked with no as the default: Xdebug and phpMyAdmin.
+   - **Optional**, asked with no as the default: Xdebug, phpMyAdmin and
+     nginx. nginx is installed in an apt-get of its own once Apache holds
+     port 80 (so the package leaves it stopped), then set up next to Apache
+     (step 10). An nginx already installed is offered the setup only.
    - **For installs from an organization**, one question, no by default: the
      GitHub CLI, rclone and Claude Code. Signing in to them stays yours; the
      installer prints how. The GitLab CLI, needed only for GitLab groups, is
      reported with where to get it and never installed in that group.
-   - It warns about PHP older than 8.1 and an nginx that may hold ports 80
-     and 443. `--yes` and `--skip-optional` skip all but the required parts.
+   - It warns about PHP older than 8.1, and with `--yes` about an nginx that
+     is installed but not set up. `--yes` and `--skip-optional` skip all but
+     the required parts.
 2. Writes `/etc/devmagic-panel/config.env` with the detected paths.
 3. Puts the release in `~/.local/share/devmagic-panel/releases/<version>`: as
    it is, or built from the checkout.
 4. Installs the root scripts (from that release) to
    `/usr/local/lib/devmagic-panel` and a sudoers rule that allows only
    `dmp-root` and `wpcore` without a password.
-5. **Backs up** `/etc/ssl/localcerts`, the Apache vhosts, `/etc/hosts` and the
-   system CA folder to `~/devmagic-panel-backups/` (readable only by you; it
+5. **Backs up** `/etc/ssl/localcerts`, the Apache vhosts, nginx's sites when
+   nginx is installed, `/etc/hosts` and the system CA folder to `~/devmagic-panel-backups/` (readable only by you; it
    holds private keys).
 6. Enables the Apache modules it needs (`ssl`, `rewrite`, `headers`, `proxy`,
    `proxy_http`, `proxy_wstunnel`).
@@ -276,13 +281,19 @@ change, switch branches or rebuild freely.
    clone in `~/.local/share/devmagic-panel/app` goes. It offers to keep the
    service running after you log out (`loginctl enable-linger`), so a running
    install or import is not cut off.
-10. Installs Mailpit when you said yes to it. On a home folder encrypted with
+10. Sets nginx up next to Apache when you said yes to it (`dmp-root
+    nginx-setup`): Apache's `ports.conf` moves from every address to
+    `127.0.0.1` (the original is kept in `/var/lib/devmagic-panel/nginx`),
+    Debian's default nginx site goes off, the panel's settings go in
+    `/etc/nginx/conf.d/devmagic-panel.conf`, and nginx answers on `127.0.0.2`.
+    Once nginx is set up, every later run writes those settings again.
+11. Installs Mailpit when you said yes to it. On a home folder encrypted with
     eCryptfs, which unlocks only when you log in, systemd cannot start your user
     services at boot or login, so it also writes
     `~/.config/autostart/devmagic-panel.desktop`: your desktop then starts the
     panel and Mailpit once you log in. The Environment page checks for it and
     adds it in one click.
-11. Writes the list of everything it put on the machine to
+12. Writes the list of everything it put on the machine to
     `/var/lib/devmagic-panel/installed-files` (root-owned, readable by all):
     each path, what it is, and whether an uninstall removes it, asks, or keeps it.
 
@@ -336,9 +347,9 @@ When the installer put Node.js in place for the panel, use
 | --- | --- |
 | Aura | The health of your sites and this machine, every problem in one list: certs missing names, expiring or from the old CA, missing or leftover hosts lines, names served on port 80 or 443 only, insecure or outdated WordPress (from WordPress.org), Local mode off, Mailpit down, nearly empty uploads with nothing loading them from production, a wp-content WordPress cannot write to; one-click fixes and Fix all |
 | WordPress | The shared wpcore cores with their WordPress.org status and the sites on each; add a release (one with known security issues after a typed confirmation, for testing), switch sites to a safe core, remove unused cores |
-| Services | Five tabs, each with its own address. Overview (`/services`): a card per service (Apache, PHP, MySQL, Mailpit, Cron) with its state, its facts, its buttons (Apache reload and restart after a configtest, MySQL restart, Mailpit installed or started in one click: a pinned release, checksum checked, as a user service) and a link to its tab. PHP (`/services/php`, a version at `/services/php/<version>`): PHP on this machine first, with a tile per installed version, then everything of the version picked, one section under the other: every installed PHP version with its release and any newer build apt offers (Update in one click), versions apt can install (Install, with PHP-FPM, the command line and the common modules; the one-time command for the ondrej/php PPA when apt has no other version) and Remove for one nothing uses, module packages from apt per version, the parts installed (mod_php, PHP-FPM, command line), its modules and Xdebug (any mix of modes) switched per version, every site's code checked against the version with a table of what each has (Sites), the panel's own settings per version for the web and the command line (memory, uploads, time limits, errors, OPcache and more, in its own 99-devmagic-panel.ini; php.ini is never edited), what each php.ini changes from the packaged one with a job that moves those changes into the panel's settings, PHP info and Xdebug info for the web and the command line (asked from PHP itself, password-like settings hidden), a check of what changes for sites on PHP-FPM, Make PHP-FPM match Apache for a version whose FPM differs from its mod_php, and How sites run: the switch that turns mod_php off and runs every site on one version through PHP-FPM (Apache on mpm_event, phpMyAdmin in a pool of its own, every site checked afterwards, Undo turns mod_php back on), and the way back. MySQL (`/services/mysql`): every database and user with what each is to the panel (a site's, kept for a site, not used by a site, left behind, MySQL's own), fresh sizes, Analyze and Optimize, delete a database or user no site uses (saved first to the panel's MySQL backups for 14 days, so Undo puts it back; Saved copies lists them, with Delete to remove one sooner), reset a site's database user. Apache (`/services/apache`): Apache at a glance (state and uptime, version, worker model, PHP, ports), every module in mods-available with a switch (the panel's own, the core ones, php* and mpm_* stay as they are; a change whose configtest fails is taken back), every vhost file with whether it is enabled and whose it is, a configtest and Apache's own error log. Cron (`/services/cron`): the panel's tasks in your crontab (a site's WP-Cron, a WP-CLI command, a PHP file in a site, a local URL, or a program with arguments, run without a shell) with a schedule in words and its next runs, a time limit, a switch, Run now and a history of runs with their output; the lines you wrote yourself, read only; and system cron and the systemd timers, read only |
+| Services | Six tabs, each with its own address. Overview (`/services`): a card per service (Apache, PHP, nginx, MySQL, Mailpit, Cron) with its state, its facts, its buttons (Apache reload and restart after a configtest, MySQL restart, Mailpit installed or started in one click: a pinned release, checksum checked, as a user service) and a link to its tab. PHP (`/services/php`, a version at `/services/php/<version>`): PHP on this machine first, with a tile per installed version, then everything of the version picked, one section under the other: every installed PHP version with its release and any newer build apt offers (Update in one click), versions apt can install (Install, with PHP-FPM, the command line and the common modules; the one-time command for the ondrej/php PPA when apt has no other version) and Remove for one nothing uses, module packages from apt per version, the parts installed (mod_php, PHP-FPM, command line), its modules and Xdebug (any mix of modes) switched per version, every site's code checked against the version with a table of what each has (Sites), the panel's own settings per version for the web and the command line (memory, uploads, time limits, errors, OPcache and more, in its own 99-devmagic-panel.ini; php.ini is never edited), what each php.ini changes from the packaged one with a job that moves those changes into the panel's settings, PHP info and Xdebug info for the web and the command line (asked from PHP itself, password-like settings hidden), a check of what changes for sites on PHP-FPM, Make PHP-FPM match Apache for a version whose FPM differs from its mod_php, and How sites run: the switch that turns mod_php off and runs every site on one version through PHP-FPM (Apache on mpm_event, phpMyAdmin in a pool of its own, every site checked afterwards, Undo turns mod_php back on), and the way back. MySQL (`/services/mysql`): every database and user with what each is to the panel (a site's, kept for a site, not used by a site, left behind, MySQL's own), fresh sizes, Analyze and Optimize, delete a database or user no site uses (saved first to the panel's MySQL backups for 14 days, so Undo puts it back; Saved copies lists them, with Delete to remove one sooner), reset a site's database user. Apache (`/services/apache`): Apache at a glance (state and uptime, version, worker model, PHP, ports), every module in mods-available with a switch (the panel's own, the core ones, php* and mpm_* stay as they are; a change whose configtest fails is taken back), every vhost file with whether it is enabled and whose it is, a configtest and Apache's own error log. nginx (`/services/nginx`): nginx next to Apache, both on ports 80 and 443, each on its own loopback address (Apache on `127.0.0.1`, nginx on `127.0.0.2`), so a site goes to the server its hosts line points at with nothing proxied; the command to install it, Set up nginx (Apache restarts on its address, Debian's default nginx site goes off, every site is checked afterwards, Undo turns nginx off), Write settings again and Turn nginx off, nginx -t and Reload, every config in sites-available with whether it is enabled, whose it is and whether it takes Apache's ports, and nginx's own error log. Cron (`/services/cron`): the panel's tasks in your crontab (a site's WP-Cron, a WP-CLI command, a PHP file in a site, a local URL, or a program with arguments, run without a shell) with a schedule in words and its next runs, a time limit, a switch, Run now and a history of runs with their output; the lines you wrote yourself, read only; and system cron and the systemd timers, read only |
 | Mail | The mail your local sites sent, caught by Mailpit: all sites or one, HTML shown in a sandbox, delete a site's mail; installs Mailpit in one click when it is missing |
-| Environment | Checks the panel's own installation (files, root scripts, build), Apache, certificates, hosts entries, MySQL, PHP, tools and access, each marked required, recommended or optional, with one-click fixes; groups that all pass start closed. Its Settings tab (`/environment/settings`) holds the AI assistant and the Claude Code defaults for organization installs |
+| Environment | Checks the panel's own installation (files, root scripts, build), Apache, nginx once it is installed (set up, running, nginx -t, each server on its own address, configs made by hand that take Apache's ports), certificates, hosts entries, MySQL, PHP, tools and access, each marked required, recommended or optional, with one-click fixes; groups that all pass start closed. Its Settings tab (`/environment/settings`) holds the AI assistant and the Claude Code defaults for organization installs |
 | Sites | Each site's tabs have their own address (`?tab=database`, `?tab=logs&log=apache`), so a reload or a link opens the same one. They come in a fixed order: Overview and Logs, then WordPress and its data (Network on a multisite, Plugins, Database, Cron, Config), then the server (PHP, Domains and SSL), and a tab's badge counts only what needs a look: errors in debug.log, late WP-Cron events, local constants to set, names the certificate or hosts file leaves out. Overview has a tile for each other tab (debug mode, the network, the database, WP-Cron, PHP, domains and the certificate) that opens it, then git (one section per repo: the site's own, wp-content, each theme, plugin and must-use plugin folder with a `.git` of its own, and mounted folders, each with its branch, pull, fetch, switch and pull or merge requests), quick actions and the core; the debug constants sit on the Logs tab above debug.log. A WordPress site's Cron tab lists its WP-Cron events with Run now and Delete (Undo puts one back), its intervals, Check WP-Cron, its cron tasks, and the switch that runs its WP-Cron from cron instead of page loads. Your local sites with health, certs, core, git, database, multisite, logs and how each was installed (by the panel and from what, restored, or by hand), with a filter for it. A WordPress install a vhost serves under a path (an `Alias`, like Northwind Learn at `local.northwind.com/learn`) is a site of its own (the wizard installs one too: its own folder, an Alias in the parent's vhost), with its own folder, database, git, debug settings, logs, Local mode and snapshots; its vhost, certificate and hosts line stay with the parent. Also: one-click wp-admin login (Network Admin too), a network's sites with archived, spam, hidden and deleted ones marked and filtered, a super admin made administrator on every site of a network (Undo on the job takes it back), clear caches, flush rewrite rules, each debug constant on its own (WP_DEBUG, WP_DEBUG_LOG, WP_DEBUG_DISPLAY, SCRIPT_DEBUG, SAVEQUERIES), clear debug.log, a PHP tab with the site's own PHP version and settings through its own PHP-FPM pool (checked against what its composer.json, plugins and themes ask for; WP-CLI the panel runs for it follows; after a switch the panel opens the home page and wp-admin and reads the site's logs for new PHP fatal errors; Undo on the job puts it back), a compatibility check of its themes and plugins against another PHP version before you switch (PHPCompatibilityWP, fetched once with Composer into the panel's data folder; a hint that never blocks the switch), PHP info from the PHP that serves it, a Plugins tab that turns each plugin on or off with one switch (search, filters, updates WordPress already found, what each needs and what needs it, the plugins turned off at install and the local helpers marked, Undo in the toast), open in VS Code in a new window, open a terminal at the site's folder (the desktop's default terminal, when the panel runs in your desktop session), switch the shared WordPress core, switch git branches (search by any letters of the name), each branch's open pull request on GitHub (through the GitHub CLI when you are signed in to it), pull and fetch (mounted folders too), database snapshots, restore, dump import and search and replace with a preview, Local mode with blocked hosts, where missing uploads load from, fix health issues in one click, move sites to the Archive (any site in the usual layout) |
 | New site | Paste a repo URL and pick one of its real branches (the default one first); the wizard fills itself from your last install of that repo (the panel remembers its answers; nothing is written into the repo). From a git repo and a database dump, a fresh WordPress, an empty site, or from an organization. One cert, vhost and hosts line cover every domain; the addresses the dump uses (production, staging, another local copy, with a port or not) are replaced, a network's sites listed by name with a choice of its type here, subdirectory or subdomain in WordPress's words (it starts as the dump has it, sets SUBDOMAIN_INSTALL to match, is remembered per repo, and the install moves the sites whose address changes after the replace; a network is never installed under a path, and one served through a domain mapping plugin keeps its domains), production-only plugins deactivated (a search finds one in a long list), the local helpers the repo has (as a plugin folder or in composer.json) turned on, missing images loaded from the production domain you give. A build checklist lists every composer.json and package.json in the repo and ticks only the ones whose output the repo does not hold (vendor/ or a build folder git ignores; never a wordpress.org plugin), with their build, prod or production script; watchers are never offered. The newest core you have is picked unless you choose another. A dump's admins are listed (a network's super admins; the scan reads up to 16 GB of SQL for them), one-click login signs you in as the first, and an admin for this copy (admin / admin, superadmin on a network) is made only when you switch it on, or when the dump has none. Domains are replaced in URLs only. Each step shows its output and progress (clone, import, replace), the header lists running installs so you can leave and come back, at most two run at once, and free disk space is checked first; a failed install can be retried from its step or undone, and a failed step the site works without (the build, the local helpers, BE Media, `.htaccess`, flushing caches, the admin account) can be skipped: the install goes on and the site's page keeps what is left to do, each with a Done button once you did it yourself. Builds run with the Node the repo's `.nvmrc` or `.node-version` asks for, from nvm, else nvm's default or the Node the panel runs on, since the panel's service has no nvm in its PATH. Go back a step and the steps you reached stay open until you change an answer; put it back and they open again |
 | Run history | Every action the panel ran, with its result, in numbered pages; an install that went on without a step shows a warning and how many it skipped, as on the Jobs page; kept 90 days (at most 2000 runs) |
@@ -351,6 +362,14 @@ When the installer put Node.js in place for the panel, use
 - **Vhosts stay as they are.** The panel only rewrites or removes a vhost
   whose first line is its own marker. Sites made by hand or by devmagic keep
   their vhost; the panel reissues their cert and manages their hosts line.
+- **nginx runs next to Apache, never in its place.** Once you set it up,
+  Apache answers on `127.0.0.1` and nginx on `127.0.0.2`, both on ports 80
+  and 443, so other devices on your network no longer reach Apache. Every
+  site, the panel and phpMyAdmin stay on Apache. nginx configs you wrote stay
+  as they are; one that listens on port 80 or 443 on every address keeps
+  nginx from starting next to Apache, so the setup names it and waits until
+  it listens on `127.0.0.2` or is off. Turning nginx off puts Apache's
+  `ports.conf` and Debian's default site back and stops nginx.
 - **Hosts entries go in one marked block** in `/etc/hosts`, between
   `# BEGIN devmagic-panel` and `# END devmagic-panel`, one line per site.
   Everything outside the block is left alone.
@@ -501,8 +520,8 @@ API key and works with the assistant off.
 
 ## ↩️ Undo and backups
 
-The installer backs up certs, vhosts, `/etc/hosts` and the system CA folder to
-`~/devmagic-panel-backups/` before it changes anything. Make another backup
+The installer backs up certs, vhosts, nginx's sites, `/etc/hosts` and the
+system CA folder to `~/devmagic-panel-backups/` before it changes anything. Make another backup
 any time with `sudo /usr/local/lib/devmagic-panel/bin/dmp-root backup`. To go
 back:
 
@@ -512,8 +531,9 @@ sudo /usr/local/lib/devmagic-panel/bin/dmp-restore          # newest backup
 sudo /usr/local/lib/devmagic-panel/bin/dmp-restore <file>   # a given one
 ```
 
-It asks for your password on purpose: restoring writes Apache config, so it
-is not part of the passwordless rule. It backs up the current state first, so
+It asks for your password on purpose: restoring writes Apache and nginx
+config, so it is not part of the passwordless rule. While nginx runs next to
+Apache, a backup from before keeps Debian's default nginx site off. It backs up the current state first, so
 a restore can be undone too. If the panel's own site is gone afterwards, run
 `~/.local/share/devmagic-panel/current/install.sh` again.
 
@@ -584,7 +604,9 @@ it on GitHub too.
 
 `./install.sh --uninstall` in a checkout does the same. It works from the
 installer's list of what it put on the machine (or the usual list for installs
-older than v0.5.0). It stops the panel and Mailpit, removes the panel's own
+older than v0.5.0). It stops the panel and Mailpit, turns nginx off when the
+panel set it up next to Apache (Apache back on every address, nginx stopped
+and left installed), removes the panel's own
 site (`local.devmagic`: vhost, certificate, hosts line), the releases and
 `current` (and a v0.5 clone in `app`), the Node.js it installed for the panel,
 the systemd unit, the login entry on an encrypted home, the panel's block in

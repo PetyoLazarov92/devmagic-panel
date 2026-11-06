@@ -35,6 +35,7 @@ import { planMatchFpm, planSitePhp } from './php/site-php.js';
 import { forgetCompat, planCheckCompat, planCheckCompatAll, wordpressSites } from './php/compat.js';
 import { planInstallVersion, planPhpPackage, planRemoveVersion, planUpgradeVersion, setCliVersion } from './php/apt.js';
 import { planSwitchToFpm, planSwitchToModPhp } from './php/switch.js';
+import { planNginxSetup, planNginxTeardown } from './nginx.js';
 import { analyzeDatabases, deleteMysqlBackup, type MysqlContext, mysqlBackupsDir, MysqlRefused, planDropDatabase, planDropUsers, planOptimize, resetSiteUser } from './mysql-server.js';
 import type { RunStore } from './store.js';
 import { clearMail, type Downloader, mailpitFetch, type MailpitFetch, planInstallMailpit } from './mailpit.js';
@@ -256,6 +257,9 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'apache.reload': (ctx) => steps(() => root(ctx, 'apache-reload')),
   'apache.setModule': (ctx, { module, enabled }) => steps(() => root(ctx, 'apache-module', module, enabled ? 'on' : 'off')),
   'service.restart': (ctx, { service }) => steps(() => root(ctx, 'service-restart', service)),
+  'nginx.setup': async (ctx) => startJob(ctx, planNginxSetup(ctx), 'Set nginx up next to Apache', 'nginx'),
+  'nginx.teardown': async (ctx) => startJob(ctx, planNginxTeardown(ctx), 'Turn nginx off', 'nginx'),
+  'nginx.reload': (ctx) => steps(() => root(ctx, 'nginx-reload')),
   'mysql.analyze': (ctx, input) => analyzeDatabases(mysqlCtx(ctx), input),
   'mysql.optimize': async (ctx, input) =>
     startJob(ctx, await planOptimize(mysqlCtx(ctx), input, (s) => ctx.jobs.busyFor(`${s.domain}${s.path ?? ''}`) !== undefined), `Optimize ${input.database}`, input.database),

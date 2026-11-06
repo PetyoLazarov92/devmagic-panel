@@ -48,11 +48,11 @@ export function listenPorts(config: SystemConfig): string[] {
 }
 
 /** Seconds since the machine started, from /proc/uptime. */
-const machineUptime = () => Number(readFileSync('/proc/uptime', 'utf8').split(' ')[0]);
+export const machineUptime = () => Number(readFileSync('/proc/uptime', 'utf8').split(' ')[0]);
 
-/** When Apache last started: systemd's monotonic start, against the machine's uptime. */
-async function startedAt(exec: Executor, now: number, uptime: () => number): Promise<string | undefined> {
-  const r = await exec('systemctl', ['show', 'apache2', '--property=ActiveEnterTimestampMonotonic', '--value']);
+/** When a unit (Apache by default) last started: systemd's monotonic start, against the machine's uptime. */
+export async function startedAt(exec: Executor, now: number, uptime: () => number, unit = 'apache2'): Promise<string | undefined> {
+  const r = await exec('systemctl', ['show', unit, '--property=ActiveEnterTimestampMonotonic', '--value']);
   const micros = Number(r.stdout.trim());
   if (r.code !== 0 || !micros) return undefined;
   try {

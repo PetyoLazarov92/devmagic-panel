@@ -419,12 +419,18 @@ detect_settings() {
   # Where the panel updates from, like a fork; empty means its own repository.
   UPDATE_REPO=""
   UPDATE_GIT_URL=""
+  # nginx next to Apache, each on its own address (scripts/lib/nginx.sh).
+  NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"
+  NGINX_SITES_ENABLED="/etc/nginx/sites-enabled"
+  NGINX_LOG_DIR="/var/log/nginx"
+  NGINX_ADDRESS="127.0.0.2"
+  APACHE_ADDRESS="127.0.0.1"
 
   if [[ -r "$CONFIG_DIR/config.env" ]]; then
     local line
     # An if, not &&: a last line that does not match must not fail the step under set -e.
     while IFS= read -r line; do
-      if [[ "$line" =~ ^(PANEL_PORT|PANEL_DOMAIN|WEB_DIR|WEB_GROUP|CERTS_DIR|CA_DIR|BACKUP_DIR|STATE_DIR|UPDATE_REPO|UPDATE_GIT_URL)=([A-Za-z0-9._/@:-]*)$ ]]; then
+      if [[ "$line" =~ ^(PANEL_PORT|PANEL_DOMAIN|WEB_DIR|WEB_GROUP|CERTS_DIR|CA_DIR|BACKUP_DIR|STATE_DIR|UPDATE_REPO|UPDATE_GIT_URL|NGINX_SITES_AVAILABLE|NGINX_SITES_ENABLED|NGINX_LOG_DIR|NGINX_ADDRESS|APACHE_ADDRESS)=([A-Za-z0-9._/@:-]*)$ ]]; then
         printf -v "${BASH_REMATCH[1]}" '%s' "${BASH_REMATCH[2]}"
       fi
     done < "$CONFIG_DIR/config.env"
@@ -468,6 +474,11 @@ BACKUP_DIR=$BACKUP_DIR
 PHP_CONF_DIR=/etc/php
 PHP_LIB_DIR=/usr/lib/php
 STATE_DIR=$STATE_DIR
+NGINX_SITES_AVAILABLE=$NGINX_SITES_AVAILABLE
+NGINX_SITES_ENABLED=$NGINX_SITES_ENABLED
+NGINX_LOG_DIR=$NGINX_LOG_DIR
+NGINX_ADDRESS=$NGINX_ADDRESS
+APACHE_ADDRESS=$APACHE_ADDRESS
 EOF
     # Only when set: without them the panel updates from its own repository.
     if [[ -n "$UPDATE_REPO" ]]; then printf 'UPDATE_REPO=%s\n' "$UPDATE_REPO"; fi
@@ -500,6 +511,17 @@ WANT_MAILPIT=0
 WANT_CLAUDE=0
 WANT_PHPMYADMIN=0
 WANT_ORG=0
+# nginx: installed in an apt-get of its own, after Apache holds port 80, then set up next to Apache.
+WANT_NGINX_PACKAGE=0
+WANT_NGINX=0
+
+# The panel's nginx settings, written by dmp-root nginx-setup: their marker says nginx runs next to Apache.
+nginx_conf_file() { printf '%s/conf.d/devmagic-panel.conf' "$(dirname "$NGINX_SITES_AVAILABLE")"; }
+nginx_set_up() {
+  local conf
+  conf="$(nginx_conf_file)"
+  [[ -r "$conf" && "$(head -n 1 "$conf")" == "# Managed by devmagic-panel. Edits here are overwritten." ]]
+}
 
 # MySQL on Ubuntu and its family; Debian has MariaDB in its place.
 database_package() {
@@ -616,6 +638,15 @@ check_dependencies() {
   printf '   Optional\n'
   report_pkgs optional "Xdebug" "php$pv-xdebug"
   report_pkgs optional "phpMyAdmin" phpmyadmin
+  if ! has_pkg nginx; then
+    report optional "nginx, to run sites on it next to Apache" nginx
+    optional+=(nginx)
+  elif nginx_set_up; then
+    report ok "nginx, next to Apache" "on $NGINX_ADDRESS, Apache on $APACHE_ADDRESS"
+  else
+    report optional "nginx, next to Apache" "installed, not set up"
+    optional+=(nginx-setup)
+  fi
 
   printf '   For installs from an organization\n'
   report_cmd org "GitHub CLI" gh gh
@@ -634,8 +665,8 @@ check_dependencies() {
   if [[ -n "$php_version" ]] && [[ "$(printf '%s\n%s\n' "$MIN_PHP" "$php_version" | sort -V | head -n 1)" != "$MIN_PHP" ]]; then
     dmp_warn "PHP $php_version is older than $MIN_PHP: current WordPress and its plugins expect $MIN_PHP or newer"
   fi
-  if has_pkg nginx; then
-    dmp_warn "nginx is installed: Apache needs ports 80 and 443, so stop nginx if it holds them"
+  if has_pkg nginx && ! nginx_set_up && (( SKIP_OPTIONAL )); then
+    dmp_warn "nginx is installed but not set up: set it up next to Apache on the panel's Services page, nginx tab"
   fi
 
   # Required: one question for everything missing.
@@ -668,6 +699,8 @@ check_dependencies() {
     case "$pkg" in
       php*-xdebug) confirm "Install Xdebug?" n && APT_PKGS+=("$pkg") ;;
       phpmyadmin) confirm "Install phpMyAdmin?" n && WANT_PHPMYADMIN=1 ;;
+      nginx) confirm "Install nginx and run it next to Apache? Apache moves to $APACHE_ADDRESS, nginx answers on $NGINX_ADDRESS, and every site stays on Apache until you move it" n && { WANT_NGINX_PACKAGE=1; WANT_NGINX=1; } ;;
+      nginx-setup) confirm "Set nginx up next to Apache? Apache moves to $APACHE_ADDRESS, nginx answers on $NGINX_ADDRESS, and every site stays on Apache until you move it" n && WANT_NGINX=1 ;;
     esac
   done
   claude_found || org+=("Claude Code")
@@ -684,14 +717,17 @@ check_dependencies() {
 
 # Installs what check_dependencies settled on.
 install_dependencies() {
-  if (( ${#APT_PKGS[@]} > 0 || WANT_PHPMYADMIN )); then
+  if (( ${#APT_PKGS[@]} > 0 || WANT_PHPMYADMIN || WANT_NGINX_PACKAGE )); then
     dmp_step "Installing packages"
     apt_update
     (( ${#APT_PKGS[@]} > 0 )) && as_root apt-get install -y -qq "${APT_PKGS[@]}"
     # phpMyAdmin asks its own questions (web server, database).
     (( WANT_PHPMYADMIN )) && as_root apt-get install -y phpmyadmin
+    # After Apache holds port 80: the package then leaves nginx stopped instead of taking it.
+    (( WANT_NGINX_PACKAGE )) && as_root apt-get install -y -qq nginx
     local -a all=("${APT_PKGS[@]}")
     (( WANT_PHPMYADMIN )) && all+=(phpmyadmin)
+    (( WANT_NGINX_PACKAGE )) && all+=(nginx)
     record packages "apt:${all[*]}" keep "packages the panel and your sites use, installed by install.sh"
   fi
   (( WANT_WPCLI )) && install_wpcli
@@ -1178,6 +1214,25 @@ setup_panel_site() {
   record line /etc/hosts remove "$PANEL_DOMAIN in the devmagic-panel block"
 }
 
+# nginx next to Apache: set up when you asked for it, and its settings written
+# again on every later run (or update) once it is. After the panel's own site,
+# since an nginx older than 1.19.4 answers unknown names with its certificate.
+setup_nginx() {
+  if nginx_set_up; then
+    dmp_step "Writing the panel's nginx settings again"
+  elif (( WANT_NGINX )); then
+    dmp_step "Setting nginx up on $NGINX_ADDRESS, next to Apache on $APACHE_ADDRESS"
+  else
+    return 0
+  fi
+  if ! as_root "$DMP" nginx-setup; then
+    (( FROM_PANEL )) && fail "dmp-root nginx-setup failed"
+    dmp_warn "nginx is not set up, see above; set it up later on the panel's Services page, nginx tab"
+    return 0
+  fi
+  record setting "nginx:$NGINX_ADDRESS" remove "nginx next to Apache: Apache goes back on every address, Debian's default nginx site back on, and nginx stops; nginx stays installed"
+}
+
 # ── 6. secrets, service ──────────────────────────────────────
 
 # The panel password and the MySQL admin account, asked by the panel's own
@@ -1510,6 +1565,14 @@ uninstall_main() {
     fi
   fi
   (( ${#site_files[@]} > 0 )) && asked+=("the panel's ${#site_files[@]} files in your sites (Local mode and the login helper)")
+  # nginx next to Apache goes back as it was, listed or not (installs before the panel knew it).
+  local nginx_on=0
+  if nginx_set_up; then
+    nginx_on=1
+    if ! printf '%s\n' "${entries[@]}" | grep -q $'^setting\tnginx:'; then
+      removed+=("nginx:$NGINX_ADDRESS  (nginx next to Apache: Apache goes back on every address, Debian's default nginx site back on, and nginx stops; nginx stays installed)")
+    fi
+  fi
   local cron_tasks
   cron_tasks="$(crontab_block_tasks)"
   [[ -n "$cron_tasks" ]] && removed+=("the devmagic-panel block in your crontab  ($cron_tasks task(s) of the panel; your own lines stay)")
@@ -1562,7 +1625,11 @@ uninstall_main() {
     remove_crontab_block
   fi
 
-  # The panel's own site goes while dmp-root is still there.
+  # nginx and the panel's own site go while dmp-root is still there.
+  if (( nginx_on )); then
+    dmp_step "Turning nginx off; Apache answers on every address again"
+    as_root "$DMP" nginx-teardown || dmp_warn "could not turn nginx off: put /etc/apache2/ports.conf back from $STATE_DIR/nginx/ports.conf by hand"
+  fi
   dmp_step "Removing https://$PANEL_DOMAIN"
   as_root "$DMP" vhost-remove "$PANEL_DOMAIN" || dmp_warn "could not remove the vhost of $PANEL_DOMAIN"
   as_root "$DMP" hosts-remove "$PANEL_DOMAIN" || dmp_warn "could not remove $PANEL_DOMAIN from /etc/hosts"
@@ -1577,6 +1644,8 @@ uninstall_main() {
       line:* | modules:* | packages:*) continue ;;
       # The folders dmp-root, sudo and config.env live in go last.
       *:"$DMP_PREFIX" | *:"$DMP_PREFIX"/* | *:"$SUDOERS_FILE" | *:"$CONFIG_DIR" | *:"$CONFIG_DIR"/*) continue ;;
+      # Turned off above, with nginx-teardown.
+      setting:nginx:*) continue ;;
       setting:linger:*)
         (( remove_linger )) && as_root loginctl disable-linger "${path#linger:}"
         continue
@@ -1678,6 +1747,7 @@ main() {
   reissue_existing_certs
   setup_panel_site
   as_root "$DMP" apache-reload
+  setup_nginx
   setup_secrets
   step_at restart
   install_service

@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # Archives everything the panel may change: certs and CA keys, Apache vhosts,
-# the hosts file and the system CA folder. The archive holds private keys,
+# nginx's sites when nginx is installed, the hosts file and the system CA folder. The archive holds private keys,
 # so it is readable only by the panel user.
 
 dmp_backup() {
@@ -10,7 +10,7 @@ dmp_backup() {
   archive="$BACKUP_DIR/devmagic-panel-backup-$stamp.tar.gz"
 
   local p
-  for p in "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$HOSTS_FILE" "$SYSTEM_CA_DIR"; do
+  for p in "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$NGINX_SITES_AVAILABLE" "$NGINX_SITES_ENABLED" "$HOSTS_FILE" "$SYSTEM_CA_DIR"; do
     [[ -e "$p" ]] && paths+=("${p#/}")
   done
   (( ${#paths[@]} > 0 )) || dmp_die "nothing to back up"

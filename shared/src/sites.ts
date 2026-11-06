@@ -489,11 +489,11 @@ export interface CleanPreview {
 export interface ServicesReport {
   checkedAt: string;
   services: Array<{
-    id: 'apache' | 'mysql' | 'mailpit' | 'cron';
+    id: 'apache' | 'nginx' | 'mysql' | 'mailpit' | 'cron';
     label: string;
     state: 'running' | 'stopped' | 'missing';
     detail: string;
-    /** Only Apache and MySQL can be restarted from the panel. */
+    /** Only Apache, nginx (once the panel set it up) and MySQL can be restarted from the panel. */
     canRestart: boolean;
     /** For Mailpit when it is not running: the panel can install it, or start the copy it installed. */
     offer?: 'install' | 'start';

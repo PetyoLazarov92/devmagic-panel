@@ -6,6 +6,7 @@ import { isListening } from './environment.js';
 import type { ExecResult, Executor } from './exec.js';
 import { apachePhpVersion, fpmDefaultVersion } from './php/versions.js';
 import { parseCrontab, tasksOf } from './cron.js';
+import { nginxInstalled, nginxSetUp } from './nginx.js';
 
 /** `systemctl is-active` answers active, inactive, failed, or unknown for a unit that does not exist. */
 export async function unitState(exec: Executor, unit: string): Promise<'running' | 'stopped' | 'missing'> {
@@ -32,7 +33,8 @@ function cronDetail(crontab: ExecResult): string {
 }
 
 export async function servicesReport(config: SystemConfig, exec: Executor, now = Date.now, mailpitBin?: string): Promise<ServicesReport> {
-  const [apache, mysql, mariadb, mailpit, apacheVersion, mysqlVersion, cli, cron, crontab] = await Promise.all([
+  const hasNginx = nginxInstalled(config);
+  const [apache, mysql, mariadb, mailpit, apacheVersion, mysqlVersion, cli, cron, crontab, nginx, nginxVersion] = await Promise.all([
     unitState(exec, 'apache2'),
     unitState(exec, 'mysql'),
     unitState(exec, 'mariadb'),
@@ -42,7 +44,16 @@ export async function servicesReport(config: SystemConfig, exec: Executor, now =
     exec('php', ['-r', 'echo PHP_VERSION;']),
     unitState(exec, 'cron'),
     exec('crontab', ['-l']),
+    hasNginx ? unitState(exec, 'nginx') : Promise.resolve('missing' as const),
+    hasNginx ? exec('nginx', ['-v']) : Promise.resolve(null),
   ]);
+  const nginxLabel = nginxVersion ? /nginx\/[\d.]+/.exec(`${nginxVersion.stdout}${nginxVersion.stderr}`)?.[0] : undefined;
+  const setUp = hasNginx && nginxSetUp(config);
+  const nginxDetail = !hasNginx
+    ? 'not installed: sudo apt install nginx runs sites on it next to Apache'
+    : setUp
+      ? `${nginxLabel ?? 'nginx'} on ${config.NGINX_ADDRESS}, Apache on ${config.APACHE_ADDRESS}`
+      : `${nginxLabel ?? 'nginx'} installed, not set up next to Apache yet`;
   const db = mysql !== 'missing' ? { unit: 'mysql', state: mysql } : { unit: 'mariadb', state: mariadb };
   const apacheLabel = /Apache\/[\d.]+/.exec(apacheVersion.stdout)?.[0] ?? 'Apache';
   const phpApache = apachePhpVersion(config);
@@ -51,6 +62,7 @@ export async function servicesReport(config: SystemConfig, exec: Executor, now =
     checkedAt: new Date(now()).toISOString(),
     services: [
       { id: 'apache', label: 'Apache', state: apache, detail: apacheLabel, canRestart: apache !== 'missing' },
+      { id: 'nginx', label: 'nginx', state: nginx, detail: nginxDetail, canRestart: setUp && nginx !== 'missing' },
       { id: 'mysql', label: db.unit === 'mysql' ? 'MySQL' : 'MariaDB', state: db.state, detail: firstLine(mysqlVersion) || db.unit, canRestart: db.state !== 'missing' },
       {
         id: 'mailpit',

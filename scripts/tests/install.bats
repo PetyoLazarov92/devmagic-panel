@@ -533,3 +533,71 @@ E: The repository 'https://apt.spellbook.test/repo stable InRelease' is not sign
   [ "$status" -eq 0 ]
   [ "$output" = "   [dry-run] sudo apt-get update -qq" ]
 }
+
+# nginx's folders in a temp tree, set up by the panel when asked.
+nginx_tree() {
+  NGINX="$BATS_TEST_TMPDIR/nginx"
+  mkdir -p "$NGINX/sites-available" "$NGINX/conf.d"
+  if [[ "${1:-}" == set-up ]]; then
+    printf '# Managed by devmagic-panel. Edits here are overwritten.\nserver {}\n' > "$NGINX/conf.d/devmagic-panel.conf"
+  fi
+  mkdir -p "$DMP_INSTALL_CONFIG_DIR"
+  printf 'NGINX_SITES_AVAILABLE=%s/sites-available\n' "$NGINX" >> "$DMP_INSTALL_CONFIG_DIR/config.env"
+}
+
+@test "nginx is optional: installed in an apt-get of its own after the others, and set up after the panel's site" {
+  fresh_machine ubuntu
+  run bash -c "yes | '$INSTALL' --dry-run"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"optional nginx, to run sites on it next to Apache (nginx)"* ]]
+  main_line="$(grep -n 'apt-get install -y -qq apache2' <<< "$output" | cut -d: -f1)"
+  nginx_line="$(grep -n 'apt-get install -y -qq nginx$' <<< "$output" | cut -d: -f1)"
+  panel_line="$(grep -n 'dmp-root vhost-write-panel' <<< "$output" | cut -d: -f1)"
+  setup_line="$(grep -n 'dmp-root nginx-setup' <<< "$output" | cut -d: -f1)"
+  [ -n "$nginx_line" ] && [ -n "$setup_line" ]
+  [ "$main_line" -lt "$nginx_line" ]
+  [ "$panel_line" -lt "$setup_line" ]
+  [[ "$output" == *"NGINX_ADDRESS=127.0.0.2"* && "$output" == *"APACHE_ADDRESS=127.0.0.1"* ]]
+}
+
+@test "--yes leaves nginx as it is, and says where to set up one that is installed" {
+  fresh_machine ubuntu
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"nginx-setup"* && "$output" != *"install -y -qq nginx"* ]]
+  DPKG_INSTALLED="nginx" run "$INSTALL" --dry-run --yes
+  [[ "$output" == *"nginx is installed but not set up: set it up next to Apache on the panel's Services page, nginx tab"* ]]
+  [[ "$output" != *"nginx-setup"* ]]
+}
+
+@test "once nginx is set up, a later run writes its settings again and keeps its addresses" {
+  fresh_machine ubuntu
+  nginx_tree set-up
+  printf 'NGINX_ADDRESS=127.0.0.9\n' >> "$DMP_INSTALL_CONFIG_DIR/config.env"
+  DPKG_INSTALLED="nginx" run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok       nginx, next to Apache (on 127.0.0.9, Apache on 127.0.0.1)"* ]]
+  [[ "$output" == *"Writing the panel's nginx settings again"*"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root nginx-setup"* ]]
+  [[ "$output" == *"NGINX_ADDRESS=127.0.0.9"* ]]
+}
+
+@test "uninstall turns nginx off before the panel's own site goes" {
+  installed_machine
+  nginx_tree set-up
+  run "$INSTALL" --uninstall --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"CALLED "* ]]
+  [[ "$output" == *"nginx:127.0.0.2  (nginx next to Apache: Apache goes back on every address"* ]]
+  teardown_line="$(grep -n 'dmp-root nginx-teardown' <<< "$output" | cut -d: -f1)"
+  vhost_line="$(grep -n 'dmp-root vhost-remove local.devmagic' <<< "$output" | cut -d: -f1)"
+  [ -n "$teardown_line" ]
+  [ "$teardown_line" -lt "$vhost_line" ]
+}
+
+@test "uninstall leaves nginx alone when the panel did not set it up" {
+  installed_machine
+  nginx_tree
+  run "$INSTALL" --uninstall --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"nginx-teardown"* ]]
+}

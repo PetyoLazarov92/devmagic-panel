@@ -32,10 +32,11 @@ dmp_apache_restart() {
   dmp_ok "apache restarted"
 }
 
-# service-restart <apache|mysql>: MySQL runs as mysql or mariadb, whichever unit exists.
+# service-restart <apache|mysql|nginx>: MySQL runs as mysql or mariadb, whichever unit exists.
 dmp_service_restart() {
   case "$1" in
     apache) dmp_apache_restart ;;
+    nginx) dmp_nginx_restart ;;
     mysql)
       local unit
       for unit in mysql mariadb; do
@@ -47,7 +48,7 @@ dmp_service_restart() {
       done
       dmp_die "no mysql or mariadb service found"
       ;;
-    *) dmp_usage_error "service-restart takes apache or mysql" ;;
+    *) dmp_usage_error "service-restart takes apache, mysql or nginx" ;;
   esac
 }
 

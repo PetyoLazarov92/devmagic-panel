@@ -481,9 +481,29 @@ export const actions = {
   },
   'service.restart': {
     title: 'Restart a service',
-    description: 'Restarts Apache (only after its configtest passes) or MySQL/MariaDB.',
+    description: 'Restarts Apache or nginx (each only after its configtest passes) or MySQL/MariaDB.',
     changesSystem: true,
-    input: z.object({ service: z.enum(['apache', 'mysql']) }),
+    input: z.object({ service: z.enum(['apache', 'mysql', 'nginx']) }),
+  },
+  'nginx.setup': {
+    title: 'Set nginx up next to Apache',
+    description:
+      "Runs nginx next to Apache, both on ports 80 and 443: Apache moves from every address to its own (127.0.0.1) and nginx answers on another (127.0.0.2), so a site later goes to the server its hosts line points at. Turns Debian's default nginx site off, writes the panel's nginx settings, restarts Apache and starts nginx, then checks every site still answers. Run again, it writes the settings anew. Needs nginx installed (sudo apt install nginx). Sites, the panel and phpMyAdmin stay on Apache. Starts a job; Undo turns nginx off again.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'nginx.teardown': {
+    title: 'Turn nginx off',
+    description:
+      "Puts Apache back on every address and Debian's default nginx site back on, stops nginx and keeps it from starting at boot, then checks every site still answers. Refused while a site runs on nginx. nginx stays installed. Starts a job; Undo sets nginx up again.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'nginx.reload': {
+    title: 'Reload nginx',
+    description: 'Runs nginx -t and reloads nginx when it passes.',
+    changesSystem: true,
+    input: z.object({}),
   },
   'mysql.analyze': {
     title: 'Analyze database tables',

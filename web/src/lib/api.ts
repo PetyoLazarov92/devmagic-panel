@@ -1,4 +1,4 @@
-import type { ActionId, ActionRunResult, ApacheReport, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { ActionId, ActionRunResult, ApacheReport, NginxReport, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -76,6 +76,9 @@ export interface Api {
   /** The vhosts, modules and configtest for the Apache tab, and Apache's own error log. */
   apache: () => Promise<ApacheReport>;
   apacheLog: () => Promise<SiteLog>;
+  /** nginx next to Apache for the nginx tab: installed, set up, nginx -t, configs; and nginx's own error log. */
+  nginx: () => Promise<NginxReport>;
+  nginxLog: () => Promise<SiteLog>;
   /** The installed PHP versions for the PHP tab, and per version its php.ini changes and PHP's own info. */
   php: () => Promise<PhpReport>;
   phpIni: (version: string) => Promise<PhpIniReport>;
@@ -244,6 +247,8 @@ const realApi: Api = {
   mysql: () => request('GET', '/api/mysql'),
   apache: () => request('GET', '/api/apache'),
   apacheLog: () => request('GET', '/api/apache/log'),
+  nginx: () => request('GET', '/api/nginx'),
+  nginxLog: () => request('GET', '/api/nginx/log'),
   php: () => request('GET', '/api/php'),
   phpIni: (version) => request('GET', `/api/php/${encodeURIComponent(version)}/ini`),
   phpInfo: (version, sapi) => request('GET', `/api/php/${encodeURIComponent(version)}/info?sapi=${sapi}`),

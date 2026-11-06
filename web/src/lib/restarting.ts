@@ -7,7 +7,7 @@ import { toast } from '@/lib/toast';
  * so the answer can be cut off by the restart; that is reported as likely
  * done, and the page checks again a moment later.
  */
-export async function runRestarting(id: 'service.restart' | 'apache.reload' | 'apache.setModule' | 'php.setXdebug' | 'php.setModule' | 'php.setIni' | 'php.setCli', input: Record<string, unknown>, label: string, after: () => void) {
+export async function runRestarting(id: 'service.restart' | 'apache.reload' | 'nginx.reload' | 'apache.setModule' | 'php.setXdebug' | 'php.setModule' | 'php.setIni' | 'php.setCli', input: Record<string, unknown>, label: string, after: () => void) {
   try {
     const result = await api.runAction(id, input);
     toast(result.ok ? { tone: 'success', title: label } : { tone: 'danger', title: `${label} failed`, detail: lastLine(result.output) });

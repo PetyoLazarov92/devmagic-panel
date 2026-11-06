@@ -1,4 +1,4 @@
-import type { AccessReport, ActionRunResult, ApacheReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
@@ -267,6 +267,7 @@ const mockTrash: TrashEntry[] = [
 ];
 
 // Mailpit starts stopped in the mockup; installing it there "starts" it and the sample mail appears.
+let mockNginxSetUp = false;
 let mailpitRunning = false;
 /** The user step's label for a clean-up, from the user it keeps or makes. */
 const mockUserLabel = (input: Record<string, unknown>) => {
@@ -1054,6 +1055,9 @@ export const mockApi: Api = {
       checkedAt: new Date().toISOString(),
       services: [
         { id: 'apache', label: 'Apache', state: 'running', detail: 'Apache/2.4.58', canRestart: true },
+        mockNginxSetUp
+          ? { id: 'nginx', label: 'nginx', state: 'running', detail: 'nginx/1.24.0 on 127.0.0.2, Apache on 127.0.0.1', canRestart: true }
+          : { id: 'nginx', label: 'nginx', state: 'stopped', detail: 'nginx/1.24.0 installed, not set up next to Apache yet', canRestart: false },
         { id: 'mysql', label: 'MySQL', state: 'running', detail: 'mysql  Ver 8.0.43-0ubuntu0.24.04.1 for Linux on x86_64', canRestart: true },
         mailpitRunning
           ? { id: 'mailpit', label: 'Mailpit', state: 'running', detail: 'catching mail on port 1025, read it at http://localhost:8025/', canRestart: false }
@@ -1137,6 +1141,31 @@ export const mockApi: Api = {
         { file: 'local.devmagic.conf', enabled: true, managed: false, names: ['local.devmagic'], mounts: [], certExpiresAt: '2028-06-01T00:00:00.000Z' },
       ],
       errorLog: '/var/log/apache2/error.log',
+    };
+  },
+  nginx: async (): Promise<NginxReport> => {
+    await wait(300);
+    return {
+      checkedAt: new Date().toISOString(),
+      installed: true,
+      setUp: mockNginxSetUp,
+      addresses: { nginx: '127.0.0.2', apache: '127.0.0.1' },
+      configtest: { ok: true, output: 'nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful' },
+      server: mockNginxSetUp ? { state: 'running', version: 'nginx/1.24.0', since: new Date(Date.now() - 2 * 3_600_000).toISOString() } : { state: 'stopped', version: 'nginx/1.24.0' },
+      configs: [
+        { file: 'default', enabled: !mockNginxSetUp, managed: false, names: [], listens: ['80 default_server', '[::]:80 default_server'] },
+        { file: 'local.legacy.test', enabled: false, managed: false, names: ['local.legacy.test'], listens: ['127.0.0.2:443 ssl'] },
+      ],
+      errorLog: '/var/log/nginx/error.log',
+    };
+  },
+  nginxLog: async () => {
+    await wait(150);
+    return {
+      file: '/var/log/nginx/error.log',
+      shared: true,
+      exists: true,
+      lines: mockNginxSetUp ? [{ time: new Date(Date.now() - 600_000).toISOString(), level: 'notice', message: 'signal process started' }] : [],
     };
   },
   apacheLog: async () => {
@@ -1321,6 +1350,7 @@ export const mockApi: Api = {
     if (id === 'org.readRepo' || id === 'org.checkAccess') return mockClaudeJob(id, input);
     // The mockup's Mailpit "runs" once its install job has had time to finish.
     if (id === 'mailpit.install') window.setTimeout(() => (mailpitRunning = true), 3500);
+    if (id === 'nginx.setup' || id === 'nginx.teardown') window.setTimeout(() => (mockNginxSetUp = id === 'nginx.setup'), 3500);
     return mockDbJob(id, input);
   },
   logs: async (domain, source) => {

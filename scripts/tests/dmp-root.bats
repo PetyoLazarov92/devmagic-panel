@@ -1250,3 +1250,215 @@ trash_site_tree() {
     [ "$status" -eq 2 ]
   done
 }
+
+# ── nginx next to Apache ─────────────────────────────────────
+
+# Debian's default nginx site, linked the way the package links it.
+nginx_default_site() {
+  printf 'server {\n\tlisten 80 default_server;\n\tlisten [::]:80 default_server;\n}\n' > "$T/nginx/sites-available/default"
+  ln -s "$T/nginx/sites-available/default" "$T/nginx/sites-enabled/default"
+}
+
+@test "nginx-setup moves Apache to its address, turns the default site off and writes the panel's conf" {
+  nginx_default_site
+  run dmp nginx-setup
+  [ "$status" -eq 0 ]
+  head -n 1 "$T/ports.conf" | grep -qx '# Managed by devmagic-panel. Edits here are overwritten.'
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  grep -qx $'\tListen 127.0.0.1:443' "$T/ports.conf"
+  run grep -qE '^\s*Listen (80|443)$' "$T/ports.conf"
+  [ "$status" -ne 0 ]
+  grep -qx 'Listen 80' "$T/state/nginx/ports.conf"
+  [ ! -e "$T/nginx/sites-enabled/default" ]
+  [ "$(cat "$T/state/nginx/default-site")" = "$T/nginx/sites-available/default" ]
+  conf="$T/nginx/conf.d/devmagic-panel.conf"
+  head -n 1 "$conf" | grep -qx '# Managed by devmagic-panel. Edits here are overwritten.'
+  grep -q 'listen 127.0.0.2:80 default_server;' "$conf"
+  grep -q 'listen 127.0.0.2:443 ssl default_server;' "$conf"
+  grep -q 'ssl_reject_handshake on;' "$conf"
+  grep -q '^client_max_body_size 0;' "$conf"
+  grep -qx 'nginx -t' "$STUB_LOG"
+  grep -qx 'systemctl restart apache2' "$STUB_LOG"
+  grep -qx 'systemctl restart nginx' "$STUB_LOG"
+  # Apache lets go of every address before nginx starts.
+  [ "$(grep -n 'systemctl restart apache2' "$STUB_LOG" | cut -d: -f1)" -lt "$(grep -n 'systemctl restart nginx' "$STUB_LOG" | cut -d: -f1)" ]
+}
+
+@test "nginx-setup run again keeps the original ports.conf and does not restart Apache" {
+  dmp nginx-setup
+  : > "$STUB_LOG"
+  run dmp nginx-setup
+  [ "$status" -eq 0 ]
+  grep -qx 'Listen 80' "$T/state/nginx/ports.conf"
+  [ "$(grep -c '^Listen 127.0.0.1:80$' "$T/ports.conf")" -eq 1 ]
+  run grep -qx 'systemctl restart apache2' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+  grep -qx 'systemctl restart nginx' "$STUB_LOG"
+}
+
+@test "nginx-setup leaves settings nginx.conf has to nginx.conf, and uses the panel's cert on an older nginx" {
+  printf 'http {\n\tserver_names_hash_bucket_size 64;\n}\n' > "$T/nginx/nginx.conf"
+  dmp ca-create
+  dmp cert-issue local.devmagic
+  STUB_NGINX_VERSION=1.18.0 run dmp nginx-setup
+  [ "$status" -eq 0 ]
+  conf="$T/nginx/conf.d/devmagic-panel.conf"
+  grep -qx '# server_names_hash_bucket_size: nginx.conf sets it.' "$conf"
+  run grep -q 'ssl_reject_handshake' "$conf"
+  [ "$status" -ne 0 ]
+  grep -q "ssl_certificate $T/certs/local.devmagic/local.devmagic.crt;" "$conf"
+}
+
+@test "nginx-setup merges Listen 80 and Listen [::]:80 into one Listen on Apache's address" {
+  printf 'Listen 80\nListen [::]:80\nListen 8080\n' > "$T/ports.conf"
+  run dmp nginx-setup
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^Listen 127.0.0.1:80$' "$T/ports.conf")" -eq 1 ]
+  grep -qx 'Listen 8080' "$T/ports.conf"
+}
+
+@test "nginx-setup refuses a ports.conf it cannot move, and changes nothing" {
+  printf 'Listen 192.168.1.5:80\n' > "$T/ports.conf"
+  run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"change it by hand"* ]]
+  [ "$(cat "$T/ports.conf")" = 'Listen 192.168.1.5:80' ]
+  [ ! -e "$T/nginx/conf.d/devmagic-panel.conf" ]
+  [ -z "$(ls -A "$T/state/nginx" | grep -v '^ports.conf$')" ]
+}
+
+@test "nginx-setup refuses nginx configs that listen on every address, naming them" {
+  printf 'server {\n\tlisten 80;\n\tserver_name local.manual.test;\n}\n' > "$T/nginx/sites-available/manual"
+  ln -s "$T/nginx/sites-available/manual" "$T/nginx/sites-enabled/manual"
+  run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sites-enabled/manual: listen 80"* ]]
+  grep -qx 'Listen 80' "$T/ports.conf"
+  [ ! -e "$T/nginx/conf.d/devmagic-panel.conf" ]
+}
+
+@test "nginx-setup accepts configs on nginx's address, other ports and IPv6" {
+  printf 'server {\n\tlisten 127.0.0.2:443 ssl;\n\tlisten [::]:80;\n\tlisten 8081;\n}\n' > "$T/nginx/sites-available/manual"
+  ln -s "$T/nginx/sites-available/manual" "$T/nginx/sites-enabled/manual"
+  run dmp nginx-setup
+  [ "$status" -eq 0 ]
+}
+
+@test "nginx-setup refuses when another program holds port 80" {
+  STUB_SS='LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("caddy",pid=42,fd=7))' run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"caddy on 0.0.0.0:80"* ]]
+  grep -qx 'Listen 80' "$T/ports.conf"
+}
+
+@test "nginx-setup does not count Apache on every address as taken" {
+  STUB_SS='LISTEN 0 511 *:80 *:* users:(("apache2",pid=7,fd=4))' run dmp nginx-setup
+  [ "$status" -eq 0 ]
+}
+
+@test "nginx-setup puts everything back when nginx's configtest fails" {
+  nginx_default_site
+  STUB_NGINX_FAIL=1 run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nothing changed"* ]]
+  grep -qx 'Listen 80' "$T/ports.conf"
+  [ ! -e "$T/nginx/conf.d/devmagic-panel.conf" ]
+  [ -L "$T/nginx/sites-enabled/default" ]
+  [ ! -e "$T/state/nginx/ports.conf" ]
+  run grep -q 'systemctl restart' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "nginx-setup puts everything back when nginx does not start" {
+  nginx_default_site
+  stub systemctl '[[ "$*" != "restart nginx" ]]'
+  run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nginx would not start"* ]]
+  grep -qx 'Listen 80' "$T/ports.conf"
+  [ ! -e "$T/nginx/conf.d/devmagic-panel.conf" ]
+  [ -L "$T/nginx/sites-enabled/default" ]
+  # Apache goes back to every address.
+  [ "$(grep -c 'systemctl restart apache2' "$STUB_LOG")" -eq 2 ]
+}
+
+@test "nginx-setup refuses a conf.d file of the same name the panel did not write" {
+  echo '# mine' > "$T/nginx/conf.d/devmagic-panel.conf"
+  run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [ "$(cat "$T/nginx/conf.d/devmagic-panel.conf")" = '# mine' ]
+}
+
+@test "nginx-setup needs nginx installed" {
+  rm "$T/nginx/nginx.conf"
+  run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sudo apt install nginx"* ]]
+}
+
+@test "nginx-teardown puts ports.conf and the default site back and stops nginx" {
+  nginx_default_site
+  original="$(cat "$T/ports.conf")"
+  dmp nginx-setup
+  : > "$STUB_LOG"
+  run dmp nginx-teardown
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/ports.conf")" = "$original" ]
+  [ ! -e "$T/nginx/conf.d/devmagic-panel.conf" ]
+  [ "$(readlink "$T/nginx/sites-enabled/default")" = "$T/nginx/sites-available/default" ]
+  [ ! -e "$T/state/nginx" ]
+  grep -qx 'systemctl stop nginx' "$STUB_LOG"
+  grep -qx 'systemctl disable nginx' "$STUB_LOG"
+  grep -qx 'systemctl restart apache2' "$STUB_LOG"
+}
+
+@test "nginx-teardown refuses while a site runs on nginx" {
+  dmp nginx-setup
+  printf '# Managed by devmagic-panel. Edits here are overwritten.\nserver {}\n' > "$T/nginx/sites-available/local.acme.com.conf"
+  run dmp nginx-teardown
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"local.acme.com"* ]]
+  [ -e "$T/nginx/conf.d/devmagic-panel.conf" ]
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+}
+
+@test "nginx-teardown when nginx is not set up changes nothing" {
+  run dmp nginx-teardown
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not set up"* ]]
+  run grep -q systemctl "$STUB_LOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "nginx-reload and service-restart nginx run a configtest first" {
+  run dmp nginx-reload
+  [ "$status" -eq 0 ]
+  grep -qx 'systemctl reload nginx' "$STUB_LOG"
+  : > "$STUB_LOG"
+  STUB_NGINX_FAIL=1 run dmp service-restart nginx
+  [ "$status" -eq 1 ]
+  run grep -q 'systemctl restart nginx' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+  run dmp nginx-reload extra
+  [ "$status" -eq 2 ]
+}
+
+@test "config refuses nginx and Apache addresses outside loopback or the same" {
+  for bad in 10.0.0.2 127.0.1.1 127.0.0.300 localhost; do
+    sed -i "s/^NGINX_ADDRESS=.*/NGINX_ADDRESS=$bad/" "$DMP_CONFIG"
+    run dmp nginx-configtest
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"NGINX_ADDRESS must be"* ]]
+  done
+  sed -i "s/^NGINX_ADDRESS=.*/NGINX_ADDRESS=127.0.0.1/" "$DMP_CONFIG"
+  run dmp nginx-configtest
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must differ"* ]]
+}
+
+@test "backup takes nginx's sites along" {
+  echo 'server {}' > "$T/nginx/sites-available/manual"
+  dmp backup
+  archive="$(ls "$T"/backups/devmagic-panel-backup-*.tar.gz)"
+  tar -tzf "$archive" | grep -q 'nginx/sites-available/manual$'
+}

@@ -6,7 +6,9 @@ DMP_ROOT_BIN="$BATS_TEST_DIRNAME/../bin/dmp-root"
 
 setup_tree() {
   T="$BATS_TEST_TMPDIR/sys"
-  mkdir -p "$T"/{sites-available,sites-enabled,certs,system-ca,www,log,stub}
+  mkdir -p "$T"/{sites-available,sites-enabled,certs,system-ca,www,log,stub} "$T"/nginx/{sites-available,sites-enabled,conf.d}
+  printf 'http {\n\tinclude %s/nginx/conf.d/*.conf;\n}\n' "$T" > "$T/nginx/nginx.conf"
+  printf 'Listen 80\n\n<IfModule ssl_module>\n\tListen 443\n</IfModule>\n' > "$T/ports.conf"
   printf '127.0.0.1 localhost\n# hand-written\n127.0.0.1 local.manual.com\n' > "$T/hosts"
 
   export DMP_CONFIG="$T/config.env"
@@ -28,6 +30,11 @@ BACKUP_DIR=$T/backups
 PHP_CONF_DIR=$T/php
 PHP_LIB_DIR=$T/php-lib
 STATE_DIR=$T/state
+NGINX_SITES_AVAILABLE=$T/nginx/sites-available
+NGINX_SITES_ENABLED=$T/nginx/sites-enabled
+NGINX_LOG_DIR=$T/nginx/log
+NGINX_ADDRESS=127.0.0.2
+APACHE_ADDRESS=127.0.0.1
 EOF
 
   export STUB_LOG="$T/stub.log"
@@ -40,6 +47,8 @@ EOF
   stub phpenmod ':'
   stub phpdismod ':'
   stub update-ca-certificates ':'
+  stub nginx 'if [[ "$1" == -v ]]; then echo "nginx version: nginx/${STUB_NGINX_VERSION:-1.24.0} (Ubuntu)" >&2; exit 0; fi; [[ -z "${STUB_NGINX_FAIL:-}" ]] || { echo "nginx: [emerg] unknown directive" >&2; exit 1; }; echo "nginx: configuration file test is successful" >&2'
+  stub ss 'printf "%s" "${STUB_SS:-}"'
   export PATH="$T/stub:$PATH"
 }
 

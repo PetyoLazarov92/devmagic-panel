@@ -1,6 +1,6 @@
 import type { CheckGroup, CheckResult, CheckStatus, EnvironmentReport } from '@devmagic-panel/shared';
 
-export const GROUP_ORDER: CheckGroup[] = ['panel', 'apache', 'certificates', 'hosts', 'database', 'php', 'tools', 'access'];
+export const GROUP_ORDER: CheckGroup[] = ['panel', 'apache', 'nginx', 'certificates', 'hosts', 'database', 'php', 'tools', 'access'];
 
 /** The worst status of a group's checks. */
 export function groupStatus(checks: CheckResult[]): CheckStatus {

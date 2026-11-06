@@ -26,6 +26,31 @@ function levelOf(message: string): LogLine['level'] {
   return 'info';
 }
 
+const NGINX_LEVELS: Record<string, LogLine['level']> = { emerg: 'fatal', alert: 'fatal', crit: 'fatal', error: 'error', warn: 'warning', notice: 'notice', info: 'info', debug: 'info' };
+
+/**
+ * Parses nginx's error log, newest entry first: "2026/11/06 10:21:04 [error]
+ * 1234#1234: *5 message", in the machine's local time. PHP's errors arrive as
+ * "FastCGI sent in stderr", so their own level wins over nginx's.
+ */
+export function parseNginxErrorLog(text: string, limit = 500): LogLine[] {
+  const entries: LogLine[] = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const m = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2}) \[([a-z]+)\] (?:\d+#\d+: )?(?:\*\d+ )?(.*)$/.exec(line);
+    if (!m) {
+      const last = entries.at(-1);
+      if (last) last.message += `\n${line}`;
+      continue;
+    }
+    const [, y, mo, d, h, mi, sec, level, message] = m as unknown as string[];
+    const time = new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(sec)).toISOString();
+    const php = /PHP message: PHP /.test(message as string) ? levelOf(message as string) : null;
+    entries.push({ time, level: php ?? NGINX_LEVELS[level as string] ?? 'info', message: message as string });
+  }
+  return entries.reverse().slice(0, limit);
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "23-Oct-2026 23:08:28 UTC" to ISO. */

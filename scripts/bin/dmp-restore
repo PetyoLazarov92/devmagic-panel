@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# dmp-restore: put certs, vhosts, /etc/hosts and the system CA folder back
-# the way a devmagic-panel backup recorded them.
+# dmp-restore: put certs, vhosts, nginx sites, /etc/hosts and the system CA
+# folder back the way a devmagic-panel backup recorded them.
 #
 #   sudo /usr/local/lib/devmagic-panel/bin/dmp-restore --list
 #   sudo /usr/local/lib/devmagic-panel/bin/dmp-restore            newest backup
 #   sudo /usr/local/lib/devmagic-panel/bin/dmp-restore <archive>
 #
 # Deliberately NOT in the passwordless sudoers rule: restoring writes Apache
-# config, which can run programs as root, so sudo asks for your password.
-# The archive must come from the backup folder and may only hold the paths a
-# backup covers; links are allowed only where a2ensite makes them.
+# and nginx config, which can run programs as root, so sudo asks for your
+# password. The archive must come from the backup folder and may only hold
+# the paths a backup covers; links are allowed only in sites-enabled, to a
+# site in the sites-available next to it.
 set -euo pipefail
 
 DMP_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
@@ -20,7 +21,7 @@ done
 
 ARCHIVE_PATTERN='^devmagic-panel-backup-[0-9]{8}-[0-9]{6}\.tar\.gz$'
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
 
 list_archives() {
   [[ -d "$BACKUP_DIR" ]] || return 0
@@ -31,9 +32,19 @@ list_archives() {
 # The paths a backup covers, as tar stores them (no leading slash).
 allowed_paths() {
   local p
-  for p in "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$HOSTS_FILE" "$SYSTEM_CA_DIR"; do
+  for p in "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$NGINX_SITES_AVAILABLE" "$NGINX_SITES_ENABLED" "$HOSTS_FILE" "$SYSTEM_CA_DIR"; do
     printf '%s\n' "${p#/}"
   done
+}
+
+# The sites-available a link in this folder (as tar stores it) may point to,
+# or nothing when links do not belong there.
+available_for() {
+  case "$1" in
+    "${APACHE_SITES_ENABLED#/}") printf '%s' "$APACHE_SITES_AVAILABLE" ;;
+    "${NGINX_SITES_ENABLED#/}") printf '%s' "$NGINX_SITES_AVAILABLE" ;;
+    *) return 1 ;;
+  esac
 }
 
 is_allowed_member() {
@@ -61,7 +72,7 @@ resolve_archive() {
 }
 
 check_members() {
-  local archive="$1" member line kind name enabled="${APACHE_SITES_ENABLED#/}"
+  local archive="$1" member line kind name
   while IFS= read -r member; do
     is_allowed_member "$member" || dmp_die "refusing $archive: it holds $member, which a backup never contains"
   done < <(tar -tzf "$archive")
@@ -79,7 +90,7 @@ check_members() {
         # splits on runs of spaces, so the padded size column is fine.
         read -r _ _ _ _ _ name <<< "$line"
         name="${name%% -> *}"
-        [[ "$(dirname "$name")" == "$enabled" ]] || dmp_die "refusing $archive: link outside sites-enabled: $name"
+        available_for "$(dirname "$name")" >/dev/null || dmp_die "refusing $archive: link outside sites-enabled: $name"
         ;;
     esac
   done < <(tar -tvzf "$archive")
@@ -87,7 +98,7 @@ check_members() {
 
 # After extraction: only regular files, folders, and a2ensite-style links.
 check_tree() {
-  local root="$1" enabled="${APACHE_SITES_ENABLED#/}" path target
+  local root="$1" path target available
   if [[ -n "$(find "$root" ! -type f ! -type d ! -type l -print -quit)" ]]; then
     dmp_die "refusing the backup: it holds special files"
   fi
@@ -97,10 +108,10 @@ check_tree() {
   local name
   while IFS= read -r path; do
     target="$(readlink "$path")"
-    [[ "$(dirname "${path#"$root"/}")" == "$enabled" ]] || dmp_die "refusing the backup: link outside sites-enabled: ${path#"$root"/}"
+    available="$(available_for "$(dirname "${path#"$root"/}")")" || dmp_die "refusing the backup: link outside sites-enabled: ${path#"$root"/}"
     case "$target" in
       ../sites-available/*) name="${target#../sites-available/}" ;;
-      "$APACHE_SITES_AVAILABLE"/*) name="${target#"$APACHE_SITES_AVAILABLE"/}" ;;
+      "$available"/*) name="${target#"$available"/}" ;;
       *) name="" ;;
     esac
     [[ "$name" =~ ^[A-Za-z0-9._-]+$ && "$name" != .* ]] || dmp_die "refusing the backup: ${path#"$root"/} points to $target"
@@ -109,7 +120,7 @@ check_tree() {
 
 restore_from() {
   local root="$1" p rel
-  for p in "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$SYSTEM_CA_DIR"; do
+  for p in "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$NGINX_SITES_AVAILABLE" "$NGINX_SITES_ENABLED" "$SYSTEM_CA_DIR"; do
     rel="${p#/}"
     [[ -d "$root/$rel" ]] || continue
     rm -rf "$p"
@@ -122,6 +133,24 @@ restore_from() {
     cat "$root/$rel" > "$HOSTS_FILE"
     dmp_ok "restored $HOSTS_FILE"
   fi
+}
+
+# nginx after a restore: Debian's default site stays off while the panel has
+# nginx next to Apache (a backup from before that has it on, and it would
+# take every address from Apache), then a configtest and a reload.
+restore_nginx() {
+  command -v nginx >/dev/null || return 0
+  if [[ -f "$STATE_DIR/nginx/default-site" && -L "$NGINX_SITES_ENABLED/default" ]]; then
+    rm -f "$NGINX_SITES_ENABLED/default"
+    dmp_ok "kept Debian's default nginx site off: Apache answers on every address but nginx's"
+  fi
+  systemctl is-active --quiet nginx || return 0
+  if nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx && dmp_ok "nginx reloaded"
+  else
+    dmp_warn "nginx -t fails with the restored config; nginx was not reloaded"
+  fi
+  return 0
 }
 
 main() {
@@ -148,8 +177,9 @@ main() {
   check_members "$archive"
 
   dmp_step "Restoring $archive"
-  printf '   This replaces %s, %s, %s, %s and %s with the backed-up versions.\n' \
+  printf '   This replaces %s, %s, %s, %s and %s with the backed-up versions,\n' \
     "$CERTS_DIR" "$APACHE_SITES_AVAILABLE" "$APACHE_SITES_ENABLED" "$SYSTEM_CA_DIR" "$HOSTS_FILE"
+  printf '   and %s and %s when the backup has them.\n' "$NGINX_SITES_AVAILABLE" "$NGINX_SITES_ENABLED"
   if (( ! yes )); then
     local answer
     read -r -p "Continue? [y/N] " answer
@@ -174,6 +204,7 @@ main() {
   else
     dmp_warn "apache configtest fails with the restored config; Apache was not reloaded"
   fi
+  restore_nginx
   dmp_ok "restore finished. If the panel's own site is gone, run install.sh again."
 }
 

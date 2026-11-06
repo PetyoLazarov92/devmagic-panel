@@ -18,11 +18,27 @@ DMP_CONFIG_KEYS=(
 
 # Keys added after the first release; older config files leave them out and get these defaults.
 # UPDATE_REPO and UPDATE_GIT_URL are the panel's (where it updates from); dmp-root only accepts them.
-DMP_CONFIG_OPTIONAL_KEYS=(PHP_CONF_DIR PHP_LIB_DIR STATE_DIR UPDATE_REPO UPDATE_GIT_URL)
+DMP_CONFIG_OPTIONAL_KEYS=(PHP_CONF_DIR PHP_LIB_DIR STATE_DIR UPDATE_REPO UPDATE_GIT_URL
+  NGINX_SITES_AVAILABLE NGINX_SITES_ENABLED NGINX_LOG_DIR NGINX_ADDRESS APACHE_ADDRESS)
 DMP_DEFAULT_PHP_CONF_DIR="/etc/php"
 # Where Debian keeps each version's packaged php.ini (php.ini-production), to compare and restore.
 DMP_DEFAULT_PHP_LIB_DIR="/usr/lib/php"
 DMP_DEFAULT_STATE_DIR="/var/lib/devmagic-panel"
+DMP_DEFAULT_NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"
+DMP_DEFAULT_NGINX_SITES_ENABLED="/etc/nginx/sites-enabled"
+DMP_DEFAULT_NGINX_LOG_DIR="/var/log/nginx"
+# nginx and Apache each answer on their own loopback address once nginx is set up.
+DMP_DEFAULT_NGINX_ADDRESS="127.0.0.2"
+DMP_DEFAULT_APACHE_ADDRESS="127.0.0.1"
+
+# An address in 127.0.0.0/8 but 127.0.1.1, which Debian gives the machine's own name.
+dmp_is_loopback_address() {
+  local a="$1" octet
+  [[ "$a" =~ ^127\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ && "$a" != 127.0.1.1 ]] || return 1
+  for octet in "${BASH_REMATCH[@]:1}"; do
+    (( 10#$octet <= 255 )) || return 1
+  done
+}
 
 dmp_config_file() {
   if [[ $EUID -eq 0 ]]; then
@@ -60,9 +76,19 @@ dmp_load_config() {
   PHP_CONF_DIR="${PHP_CONF_DIR:-$DMP_DEFAULT_PHP_CONF_DIR}"
   PHP_LIB_DIR="${PHP_LIB_DIR:-$DMP_DEFAULT_PHP_LIB_DIR}"
   STATE_DIR="${STATE_DIR:-$DMP_DEFAULT_STATE_DIR}"
+  NGINX_SITES_AVAILABLE="${NGINX_SITES_AVAILABLE:-$DMP_DEFAULT_NGINX_SITES_AVAILABLE}"
+  NGINX_SITES_ENABLED="${NGINX_SITES_ENABLED:-$DMP_DEFAULT_NGINX_SITES_ENABLED}"
+  NGINX_LOG_DIR="${NGINX_LOG_DIR:-$DMP_DEFAULT_NGINX_LOG_DIR}"
+  NGINX_ADDRESS="${NGINX_ADDRESS:-$DMP_DEFAULT_NGINX_ADDRESS}"
+  APACHE_ADDRESS="${APACHE_ADDRESS:-$DMP_DEFAULT_APACHE_ADDRESS}"
   for key in WEB_DIR CERTS_DIR CA_DIR APACHE_SITES_AVAILABLE APACHE_SITES_ENABLED \
-    APACHE_LOG_DIR HOSTS_FILE SYSTEM_CA_DIR BACKUP_DIR PHP_CONF_DIR PHP_LIB_DIR STATE_DIR; do
+    APACHE_LOG_DIR HOSTS_FILE SYSTEM_CA_DIR BACKUP_DIR PHP_CONF_DIR PHP_LIB_DIR STATE_DIR \
+    NGINX_SITES_AVAILABLE NGINX_SITES_ENABLED NGINX_LOG_DIR; do
     [[ "${!key}" == /* && "${!key}" != *..* ]] || dmp_die "$key must be an absolute path: ${!key}"
   done
+  for key in NGINX_ADDRESS APACHE_ADDRESS; do
+    dmp_is_loopback_address "${!key}" || dmp_die "$key must be an address in 127.0.0.0/8 other than 127.0.1.1: ${!key}"
+  done
+  [[ "$NGINX_ADDRESS" != "$APACHE_ADDRESS" ]] || dmp_die "NGINX_ADDRESS and APACHE_ADDRESS must differ"
   [[ "$PANEL_PORT" =~ ^[0-9]{2,5}$ ]] || dmp_die "PANEL_PORT must be a number: $PANEL_PORT"
 }

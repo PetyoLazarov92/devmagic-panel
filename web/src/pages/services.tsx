@@ -17,21 +17,23 @@ import { cn } from '@/lib/utils';
 import { ApacheTab } from '@/pages/services-apache';
 import { CronTab } from '@/pages/services-cron';
 import { MysqlTab } from '@/pages/services-mysql';
+import { NginxTab } from '@/pages/services-nginx';
 import { PHP_SECTIONS, type PhpSection, PhpTab } from '@/pages/services-php';
 
 const STATE_DOT = { running: 'ok', stopped: 'fail', missing: 'warn' } as const;
 
-export type ServicesTab = 'overview' | 'php' | 'mysql' | 'apache' | 'cron';
-const TAB_HREF: Record<ServicesTab, string> = { overview: '/services', php: '/services/php', mysql: '/services/mysql', apache: '/services/apache', cron: '/services/cron' };
+export type ServicesTab = 'overview' | 'php' | 'mysql' | 'apache' | 'nginx' | 'cron';
+const TAB_HREF: Record<ServicesTab, string> = { overview: '/services', php: '/services/php', mysql: '/services/mysql', apache: '/services/apache', nginx: '/services/nginx', cron: '/services/cron' };
 const TAB_INTRO: Record<ServicesTab, string> = {
   overview: 'What your sites run on. Apache is only reloaded or restarted after its configtest passes.',
   php: 'PHP on this machine first, for every site: the default, how sites run and a tile per installed version. Below, everything of the version you pick: settings, modules, Xdebug, php.ini changes and PHP info.',
   mysql: "Every database and user on the MySQL server, read with the panel's admin account. A site's database and user go with the site; the rest can be deleted here, saved first for 14 days.",
   apache: "Every vhost file in sites-available, the enabled modules, a configtest and Apache's own error log.",
+  nginx: "nginx next to Apache: both on ports 80 and 443, each on its own address, and a site goes to the server its hosts line points at. Below, nginx -t, every config in sites-available and nginx's own error log.",
   cron: "Your crontab: the panel's tasks, which it adds, changes and runs, and the lines you wrote yourself, which it leaves as they are. System cron is shown read only. For a site's WP-Cron events, open its Cron tab.",
 };
 
-/** The Services page: an overview of what sites run on, and a tab each for MySQL and Apache, each with its own address. */
+/** The Services page: an overview of what sites run on, and a tab each for PHP, MySQL, Apache, nginx and Cron, each with its own address. */
 export function ServicesPage({ tab = 'overview', phpVersion, phpSection }: { tab?: ServicesTab; phpVersion?: string; phpSection?: PhpSection }) {
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -58,6 +60,7 @@ export function ServicesPage({ tab = 'overview', phpVersion, phpSection }: { tab
           { value: 'php', label: 'PHP' },
           { value: 'mysql', label: 'MySQL' },
           { value: 'apache', label: 'Apache' },
+          { value: 'nginx', label: 'nginx' },
           { value: 'cron', label: 'Cron' },
         ]}
       />
@@ -67,6 +70,7 @@ export function ServicesPage({ tab = 'overview', phpVersion, phpSection }: { tab
         {tab === 'php' && <PhpTab refresh={refresh} onLoading={onLoading} {...(phpVersion ? { version: phpVersion } : {})} {...(phpSection ? { section: phpSection } : {})} />}
         {tab === 'mysql' && <MysqlTab refresh={refresh} onLoading={onLoading} />}
         {tab === 'apache' && <ApacheTab refresh={refresh} onLoading={onLoading} />}
+        {tab === 'nginx' && <NginxTab refresh={refresh} onLoading={onLoading} />}
         {tab === 'cron' && <CronTab refresh={refresh} onLoading={onLoading} />}
       </div>
     </div>
@@ -98,7 +102,7 @@ function ServicesOverview({ refresh, onLoading }: { refresh: number; onLoading: 
                 key={s.id}
                 title={s.label}
                 // Mailpit is optional: down is a warning, not a failure.
-                status={(s.id === 'mailpit' || s.id === 'cron') && s.state !== 'running' ? 'warn' : STATE_DOT[s.state]}
+                status={(s.id === 'mailpit' || s.id === 'cron' || (s.id === 'nginx' && !s.canRestart)) && s.state !== 'running' ? 'warn' : STATE_DOT[s.state]}
                 state={s.state === 'missing' ? 'not installed' : s.state}
                 facts={[s.detail]}
                 link={link}
@@ -130,6 +134,7 @@ function ServicesOverview({ refresh, onLoading }: { refresh: number; onLoading: 
 
 const SERVICE_LINK: Record<ServicesReport['services'][number]['id'], { href: string; label: string }> = {
   apache: { href: '/services/apache', label: 'Open Apache' },
+  nginx: { href: '/services/nginx', label: 'Open nginx' },
   mysql: { href: '/services/mysql', label: 'Open MySQL' },
   mailpit: { href: '/mail', label: 'Open Mail' },
   cron: { href: '/services/cron', label: 'Open Cron' },

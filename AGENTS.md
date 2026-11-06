@@ -125,6 +125,17 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       without mod_php starts that way. Settings per version go in the panel's own
       `99-devmagic-panel.ini`; php.ini is only replaced by the packaged one
       when you move its changes into the panel's settings.
+    - **nginx runs next to Apache, never in its place**: `dmp-root
+      nginx-setup` moves Apache's `ports.conf` from every address to
+      `APACHE_ADDRESS` (127.0.0.1, the original kept in `$STATE_DIR/nginx`),
+      turns Debian's default nginx site off and writes
+      `conf.d/devmagic-panel.conf` (the panel's marker, the record that nginx
+      is set up), so nginx answers on `NGINX_ADDRESS` (127.0.0.2), both on
+      ports 80 and 443; `nginx-teardown` puts it all back. A site goes to the
+      server its hosts line points at, never through a proxy. The panel,
+      phpMyAdmin and vhosts made by hand stay on Apache; nginx configs made
+      by hand are only read, and one that listens on port 80 or 443 off
+      nginx's address makes the setup refuse with its name.
     - **wpcore is shared**: one `/etc/wpcore.conf` and its cores folder for the
       CLI and the panel. Never a second config or cores folder.
     - **The old devmagic CLI is left alone**: no warning, and never edits to

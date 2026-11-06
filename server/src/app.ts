@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { isActionId, localConstants, localName, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -21,6 +21,7 @@ import { DEFAULT_UPDATE_REPO, defaultSources, gitUrlFor, type ReleaseSource } fr
 import { githubTokenNotice, verifyPassword, type Secrets } from './secrets.js';
 import { servicesReport } from './services.js';
 import { apacheErrorLog, apacheReport } from './apache.js';
+import { nginxErrorLog, nginxReport } from './nginx.js';
 import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
 import { Jobs } from './jobs.js';
 import { defaultClaude, type ClaudeFactory } from './assistant/briefing.js';
@@ -344,6 +345,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       mysqlReport({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases(), backupsDir: mysqlBackupsDir(deps.uploadsDir) }));
     api.get('/api/apache', async (): Promise<ApacheReport> => apacheReport(deps.config, deps.exec, deps.dmpRoot));
     api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));
+    api.get('/api/nginx', async (): Promise<NginxReport> => nginxReport(deps.config, deps.exec, deps.dmpRoot));
+    api.get('/api/nginx/log', async (): Promise<SiteLog> => nginxErrorLog(deps.config));
     // The Services page's Cron tab: your crontab, the panel's tasks and their runs, system cron read only.
     const cron = () => cronCtx({ config: deps.config, exec: deps.exec, store: deps.store, uploadsDir: deps.uploadsDir, update, ...(deps.cron ? { cron: deps.cron } : {}) });
     api.get('/api/cron', async (): Promise<CronReport> => cronReport(cron()));

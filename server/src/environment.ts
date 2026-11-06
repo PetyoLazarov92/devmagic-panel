@@ -14,6 +14,7 @@ import { runRoot } from './exec.js';
 import { installedCores, readWpcoreConfig } from './wpcore.js';
 import type { Secrets } from './secrets.js';
 import { selfChecks } from './self-check.js';
+import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
 export interface HostPaths {
@@ -98,6 +99,61 @@ async function apacheChecks(ctx: CheckContext): Promise<Check[]> {
       ? ok('apache.ports', 'Ports 80 and 443', 'both are listening')
       : fail('apache.ports', 'Ports 80 and 443', `not listening: ${[80, 443].filter((p) => !ports.includes(p)).join(', ')}`),
   );
+  return results;
+}
+
+// ── nginx ────────────────────────────────────────────────────
+
+/**
+ * nginx next to Apache, only once nginx is installed: whether the panel set
+ * it up, runs, passes nginx -t, and each server answers on its own address
+ * only. Nothing when nginx is not installed: the panel needs only Apache.
+ */
+async function nginxChecks(ctx: CheckContext): Promise<Check[]> {
+  const { exec, config } = ctx;
+  if (!nginxInstalled(config)) return [];
+  const conflicts = nginxConfigs(config).filter((c) => c.conflict);
+  const conflictCheck = conflicts.length
+    ? fail('nginx.conflicts', 'nginx leaves Apache its ports', `${conflicts.map((c) => `${c.file} ${c.conflict}`).join('; ')}: make ${conflicts.length === 1 ? 'it' : 'them'} listen on ${config.NGINX_ADDRESS}, or turn ${conflicts.length === 1 ? 'it' : 'them'} off`)
+    : ok('nginx.conflicts', 'nginx leaves Apache its ports', `no config made by hand listens on port 80 or 443 off ${config.NGINX_ADDRESS}`);
+  if (!nginxSetUp(config)) {
+    return [
+      warn('nginx.setUp', 'nginx next to Apache', `installed, not set up: open Services, nginx to run it on ${config.NGINX_ADDRESS} next to Apache`, { optional: true }),
+      ...(conflicts.length ? [conflictCheck] : []),
+    ];
+  }
+
+  const results: Check[] = [ok('nginx.setUp', 'nginx next to Apache', `nginx answers on ${config.NGINX_ADDRESS}, Apache on ${config.APACHE_ADDRESS}`)];
+  const active = await exec('systemctl', ['is-active', 'nginx']);
+  results.push(
+    active.stdout.trim() === 'active'
+      ? ok('nginx.running', 'nginx is running', 'nginx service is active')
+      : fail('nginx.running', 'nginx is running', `nginx is ${active.stdout.trim() || 'not running'}`, { fixes: [{ action: 'service.restart', input: { service: 'nginx' }, label: 'Start nginx' }] }),
+  );
+  const test = await runRoot(exec, ctx.dmpRoot, ['nginx-configtest'], 30_000);
+  if (test.code === 0) results.push(ok('nginx.configtest', 'nginx config is valid', 'nginx -t passed'));
+  else if (/password is required/i.test(test.stderr)) results.push(warn('nginx.configtest', 'nginx config is valid', 'cannot check yet: needs the sudoers rule from install.sh'));
+  else results.push(fail('nginx.configtest', 'nginx config is valid', firstLine(test.stderr) || 'nginx -t failed'));
+
+  const listening = `${(await exec('ss', ['-ltnH'])).stdout} `;
+  const on = (address: string, port: number) => new RegExp(`\\s${address.replace(/\./g, '\\.')}:${port}\\s`).test(listening);
+  const everywhere = [80, 443].filter((p) => new RegExp(`\\s(\\*|0\\.0\\.0\\.0|\\[::\\]):${p}\\s`).test(listening));
+  const missing = [
+    ...[80, 443].filter((p) => !on(config.NGINX_ADDRESS, p)).map((p) => `nginx on ${config.NGINX_ADDRESS}:${p}`),
+    ...[80, 443].filter((p) => !on(config.APACHE_ADDRESS, p)).map((p) => `Apache on ${config.APACHE_ADDRESS}:${p}`),
+  ];
+  results.push(
+    missing.length === 0 && everywhere.length === 0
+      ? ok('nginx.addresses', 'Each server on its own address', `nginx on ${config.NGINX_ADDRESS}, Apache on ${config.APACHE_ADDRESS}, ports 80 and 443`)
+      : fail(
+          'nginx.addresses',
+          'Each server on its own address',
+          [missing.length ? `not listening: ${missing.join(', ')}` : '', everywhere.length ? `something listens on port ${everywhere.join(' and ')} on every address` : '']
+            .filter(Boolean)
+            .join('; ') + ': set nginx up again on Services, nginx',
+        ),
+  );
+  results.push(conflictCheck);
   return results;
 }
 
@@ -438,6 +494,7 @@ export async function checkEnvironment(ctx: CheckContext, now: () => number = Da
   const started = now();
   const groups = await Promise.all([
     apacheChecks(ctx).then((c) => c.map((r) => ({ ...r, group: 'apache' as const }))),
+    nginxChecks(ctx).then((c) => c.map((r) => ({ ...r, group: 'nginx' as const }))),
     databaseChecks(ctx).then((c) => c.map((r) => ({ ...r, group: 'database' as const }))),
     phpChecks(ctx).then((c) => c.map((r) => ({ ...r, group: 'php' as const }))),
     toolChecks(ctx).then((c) => c.map((r) => ({ ...r, group: 'tools' as const }))),

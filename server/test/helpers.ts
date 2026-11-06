@@ -73,7 +73,7 @@ export function fakeExec(responses: Record<string, FakeResponse> = {}) {
 /** A throwaway filesystem tree with the layout config.env points at. */
 export function tempTree() {
   const root = mkdtempSync(join(tmpdir(), 'dmp-test-'));
-  const dirs = ['sites-available', 'sites-enabled', 'mods-enabled', 'certs/devmagic-panel-ca', 'system-ca', 'www', 'home/.pki/nssdb', 'log'];
+  const dirs = ['sites-available', 'sites-enabled', 'mods-enabled', 'certs/devmagic-panel-ca', 'system-ca', 'www', 'home/.pki/nssdb', 'log', 'nginx/sites-available', 'nginx/sites-enabled', 'nginx/conf.d', 'nginx/log'];
   for (const d of dirs) mkdirSync(join(root, d), { recursive: true });
   writeFileSync(join(root, 'hosts'), '127.0.0.1 localhost\n');
 
@@ -95,6 +95,11 @@ export function tempTree() {
     PHP_CONF_DIR: join(root, 'php'),
     PHP_LIB_DIR: join(root, 'php-lib'),
     STATE_DIR: join(root, 'state'),
+    NGINX_SITES_AVAILABLE: join(root, 'nginx/sites-available'),
+    NGINX_SITES_ENABLED: join(root, 'nginx/sites-enabled'),
+    NGINX_LOG_DIR: join(root, 'nginx/log'),
+    NGINX_ADDRESS: '127.0.0.2',
+    APACHE_ADDRESS: '127.0.0.1',
   };
   const hostPaths: HostPaths = {
     home: join(root, 'home'),

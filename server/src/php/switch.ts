@@ -25,7 +25,7 @@ function addresses(ctx: SitePhpContext): Array<{ domain: string; host: string }>
 }
 
 /** Checks every site, all of them, and fails listing the ones that did not answer. */
-function checkAllSites(ctx: SitePhpContext): JobStep {
+export function checkAllSites(ctx: SitePhpContext): JobStep {
   return {
     id: 'sites',
     label: 'Check every site answers',

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_APACHE_ADDRESS, DEFAULT_NGINX_ADDRESS, isLoopbackAddress } from '@devmagic-panel/shared';
 
 /**
  * System settings from /etc/devmagic-panel/config.env, the same file dmp-root
@@ -28,6 +29,13 @@ export interface SystemConfig {
   PHP_LIB_DIR: string;
   /** Root-owned panel state, like the registry of site folders the panel created; optional in config.env. */
   STATE_DIR: string;
+  /** nginx's folders, used once nginx is installed; optional in config.env, Debian's by default. */
+  NGINX_SITES_AVAILABLE: string;
+  NGINX_SITES_ENABLED: string;
+  NGINX_LOG_DIR: string;
+  /** Where nginx and Apache each answer once nginx is set up next to Apache; optional, 127.0.0.2 and 127.0.0.1. */
+  NGINX_ADDRESS: string;
+  APACHE_ADDRESS: string;
   /** owner/name of the repository the panel updates from; optional, the panel's own by default. */
   UPDATE_REPO?: string;
   /** The git remote of its package tags; optional, git@github.com:<UPDATE_REPO>.git by default. */
@@ -46,7 +54,18 @@ const KEYS = [
 ] as const;
 
 /** Keys added after the first release, with the default older config files get. */
-const OPTIONAL = { PHP_CONF_DIR: '/etc/php', PHP_LIB_DIR: '/usr/lib/php', STATE_DIR: '/var/lib/devmagic-panel', UPDATE_REPO: '', UPDATE_GIT_URL: '' };
+const OPTIONAL = {
+  PHP_CONF_DIR: '/etc/php',
+  PHP_LIB_DIR: '/usr/lib/php',
+  STATE_DIR: '/var/lib/devmagic-panel',
+  NGINX_SITES_AVAILABLE: '/etc/nginx/sites-available',
+  NGINX_SITES_ENABLED: '/etc/nginx/sites-enabled',
+  NGINX_LOG_DIR: '/var/log/nginx',
+  NGINX_ADDRESS: DEFAULT_NGINX_ADDRESS,
+  APACHE_ADDRESS: DEFAULT_APACHE_ADDRESS,
+  UPDATE_REPO: '',
+  UPDATE_GIT_URL: '',
+};
 
 export const DEFAULT_CONFIG_FILE = '/etc/devmagic-panel/config.env';
 
@@ -68,13 +87,24 @@ export function parseConfig(text: string, source: string): SystemConfig {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`PANEL_PORT must be a port number in ${source}`);
   if (values.UPDATE_REPO && !REPO_SLUG.test(values.UPDATE_REPO)) throw new Error(`UPDATE_REPO must be owner/name in ${source}`);
   if (values.UPDATE_GIT_URL && !GIT_URL.test(values.UPDATE_GIT_URL)) throw new Error(`UPDATE_GIT_URL must be a git remote in ${source}`);
+  const nginxAddress = values.NGINX_ADDRESS || OPTIONAL.NGINX_ADDRESS;
+  const apacheAddress = values.APACHE_ADDRESS || OPTIONAL.APACHE_ADDRESS;
+  for (const [key, value] of [['NGINX_ADDRESS', nginxAddress], ['APACHE_ADDRESS', apacheAddress]] as const) {
+    if (!isLoopbackAddress(value)) throw new Error(`${key} must be an address in 127.0.0.0/8 other than 127.0.1.1 in ${source}`);
+  }
+  if (nginxAddress === apacheAddress) throw new Error(`NGINX_ADDRESS and APACHE_ADDRESS must differ in ${source}`);
   const { UPDATE_REPO, UPDATE_GIT_URL, ...rest } = values;
   return {
-    ...(rest as unknown as Omit<SystemConfig, 'PANEL_PORT' | 'PHP_CONF_DIR' | 'PHP_LIB_DIR' | 'STATE_DIR'>),
+    ...(rest as unknown as Omit<SystemConfig, 'PANEL_PORT' | 'PHP_CONF_DIR' | 'PHP_LIB_DIR' | 'STATE_DIR' | 'NGINX_SITES_AVAILABLE' | 'NGINX_SITES_ENABLED' | 'NGINX_LOG_DIR' | 'NGINX_ADDRESS' | 'APACHE_ADDRESS'>),
     PANEL_PORT: port,
     PHP_CONF_DIR: values.PHP_CONF_DIR || OPTIONAL.PHP_CONF_DIR,
     PHP_LIB_DIR: values.PHP_LIB_DIR || OPTIONAL.PHP_LIB_DIR,
     STATE_DIR: values.STATE_DIR || OPTIONAL.STATE_DIR,
+    NGINX_SITES_AVAILABLE: values.NGINX_SITES_AVAILABLE || OPTIONAL.NGINX_SITES_AVAILABLE,
+    NGINX_SITES_ENABLED: values.NGINX_SITES_ENABLED || OPTIONAL.NGINX_SITES_ENABLED,
+    NGINX_LOG_DIR: values.NGINX_LOG_DIR || OPTIONAL.NGINX_LOG_DIR,
+    NGINX_ADDRESS: nginxAddress,
+    APACHE_ADDRESS: apacheAddress,
     ...(UPDATE_REPO ? { UPDATE_REPO } : {}),
     ...(UPDATE_GIT_URL ? { UPDATE_GIT_URL } : {}),
   };

@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.6.0 (2026-11-06)
+* **Services:** nginx runs next to Apache, both on ports 80 and 443, each on its own loopback address: Apache on `127.0.0.1`, nginx on `127.0.0.2`. A site then goes to the server its hosts line points at, with nothing proxied from one to the other. The new nginx tab (`/services/nginx`) shows how to install nginx, sets it up in one job (Apache restarts on its address, Debian's default nginx site goes off, every site is checked afterwards, Undo turns nginx off), writes its settings again, turns it off, and shows nginx -t, Reload, every config in sites-available and nginx's error log. Every site, the panel and phpMyAdmin stay on Apache for now
+* **Services:** the Overview has an nginx card with its state, where each server answers, and Restart once nginx is set up
+* **Panel:** the Environment page checks nginx once it is installed: set up, running, nginx -t, each server on its own address, and configs made by hand that listen on port 80 or 443 on every address, which keep nginx from starting next to Apache. Backups and `dmp-restore` cover nginx's sites, and `config.env` gets the nginx folders and both addresses
+* **Installer:** offers nginx as optional and sets it up next to Apache, writes its settings again on later runs, and on uninstall puts Apache back on every address and stops nginx. This changes the root scripts, so the update finishes with its installer, which asks for your password
+
 ### v1.5.1 (2026-11-06)
 * **Fix:** your own account is now ticked once per host, the first time that host's CLI is signed in. Before, ticking your GitHub account counted for every host, so signing in to the GitLab CLI later never ticked your GitLab account. Settings from before are read as GitHub done, so your GitLab account is ticked once glab signs in; an account you untick stays unticked
 * **Sites:** Organizations and groups to scan says what each host still needs before it lists anything (`sudo apt install glab`, `glab auth login`, `gh auth login`), with Check again, and the organization step says so in one line while no GitLab CLI is signed in. Cloning needs only your SSH key; the CLIs only list repos. The root scripts do not change: the Updates page installs this release as usual

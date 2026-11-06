@@ -68,7 +68,7 @@ export async function checkSite(ctx: SitePhpContext, site: Pick<SiteRef, 'host' 
   for (let attempt = 1; ; attempt++) {
     r = await ctx.exec('curl', [
       '-sS', '--max-time', '30', '--noproxy', '*', '--cacert', join(ctx.config.CA_DIR, 'ca.pem'),
-      '--resolve', `${site.domain}:443:127.0.0.1`, '-o', '-', '-w', '\n%{http_code}', url,
+      '--resolve', `${site.domain}:443:${ctx.config.APACHE_ADDRESS}`, '-o', '-', '-w', '\n%{http_code}', url,
     ], { timeoutMs: 40_000 });
     status = Number(r.stdout.trim().split('\n').at(-1));
     if (r.code !== 0 || status < 502 || status > 504 || attempt >= tries) break;

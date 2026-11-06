@@ -32,6 +32,7 @@ describe('servicesReport', () => {
     const report = await servicesReport(t.config, exec, () => 0);
     expect(report.services).toEqual([
       { id: 'apache', label: 'Apache', state: 'running', detail: 'Apache/2.4.58', canRestart: true },
+      { id: 'nginx', label: 'nginx', state: 'missing', detail: 'not installed: sudo apt install nginx runs sites on it next to Apache', canRestart: false },
       { id: 'mysql', label: 'MariaDB', state: 'stopped', detail: 'mysql  Ver 15.1 Distrib 10.11.8-MariaDB', canRestart: true },
       { id: 'mailpit', label: 'Mailpit', state: 'stopped', detail: 'not listening on port 1025', canRestart: false },
       { id: 'cron', label: 'Cron', state: 'running', detail: '1 task of the panel, 1 line of your own', canRestart: false },

@@ -8,7 +8,7 @@
 set -euo pipefail
 
 DMP_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-for lib in log config validate apache php fpm php-apt ca cert vhost hosts backup site trash; do
+for lib in log config validate apache php fpm php-apt ca cert vhost nginx hosts backup site trash; do
   # shellcheck source=/dev/null
   source "$DMP_HOME/lib/$lib.sh"
 done
@@ -53,7 +53,15 @@ Usage: dmp-root <command> [args]
                                       the panel's own modules and core ones
   apache-configtest                   run apache2ctl configtest
   apache-reload                       configtest, then reload Apache
-  service-restart <apache|mysql>      restart Apache (after a configtest) or MySQL
+  service-restart <apache|mysql|nginx>
+                                      restart Apache or nginx (after a configtest) or MySQL
+  nginx-setup                         nginx on NGINX_ADDRESS next to Apache, which moves from
+                                      every address to APACHE_ADDRESS; Debian's default nginx
+                                      site off; run again, it writes the panel's settings anew
+  nginx-teardown                      Apache back on every address, nginx stopped; refused
+                                      while a site runs on nginx
+  nginx-configtest                    run nginx -t
+  nginx-reload                        nginx -t, then reload nginx
   xdebug-enable [version] <mode> <start>
                                       Xdebug on for a version's web parts (mod_php, FPM),
                                       then Apache or FPM picks it up; without a version,
@@ -178,7 +186,11 @@ main() {
     apache-module) (( $# == 2 )) || dmp_usage_error "apache-module takes a module and on or off"; dmp_apache_module "$1" "$2" ;;
     apache-configtest) dmp_apache_configtest || exit 1 ;;
     apache-reload) dmp_apache_reload ;;
-    service-restart) (( $# == 1 )) || dmp_usage_error "service-restart takes apache or mysql"; dmp_service_restart "$1" ;;
+    service-restart) (( $# == 1 )) || dmp_usage_error "service-restart takes apache, mysql or nginx"; dmp_service_restart "$1" ;;
+    nginx-setup) (( $# == 0 )) || dmp_usage_error "nginx-setup takes no arguments"; dmp_require_local_name "$PANEL_DOMAIN"; dmp_nginx_setup ;;
+    nginx-teardown) (( $# == 0 )) || dmp_usage_error "nginx-teardown takes no arguments"; dmp_nginx_teardown ;;
+    nginx-configtest) (( $# == 0 )) || dmp_usage_error "nginx-configtest takes no arguments"; dmp_nginx_require_installed; dmp_nginx_configtest || exit 1 ;;
+    nginx-reload) (( $# == 0 )) || dmp_usage_error "nginx-reload takes no arguments"; dmp_nginx_reload ;;
     xdebug-enable) (( $# == 2 || $# == 3 )) || dmp_usage_error "xdebug-enable takes an optional version, a mode and a start value"; dmp_xdebug_enable "$@" ;;
     xdebug-disable) (( $# <= 1 )) || dmp_usage_error "xdebug-disable takes an optional version"; dmp_xdebug_disable "$@" ;;
     php-module) (( $# == 2 || $# == 3 )) || dmp_usage_error "php-module takes an optional version, a module and on or off"; dmp_php_module "$@" ;;
