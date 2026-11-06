@@ -280,6 +280,23 @@ describe('site.create from a repo', () => {
     expect(s.calls.find((c) => c.input?.startsWith('CREATE USER'))?.input).toContain("'new_com_3'@'localhost'");
   });
 
+  it('installs a site on nginx when asked, once nginx runs next to Apache with PHP-FPM', async () => {
+    const s = await setup({ [`sudo -n ${DMP} nginx-site-write`]: { stdout: 'ok' } });
+    await expect(runAction(s.ctx, 'site.create', { ...s.input, server: 'nginx' })).rejects.toThrow(/nginx is not set up/);
+    s.write('nginx/conf.d/devmagic-panel.conf', '# Managed by devmagic-panel. Edits here are overwritten.\n');
+    s.write('mods-enabled/php8.3.load');
+    mkdirSync(join(s.config.PHP_LIB_DIR, '8.3/sapi'), { recursive: true });
+    s.write('php-lib/8.3/sapi/fpm');
+    const result = await runAction(s.ctx, 'site.create', { ...s.input, server: 'nginx' });
+    const view = await settle(s.jobs, result.data?.jobId ?? '');
+    expect(view.status).toBe('done');
+    expect(view.steps.find((x) => x.id === 'vhost')?.label).toBe('Write the nginx site and reload');
+    const all = lines(s.calls);
+    expect(all).toContain(`sudo -n ${DMP} nginx-site-write local.new.com --kind single --uploads-proxy www.new.com local.new.de`);
+    expect(all.some((l) => l.includes('vhost-write'))).toBe(false);
+    await expect(runAction(s.ctx, 'site.create', { ...s.input, path: '/learn', aliases: [], server: 'nginx' })).rejects.toBeInstanceOf(ActionInputError);
+  });
+
   it('adds a core the shared folder lacks before linking it', async () => {
     const s = await setup({ [`sudo -n ${WPCORE} add 7.2.0`]: { stdout: 'added' }, [`sudo -n ${WPCORE} link local.new.com 7.2.0`]: { stdout: 'linked' } });
     const result = await runAction(s.ctx, 'site.create', { ...s.input, core: { mode: 'wpcore', version: '7.2.0' } });

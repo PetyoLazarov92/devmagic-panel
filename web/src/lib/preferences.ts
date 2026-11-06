@@ -38,7 +38,7 @@ function set(next: Preferences): void {
 /** Takes the panel's values, once signed in. */
 export async function loadPreferences(): Promise<void> {
   try {
-    set(await api.preferences());
+    set(schema.parse(await api.preferences()));
   } catch {
     // Not signed in yet, or the panel is restarting: the copy stays.
   }

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { isLocalName } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { SiteKind } from './htaccess.js';
@@ -103,16 +103,21 @@ export function parseNginxSite(text: string, file: string): VhostInfo {
     for (const n of (m[1] as string).toLowerCase().split(/\s+/)) if (n && n !== '_' && !names.includes(n)) names.push(n);
   }
   const kind = /^# kind: (single|subdirectory|subdomain)$/m.exec(text)?.[1] as SiteKind | undefined;
+  const docroot = value('root');
+  // Sites under its paths: "# mount: /learn=local.learn.shop.com", a folder next to the site's own.
+  const mounts = docroot
+    ? [...text.matchAll(/^# mount: (\/[A-Za-z0-9._/-]+)=([a-z0-9.-]+)$/gm)].map((m) => ({ path: m[1] as string, docroot: join(dirname(docroot), m[2] as string) }))
+    : [];
   return {
     server: 'nginx',
     file,
     managed: text.split('\n', 1)[0] === VHOST_MARKER,
     names,
     byPort: { http: [...names], https: [...names] },
-    docroot: value('root'),
+    docroot,
     certFile: value('ssl_certificate'),
     errorLog: value('error_log'),
-    mounts: [],
+    mounts,
     uploadsProxy: /^\s*return 302 https:\/\/([a-z0-9.-]+)\$request_uri;\s*$/m.exec(text)?.[1] ?? null,
     ...(kind ? { kind } : {}),
   };
@@ -136,6 +141,7 @@ function readNginxSites(config: SystemConfig): VhostInfo[] {
     // Only the panel's files are sites here; nginx configs made by hand are listed on the nginx tab.
     if (!info.managed || !primary || !isLocalName(primary) || primary === config.PANEL_DOMAIN) continue;
     if (!info.docroot?.startsWith(`${config.WEB_DIR}/`)) continue;
+    info.mounts = info.mounts.filter((m) => existsSync(m.docroot));
     out.push(info);
   }
   return out;

@@ -506,6 +506,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({ domain: localName, server: z.enum(['apache', 'nginx']), acceptIgnored: z.boolean().default(false) }),
   },
+  'sites.setServerAll': {
+    title: 'Move every site to Apache or nginx',
+    description:
+      "Moves every site that can to one web server, one after the other, each as site.setServer moves it, and checks each answers. Sites that cannot stay where they are and are listed: vhosts made by hand, sites without PHP-FPM for their PHP version, and, unless acceptIgnored, sites whose .htaccess has rules nginx does not read. Starts a job; Undo moves every site back.",
+    changesSystem: true,
+    input: z.object({ server: z.enum(['apache', 'nginx']), acceptIgnored: z.boolean().default(false) }),
+  },
   'nginx.reload': {
     title: 'Reload nginx',
     description: 'Runs nginx -t and reloads nginx when it passes.',
@@ -1210,6 +1217,8 @@ export const actions = {
         organization: namespaceRef.optional(),
         /** For a network in the dump: its layout here, and the sites whose address changes are moved after the replace. */
         network: networkChoice.optional(),
+        /** The web server of a site of its own, once nginx runs next to Apache; a site under a path runs on its parent's. */
+        server: z.enum(['apache', 'nginx']).default('apache'),
       })
       .superRefine((v, ctx) => {
         if (v.source === 'repo' && !v.repo) ctx.addIssue({ code: 'custom', path: ['repo'], message: 'A repo is required' });
@@ -1222,6 +1231,7 @@ export const actions = {
         if (v.uploadsVia === 'plugin' && (v.source !== 'repo' || !v.uploadsFrom)) {
           ctx.addIssue({ code: 'custom', path: ['uploadsVia'], message: 'BE Media from Production needs a repo that has it and a production host' });
         }
+        if (v.path && v.server === 'nginx') ctx.addIssue({ code: 'custom', path: ['server'], message: "A site under a path runs on its parent's server" });
         if (v.replaceExisting && v.path) ctx.addIssue({ code: 'custom', path: ['replaceExisting'], message: 'A site under a path is not replaced; remove it first' });
         if (v.network) {
           if (!v.uploadId || v.path) ctx.addIssue({ code: 'custom', path: ['network'], message: 'A network layout needs a dump, and no site under a path' });

@@ -136,8 +136,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       through a proxy: `hosts-add` reads the address from the system (an
       enabled `nginx-site-write` file of the panel's for the domain means
       `NGINX_ADDRESS`), never from the caller. A site on nginx has
-      `sites-available/<domain>.conf` with the marker and a `# kind:` line,
-      no mounts, and its PHP through the upstream `dmp-php-<domain>` in
+      `sites-available/<domain>.conf` with the marker, a `# kind:` line and a
+      `# mount: /path=folder` line per site under its paths (served with
+      `alias`, each through its own upstream), and its PHP through the upstream `dmp-php-<domain>` in
       `conf.d/devmagic-panel-php.conf` (its pool or the default version's
       FPM), written with Apache's PHP conf. `site.setServer` moves a site;
       every rewrite of a site's config goes through `siteWriteArgs`, so it

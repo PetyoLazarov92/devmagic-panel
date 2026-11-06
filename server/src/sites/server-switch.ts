@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { ActionInput } from '@devmagic-panel/shared';
 import { isLocalName } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
@@ -13,7 +13,7 @@ import { findVhost } from './discover.js';
 import { htaccessIgnored, readHtaccess, siteKind } from './htaccess.js';
 import { hostsOutsideBlock, readHosts } from './hosts-block.js';
 import { mountArgs, SiteActionRefused } from './site-actions.js';
-import type { VhostInfo } from './vhost.js';
+import { readSiteVhosts, type VhostInfo } from './vhost.js';
 import { parseWpConfig } from './wpconfig.js';
 
 /**
@@ -66,10 +66,13 @@ export function moveRefusal(config: SystemConfig, vhost: VhostInfo, domain: stri
   if (vhost.docroot !== join(config.WEB_DIR, domain)) return `${domain} lives in ${vhost.docroot}, not ${join(config.WEB_DIR, domain)}; only a site in the usual folder moves`;
   if (vhost.server === 'nginx') return null;
   if (!nginxSetUp(config)) return 'nginx is not set up next to Apache yet: set it up on Services, nginx first';
-  if (vhost.mounts.length) return `${domain} serves ${vhost.mounts.map((m) => m.path).join(', ')} under paths, which stay on Apache for now`;
+  const elsewhere = vhost.mounts.filter((m) => dirname(m.docroot) !== config.WEB_DIR);
+  if (elsewhere.length) return `${domain} serves ${elsewhere.map((m) => m.docroot).join(', ')} from outside ${config.WEB_DIR}, which the panel does not move`;
   const outside = hostsOutsideBlock(readHosts(config), vhost.names);
   if (outside.length) return `${outside.join(', ')} ${outside.length === 1 ? 'has' : 'have'} a line in /etc/hosts outside the panel's block, which keeps the site on Apache: remove that line first`;
   if (!nginxPhpVersion(config, domain)) return `nginx runs PHP through PHP-FPM only, and there is none for the PHP version ${domain} runs: install PHP-FPM for it on Services, PHP`;
+  const noFpm = vhost.mounts.find((m) => !nginxPhpVersion(config, basename(m.docroot)));
+  if (noFpm) return `nginx runs PHP through PHP-FPM only, and there is none for the PHP version ${domain}${noFpm.path} runs: install PHP-FPM for it on Services, PHP`;
   return null;
 }
 
@@ -99,7 +102,7 @@ export function planSetServer(ctx: ServerSwitchContext, { domain, server, accept
   const php = nginxPhpVersion(config, domain);
   if (!php) throw new SiteActionRefused(`nginx runs PHP through PHP-FPM only, and there is none for the PHP version ${domain} runs: install PHP-FPM for it on Services, PHP`);
   const kind = kindOf(vhost.docroot as string);
-  const write = () => root(ctx, ['nginx-site-write', domain, '--kind', kind, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...aliases]);
+  const write = () => root(ctx, ['nginx-site-write', domain, '--kind', kind, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...mountArgs(config, vhost.mounts), ...aliases]);
 
   if (vhost.server === 'nginx') {
     return [{ id: 'nginx', label: `Write the nginx site for ${domain} again, with the ${kind === 'single' ? 'single site' : `${kind} network`} rules`, weight: 2, run: async () => failed(await write()) }, check(ctx, domain)];
@@ -140,6 +143,41 @@ export function planSetServer(ctx: ServerSwitchContext, { domain, server, accept
   ];
 }
 
+/**
+ * sites.setServerAll: every site that can moves to one server, one after the
+ * other, each as site.setServer moves it. Sites that cannot (made by hand,
+ * no PHP-FPM, .htaccess rules nginx ignores without the tick) stay where they
+ * are and are listed. Undo moves every site back.
+ */
+export function planSetServerAll(ctx: ServerSwitchContext, { server, acceptIgnored }: ActionInput<'sites.setServerAll'>): JobStep[] {
+  const target = server === 'nginx' ? 'nginx' : 'Apache';
+  const moving: string[] = [];
+  const staying: string[] = [];
+  for (const vhost of readSiteVhosts(ctx.config).filter((v) => v.server !== server)) {
+    const domain = vhost.names[0] as string;
+    const refusal = moveRefusal(ctx.config, vhost, domain);
+    const ignored = server === 'nginx' && vhost.docroot ? ignoredOnNginx(vhost.docroot) : [];
+    if (refusal) staying.push(`${domain}: ${refusal}`);
+    else if (ignored.length && !acceptIgnored) staying.push(`${domain}: nginx would not read its .htaccess rules (${ignored.join(', ')})`);
+    else moving.push(domain);
+  }
+  if (moving.length === 0) {
+    throw new SiteActionRefused(staying.length ? `No site can move to ${target}: ${staying.join('; ')}` : `Every site runs on ${target} already`);
+  }
+  const list: JobStep = {
+    id: 'list',
+    label: `Move ${moving.length} site${moving.length === 1 ? '' : 's'} to ${target}${staying.length ? `, leave ${staying.length} as ${staying.length === 1 ? 'it is' : 'they are'}` : ''}`,
+    weight: 1,
+    run: async () => ({ code: 0, stdout: [`moving: ${moving.join(', ')}`, ...staying.map((s) => `staying: ${s}`)].join('\n'), stderr: '' }),
+  };
+  return [
+    list,
+    ...moving.flatMap((domain) =>
+      planSetServer(ctx, { domain, server, acceptIgnored }).map((step) => ({ ...step, id: `${domain}:${step.id}`, label: `${domain}: ${step.label}` })),
+    ),
+  ];
+}
+
 const apacheArgs = (config: SystemConfig, vhost: VhostInfo, domain: string, aliases: string[]) => [
   'vhost-write', domain, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...mountArgs(config, vhost.mounts), ...aliases,
 ];
@@ -166,7 +204,7 @@ function toApache(ctx: ServerSwitchContext, vhost: VhostInfo, domain: string, al
         const r = await root(ctx, ['nginx-site-remove', domain]);
         if (r.code === 0) {
           job.onUndo('Write the nginx site again and point the hosts line at nginx', async () => {
-            const written = await root(ctx, ['nginx-site-write', domain, '--kind', kind, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...aliases]);
+            const written = await root(ctx, ['nginx-site-write', domain, '--kind', kind, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...mountArgs(ctx.config, vhost.mounts), ...aliases]);
             return written.code === 0 ? root(ctx, ['hosts-add', ...names]) : written;
           });
         }

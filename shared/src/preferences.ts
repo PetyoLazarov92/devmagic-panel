@@ -12,12 +12,16 @@ export const SITES_SORT_LABELS: Record<(typeof SITES_SORTS)[number], string> = {
   'name-desc': 'Name Z to A',
 };
 
-const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS) };
+/** The web server a new site of its own gets, once nginx runs next to Apache. */
+export const SITE_SERVERS = ['apache', 'nginx'] as const;
+
+const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), newSiteServer: z.enum(SITE_SERVERS) };
 
 export const preferences = z.object({
   theme: fields.theme.default('system'),
   sitesView: fields.sitesView.default('grid'),
   sitesSort: fields.sitesSort.default('name'),
+  newSiteServer: fields.newSiteServer.default('apache'),
 });
 
 export type Preferences = z.infer<typeof preferences>;

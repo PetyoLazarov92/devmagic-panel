@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.8.0 (2026-11-06)
+* **Sites:** a site with WordPress installs under its paths (`local.acme.com/learn`) moves to nginx with them: each is served from its own folder with `alias`, its own PHP-FPM upstream (its pool, or the default version's), WordPress's fallback to its own `index.php`, and the same deny rules. A new site under a path of a site on nginx goes into its nginx file. Checked with nginx 1.24's own `nginx -t` and with requests against it
+* **Sites:** the new site wizard asks which web server a site of its own gets, once nginx runs next to Apache: Apache, or nginx with the PHP-FPM version it would run on. The install writes the nginx file with WordPress's rules for what the dump is (a single site, or its kind of network). A site under a path runs on its parent's server
+* **Services:** the nginx tab has a Sites card: how many sites run on each server, the web server the wizard picks for new sites, and Move every site to nginx or to Apache. That is one job that moves each site that can, one after the other, checks each, lists the ones that stay and why, and Undo moves every site back
+* **Panel:** preferences load with their defaults filled in, so a setting a newer panel adds never comes back empty. The root scripts change, so the update finishes with its installer, which asks for your password
+
 ### v1.7.0 (2026-11-06)
 * **Sites:** a site moves to nginx, and back to Apache, from the Web server card on its Domains and SSL tab. The panel writes the site's nginx file (WordPress's rules for a single site or its kind of network, the uploads redirect, the same certificate and folder), runs its PHP through PHP-FPM (its own pool, or the default version's), points its hosts line at nginx (`127.0.0.2`), checks the site answers there, and only then removes the Apache vhost. Back to Apache goes the other way round, and Undo on the job moves it back. Its folder, database and certificate never move
 * **Sites:** nginx reads no `.htaccess`, so the move lists any rules beyond WordPress's (a cache plugin's section, redirects of your own) and asks you to tick that they do nothing there. A site made by hand, one with sites under paths, or one with a hosts line outside the panel's block stays on Apache, and the card says why

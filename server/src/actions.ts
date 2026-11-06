@@ -37,7 +37,7 @@ import { forgetCompat, planCheckCompat, planCheckCompatAll, wordpressSites } fro
 import { planInstallVersion, planPhpPackage, planRemoveVersion, planUpgradeVersion, setCliVersion } from './php/apt.js';
 import { planSwitchToFpm, planSwitchToModPhp } from './php/switch.js';
 import { planNginxSetup, planNginxTeardown } from './nginx.js';
-import { planSetServer } from './sites/server-switch.js';
+import { planSetServer, planSetServerAll } from './sites/server-switch.js';
 import { analyzeDatabases, deleteMysqlBackup, type MysqlContext, mysqlBackupsDir, MysqlRefused, planDropDatabase, planDropUsers, planOptimize, resetSiteUser } from './mysql-server.js';
 import type { RunStore } from './store.js';
 import { clearMail, type Downloader, mailpitFetch, type MailpitFetch, planInstallMailpit } from './mailpit.js';
@@ -262,6 +262,8 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'nginx.setup': async (ctx) => startJob(ctx, planNginxSetup(ctx), 'Set nginx up next to Apache', 'nginx'),
   'nginx.teardown': async (ctx) => startJob(ctx, planNginxTeardown(ctx), 'Turn nginx off', 'nginx'),
   'nginx.reload': (ctx) => steps(() => root(ctx, 'nginx-reload')),
+  'sites.setServerAll': async (ctx, input) =>
+    startJob(ctx, planSetServerAll(ctx, input), input.server === 'nginx' ? 'Move every site to nginx' : 'Move every site to Apache', 'web servers'),
   'site.setServer': async (ctx, input) =>
     startJob(ctx, planSetServer(ctx, input), input.server === 'nginx' ? `Run ${input.domain} on nginx` : `Run ${input.domain} on Apache again`, input.domain),
   'mysql.analyze': (ctx, input) => analyzeDatabases(mysqlCtx(ctx), input),

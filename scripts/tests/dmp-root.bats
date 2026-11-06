@@ -1645,3 +1645,25 @@ nginx_site_tree() {
   grep -qx '127.0.0.2 local.acme.com local.acme.de' "$T/hosts"
   grep -q 'upstream dmp-php-local.acme.com' "$T/nginx/conf.d/devmagic-panel-php.conf"
 }
+
+@test "nginx-site-write serves a site under a path with alias and its own PHP upstream" {
+  nginx_site_tree
+  mkdir -p "$T/www/local.learn.acme.com"
+  run dmp nginx-site-write local.acme.com --mount /learn=local.learn.acme.com local.acme.de
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.acme.com.conf"
+  grep -qx '# mount: /learn=local.learn.acme.com' "$site"
+  grep -q "alias $T/www/local.learn.acme.com/;" "$site"
+  grep -q 'location ^~ /learn/ {' "$site"
+  grep -q 'fastcgi_pass dmp-php-local.learn.acme.com;' "$site"
+  grep -q 'try_files $uri $uri/ @dmp-local.learn.acme.com;' "$site"
+  grep -q 'rewrite ^ /learn/index.php last;' "$site"
+  grep -q 'upstream dmp-php-local.learn.acme.com' "$T/nginx/conf.d/devmagic-panel-php.conf"
+  for bad in "--mount learn=local.learn.acme.com" "--mount /../x=local.learn.acme.com" "--mount /learn=local.acme.com" "--mount /learn=bad_name"; do
+    # shellcheck disable=SC2086
+    run dmp nginx-site-write local.acme.com $bad
+    [ "$status" -eq 2 ]
+  done
+  run dmp nginx-site-write local.acme.com --mount /x=local.none.acme.com
+  [ "$status" -eq 1 ]
+}

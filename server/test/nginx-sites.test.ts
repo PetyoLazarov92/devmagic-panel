@@ -6,7 +6,7 @@ import { Jobs, type JobStep } from '../src/jobs.js';
 import { discoverSites } from '../src/sites/discover.js';
 import { htaccessIgnored } from '../src/sites/htaccess.js';
 import { hostsBlockAddress, hostsOutsideBlock, HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
-import { moveRefusal, planSetServer } from '../src/sites/server-switch.js';
+import { moveRefusal, planSetServer, planSetServerAll } from '../src/sites/server-switch.js';
 import { planNginxTeardown } from '../src/nginx.js';
 import { parseNginxSite, readSiteVhosts } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
@@ -145,6 +145,24 @@ describe('site.setServer', () => {
     expect(lines()).toEqual(['nginx-site-write local.shop.com --kind subdirectory local.shop.de']);
   });
 
+  it('takes the sites under its paths along to nginx, each with its own PHP', async () => {
+    const t = tree();
+    mkdirSync(join(t.config.WEB_DIR, 'local.learn.shop.com'));
+    t.write('sites-available/local.shop.com-ssl.conf', `${MARKER}\n<VirtualHost *:443>\n ServerName local.shop.com\n ServerAlias local.shop.de\n DocumentRoot ${t.docroot}\n Alias /learn ${join(t.config.WEB_DIR, 'local.learn.shop.com')}\n</VirtualHost>\n`);
+    const { c, lines } = ctx(t);
+    await runSteps(planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: false }));
+    expect(lines()[0]).toBe('nginx-site-write local.shop.com --kind single --mount /learn=local.learn.shop.com local.shop.de');
+  });
+
+  it('reads the sites under paths of a site on nginx from its file', () => {
+    const t = tree();
+    mkdirSync(join(t.config.WEB_DIR, 'local.learn.shop.com'));
+    onNginx(t);
+    const file = join(t.config.NGINX_SITES_AVAILABLE, 'local.shop.com.conf');
+    writeFileSync(file, nginxFile(t.root, 'local.shop.com', 'local.shop.com local.shop.de').replace('# kind: single', '# kind: single\n# mount: /learn=local.learn.shop.com\n# mount: /gone=local.gone.shop.com'));
+    expect(readSiteVhosts(t.config)[0]?.mounts).toEqual([{ path: '/learn', docroot: join(t.config.WEB_DIR, 'local.learn.shop.com') }]);
+  });
+
   it('moves a site back to Apache: the vhost, the nginx file goes, the hosts line follows', async () => {
     const t = tree();
     onNginx(t);
@@ -154,7 +172,7 @@ describe('site.setServer', () => {
     expect(undos).toEqual(['Remove the Apache vhost', 'Write the nginx site again and point the hosts line at nginx']);
   });
 
-  it('refuses before anything runs: nginx not set up, no PHP-FPM, a vhost made by hand, a hosts line outside the block, sites under paths', () => {
+  it('refuses before anything runs: nginx not set up, no PHP-FPM, a vhost made by hand, a hosts line outside the block, a site under a path from outside the web root', () => {
     const input = { domain: 'local.shop.com', server: 'nginx' as const, acceptIgnored: false };
     expect(() => planSetServer(ctx(tree({ nginxSetUp: false })).c, input)).toThrow(/not set up next to Apache/);
     expect(() => planSetServer(ctx(tree({ fpm: false })).c, input)).toThrow(/PHP-FPM only/);
@@ -164,10 +182,10 @@ describe('site.setServer', () => {
     const outside = tree();
     outside.write('hosts', `127.0.0.1 local.shop.de\n${HOSTS_BEGIN}\n127.0.0.1 local.shop.com local.shop.de\n${HOSTS_END}\n`);
     expect(() => planSetServer(ctx(outside).c, input)).toThrow(/outside the panel's block/);
-    const mounted = tree();
-    mkdirSync(join(mounted.config.WEB_DIR, 'local.learn.shop.com'));
-    mounted.write('sites-available/local.shop.com-ssl.conf', `${MARKER}\n<VirtualHost *:443>\n ServerName local.shop.com\n DocumentRoot ${mounted.docroot}\n Alias /learn ${join(mounted.config.WEB_DIR, 'local.learn.shop.com')}\n</VirtualHost>\n`);
-    expect(() => planSetServer(ctx(mounted).c, input)).toThrow(/under paths/);
+    const away = tree();
+    mkdirSync(join(away.root, 'elsewhere'));
+    away.write('sites-available/local.shop.com-ssl.conf', `${MARKER}\n<VirtualHost *:443>\n ServerName local.shop.com\n DocumentRoot ${away.docroot}\n Alias /learn ${join(away.root, 'elsewhere')}\n</VirtualHost>\n`);
+    expect(() => planSetServer(ctx(away).c, input)).toThrow(/from outside/);
     expect(() => planSetServer(ctx(tree()).c, { ...input, server: 'apache' })).toThrow(/on Apache already/);
   });
 
@@ -191,6 +209,33 @@ describe('site.setServer', () => {
     await expect(runAction(c, 'site.setServer', { domain: 'local.shop.com', server: 'caddy' })).rejects.toBeInstanceOf(ActionInputError);
     const run = await runAction(c, 'site.setServer', { domain: 'local.shop.com', server: 'nginx' });
     expect(run.data?.jobId).toBeTruthy();
+  });
+});
+
+describe('sites.setServerAll', () => {
+  it('moves every site that can, one after the other, and lists the ones that stay', async () => {
+    const t = tree();
+    // A second site, made by hand: it stays on Apache.
+    const hand = join(t.config.WEB_DIR, 'local.hand.com');
+    mkdirSync(hand);
+    t.write('sites-available/local.hand.com-ssl.conf', `<VirtualHost *:443>\n ServerName local.hand.com\n DocumentRoot ${hand}\n</VirtualHost>\n`);
+    symlinkSync(join(t.config.APACHE_SITES_AVAILABLE, 'local.hand.com-ssl.conf'), join(t.config.APACHE_SITES_ENABLED, 'local.hand.com-ssl.conf'));
+    const { c, lines } = ctx(t);
+    const steps = planSetServerAll(c, { server: 'nginx', acceptIgnored: false });
+    expect(steps.map((s) => s.id)).toEqual(['list', 'local.shop.com:nginx', 'local.shop.com:hosts', 'local.shop.com:check', 'local.shop.com:apache']);
+    expect(steps[0]?.label).toBe('Move 1 site to nginx, leave 1 as it is');
+    const out = await steps[0]?.run({} as Parameters<JobStep['run']>[0]);
+    expect(Array.isArray(out) ? '' : out?.stdout).toContain('staying: local.hand.com: the vhost of local.hand.com was made by hand');
+    await runSteps(steps.slice(1));
+    expect(lines()[0]).toBe('nginx-site-write local.shop.com --kind single local.shop.de');
+  });
+
+  it('leaves sites with .htaccess rules nginx ignores unless ticked, and refuses when nothing can move', () => {
+    const t = tree();
+    t.write('www/local.shop.com/.htaccess', 'Header set X-Acme 1\n');
+    expect(() => planSetServerAll(ctx(t).c, { server: 'nginx', acceptIgnored: false })).toThrow(/No site can move to nginx: local.shop.com: nginx would not read/);
+    expect(planSetServerAll(ctx(t).c, { server: 'nginx', acceptIgnored: true })).toHaveLength(5);
+    expect(() => planSetServerAll(ctx(t).c, { server: 'apache', acceptIgnored: false })).toThrow(/Every site runs on Apache already/);
   });
 });
 

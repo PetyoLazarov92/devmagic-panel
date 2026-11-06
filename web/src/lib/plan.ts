@@ -25,7 +25,7 @@ export function previewSteps(input: CreateSiteInput, dbName: string, dumpName?: 
     ['core', input.core?.mode === 'wpcore' ? `Link WordPress ${input.core.version} with wpcore` : `Download WordPress ${input.core?.version ?? ''}`, isWp],
     ['mount', `Serve it at https://${input.domain}${input.path ?? ''}/`, Boolean(under)],
     ['cert', `Issue a certificate for ${names} name${names > 1 ? 's' : ''}`, !under],
-    ['vhost', `Write the Apache vhost and reload${input.uploadsFrom && input.uploadsVia === 'redirect' ? ` (missing uploads from ${input.uploadsFrom})` : ''}`, !under],
+    ['vhost', `Write the ${input.server === 'nginx' ? 'nginx site' : 'Apache vhost'} and reload${input.uploadsFrom && input.uploadsVia === 'redirect' ? ` (missing uploads from ${input.uploadsFrom})` : ''}`, !under],
     ['hosts', 'Add the /etc/hosts entry', !under],
     ['db', `Create database ${dbName} and its user`, isWp],
     ['config', 'Write wp-config.php', isWp],

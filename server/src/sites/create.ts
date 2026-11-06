@@ -23,7 +23,9 @@ import { ensureHtaccess } from './htaccess.js';
 import { setLocalMode } from './local-mode.js';
 import { currentUpload, readUpload } from './uploads.js';
 import { findVhost } from './discover.js';
-import { mountArgs, siteHost } from './site-actions.js';
+import { siteHost, siteWriteArgs } from './site-actions.js';
+import { nginxSetUp } from '../nginx.js';
+import { nginxPhpVersion } from './server-switch.js';
 import { engineHint, nodeEnv, nodeFor, type NodeOptions } from './node.js';
 import { readSiteVhosts } from './vhost.js';
 import { mysqlPassword } from './mysql-password.js';
@@ -58,11 +60,14 @@ const secret = () => randomBytes(18).toString('base64url');
 export async function precheck(ctx: CreateContext, input: CreateInput): Promise<{ facts?: DumpFacts; dumpFile?: string }> {
   const vhosts = readSiteVhosts(ctx.config);
   const taken = new Set(vhosts.flatMap((v) => v.names));
+  if (input.server === 'nginx' && !input.path) {
+    if (!nginxSetUp(ctx.config)) throw new CreateRefused('nginx is not set up next to Apache: set it up on Services, nginx, or install the site on Apache');
+    if (!nginxPhpVersion(ctx.config, input.domain)) throw new CreateRefused('nginx runs PHP through PHP-FPM only, and the default PHP version has none: install PHP-FPM for it on Services, PHP');
+  }
   if (input.path) {
     // Under a path: the domain is an existing site's, the path free, and the folder new.
     const parent = vhosts.find((v) => v.names[0] === input.domain);
     if (!parent) throw new CreateRefused(`no site called ${input.domain} to put ${input.path} under`);
-    if (parent.server === 'nginx') throw new CreateRefused(`${input.domain} runs on nginx, where sites under a path are not served yet; move it to Apache on its Domains and SSL tab first`);
     if (parent.mounts.some((m) => m.path === input.path)) throw new CreateRefused(`${input.domain}${input.path} is already served`);
     const folder = mountFolder(input.domain, input.path) as string;
     if (taken.has(folder)) throw new CreateRefused(`${folder} is already used by another site`);
@@ -294,8 +299,8 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
             `    Alias ${path} ${docroot}\n    <Directory ${docroot}>\n        Options FollowSymLinks\n        AllowOverride All\n        Require all granted\n    </Directory>`,
         );
       }
-      const write = (mounts: Array<{ path: string; docroot: string }>) =>
-        root('vhost-write', domain, ...(parent.uploadsProxy ? ['--uploads-proxy', parent.uploadsProxy] : []), ...mountArgs(config, mounts), ...parent.names.slice(1).filter(isLocalName));
+      // The parent's server config, Apache's vhost or its nginx file, with this path added.
+      const write = (mounts: Array<{ path: string; docroot: string }>) => root(...siteWriteArgs(config, parent, domain, parent.uploadsProxy, parent.names.slice(1).filter(isLocalName), mounts));
       const r = await write([...parent.mounts, { path, docroot }]);
       if (r.code === 0) job.onUndo(`Stop serving ${path} on ${domain}`, () => write(parent.mounts));
       return r;
@@ -307,12 +312,22 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
       if (r.code === 0) job.onUndo('Remove the certificate', () => root('cert-remove', domain));
       return r;
     });
-    add('vhost', 'Write the Apache vhost and reload', async (job) => {
-      const proxy = input.uploadsFrom && input.uploadsVia === 'redirect' ? ['--uploads-proxy', input.uploadsFrom] : [];
-      const r = await root('vhost-write', domain, ...proxy, ...input.aliases);
-      if (r.code === 0) job.onUndo('Remove the vhost', () => root('vhost-remove', domain));
-      return r;
-    });
+    const proxy = input.uploadsFrom && input.uploadsVia === 'redirect' ? ['--uploads-proxy', input.uploadsFrom] : [];
+    if (input.server === 'nginx') {
+      // WordPress's rules for what the site is: a network when the dump has one, of the type chosen here.
+      const kind = multisite || input.network ? (subdomain ? 'subdomain' : 'subdirectory') : 'single';
+      add('vhost', 'Write the nginx site and reload', async (job) => {
+        const r = await root('nginx-site-write', domain, '--kind', kind, ...proxy, ...input.aliases);
+        if (r.code === 0) job.onUndo('Remove the nginx site', () => root('nginx-site-remove', domain));
+        return r;
+      });
+    } else {
+      add('vhost', 'Write the Apache vhost and reload', async (job) => {
+        const r = await root('vhost-write', domain, ...proxy, ...input.aliases);
+        if (r.code === 0) job.onUndo('Remove the vhost', () => root('vhost-remove', domain));
+        return r;
+      });
+    }
     add('hosts', 'Add the /etc/hosts entry', async (job) => {
       const r = await root('hosts-add', ...names);
       if (r.code === 0) job.onUndo('Remove the hosts entry', () => root('hosts-remove', domain));

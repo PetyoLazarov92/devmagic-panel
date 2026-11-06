@@ -29,9 +29,11 @@ Usage: dmp-root <command> [args]
                                       --mount serves the folder WEB_DIR/<folder> at /path
   vhost-write-panel                   write the vhost that proxies to the panel
   vhost-remove <domain>               disable and remove a site vhost
-  nginx-site-write <domain> [--kind single|subdirectory|subdomain] [--uploads-proxy <host>] [alias...]
+  nginx-site-write <domain> [--kind single|subdirectory|subdomain] [--uploads-proxy <host>]
+                   [--mount /path=folder]... [alias...]
                                       the site on nginx (NGINX_ADDRESS), from WEB_DIR/<domain>,
                                       its PHP through PHP-FPM; kind picks WordPress's rules;
+                                      --mount serves the folder WEB_DIR/<folder> at /path;
                                       nginx -t, then reload; hosts-add then points it there
   nginx-site-remove <domain>          take a site off nginx
   hosts-add <domain> [alias...]       add or replace the site's /etc/hosts line
@@ -155,16 +157,27 @@ vhost_write() {
   dmp_vhost_write_site "$domain" "$proxy" "$@"
 }
 
-# nginx-site-write <domain> [--kind single|subdirectory|subdomain] [--uploads-proxy <host>] [alias...]
+# nginx-site-write <domain> [--kind ...] [--uploads-proxy <host>] [--mount /path=folder]... [alias...]
 nginx_site_write() {
   (( $# >= 1 )) || dmp_usage_error "a domain is required"
-  local domain="$1" kind=single proxy="" name
+  local domain="$1" kind=single proxy="" name at folder
   shift
   while [[ "${1:-}" == --* ]]; do
     (( $# >= 2 )) || dmp_usage_error "$1 needs a value"
     case "$1" in
       --kind) dmp_in_list "$2" "${DMP_NGINX_KINDS[@]}" || dmp_usage_error "--kind takes ${DMP_NGINX_KINDS[*]}, not: $2"; kind="$2" ;;
       --uploads-proxy) dmp_require_hostname "$2"; proxy="$2" ;;
+      # As vhost-write's: a path of letters, digits, . _ - and a folder in WEB_DIR that exists.
+      --mount)
+        [[ "$2" == /*=* ]] || dmp_usage_error "--mount needs /path=folder"
+        at="${2%%=*}"
+        folder="${2#*=}"
+        dmp_require_mount_path "$at"
+        dmp_require_local_name "$folder"
+        [[ "$folder" != "$domain" ]] || dmp_usage_error "a site cannot be mounted into itself"
+        [[ -d "$WEB_DIR/$folder" && ! -L "$WEB_DIR/$folder" ]] || dmp_die "no folder $WEB_DIR/$folder"
+        DMP_NGINX_MOUNTS+=("$at=$folder")
+        ;;
       *) dmp_usage_error "unknown option: $1" ;;
     esac
     shift 2

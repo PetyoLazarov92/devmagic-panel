@@ -692,9 +692,9 @@ let mockLocalConstants: LocalConstant[] = [{ name: 'WP_ENVIRONMENT_TYPE', value:
 // Kept for the browser session, as the panel keeps them in its database.
 const mockPreferences: Preferences = (() => {
   try {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
   } catch {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name' };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache' };
   }
 })();
 
@@ -1159,6 +1159,7 @@ export const mockApi: Api = {
       errorLog: '/var/log/nginx/error.log',
     };
   },
+  nginxState: async () => ({ setUp: mockNginxSetUp, php: '8.3' }),
   nginxLog: async () => {
     await wait(150);
     return {
@@ -1351,6 +1352,9 @@ export const mockApi: Api = {
     // The mockup's Mailpit "runs" once its install job has had time to finish.
     if (id === 'mailpit.install') window.setTimeout(() => (mailpitRunning = true), 3500);
     if (id === 'nginx.setup' || id === 'nginx.teardown') window.setTimeout(() => (mockNginxSetUp = id === 'nginx.setup'), 3500);
+    if (id === 'sites.setServerAll') {
+      for (const s of sites) if (!s.path && !s.move?.refusal) s.server = input.server === 'nginx' ? 'nginx' : 'apache';
+    }
     if (id === 'site.setServer') {
       const moved = sites.find((s) => s.domain === input.domain && !s.path);
       if (moved) moved.server = input.server === 'nginx' ? 'nginx' : 'apache';

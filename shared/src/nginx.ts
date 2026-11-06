@@ -42,6 +42,13 @@ export interface NginxReport {
   errorLog: string;
 }
 
+/** What the new site wizard needs: whether a new site can run on nginx, and on which PHP-FPM version. */
+export interface NginxState {
+  setUp: boolean;
+  /** The default PHP version's PHP-FPM, when it is installed. */
+  php?: string;
+}
+
 /** The addresses the panel uses when config.env names none. */
 export const DEFAULT_NGINX_ADDRESS = '127.0.0.2';
 export const DEFAULT_APACHE_ADDRESS = '127.0.0.1';

@@ -1,5 +1,5 @@
 import type { NginxConfig, NginxReport } from '@devmagic-panel/shared';
-import { Check, Copy, FileCode2, LoaderCircle, Power, RefreshCw, ScrollText, Server, Split, TriangleAlert } from 'lucide-react';
+import { ArrowRightLeft, Check, Copy, FileCode2, LoaderCircle, Power, RefreshCw, ScrollText, Server, Split, TriangleAlert } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
@@ -9,10 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/field';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { runRestarting } from '@/lib/restarting';
 import { toast } from '@/lib/toast';
+import { savePreferences, usePreferences } from '@/lib/preferences';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +65,8 @@ export function NginxTab({ refresh, onLoading }: { refresh: number; onLoading: (
           </div>
         )}
       </SetupCard>
+
+      {data.setUp && <SitesCard key={job.job?.status ?? 'none'} busy={jobBusy} onStart={(server, acceptIgnored) => void job.follow(api.startJob('sites.setServerAll', { server, acceptIgnored }))} />}
 
       {data.installed && (
         <>
@@ -303,6 +307,104 @@ function ConfigsCard({ report }: { report: NginxReport }) {
         ))}
         {shown.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">No configs here.</li>}
       </ul>
+    </Card>
+  );
+}
+
+/**
+ * Sites on nginx and on Apache, the default web server for new sites, and
+ * moving every site that can at once (sites.setServerAll): a job, each site
+ * checked as it moves, Undo moves every site back.
+ */
+function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: 'apache' | 'nginx', acceptIgnored: boolean) => void }) {
+  const sites = useAsync(() => api.sites(), []);
+  const { newSiteServer } = usePreferences();
+  const [confirm, setConfirm] = useState<'apache' | 'nginx' | null>(null);
+  const [accepted, setAccepted] = useState(false);
+  const own = (sites.data ?? []).filter((s) => !s.path);
+  const on = (server: 'apache' | 'nginx') => own.filter((s) => s.server === server);
+  // What a move of every site to one server does to each site there is not yet.
+  const plan = (server: 'apache' | 'nginx') => {
+    const candidates = own.filter((s) => s.server !== server);
+    const stay = candidates.filter((s) => s.move?.refusal).map((s) => ({ site: s, why: s.move?.refusal as string }));
+    const ignored = candidates.filter((s) => !s.move?.refusal && server === 'nginx' && (s.move?.ignored.length ?? 0) > 0);
+    const move = candidates.filter((s) => !s.move?.refusal && !ignored.includes(s));
+    return { stay, ignored, move };
+  };
+  const current = confirm ? plan(confirm) : null;
+  const moving = current ? current.move.length + (accepted ? current.ignored.length : 0) : 0;
+
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader>
+        <CardTitle>Sites</CardTitle>
+        <span className="text-xs text-muted-foreground">{sites.data ? `${on('nginx').length} on nginx, ${on('apache').length} on Apache` : 'reading'}</span>
+      </CardHeader>
+      <div className="grid gap-4 p-5 text-sm">
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 font-medium">New sites</legend>
+          <div className="flex flex-wrap gap-4">
+            {(['apache', 'nginx'] as const).map((server) => (
+              <label key={server} className="flex cursor-pointer items-center gap-2">
+                <input type="radio" name="new-site-server" checked={newSiteServer === server} onChange={() => savePreferences({ newSiteServer: server })} className="accent-[var(--primary)]" />
+                {server === 'nginx' ? 'nginx' : 'Apache'}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">What the new site wizard picks; you can pick the other one there. A site under a path runs on its parent&apos;s server.</p>
+        </fieldset>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={busy || !sites.data || plan('nginx').move.length + plan('nginx').ignored.length === 0} onClick={() => { setAccepted(false); setConfirm('nginx'); }}>
+            <ArrowRightLeft />
+            Move every site to nginx
+          </Button>
+          <Button variant="outline" disabled={busy || !sites.data || on('nginx').length === 0} onClick={() => { setAccepted(false); setConfirm('apache'); }}>
+            <ArrowRightLeft />
+            Move every site to Apache
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">One site moves at a time, on its Domains and SSL tab.</p>
+      </div>
+
+      <Dialog
+        open={confirm !== null}
+        onClose={() => setConfirm(null)}
+        title={confirm === 'nginx' ? 'Move every site to nginx?' : 'Move every site to Apache?'}
+        description="Each site moves as it does from its Domains and SSL tab, one after the other, and is checked before the next. Undo on the job moves every site back."
+      >
+        {current && (
+          <div className="grid gap-3 text-sm">
+            {current.move.length > 0 && <p>Moving: {current.move.map((s) => s.domain).join(', ')}</p>}
+            {current.ignored.length > 0 && (
+              <div className="grid gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2">
+                <p className="text-warning">nginx would not read the .htaccess rules of {current.ignored.map((s) => `${s.domain} (${s.move?.ignored.join(', ')})`).join('; ')}.</p>
+                <Checkbox id="move-all-accept" checked={accepted} onChange={setAccepted} label="Move these too; I know those rules do nothing on nginx" />
+              </div>
+            )}
+            {current.stay.length > 0 && (
+              <div className="grid gap-1 text-muted-foreground">
+                <p>Staying where they are:</p>
+                <ul className="list-disc pl-5 text-xs">
+                  {current.stay.map(({ site, why }) => <li key={site.domain}>{site.domain}: {why}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button>
+              <Button
+                disabled={moving === 0}
+                onClick={() => {
+                  const server = confirm;
+                  setConfirm(null);
+                  if (server) onStart(server, accepted);
+                }}
+              >
+                Move {moving} site{moving === 1 ? '' : 's'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
     </Card>
   );
 }

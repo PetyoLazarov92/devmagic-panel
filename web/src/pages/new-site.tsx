@@ -1,4 +1,4 @@
-import type { AddressInput, InstallDraft, NewSiteSource, OrgStatus, RepoBuild, RepoInspection, RepoLayout, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
+import type { AddressInput, InstallDraft, NginxState, NewSiteSource, OrgStatus, RepoBuild, RepoInspection, RepoLayout, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
 import { actions, addressSummary, branchName, branchWebUrl, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin, repoWeb, sameRepo } from '@devmagic-panel/shared';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, CircleX, Copy, ExternalLink, FileArchive, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, Upload, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -30,6 +30,7 @@ import { type NetworkAnswers, networkPlan, type NetworkPlan, NO_NETWORK_ANSWERS 
 import { pluginMatches } from '@/lib/plugin-search';
 import { answersHash, stepViews } from '@/lib/steps';
 import { useAsync } from '@/lib/use-async';
+import { usePreferences } from '@/lib/preferences';
 import { asideUploads } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
 
@@ -87,6 +88,8 @@ export interface WizardState {
   under: { domain: string; path: string } | null;
   /** The primary domain is installed already: archive that site first and install again. */
   replaceExisting: boolean;
+  /** Apache or nginx, once nginx runs next to Apache; null until it is known: the default for new sites from the nginx tab. */
+  server: 'apache' | 'nginx' | null;
   /** Installing from a GitHub organization or GitLab group: the repo, what Claude Code read and the dump; null for the other starts. */
   org: OrgState | null;
   /** A hash of each step's answers when you continued from it, so the step list can open the steps you reached (lib/steps). */
@@ -101,6 +104,7 @@ type Inspection =
 
 const initial: WizardState = {
   replaceExisting: false,
+  server: null,
   org: null,
   source: 'repo',
   repoUrl: '',
@@ -202,7 +206,7 @@ const STEP_ANSWERS: Record<Step, (s: WizardState) => unknown> = {
   read: (s) => [s.org?.read.status, s.org?.read.facts],
   access: (s) => [s.org?.access.status, s.upload?.id],
   source: (s) => [s.repoUrl.trim(), s.branch.trim(), s.layout, s.upload?.id],
-  domains: (s) => [s.domains, s.under, s.replaceExisting, s.replaceOn, s.network],
+  domains: (s) => [s.domains, s.under, s.replaceExisting, s.replaceOn, s.network, s.server],
   wordpress: (s) => [s.coreMode, s.coreVersion, s.adminUser, s.adminEmail, s.adminIfExists, s.adminIfMissing, s.adminCreate, s.deactivate, s.activate, s.uploadsFrom, s.uploadsVia, s.composer, s.npm, s.buildPicks],
   review: () => null,
 };
@@ -279,6 +283,8 @@ export function toInput(state: WizardState): CreateSiteInput {
     domain: locals[0] ?? '',
     ...(under ? { path: under.path } : {}),
     replaceExisting: !under && state.replaceExisting,
+    // A site under a path runs on its parent's server.
+    server: !under && state.server === 'nginx' ? 'nginx' : 'apache',
     // The organization or group it came from; a pasted URL on another host has none.
     ...(state.org?.repo?.org && isRepo ? { organization: state.org.repo.org } : {}),
     aliases: locals.slice(1),
@@ -407,6 +413,12 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
 
   const cores = useAsync(() => api.cores(), []);
   const sites = useAsync(() => api.sites(), []);
+  const nginx = useAsync(() => api.nginxState(), []);
+  const { newSiteServer } = usePreferences();
+  // Once it is known whether nginx runs: the default for new sites, Apache while it does not.
+  useEffect(() => {
+    if (nginx.data && state.server === null) set('server', nginx.data.setUp ? newSiteServer : 'apache');
+  }, [nginx.data, state.server, newSiteServer]);
   const assistant = useAsync(() => api.assistant(), []);
   const orgStatus = useAsync(() => api.orgStatus(), []);
 
@@ -773,7 +785,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
         )}
         {wizard && step === 'access' && <AccessStep state={state} setState={setOrgState} status={orgStatus.data ?? null} cores={cores.data ?? []} draftId={draftId.current ?? ''} saveNow={saveNow} />}
         {wizard && step === 'source' && <SourceStep state={state} setState={setState} sites={sites.data ?? []} cores={cores.data ?? []} assistantOn={assistant.data?.enabled === true} />}
-        {wizard && step === 'domains' && <DomainsStep state={state} set={set} errors={domainErrors} sites={sites.data ?? []} underError={underError} underFolder={underFolder} existing={existing} network={network} networkErrors={networkErrors} summary={state.upload ? addressSummary(addressesFor(input, state, network), input.network?.layout) : null} />}
+        {wizard && step === 'domains' && <DomainsStep state={state} set={set} nginx={nginx.data ?? null} errors={domainErrors} sites={sites.data ?? []} underError={underError} underFolder={underFolder} existing={existing} network={network} networkErrors={networkErrors} summary={state.upload ? addressSummary(addressesFor(input, state, network), input.network?.layout) : null} />}
         {wizard && step === 'wordpress' && <WordPressStep state={state} set={set} cores={cores.data ?? []} input={input} uploadsError={uploadsError} />}
         {wizard && step === 'review' && <ReviewStep state={state} set={set} input={input} dbName={dbName} cores={cores.data} />}
         {running && <RunScreen input={{ ...input, ...(draftId.current ? { draftId: draftId.current } : {}) }} onBack={() => setRunning(false)} />}
@@ -1242,9 +1254,11 @@ function SourceStep({ state, setState, sites, cores, assistantOn }: {
 
 // ── Domains ──────────────────────────────────────────────────
 
-function DomainsStep({ state, set, errors, sites, underError, underFolder, existing, network, networkErrors, summary }: {
+function DomainsStep({ state, set, nginx, errors, sites, underError, underFolder, existing, network, networkErrors, summary }: {
   state: WizardState;
   set: Setter;
+  /** Whether nginx runs next to Apache; null while it is read. */
+  nginx: NginxState | null;
   /** What the replace step will change, or null when the dump already answers here. */
   summary?: string | null;
   errors: Array<string | null>;
@@ -1369,8 +1383,34 @@ function DomainsStep({ state, set, errors, sites, underError, underFolder, exist
         <NetworkSection facts={facts} plan={network} main={cleanAddress(state.domains[0]?.local ?? '', false)} answers={state.network ?? NO_NETWORK_ANSWERS} errors={networkErrors} onChange={(answers) => set('network', answers)} nothingChanges={summary === null} />
       )}
       {existing && <ReinstallNote site={existing} state={state} set={set} />}
+      {nginx?.setUp && !under && <ServerChoice state={state} set={set} php={nginx.php} />}
       {fromDump && state.upload && <ReplaceOptions state={state} set={set} summary={summary ?? null} />}
     </div>
+  );
+}
+
+/** Apache or nginx for the new site, once nginx runs next to Apache; a site can move later on its Domains and SSL tab. */
+function ServerChoice({ state, set, php }: { state: WizardState; set: Setter; php: string | undefined }) {
+  const choices = [
+    { value: 'apache', label: 'Apache', hint: 'Reads .htaccess, as most WordPress hosts run it' },
+    { value: 'nginx', label: 'nginx', hint: php ? `PHP through PHP-FPM ${php}; .htaccess is not read` : 'Needs PHP-FPM for the default PHP version: install it on Services, PHP' },
+  ] as const;
+  return (
+    <fieldset className="grid gap-2">
+      <legend className="mb-1 text-sm font-medium">Web server</legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {choices.map((c) => (
+          <label key={c.value} className={cn('flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm', state.server === c.value && 'border-primary/50 bg-primary/5', c.value === 'nginx' && !php && 'cursor-not-allowed opacity-60')}>
+            <input type="radio" name="web-server" checked={state.server === c.value} disabled={c.value === 'nginx' && !php} onChange={() => set('server', c.value)} className="mt-0.5 accent-[var(--primary)]" />
+            <span className="grid gap-0.5">
+              <span className="font-medium">{c.label}</span>
+              <span className="text-xs text-muted-foreground">{c.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">The site can move to the other one later, on its Domains and SSL tab.</p>
+    </fieldset>
   );
 }
 

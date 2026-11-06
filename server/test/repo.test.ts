@@ -124,7 +124,7 @@ describe('repo presets', () => {
       presetFromCreate({
         source: 'repo', domain: 'local.shop.com', aliases: ['local.shop.de'], repo: { url: 'git@github.com:x/y.git', branch: 'feature/x', layout: 'theme' },
         replace: [{ from: 'www.shop.com', to: 'local.shop.com' }], core: { mode: 'wpcore', version: '7.1.3' }, deactivate: ['wp-rocket'],
-        uploadsFrom: 'www.shop.com', uploadsVia: 'plugin', build: { composer: false, npm: true }, activate: ['query-monitor'], replaceExisting: false,
+        uploadsFrom: 'www.shop.com', uploadsVia: 'plugin', build: { composer: false, npm: true }, activate: ['query-monitor'], replaceExisting: false, server: 'apache',
       }),
     ).toEqual({
       domains: [{ production: 'www.shop.com', local: 'local.shop.com' }, { local: 'local.shop.de' }],

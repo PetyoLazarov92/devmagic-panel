@@ -61,11 +61,11 @@ export function mountArgs(config: SystemConfig, mounts: Array<{ path: string; do
  * vhost (with the sites under its paths) or, for a site on nginx, its nginx
  * file with the WordPress rules it has.
  */
-export function siteWriteArgs(config: SystemConfig, vhost: VhostInfo, domain: string, proxy: string | null, aliases: string[]): string[] {
+export function siteWriteArgs(config: SystemConfig, vhost: VhostInfo, domain: string, proxy: string | null, aliases: string[], mounts = vhost.mounts): string[] {
   const redirect = proxy ? ['--uploads-proxy', proxy] : [];
   return vhost.server === 'nginx'
-    ? ['nginx-site-write', domain, '--kind', vhost.kind ?? 'single', ...redirect, ...aliases]
-    : ['vhost-write', domain, ...redirect, ...mountArgs(config, vhost.mounts), ...aliases];
+    ? ['nginx-site-write', domain, '--kind', vhost.kind ?? 'single', ...redirect, ...mountArgs(config, mounts), ...aliases]
+    : ['vhost-write', domain, ...redirect, ...mountArgs(config, mounts), ...aliases];
 }
 
 /** The reload that picks up a reissued certificate: the server that has the site. */

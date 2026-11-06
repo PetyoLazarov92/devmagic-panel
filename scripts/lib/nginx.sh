@@ -398,7 +398,24 @@ dmp_nginx_php_socket() {
   printf '%s/php%s-fpm.sock' "$DMP_PHP_RUN_DIR" "$version"
 }
 
-# conf.d/devmagic-panel-php.conf: one upstream per site on nginx.
+# Sites under paths of a site on nginx: "/learn=local.learn.shop.com"
+# entries, each a folder in WEB_DIR. dmp-root sets them after checking each one.
+DMP_NGINX_MOUNTS=()
+
+# The folders of the sites on nginx: each site's, then the ones it serves
+# under paths (its "# mount:" lines), one per line.
+dmp_nginx_php_folders() {
+  local domain spec folder
+  while IFS= read -r domain; do
+    printf '%s\n' "$domain"
+    while IFS= read -r spec; do
+      folder="${spec#*=}"
+      dmp_is_local_name "$folder" && printf '%s\n' "$folder"
+    done < <(sed -nE 's/^# mount: (\/[A-Za-z0-9._\/-]+=[a-z0-9.-]+)$/\1/p' "$(dmp_nginx_site_file "$domain")")
+  done < <(dmp_nginx_sites)
+}
+
+# conf.d/devmagic-panel-php.conf: one upstream per site on nginx, and per site under one of its paths.
 dmp_nginx_php_render() {
   local domain socket
   printf '%s\n' "$DMP_VHOST_MARKER"
@@ -410,7 +427,7 @@ dmp_nginx_php_render() {
       # No FPM for it: nginx still starts, and the site answers 502 until there is one.
       printf '# %s: no PHP-FPM for its PHP version\nupstream dmp-php-%s {\n    server unix:%s/dmp-none.sock down;\n}\n' "$domain" "$domain" "$DMP_PHP_RUN_DIR"
     fi
-  done < <(dmp_nginx_sites)
+  done < <(dmp_nginx_php_folders | awk '!seen[$0]++')
 }
 
 # Writes the upstreams and runs nginx -t; returns 1 with the previous file back when it fails.
@@ -439,8 +456,42 @@ dmp_nginx_reload_if_active() {
 
 # Usage: dmp_nginx_site_render <domain> <kind> <uploads-proxy-host or ""> [alias...]
 dmp_nginx_site_render() {
-  local domain="$1" kind="$2" proxy="$3" version names listen443 http2="" rewrites="" uploads=""
+  local domain="$1" kind="$2" proxy="$3" version names listen443 http2="" rewrites="" uploads="" mounts="" headers="" mount at dir folder
   shift 3
+  for mount in "${DMP_NGINX_MOUNTS[@]}"; do
+    at="${mount%%=*}"
+    folder="${mount#*=}"
+    dir="$WEB_DIR/$folder"
+    headers+=$'\n'"# mount: $at=$folder"
+    mounts+=$'\n'"    # A site of its own, served under $at, with its own PHP."
+    mounts+=$'\n'"    location = $at {"
+    mounts+=$'\n'"        return 301 https://\$host$at/;"
+    mounts+=$'\n'"    }"
+    mounts+=$'\n'"    location ^~ $at/ {"
+    mounts+=$'\n'"        alias $dir/;"
+    mounts+=$'\n'"        index index.php index.html;"
+    mounts+=$'\n'"        location ~ /\.(?!well-known/) {"
+    mounts+=$'\n'"            deny all;"
+    mounts+=$'\n'"        }"
+    mounts+=$'\n'"        location ~* ^$at/wp-content/uploads/.*\.php\$ {"
+    mounts+=$'\n'"            deny all;"
+    mounts+=$'\n'"        }"
+    mounts+=$'\n'"        location ~ \.php\$ {"
+    mounts+=$'\n'"            if (!-f \$request_filename) {"
+    mounts+=$'\n'"                return 404;"
+    mounts+=$'\n'"            }"
+    mounts+=$'\n'"            include fastcgi_params;"
+    mounts+=$'\n'"            fastcgi_param SCRIPT_FILENAME \$request_filename;"
+    mounts+=$'\n'"            fastcgi_pass dmp-php-$folder;"
+    mounts+=$'\n'"        }"
+    # A missing file goes to WordPress through a named location: try_files
+    # with alias does not take a URI as its last choice.
+    mounts+=$'\n'"        try_files \$uri \$uri/ @dmp-$folder;"
+    mounts+=$'\n'"    }"
+    mounts+=$'\n'"    location @dmp-$folder {"
+    mounts+=$'\n'"        rewrite ^ $at/index.php last;"
+    mounts+=$'\n'"    }"$'\n'
+  done
   names="$domain${*:+ $*}"
   version="$(dmp_nginx_version)"
   if [[ -n "$version" ]] && dmp_version_at_least "$version" "$DMP_NGINX_HTTP2_DIRECTIVE"; then
@@ -470,7 +521,7 @@ dmp_nginx_site_render() {
   fi
   cat <<EOF
 $DMP_VHOST_MARKER
-# kind: $kind
+# kind: $kind$headers
 server {
     listen $NGINX_ADDRESS:80;
     server_name $names;
@@ -497,7 +548,7 @@ server {
     location ~* ^/wp-content/uploads/.*\.php\$ {
         deny all;
     }
-$uploads$rewrites
+$uploads$rewrites$mounts
     location / {
         try_files \$uri \$uri/ /index.php?\$args;
     }
@@ -557,6 +608,10 @@ dmp_nginx_site_write() {
   outside="$(dmp_hosts_outside_block "$domain" "${aliases[@]}" | sort -u | tr '\n' ' ')"
   [[ -z "$outside" ]] || dmp_die "${outside% } in $HOSTS_FILE outside the panel's block would keep the site on Apache; remove that line first"
   dmp_nginx_socket_or_die "$domain"
+  local mount
+  for mount in "${DMP_NGINX_MOUNTS[@]}"; do
+    dmp_nginx_socket_or_die "${mount#*=}"
+  done
 
   file="$(dmp_nginx_site_file "$domain")"
   link="$(dmp_nginx_site_link "$domain")"
