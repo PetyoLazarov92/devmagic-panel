@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.5.1 (2026-11-06)
+* **Fix:** your own account is now ticked once per host, the first time that host's CLI is signed in. Before, ticking your GitHub account counted for every host, so signing in to the GitLab CLI later never ticked your GitLab account. Settings from before are read as GitHub done, so your GitLab account is ticked once glab signs in; an account you untick stays unticked
+* **Sites:** Organizations and groups to scan says what each host still needs before it lists anything (`sudo apt install glab`, `glab auth login`, `gh auth login`), with Check again, and the organization step says so in one line while no GitLab CLI is signed in. Cloning needs only your SSH key; the CLIs only list repos. The root scripts do not change: the Updates page installs this release as usual
+
 ### v1.5.0 (2026-11-06)
 * **Sites:** repos inside a site's folder show on its Git card, each in a section of its own after the site's: wp-content, and each theme, plugin and must-use plugin folder with a `.git` of its own (`Theme: acme`, `Plugin: acme-blocks`). Each has its branch picker, ahead and behind, uncommitted changes, Pull, Fetch, Switch and its pull or merge requests, and the one the site was installed from is marked. Before, a site whose theme or plugin was its repo, as the panel installs one with the Theme or Plugin layout, showed no Git card at all
 * **Sites:** the Sites list shows a site's own branch, or its first theme or plugin repo's when it has none, with how many more repos it has. A folder reached through a symlink is left out, and a site shows at most 20 repos

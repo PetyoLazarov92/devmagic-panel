@@ -100,10 +100,13 @@ describe('site routes', () => {
     const send = (method: 'PUT' | 'POST', url: string, payload: Record<string, unknown>) => app.inject({ method, url, headers: { host: HOST, origin: ORIGIN, cookie }, payload });
     expect((await get('/api/org/status')).json()).toMatchObject({ claude: { found: false }, gh: { installed: false }, glab: { installed: false, hosts: [{ host: 'gitlab.com', installed: false }] }, rclone: { installed: false }, settings: { selected: [] } });
     const settings = { selected: ['acme', 'gitlab.com/acme/web'], gitlabHosts: ['git.acme.test'], read: { model: 'haiku', effort: 'high', budgetUsd: 0.2 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } };
-    // A list you saved is yours: your accounts are never ticked for you after it.
-    expect((await send('PUT', '/api/org/settings', settings)).json()).toEqual({ ...settings, accountsTicked: true });
+    expect((await send('PUT', '/api/org/settings', settings)).json()).toEqual({ ...settings, accountHosts: [] });
     expect((await send('PUT', '/api/org/settings', { selected: ['-bad'] })).statusCode).toBe(400);
-    expect((await get('/api/org/status')).json().settings).toEqual({ ...settings, accountsTicked: true });
+    expect((await get('/api/org/status')).json().settings).toEqual({ ...settings, accountHosts: [] });
+    // The hosts your account was ticked on stay noted when the page saves without them.
+    await send('PUT', '/api/org/settings', { ...settings, accountHosts: ['github.com'] });
+    expect((await send('PUT', '/api/org/settings', settings)).json().accountHosts).toEqual(['github.com']);
+    await send('PUT', '/api/org/settings', settings);
     // Links to your own GitLab hosts come out as GitLab's in the browser too.
     expect((await get('/api/git-hosts')).json()).toEqual({ gitlab: ['git.acme.test'], detected: {}, aliases: {} });
     expect((await get('/api/org/status')).json().glab.hosts.map((h: { host: string }) => h.host)).toEqual(['gitlab.com', 'git.acme.test']);

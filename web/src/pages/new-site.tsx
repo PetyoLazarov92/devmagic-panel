@@ -757,7 +757,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
             />
           </>
         )}
-        {wizard && step === 'org' && <OrgStep state={state} setState={setOrgState} status={orgStatus.data ?? null} blank={initial} />}
+        {wizard && step === 'org' && <OrgStep state={state} setState={setOrgState} status={orgStatus.data ?? null} blank={initial} onRecheck={orgStatus.reload} />}
         {wizard && step === 'read' && (
           <ReadStep
             state={state}

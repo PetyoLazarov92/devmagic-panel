@@ -74,14 +74,14 @@ export interface OrgSettings {
   selected: string[];
   /** Your own GitLab servers, listed beside gitlab.com. */
   gitlabHosts: string[];
-  /** Your own accounts were ticked once, the first time a CLI was signed in; after that the list is yours. */
-  accountsTicked: boolean;
+  /** The hosts your own account was ticked on, once each, the first time its CLI was signed in; after that it is yours to untick. */
+  accountHosts: string[];
   /** The defaults for each Claude Code step; an install can change them for itself. */
   read: ClaudeRun;
   access: ClaudeRun;
 }
 
-export const DEFAULT_ORG_SETTINGS: OrgSettings = { selected: [], gitlabHosts: [], accountsTicked: false, ...DEFAULT_CLAUDE_STEPS };
+export const DEFAULT_ORG_SETTINGS: OrgSettings = { selected: [], gitlabHosts: [], accountHosts: [], ...DEFAULT_CLAUDE_STEPS };
 
 /** Settings saved before effort came: one model and cap for both steps. */
 function fromOneModel(value: unknown): unknown {
@@ -96,12 +96,23 @@ function fromOneModel(value: unknown): unknown {
   return { ...v, read: step('read'), access: step('access') };
 }
 
+/**
+ * Settings from v1.4 and v1.5 kept one flag for every host. It was set once
+ * the GitHub CLI was signed in, so it stands for github.com: GitLab hosts get
+ * their account ticked when glab signs in.
+ */
+function fromOneFlag(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const { accountsTicked, ...v } = value as Record<string, unknown>;
+  return v.accountHosts === undefined && accountsTicked === true ? { ...v, accountHosts: ['github.com'] } : v;
+}
+
 export const orgSettingsInput = z.preprocess(
-  fromOneModel,
+  (value) => fromOneFlag(fromOneModel(value)),
   z.object({
     selected: z.array(orgName).max(40),
     gitlabHosts: z.array(gitlabHost).max(10).default([]),
-    accountsTicked: z.boolean().default(false),
+    accountHosts: z.array(hostname).max(20).default([]),
     read: claudeRun.default(DEFAULT_CLAUDE_STEPS.read),
     access: claudeRun.default(DEFAULT_CLAUDE_STEPS.access),
   }),

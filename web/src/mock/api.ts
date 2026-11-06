@@ -147,7 +147,7 @@ function advance(job: JobView, list: 'steps' | 'undo', failAt?: string, outputs:
 
 // An organization in the mockup: its repos, what Claude reads from one, and the dumps its links point to.
 const MOCK_DUMP_UPLOAD = '00000000-0000-4000-8000-0000000000d1';
-let mockOrgSettings: OrgSettings = { selected: ['acme', 'gitlab.com/acme-web', 'gitlab.com/~shared'], gitlabHosts: ['git.acme.test'], accountsTicked: true, ...structuredClone(DEFAULT_CLAUDE_STEPS) };
+let mockOrgSettings: OrgSettings = { selected: ['acme', 'gitlab.com/acme-web', 'gitlab.com/~shared'], gitlabHosts: ['git.acme.test'], accountHosts: ['github.com', 'gitlab.com'], ...structuredClone(DEFAULT_CLAUDE_STEPS) };
 // A GitLab group in the mockup, its projects in subgroups: two of one name, kept apart by their path.
 const mockGitlabRepos: OrgRepo[] = [
   { org: 'gitlab.com/acme-web', name: 'site', fullName: 'acme-web/clients/site', description: 'Client site on WordPress', sshUrl: 'git@gitlab.com:acme-web/clients/site.git', url: 'https://gitlab.com/acme-web/clients/site', defaultBranch: 'main', pushedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), archived: false, kind: 'site' },

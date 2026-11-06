@@ -80,7 +80,7 @@ const ago = (iso: string) => {
   return text === 'now' ? 'just now' : text;
 };
 
-export function OrgStep({ state, setState, status, blank }: { state: WizardState; setState: SetState; status: OrgStatus | null; blank: WizardState }) {
+export function OrgStep({ state, setState, status, blank, onRecheck }: { state: WizardState; setState: SetState; status: OrgStatus | null; blank: WizardState; onRecheck?: () => void }) {
   const org = state.org as OrgState;
   const [query, setQuery] = useState('');
   const [sitesOnly, setSitesOnly] = useState(true);
@@ -180,7 +180,13 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
               </div>
             )}
           </div>
-          {anySignedIn && (editing || selected.length === 0) && <OrgPicker status={status} />}
+          {anySignedIn && !editing && selected.length > 0 && !status.glab.hosts.some((h) => h.signedIn) && (
+            <p className="-mt-2 text-xs text-muted-foreground">
+              GitLab repos list here once the GitLab CLI is {status.glab.installed ? 'signed in' : 'installed and signed in'}:{' '}
+              <button type="button" className="font-medium text-primary hover:underline" onClick={() => setEditing(true)}>how</button>.
+            </p>
+          )}
+          {anySignedIn && (editing || selected.length === 0) && <OrgPicker status={status} {...(onRecheck ? { onRecheck } : {})} />}
           {current && (
             <>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -255,6 +261,48 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
 
 /** The Claude Code step still ahead for this repo: none once it was read and its links checked or skipped. */
 const nextClaudeStep = (org: OrgState): ClaudeStep | null => (org.read.status !== 'done' ? 'read' : org.access.status === 'done' || org.access.status === 'skipped' ? null : 'access');
+
+/**
+ * What each host still needs before it lists anything: the CLI, or its
+ * sign-in. Cloning needs neither, only your SSH key, so this is only for
+ * listing your repos, the ones shared with you and your groups.
+ */
+function CliHints({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => void }) {
+  const lines: Array<{ host: string; text: ReactNode }> = [];
+  if (!status.gh.signedIn) {
+    lines.push({
+      host: 'GitHub',
+      text: status.gh.installed
+        ? <>not signed in: run <code className="font-mono">gh auth login</code> in a terminal.</>
+        : <>the GitHub CLI is not installed: <code className="font-mono">sudo apt install gh</code>, then <code className="font-mono">gh auth login</code>.</>,
+    });
+  }
+  if (!status.glab.installed) {
+    lines.push({
+      host: 'GitLab',
+      text: <>the GitLab CLI is not installed: <code className="font-mono">sudo apt install glab</code>, then <code className="font-mono">glab auth login</code>. It lists your GitLab projects, the ones shared with you and your groups.</>,
+    });
+  } else {
+    for (const h of status.glab.hosts.filter((x) => !x.signedIn)) {
+      const login = `glab auth login${h.host === 'gitlab.com' ? '' : ` --hostname ${h.host}`}`;
+      lines.push({ host: h.host, text: <>{h.problem && !/not signed in/.test(h.problem) ? `${h.problem}. ` : 'not signed in: '}run <code className="font-mono">{login}</code> in a terminal.</> });
+    }
+  }
+  if (lines.length === 0) return null;
+  return (
+    <div className="grid gap-1.5 rounded-md border border-warning/40 bg-warning/6 px-3 py-2 text-xs">
+      {lines.map((l) => (
+        <p key={l.host}>
+          <span className="font-medium">{l.host}:</span> {l.text}
+        </p>
+      ))}
+      <p className="text-muted-foreground">
+        Cloning needs only your SSH key; these only list repos.{' '}
+        {onRecheck && <button type="button" className="font-medium text-primary hover:underline" onClick={onRecheck}>Check again</button>}
+      </p>
+    </div>
+  );
+}
 
 /** Signed in to the CLI that lists this namespace: gh for a GitHub organization, glab on the group's host. */
 function cliSignedIn(status: OrgStatus, ref: string): boolean {
@@ -350,7 +398,7 @@ function OrgBranch({ url, defaultBranch, branch, setState }: { url: string; defa
  * Which of your organizations and groups the panel scans, from every CLI that
  * is signed in, and your own GitLab hosts; saved in the panel's settings.
  */
-function OrgPicker({ status }: { status: OrgStatus }) {
+function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => void }) {
   const orgs = useAsync(() => api.orgOrgs(), []);
   const [settings, setSettings] = useState(status.settings);
   const [saving, setSaving] = useState(false);
@@ -386,6 +434,7 @@ function OrgPicker({ status }: { status: OrgStatus }) {
         <p className="font-medium">Organizations and groups to scan {saving && <LoaderCircle className="inline size-3.5 animate-spin" />}</p>
         <p className="text-muted-foreground">The GitHub organizations and GitLab groups you belong to, your own accounts, and the repos shared with you: ones you were added to outside those. A GitLab group is scanned with its subgroups.</p>
       </div>
+      <CliHints status={status} {...(onRecheck ? { onRecheck } : {})} />
       {orgs.error && <p role="alert" className="text-danger">{orgs.error}</p>}
       {orgs.data?.problems.map((p) => <p key={p} role="alert" className="text-warning">{p}</p>)}
       {[...byHost].map(([host, list]) => (

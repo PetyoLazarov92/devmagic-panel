@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.5.0-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.5.1-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -419,8 +419,8 @@ animated border: that sign-in is what reaches the linked tasks and files.
    under Your own GitLab hosts; tick the ones to scan. A GitLab group is
    scanned with its subgroups, so only the top group you belong to is offered,
    and a project shows with its path in the group (`clients/site`). Your own
-   account on each host is listed too, ticked for you the first time a CLI is
-   signed in, and **Shared with you** lists the repos you were added to outside
+   account on each host is listed too, ticked for you once per host, the first
+   time that host's CLI is signed in, and **Shared with you** lists the repos you were added to outside
    those: GitHub repos you collaborate on, GitLab projects outside your groups.
    The panel only runs `gh` and `glab`; it never reads their tokens. Their repos
    show what each holds (WordPress site, theme, plugin) and whether this

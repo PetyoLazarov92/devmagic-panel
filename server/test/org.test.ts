@@ -594,17 +594,30 @@ describe('Claude Code steps as jobs', () => {
 });
 
 describe('organization settings', () => {
-  it('tick your own accounts the first time a CLI is signed in, and never after you saved a list', () => {
-    const glab = { installed: true, hosts: [{ host: 'gitlab.com', installed: true, signedIn: true, user: 'alex' }, { host: 'git.acme.test', installed: true, signedIn: false }] };
+  it('tick your own account once per host, the first time its CLI is signed in, next to what you picked', () => {
+    const glab = (signedIn: boolean) => ({ installed: true, hosts: [{ host: 'gitlab.com', installed: true, signedIn, ...(signedIn ? { user: 'alex' } : {}) }, { host: 'git.acme.test', installed: true, signedIn: false }] });
     const gh = { installed: true, signedIn: true, user: 'alex' };
-    expect(withAccountsTicked(DEFAULT_ORG_SETTINGS, gh, glab)).toMatchObject({ selected: ['alex', 'gitlab.com/alex'], accountsTicked: true });
+    // GitHub first, while glab is not signed in yet.
+    const first = withAccountsTicked({ ...DEFAULT_ORG_SETTINGS, selected: ['acme'] }, gh, glab(false));
+    expect(first).toMatchObject({ selected: ['acme', 'alex'], accountHosts: ['github.com'] });
+    // glab signs in later: the GitLab account is ticked then, on its own.
+    const later = withAccountsTicked(first as typeof DEFAULT_ORG_SETTINGS, gh, glab(true));
+    expect(later).toMatchObject({ selected: ['acme', 'alex', 'gitlab.com/alex'], accountHosts: ['github.com', 'gitlab.com'] });
+    // Unticked afterwards, it stays unticked.
+    expect(withAccountsTicked({ ...(later as typeof DEFAULT_ORG_SETTINGS), selected: ['acme'] }, gh, glab(true))).toBeNull();
     expect(withAccountsTicked(DEFAULT_ORG_SETTINGS, { installed: false, signedIn: false }, { installed: false, hosts: [] })).toBeNull();
-    expect(withAccountsTicked({ ...DEFAULT_ORG_SETTINGS, accountsTicked: true }, gh, glab)).toBeNull();
-    expect(withAccountsTicked({ ...DEFAULT_ORG_SETTINGS, selected: ['acme'] }, gh, glab)).toBeNull();
+  });
+
+  it('read the one flag of v1.4 and v1.5 as github.com done, so a GitLab account is still ticked when glab signs in', () => {
+    const old = orgSettingsInput.parse({ selected: ['alex'], accountsTicked: true });
+    expect(old.accountHosts).toEqual(['github.com']);
+    expect(old).not.toHaveProperty('accountsTicked');
+    expect(withAccountsTicked(old, { installed: true, signedIn: true, user: 'alex' }, { installed: true, hosts: [{ host: 'gitlab.com', installed: true, signedIn: true, user: 'alex' }] })).toMatchObject({ selected: ['alex', 'gitlab.com/alex'] });
+    expect(orgSettingsInput.parse({ selected: [], accountsTicked: false }).accountHosts).toEqual([]);
   });
 
   it('start from the recommended model and effort for each step', () => {
-    expect(orgSettingsInput.parse({ selected: [] })).toEqual({ selected: [], gitlabHosts: [], accountsTicked: false, ...DEFAULT_CLAUDE_STEPS });
+    expect(orgSettingsInput.parse({ selected: [] })).toEqual({ selected: [], gitlabHosts: [], accountHosts: [], ...DEFAULT_CLAUDE_STEPS });
     expect(DEFAULT_CLAUDE_STEPS).toEqual({ read: { model: 'sonnet', effort: 'medium', budgetUsd: 0.5 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } });
   });
 
@@ -612,7 +625,7 @@ describe('organization settings', () => {
     expect(orgSettingsInput.parse({ selected: ['acme'], model: 'opus', budgetUsd: 1 })).toEqual({
       selected: ['acme'],
       gitlabHosts: [],
-      accountsTicked: false,
+      accountHosts: [],
       read: { model: 'opus', effort: 'medium', budgetUsd: 1 },
       access: { model: 'opus', effort: 'low', budgetUsd: 1 },
     });

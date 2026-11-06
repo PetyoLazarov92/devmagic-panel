@@ -29,15 +29,20 @@ export function writeOrgSettings(file: string, settings: OrgSettings): void {
 }
 
 /**
- * The first time a CLI is signed in and nothing is picked, your own accounts
- * on each signed-in host are ticked, once; after that, or once you saved a
- * list, the list is yours. Null when nothing changes.
+ * Your own account on each host is ticked once, the first time that host's
+ * CLI is signed in: GitHub through gh, gitlab.com and your own GitLab hosts
+ * through glab, each on its own. The host is noted, so an account you untick
+ * stays unticked. Null when nothing changes.
  */
 export function withAccountsTicked(settings: OrgSettings, gh: OrgStatus['gh'], glab: OrgStatus['glab']): OrgSettings | null {
-  if (settings.accountsTicked || settings.selected.length > 0) return null;
-  const mine = [...(gh.signedIn && gh.user ? [gh.user] : []), ...glab.hosts.flatMap((h) => (h.signedIn && h.user ? [`${h.host}/${h.user}`] : []))];
-  const parsed = orgSettingsInput.safeParse({ ...settings, selected: mine, accountsTicked: true });
-  return mine.length > 0 && parsed.success ? parsed.data : null;
+  const signedIn = [
+    ...(gh.signedIn && gh.user ? [{ host: 'github.com', ref: gh.user }] : []),
+    ...glab.hosts.flatMap((h) => (h.signedIn && h.user ? [{ host: h.host, ref: `${h.host}/${h.user}` }] : [])),
+  ].filter((a) => !settings.accountHosts.includes(a.host));
+  if (signedIn.length === 0) return null;
+  const selected = [...settings.selected, ...signedIn.map((a) => a.ref).filter((ref) => !settings.selected.includes(ref))];
+  const parsed = orgSettingsInput.safeParse({ ...settings, selected, accountHosts: [...settings.accountHosts, ...signedIn.map((a) => a.host)] });
+  return parsed.success ? parsed.data : null;
 }
 
 export interface OrgRouteDeps {
@@ -105,8 +110,9 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
   api.put<{ Body: unknown }>('/api/org/settings', async (request, reply): Promise<OrgSettings | undefined> => {
     const parsed = orgSettingsInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Not organization settings' });
-    // A list you saved is yours: your accounts are never ticked again for you.
-    const settings = { ...parsed.data, accountsTicked: true };
+    // The hosts your account was ticked on stay noted, whatever the page sent, so an account you untick stays unticked.
+    const stored = readOrgSettings(deps.settingsFile).accountHosts;
+    const settings = { ...parsed.data, accountHosts: [...new Set([...stored, ...parsed.data.accountHosts])] };
     writeOrgSettings(deps.settingsFile, settings);
     return settings;
   });
