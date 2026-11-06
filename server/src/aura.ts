@@ -6,6 +6,7 @@ import { isListening } from './environment.js';
 import type { Executor } from './exec.js';
 import { missingLocalConstants } from './local-constants.js';
 import { siteKey } from './sites/site-actions.js';
+import { parseCrontab, readCrontab, tasksOf } from './cron.js';
 
 /** Same lines as DMP_HOSTS_BEGIN and DMP_HOSTS_END in scripts/lib/hosts.sh. */
 const HOSTS_BEGIN = '# BEGIN devmagic-panel (managed by the panel, edit sites there)';
@@ -35,6 +36,18 @@ export interface AuraContext {
   localConstants?: readonly LocalConstant[];
   /** A site's compatibility scans (by its key, like local.acme.com@learn), kept by the panel. */
   compatScans?: (key: string) => CompatScan[];
+  /** The sites (domain and path) cron runs the WP-Cron of; null when the crontab cannot be read. */
+  wpCronTasks?: () => Promise<Set<string> | null>;
+}
+
+/** The sites the panel's wp-cron tasks run, as domain and path; null when the crontab cannot be read. */
+export async function wpCronSites(exec: Executor): Promise<Set<string> | null> {
+  try {
+    const tasks = tasksOf(parseCrontab(await readCrontab(exec)));
+    return new Set(tasks.flatMap((t) => (t.enabled && t.task.kind === 'wp-cron' ? [`${t.task.domain}${t.task.path ?? ''}`] : [])));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -72,6 +85,24 @@ export async function readAura(ctx: AuraContext, sites: Site[]): Promise<AuraRep
       domain: site.domain,
       ...(site.path ? { path: site.path } : {}),
     });
+  }
+
+  // DISABLE_WP_CRON without a task of the panel that runs it: the site's scheduled events never run.
+  const offSites = sites.filter((s) => s.constants?.some((c) => c.name === 'DISABLE_WP_CRON' && c.value === true));
+  const running = offSites.length ? await ctx.wpCronTasks?.() : null;
+  if (running) {
+    for (const site of offSites) {
+      if (running.has(`${site.domain}${site.path ?? ''}`)) continue;
+      items.push({
+        id: 'wpcron.notRunning',
+        status: 'warn',
+        text: "DISABLE_WP_CRON is true and no cron task of the panel runs this site's WP-Cron, so its scheduled events never run",
+        hint: 'A cron line of your own may run it: then this is fine. Otherwise run it from cron, or remove DISABLE_WP_CRON from wp-config.php.',
+        fix: { action: 'cron.setSiteWpCron', input: { domain: site.domain, ...(site.path ? { path: site.path } : {}), fromCron: true }, label: 'Run WP-Cron from cron' },
+        domain: site.domain,
+        ...(site.path ? { path: site.path } : {}),
+      });
+    }
   }
 
   const hostsText = existsSync(ctx.config.HOSTS_FILE) ? readFileSync(ctx.config.HOSTS_FILE, 'utf8') : '';

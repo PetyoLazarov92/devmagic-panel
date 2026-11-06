@@ -176,6 +176,13 @@ export function readTools(deps: ChatDeps, looked: string[]) {
 /** Tool names cannot hold dots: site.clearCache becomes site_clearCache. */
 export const toolNameFor = (id: ActionId) => id.replace('.', '_');
 
+/** A cron task the assistant proposes never runs a program of its choice: only the typed kinds. */
+function assistantInput(id: ActionId): z.ZodType {
+  const input = actions[id].input as z.ZodType;
+  if (id !== 'cron.add' && id !== 'cron.update') return input;
+  return input.refine((v) => (v as { task?: { kind?: string } }).task?.kind !== 'program', { message: 'The assistant may not propose a program task', path: ['task'] });
+}
+
 /**
  * One tool per registry action, built from the action's own schema. Calling
  * one only adds a proposal card; the card runs the action through the same
@@ -192,7 +199,7 @@ export function actionTools(
       return betaZodTool({
         name: toolNameFor(id),
         description: `${action.title}. ${action.description} Calling this only shows the user a card with a Run button; it does not run anything.`,
-        inputSchema: z.object({ input: action.input, why: z.string().max(300).describe('One line: why this helps') }),
+        inputSchema: z.object({ input: assistantInput(id), why: z.string().max(300).describe('One line: why this helps') }),
         run: async ({ input, why }) => {
           propose({ id: randomUUID(), action: id, title: action.title, description: action.description, input: input as Record<string, unknown>, why });
           return reply;

@@ -3,6 +3,7 @@ import { apacheModuleLock, apacheModuleName } from './apache.js';
 import { mysqlAccount, mysqlBackupName, mysqlDatabaseName } from './mysql.js';
 import { NETWORK_PATH } from './network.js';
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
+import { cronSchedule } from './cron.js';
 
 /**
  * The action registry: every change the panel can make, defined once.
@@ -331,6 +332,109 @@ export const CLEAN_LOG_TABLES = [
   'uap_api_log_response', 'uap_tokens_log',
 ] as const;
 
+// ── cron ────────────────────────────────────────────────────
+
+/** A task of the panel's block in the user's crontab: six letters and digits, on its line. */
+export const cronTaskId = z.string().regex(/^[a-z0-9]{6}$/, 'A task id like k3f9q2');
+/** A task's name, on the comment line above it in the crontab. */
+export const cronTitle = z.string().trim().min(1, 'Give the task a name').max(80).regex(/^[^\x00-\x1f\x7f]+$/, 'One line, no control characters');
+/** A word that goes on a crontab line as it is: nothing /bin/sh reads as syntax. */
+export const CRON_WORD = /^[A-Za-z0-9._/:=@,+-]{1,200}$/;
+
+/** WP-CLI's own commands: a site's own command is anything else that the site has. */
+export const WP_CLI_BUILTIN = [
+  'cache', 'cap', 'cli', 'comment', 'config', 'core', 'cron', 'db', 'dist-archive', 'embed', 'eval', 'eval-file', 'export', 'find', 'help', 'i18n', 'import',
+  'language', 'maintenance-mode', 'media', 'menu', 'network', 'option', 'package', 'plugin', 'post', 'post-type', 'profile', 'rewrite', 'role', 'scaffold',
+  'search-replace', 'server', 'shell', 'sidebar', 'site', 'super-admin', 'taxonomy', 'term', 'theme', 'transient', 'user', 'widget',
+] as const;
+/** The WP-CLI commands a task may run, besides a site's own. */
+export const WP_CLI_SCHEDULED = [['action-scheduler', 'run'], ['cron', 'event', 'run'], ['transient', 'delete'], ['cache', 'flush']] as const;
+/** WP-CLI's global options that load or run code, or point it at another site. */
+const WP_CLI_REFUSED_OPTIONS = ['--exec', '--require', '--path', '--url', '--ssh', '--http', '--context'];
+
+/** Why a task may not run this WP-CLI command, or null. Whether a site has its own command is checked on the site. */
+export function wpCliCommandProblem(words: readonly string[]): string | null {
+  const first = words[0] ?? '';
+  const option = words.find((w) => WP_CLI_REFUSED_OPTIONS.some((o) => w === o || w.startsWith(`${o}=`)));
+  if (option) return `${option.split('=')[0]} is not allowed in a task`;
+  if (first.startsWith('-')) return 'Start with the command, like action-scheduler run';
+  if (WP_CLI_SCHEDULED.some((allowed) => allowed.every((w, i) => words[i] === w))) {
+    if (first === 'cron' && !words[3]) return 'cron event run needs the hook to run';
+    return null;
+  }
+  if ((WP_CLI_BUILTIN as readonly string[]).includes(first)) {
+    return `wp ${words.slice(0, 2).join(' ')} is not one a task may run: ${WP_CLI_SCHEDULED.map((c) => c.join(' ')).join(', ')}, or a command of the site's own`;
+  }
+  return null;
+}
+
+/** Whether the WP-CLI command is a site's own (a plugin's or the theme's), which the site must have. */
+export const isSiteWpCommand = (words: readonly string[]) => !(WP_CLI_BUILTIN as readonly string[]).includes(words[0] ?? '') && words[0] !== 'action-scheduler';
+
+/** A file in the site's folder, relative to it. */
+const siteFile = z
+  .string()
+  .max(300)
+  .regex(/^(?!\/)[A-Za-z0-9._/-]+\.php$/, 'A PHP file in the site, like wp-content/cron/sync.php')
+  .refine((f) => !f.split('/').some((part) => part === '..' || part === '.' || part === ''), 'A PHP file in the site, like wp-content/cron/sync.php');
+
+const cronSite = { domain: localName, path: sitePath };
+
+/**
+ * What a task of the panel runs. The runner runs it with an argument list,
+ * never through a shell, and checks it again with this schema each time.
+ */
+export const cronTask = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('wp-cron'), ...cronSite }),
+  z
+    .object({ kind: z.literal('wp-cli'), ...cronSite, command: z.array(z.string().regex(CRON_WORD, 'Letters, digits and . _ / : = @ , + - only')).min(1).max(20) })
+    .superRefine((v, ctx) => {
+      const problem = wpCliCommandProblem(v.command);
+      if (problem) ctx.addIssue({ code: 'custom', path: ['command'], message: problem });
+    }),
+  z.object({ kind: z.literal('php-script'), ...cronSite, file: siteFile }),
+  z.object({
+    kind: z.literal('url'),
+    url: z
+      .string()
+      .max(500)
+      .refine((u) => {
+        try {
+          const url = new URL(u);
+          return (url.protocol === 'https:' || url.protocol === 'http:') && isLocalName(url.hostname) && !url.username && !url.password;
+        } catch {
+          return false;
+        }
+      }, 'An address on a local name, like https://local.acme.com/wp-cron.php'),
+  }),
+  z.object({
+    kind: z.literal('program'),
+    program: z
+      .string()
+      .max(300)
+      .regex(/^\/[A-Za-z0-9._/+-]+$/, 'The full path of a program, like /home/alex/bin/sync.sh')
+      .refine((p) => !p.split('/').slice(1).some((part) => part === '..' || part === '.' || part === ''), 'The full path of a program, like /home/alex/bin/sync.sh'),
+    args: z.array(z.string().max(500).regex(/^[^\0\r\n]*$/, 'One line each')).max(20).default([]),
+  }),
+]);
+export type CronTask = z.output<typeof cronTask>;
+export type CronTaskKind = CronTask['kind'];
+
+/** A saved copy of the crontab, or of a site's WP-Cron events, taken before a change. */
+export const cronBackupName = z.string().regex(/^(crontab|wp-cron-[a-z0-9.-]{1,253})-\d{8}-\d{6}-\d{3}\.(txt|json)$/, 'A saved copy');
+/** A network site's address, for --url. */
+const wpSiteUrl = z.string().url().max(500).optional();
+/** A hook of a WP-Cron event. */
+export const wpCronHook = z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_.:/\\-]{0,189}$/, 'A hook like acme_sync_orders');
+
+const cronFields = {
+  title: cronTitle,
+  schedule: cronSchedule,
+  task: cronTask,
+  enabled: z.boolean().default(true),
+  /** The run is stopped after this long. */
+  timeoutMinutes: z.number().int().min(1).max(60).default(10),
+};
 
 export const APACHE_MODULES = ['ssl', 'rewrite', 'headers', 'proxy', 'proxy_http', 'proxy_wstunnel'] as const;
 
@@ -793,6 +897,75 @@ export const actions = {
     description: 'Deletes the mail Mailpit caught from one site, or all of it when no domain is given.',
     changesSystem: true,
     input: z.object({ domain: localName.optional() }),
+  },
+  'cron.add': {
+    title: 'Add a cron task',
+    description:
+      "Adds a task to the panel's block in your crontab, which cron runs as you: a site's WP-Cron, a WP-CLI command (action-scheduler run, cron event run <hook>, transient delete, cache flush, or the site's own command), a PHP file in the site, a local URL, or a program with arguments. The panel's runner runs it without a shell and keeps its output. Lines you wrote yourself are never changed. Undo puts the block back as it was.",
+    changesSystem: true,
+    input: z.object(cronFields),
+  },
+  'cron.update': {
+    title: 'Change a cron task',
+    description: "Changes a task of the panel's block in your crontab: its name, schedule, what it runs, whether it is on and how long it may take. Its run history stays.",
+    changesSystem: true,
+    input: z.object({ id: cronTaskId, ...cronFields }),
+  },
+  'cron.setEnabled': {
+    title: 'Turn a cron task on or off',
+    description: 'Turns a task of the panel on or off. An off task stays in the crontab, commented out, with its name and history.',
+    changesSystem: true,
+    input: z.object({ id: cronTaskId, enabled: z.boolean() }),
+  },
+  'cron.remove': {
+    title: 'Remove a cron task',
+    description: "Removes a task from the panel's block in your crontab. The crontab is saved first, so Undo puts the task back.",
+    changesSystem: true,
+    input: z.object({ id: cronTaskId }),
+  },
+  'cron.runNow': {
+    title: 'Run a cron task now',
+    description: "Runs a task of the panel now, the way cron runs it, as a job with its output; recorded in the task's history.",
+    changesSystem: true,
+    input: z.object({ id: cronTaskId }),
+  },
+  'cron.undo': {
+    title: 'Undo a crontab change',
+    description: "Puts the panel's block of your crontab back from the copy saved before a change. Lines outside the block, yours, stay as they are now.",
+    changesSystem: true,
+    input: z.object({ backup: cronBackupName }),
+  },
+  'cron.clearRuns': {
+    title: "Clear a cron task's history",
+    description: 'Deletes the run history and output the panel kept for one task.',
+    changesSystem: true,
+    input: z.object({ id: cronTaskId }),
+  },
+  'cron.setSiteWpCron': {
+    title: 'Run WP-Cron from cron',
+    description:
+      "On: adds a task that runs the site's due WP-Cron events from cron (every 5 minutes unless a schedule is given) and sets DISABLE_WP_CRON to true, so page loads stop running it. Off: removes that task and DISABLE_WP_CRON from wp-config.php, so page loads run it again. Undo takes back both.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, fromCron: z.boolean(), schedule: cronSchedule.default('*/5 * * * *') }),
+  },
+  'wpcron.run': {
+    title: 'Run a WP-Cron event now',
+    description: "Runs a site's WP-Cron events of one hook now with wp cron event run, as WordPress would run them when due.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, url: wpSiteUrl, hook: wpCronHook }),
+  },
+  'wpcron.delete': {
+    title: 'Delete a WP-Cron event',
+    description:
+      "Deletes exactly one scheduled WP-Cron event of a site (its hook, time and arguments), after saving the site's events, so Undo puts it back. A plugin that schedules the event may schedule it again.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, url: wpSiteUrl, hook: wpCronHook, time: z.number().int().min(0), sig: z.string().regex(/^[0-9a-f]{32}$/, 'An event signature') }),
+  },
+  'wpcron.undo': {
+    title: 'Put a deleted WP-Cron event back',
+    description: "Puts back the WP-Cron events a delete removed, from the copy saved before it, next to the events scheduled since.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, url: wpSiteUrl, backup: cronBackupName }),
   },
   'site.clearCache': {
     title: 'Clear caches',

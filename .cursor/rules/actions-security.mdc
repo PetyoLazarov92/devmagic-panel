@@ -51,5 +51,15 @@ alwaysApply: true
   restores files: Apache config can run programs as root (piped logs). That is
   why `dmp-restore` is outside the sudoers rule and checks every archive member,
   link and file type before writing.
+- Cron: the panel writes only its block of the user's crontab, through
+  `crontab -` with stdin. A task line holds the panel's node, `cli.js
+  cron-run` and words matching `CRON_WORD` (letters, digits and `._/:=@,+-`),
+  so the `/bin/sh` cron uses reads no syntax in it; text from a person goes
+  on the comment line or in base64. The runner checks the arguments with the
+  registry's `cronTask` again and runs them with the `Executor`. WP-CLI tasks
+  are limited to the scheduled commands and a site's own (never `eval`,
+  `db`, `--exec` or `--require`), and the assistant never proposes a
+  `program` task. System cron is read only: never a `dmp-root` command that
+  writes `/etc/cron.d` or root's crontab.
 - Never touch what the panel did not create: vhosts without the marker line,
   hosts lines outside the block, wpcore's config.

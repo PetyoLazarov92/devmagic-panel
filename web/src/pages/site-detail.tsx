@@ -30,17 +30,18 @@ import { Link, navigate, useQueryParam } from '@/lib/router';
 import { useReloadWhileBusy } from '@/lib/jobs';
 import { useAsync } from '@/lib/use-async';
 import { ConfigTab, LocalConstants, SaltsConfirm, saltsSummary, setConstant } from '@/pages/site-config';
+import { CronTab } from '@/pages/site-cron';
 import { DatabaseTab } from '@/pages/site-database';
 import { PhpTab } from '@/pages/site-php';
 import { PluginsTab } from '@/pages/site-plugins';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { cn } from '@/lib/utils';
 
-type Tab = 'overview' | 'plugins' | 'php' | 'logs' | 'database' | 'config' | 'domains';
+type Tab = 'overview' | 'plugins' | 'php' | 'logs' | 'cron' | 'database' | 'config' | 'domains';
 
 /** The tabs a site has: Plugins needs WordPress, Database a database, Config wp-config.php; a site under a path shares its parent's domains. */
 function siteTabs(site: Site): Tab[] {
-  return ['overview', ...(site.core.kind !== 'none' ? ['plugins' as const, 'php' as const] : []), 'logs', ...(site.db ? ['database' as const] : []), ...(site.constants ? ['config' as const] : []), ...(site.path ? [] : ['domains' as const])];
+  return ['overview', ...(site.core.kind !== 'none' ? ['plugins' as const, 'php' as const] : []), 'logs', ...(site.core.kind !== 'none' ? ['cron' as const] : []), ...(site.db ? ['database' as const] : []), ...(site.constants ? ['config' as const] : []), ...(site.path ? [] : ['domains' as const])];
 }
 
 /** A tab's address: the site's page with ?tab=, nothing for Overview. Not a path segment, which a site under that path would own. */
@@ -55,6 +56,11 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
   const under = (all.data ?? []).filter((s) => s.domain === domain && s.path);
   const requested = useQueryParam('tab');
   const [removing, setRemoving] = useState(false);
+  // The WordPress site's WP-Cron, for the Cron tab and its count; url picks a network site.
+  const [cronUrl, setCronUrl] = useState<string | undefined>(undefined);
+  const wordpress = Boolean(site && site.core.kind !== 'none' && !site.installing);
+  const wpCron = useAsync(() => (wordpress ? api.wpCron(domain, path, cronUrl) : Promise.resolve(null)), [domain, path, cronUrl, wordpress]);
+  const reloadCron = (url?: string) => (url === cronUrl ? wpCron.reload() : setCronUrl(url));
   useReloadWhileBusy(Boolean(site?.installing || site?.busy), reload);
   // The tab is in the address, so a reload or a link opens it; one this site lacks shows Overview.
   const tab: Tab = site && siteTabs(site).includes(requested as Tab) ? (requested as Tab) : 'overview';
@@ -91,6 +97,8 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
   }
 
   const problems = (logs.data?.lines ?? []).filter((l) => l.level === 'fatal' || l.level === 'error').length;
+  // Late events, and the panel's cron tasks for the site whose last run failed.
+  const cronProblems = wpCron.data ? wpCron.data.overdue + [wpCron.data.task, ...wpCron.data.tasks].filter((t) => t?.last?.status === 'failed').length : 0;
 
   return (
     <div className="pt-2">
@@ -177,6 +185,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
           { value: 'overview', label: 'Overview' },
           ...(site.core.kind !== 'none' ? [{ value: 'plugins' as const, label: 'Plugins' }, { value: 'php' as const, label: 'PHP' }] : []),
           { value: 'logs', label: 'Logs', ...(problems ? { count: problems } : {}) },
+          ...(site.core.kind !== 'none' ? [{ value: 'cron' as const, label: 'Cron', ...(cronProblems ? { count: cronProblems } : {}) }] : []),
           ...(site.db ? [{ value: 'database' as const, label: 'Database' }] : []),
           ...(site.constants ? [{ value: 'config' as const, label: 'Config', count: site.constants.length }] : []),
           // A site under a path shares its parent's domains and certificate.
@@ -189,6 +198,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         {tab === 'plugins' && <PluginsTab site={site} />}
         {tab === 'php' && <PhpTab site={site} />}
         {tab === 'logs' && <LogsTab site={site} />}
+        {tab === 'cron' && <CronTab site={site} report={wpCron} onReload={reloadCron} />}
         {tab === 'database' && <DatabaseTab site={site} />}
         {tab === 'config' && <ConfigTab site={site} onChanged={reload} />}
         {tab === 'domains' && <DomainsTab site={site} onChanged={reload} />}

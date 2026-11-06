@@ -164,6 +164,17 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       Panel-made folders are listed in the root-owned registry
       `$STATE_DIR/sites/<domain>` (path and device:inode), so nothing of the
       panel's sits in the folder.
+    - **Cron is your crontab only**: the panel's tasks live in one marked
+      block of the panel user's crontab (`server/src/cron.ts`, written with
+      `crontab -` and the text on stdin), every other line stays as it is,
+      and each change saves the crontab to `BACKUP_DIR` first for Undo.
+      A task is a typed kind from the registry (`cronTask`), and its line
+      holds only the panel's node, `cli.js cron-run` and words matching
+      `CRON_WORD`, never text from a person (a program's arguments go in
+      base64): the runner checks them again and runs them without a shell.
+      System cron (`/etc/cron.d`, root's crontab) is only read: writing it
+      would make anything running as the user root, so never through
+      `dmp-root`. A site's WP-Cron runs from cron only when you switch it on.
     - **Every change can be undone** with `dmp-restore`, which restores a
       backup. It is not in the sudoers rule (it writes Apache config, which can
       run programs as root), so it always asks for a password.

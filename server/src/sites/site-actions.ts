@@ -25,7 +25,7 @@ export interface SiteActionContext {
 
 export interface HandlerOutcome {
   results: ExecResult[];
-  data?: { url?: string; jobId?: string };
+  data?: { url?: string; jobId?: string; backup?: string };
   /** The action started a job that records its own outcome. */
   detached?: boolean;
 }

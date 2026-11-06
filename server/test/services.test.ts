@@ -26,12 +26,15 @@ describe('servicesReport', () => {
       'mysql --version': { stdout: 'mysql  Ver 15.1 Distrib 10.11.8-MariaDB\n' },
       'php -r': { stdout: '8.3.6' },
       'ss -ltnH': { stdout: 'LISTEN 0 511 *:80 *:*\n' },
+      'systemctl is-active cron': { stdout: 'active\n' },
+      'crontab -l': { stdout: 'MAILTO=alex@example.com\n0 4 * * * /home/alex/bin/backup.sh\n\n# BEGIN devmagic-panel (managed by the panel, edit tasks there)\n# task k3f9q2: WP-Cron\n*/5 * * * * /usr/bin/node --disable-warning=ExperimentalWarning /opt/cli.js cron-run --id=k3f9q2 --timeout=10 wp-cron --site=local.acme.com\n# END devmagic-panel\n' },
     });
     const report = await servicesReport(t.config, exec, () => 0);
     expect(report.services).toEqual([
       { id: 'apache', label: 'Apache', state: 'running', detail: 'Apache/2.4.58', canRestart: true },
       { id: 'mysql', label: 'MariaDB', state: 'stopped', detail: 'mysql  Ver 15.1 Distrib 10.11.8-MariaDB', canRestart: true },
       { id: 'mailpit', label: 'Mailpit', state: 'stopped', detail: 'not listening on port 1025', canRestart: false },
+      { id: 'cron', label: 'Cron', state: 'running', detail: '1 task of the panel, 1 line of your own', canRestart: false },
     ]);
     expect(report.php).toEqual({ apache: '8.3', cli: '8.3.6' });
   });

@@ -51,6 +51,7 @@ function Routes({ path }: { path: string }) {
   }
   if (path === '/services/mysql') return <ServicesPage tab="mysql" />;
   if (path === '/services/apache') return <ServicesPage tab="apache" />;
+  if (path === '/services/cron') return <ServicesPage tab="cron" />;
   if (path === '/environment') return <EnvironmentPage tab="checks" />;
   if (path === '/environment/settings') return <EnvironmentPage tab="settings" />;
   if (path === '/runs') return <RunsPage />;
@@ -119,7 +120,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const known = path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/environment' || path === '/environment/settings' || path === '/runs' || path === '/mail' || path === '/trash' || path === '/jobs' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
+    const known = path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/cron' || path === '/environment' || path === '/environment/settings' || path === '/runs' || path === '/mail' || path === '/trash' || path === '/jobs' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
     // The password reset has its own address, but only while signed out (the effect below sends a signed-in browser on).
     if (!known && path !== RESET_PATH) navigate('/sites');
   }, [path]);

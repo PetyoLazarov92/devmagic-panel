@@ -52,7 +52,7 @@ describe('site.remove', () => {
     const result = await runAction(s.ctx, 'site.remove', { domain: 'local.shop.com', confirm: 'local.shop.com' });
     const view = await settle(s.jobs, result.data?.jobId ?? '');
     expect(view.status).toBe('done');
-    expect(view.steps.map((x) => x.id)).toEqual(['backup', 'export', 'archive', 'remove', 'db']);
+    expect(view.steps.map((x) => x.id)).toEqual(['cron', 'backup', 'export', 'archive', 'remove', 'db']);
     const root = s.calls.filter((c) => c.file === 'sudo').map((c) => c.args.slice(2).join(' '));
     expect(root[0]).toBe('backup');
     expect(root[1]).toMatch(/^trash-site local\.shop\.com \d{8}-\d{6} shop_com shop_com deleted$/);
@@ -101,7 +101,7 @@ describe('site.remove', () => {
     symlinkSync(join(s.config.APACHE_SITES_AVAILABLE, 'local.copy.com-ssl.conf'), join(s.config.APACHE_SITES_ENABLED, 'local.copy.com-ssl.conf'));
     const result = await runAction(s.ctx, 'site.remove', { domain: 'local.shop.com', confirm: 'local.shop.com' });
     const view = await settle(s.jobs, result.data?.jobId ?? '');
-    expect(view.steps.map((x) => x.id)).toEqual(['backup', 'archive', 'remove']);
+    expect(view.steps.map((x) => x.id)).toEqual(['cron', 'backup', 'archive', 'remove']);
     expect(s.calls.find((c) => c.args.includes('trash-site'))?.args.slice(-3)).toEqual(['-', '-', 'deleted']);
     expect(s.calls.some((c) => c.file === 'mysql')).toBe(false);
   });

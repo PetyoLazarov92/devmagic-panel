@@ -3,6 +3,7 @@ import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
+import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -384,6 +385,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
   const snapshot = { id: 'snapshot', label: 'Snapshot the current database first' };
   const accounts = Array.isArray(input.accounts) ? (input.accounts as Array<{ user: string; host: string }>).map((a) => `${a.user}@${a.host}`) : [];
   const plans: Record<string, Array<{ id: string; label: string }>> = {
+    ...(id === 'cron.runNow' ? { 'cron.runNow': [{ id: 'run', label: `Run ${mockCronRunNow(String(input.id))}` }] } : {}),
     'mysql.dropDatabase': [{ id: 'export', label: `Export ${String(input.database)} to the MySQL backups` }, { id: 'drop', label: `Delete database ${String(input.database)}` }],
     'mysql.dropUsers': [{ id: 'save', label: `Save ${accounts.length === 1 ? accounts[0] : `${accounts.length} accounts`} and their rights` }, { id: 'drop', label: `Delete ${accounts.join(', ')}` }],
     'mysql.optimize': [{ id: 'optimize', label: `Optimize the tables of ${String(input.database)}` }],
@@ -809,6 +811,8 @@ export const mockApi: Api = {
   },
   runAction: async (id, input): Promise<ActionRunResult> => {
     await wait(700);
+    const cron = mockCronAction(id, input);
+    if (cron) return cron;
     if (id === 'git.pull') {
       // As git answers with color.ui = always: a diffstat with its colors.
       const g = '\u001b[32m', r = '\u001b[31m', x = '\u001b[m';
@@ -1049,6 +1053,7 @@ export const mockApi: Api = {
         mailpitRunning
           ? { id: 'mailpit', label: 'Mailpit', state: 'running', detail: 'catching mail on port 1025, read it at http://localhost:8025/', canRestart: false }
           : { id: 'mailpit', label: 'Mailpit', state: 'stopped', detail: 'not listening on port 1025', canRestart: false, offer: 'install' },
+        { id: 'cron', label: 'Cron', state: 'running', detail: `${mockCron().tasks.length} tasks of the panel, 1 line of your own`, canRestart: false },
       ],
       php: { apache: '8.3', cli: '8.3.6' },
     };
@@ -1216,6 +1221,31 @@ export const mockApi: Api = {
   networkAdmins: async (domain) => {
     await wait(500);
     return structuredClone(mockNetworkAdmins(domain));
+  },
+  cron: async () => {
+    await wait(300);
+    return mockCron();
+  },
+  cronRuns: async (id) => {
+    await wait(150);
+    return mockCronRuns(id);
+  },
+  cronRun: async (run) => {
+    await wait(100);
+    const found = mockCronRun(run);
+    if (!found) throw new Error('No such run');
+    return structuredClone(found);
+  },
+  wpCron: async (domain, path, url) => {
+    await wait(500);
+    const site = sites.find((s) => s.domain === domain && s.path === path);
+    return mockWpCron(domain, path, url, Boolean(site?.constants?.some((c) => c.name === 'DISABLE_WP_CRON' && c.value === true)));
+  },
+  wpCronTest: async (domain) => {
+    await wait(600);
+    return domain === 'local.biketours.com'
+      ? { ok: false, output: 'Error: WP-Cron spawn returned HTTP status code: 401 Unauthorized' }
+      : { ok: true, output: 'Success: WP-Cron spawning is working as expected.' };
   },
   plugins: async (domain) => {
     await wait(400);

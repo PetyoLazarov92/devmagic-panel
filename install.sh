@@ -1303,6 +1303,34 @@ write_manifest() {
 
 # ── uninstall ────────────────────────────────────────────────
 
+# Same lines as CRON_BEGIN and CRON_END in server/src/cron.ts.
+CRON_BEGIN="# BEGIN devmagic-panel (managed by the panel, edit tasks there)"
+CRON_END="# END devmagic-panel"
+
+# How many tasks the panel's block in your crontab holds; nothing when there is no block.
+crontab_block_tasks() {
+  local text
+  text="$(crontab -l 2>/dev/null)" || return 0
+  grep -qxF "$CRON_BEGIN" <<< "$text" || return 0
+  awk -v b="$CRON_BEGIN" -v e="$CRON_END" '$0 == b { inside = 1; next } $0 == e { inside = 0; next } inside && /cron-run --id=/ { n++ } END { print n + 0 }' <<< "$text"
+}
+
+# The crontab on stdin without the panel's block; your own lines stay as they are.
+crontab_without_block() {
+  awk -v b="$CRON_BEGIN" -v e="$CRON_END" '$0 == b { inside = 1; next } $0 == e { inside = 0; next } !inside'
+}
+
+# Takes the panel's block out of your crontab: its tasks call the panel's runner, gone after this.
+remove_crontab_block() {
+  if (( DRY_RUN )); then
+    printf '   [dry-run] crontab - (your crontab without the devmagic-panel block)\n'
+    return 0
+  fi
+  local text
+  text="$(crontab -l 2>/dev/null)" || return 0
+  crontab_without_block <<< "$text" | crontab - || dmp_warn "could not take the devmagic-panel block out of your crontab: run crontab -e and remove it"
+}
+
 # The installed-files list, or for an install older than the list, what
 # every install puts on the machine.
 uninstall_entries() {
@@ -1467,6 +1495,9 @@ uninstall_main() {
     fi
   fi
   (( ${#site_files[@]} > 0 )) && asked+=("the panel's ${#site_files[@]} files in your sites (Local mode and the login helper)")
+  local cron_tasks
+  cron_tasks="$(crontab_block_tasks)"
+  [[ -n "$cron_tasks" ]] && removed+=("the devmagic-panel block in your crontab  ($cron_tasks task(s) of the panel; your own lines stay)")
 
   dmp_step "Uninstalling devmagic-panel"
   printf '   Removed:\n'
@@ -1510,6 +1541,11 @@ uninstall_main() {
 
   dmp_step "Stopping the panel and Mailpit"
   as_user systemctl --user disable --now devmagic-panel.service devmagic-panel-mailpit.service || true
+
+  if [[ -n "$cron_tasks" ]]; then
+    dmp_step "Taking the panel's tasks out of your crontab"
+    remove_crontab_block
+  fi
 
   # The panel's own site goes while dmp-root is still there.
   dmp_step "Removing https://$PANEL_DOMAIN"

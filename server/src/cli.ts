@@ -1,17 +1,21 @@
 #!/usr/bin/env node
-import { homedir, userInfo } from 'node:os';
+import { appendFileSync } from 'node:fs';
+import { homedir, setPriority, userInfo } from 'node:os';
 import { dirname } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { PANEL_PASSWORD_MIN, panelPasswordProblem } from '@devmagic-panel/shared';
 import { startEnabled, writeAutostart } from './autostart.js';
-import { userPaths } from './config.js';
+import { loadConfig, userPaths } from './config.js';
+import { cronLockDir, cronLogFile } from './cron.js';
+import { runCronTask, runnerPath } from './cron-run.js';
 import { pingMysql } from './environment.js';
 import { runCommand } from './exec.js';
 import { planInstallMailpit } from './mailpit.js';
 import { runMcpStdio } from './mcp.js';
 import { createPanelAccount, PANEL_MYSQL_USER } from './mysql-admin.js';
 import { hashPassword, readSecrets, writeSecrets, type Secrets } from './secrets.js';
+import { RunStore } from './store.js';
 import { panelCli } from './update.js';
 import { readVersion } from './version.js';
 
@@ -133,6 +137,28 @@ async function installMailpit(dataDir: string): Promise<boolean> {
   return true;
 }
 
+/** One run of a cron task, as cron starts it. */
+async function cronRun(dataDir: string, args: string[]): Promise<void> {
+  try {
+    process.env.PATH = runnerPath(homedir());
+    // Below the panel and the sites you are looking at.
+    setPriority(10);
+    const store = new RunStore(userPaths().databaseFile);
+    try {
+      await runCronTask({ config: loadConfig(), exec: runCommand, store, lockDir: cronLockDir(dataDir), home: homedir() }, args, 'cron');
+    } finally {
+      store.close();
+    }
+  } catch (error) {
+    try {
+      appendFileSync(cronLogFile(dataDir), `${new Date().toISOString()} cron-run ${args.join(' ')}: ${(error as Error).message}\n`, { mode: 0o600 });
+    } catch {
+      // nowhere left to say it
+    }
+    process.exitCode = 1;
+  }
+}
+
 async function main(): Promise<void> {
   const command = process.argv[2];
   // stdout belongs to the MCP protocol here: nothing else may write to it.
@@ -148,6 +174,13 @@ async function main(): Promise<void> {
     return;
   }
   const { secretsFile, dataDir } = userPaths();
+
+  // From cron, for a task of the panel: prints nothing, so cron mails nothing; its own failures go to cron.log.
+  if (command === 'cron-run') {
+    await cronRun(dataDir, process.argv.slice(3));
+    return;
+  }
+
   const current = readSecrets(secretsFile);
 
   if (command === 'setup') {
@@ -184,7 +217,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log('Usage: devmagic-panel <setup|set-password|install-mailpit|autostart|write-autostart|mcp>');
+  console.log('Usage: devmagic-panel <setup|set-password|install-mailpit|autostart|write-autostart|mcp|cron-run>');
   process.exitCode = command ? 2 : 0;
 }
 

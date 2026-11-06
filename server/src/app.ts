@@ -2,10 +2,11 @@ import { existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { isActionId, localConstants, localName, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
-import { ActionBusyError, ActionInputError, runAction } from './actions.js';
+import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
+import { cronReport } from './cron.js';
 import { GlobalLock, LoginLimiter, SESSION_COOKIE, Sessions } from './auth.js';
 import { checkSystemPassword, newPasswordProblem, resetWays, type ResetWays, setPanelPassword } from './panel-password.js';
 import { WPCORE_BIN, type SystemConfig } from './config.js';
@@ -76,6 +77,8 @@ export interface AppDeps {
   /** Prunes Run history (RUN_KEEP_DAYS, RUN_KEEP_MAX) and dumps nothing needs (a day old) at start and every hour. */
   housekeeping?: boolean;
   logger?: boolean;
+  /** What the panel's crontab lines run, and /etc for the system cron; tests pass their own. */
+  cron?: CronSetup;
 }
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -310,6 +313,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             jobs, uploadsDir: deps.uploadsDir, secrets: deps.secrets(), ...(deps.coreStatus ? { coreStatus: deps.coreStatus } : {}),
             ...(deps.mailpit ? { mailpit: deps.mailpit } : {}), ...(deps.download ? { download: deps.download } : {}), update, drafts,
             claudeCode: { home: deps.hostPaths.home, searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '', workDir: join(deps.uploadsDir, '..', 'tmp') },
+            ...(deps.cron ? { cron: deps.cron } : {}),
           },
           id,
           request.body,
@@ -328,6 +332,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       mysqlReport({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases(), backupsDir: mysqlBackupsDir(deps.uploadsDir) }));
     api.get('/api/apache', async (): Promise<ApacheReport> => apacheReport(deps.config, deps.exec, deps.dmpRoot));
     api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));
+    // The Services page's Cron tab: your crontab, the panel's tasks and their runs, system cron read only.
+    const cron = () => cronCtx({ config: deps.config, exec: deps.exec, store: deps.store, uploadsDir: deps.uploadsDir, update, ...(deps.cron ? { cron: deps.cron } : {}) });
+    api.get('/api/cron', async (): Promise<CronReport> => cronReport(cron()));
+    api.get<{ Params: { id: string } }>('/api/cron/tasks/:id/runs', async (request, reply): Promise<CronRunView[] | undefined> => {
+      if (!/^[a-z0-9]{6}$/.test(request.params.id)) return reply.code(400).send({ error: 'A task id like k3f9q2' });
+      return deps.store.cronRuns(request.params.id);
+    });
+    api.get<{ Params: { run: string } }>('/api/cron/runs/:run', async (request, reply): Promise<CronRunView | undefined> => {
+      const run = /^\d{1,12}$/.test(request.params.run) ? deps.store.cronRun(Number(request.params.run)) : undefined;
+      return run ?? reply.code(404).send({ error: 'No such run' });
+    });
     registerPhpRoutes(api, { config: deps.config, exec: deps.exec, dmpRoot: deps.dmpRoot, sitesByVersion: sitesByVersion(deps.config), store: deps.store, dataDir: dirname(deps.uploadsDir) });
 
     // The hidden Developer options: versions, services, settings, installed files and logs.
@@ -458,6 +473,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     registerCreateRoutes(api, { exec: deps.exec, jobs, uploadsDir: deps.uploadsDir });
     const siteRoutes = registerSiteRoutes(api, {
+      cron,
       config: deps.config,
       exec: deps.exec,
       secrets: deps.secrets,

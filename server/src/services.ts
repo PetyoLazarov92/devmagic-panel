@@ -5,6 +5,7 @@ import type { SystemConfig } from './config.js';
 import { isListening } from './environment.js';
 import type { ExecResult, Executor } from './exec.js';
 import { apachePhpVersion, fpmDefaultVersion } from './php/versions.js';
+import { parseCrontab, tasksOf } from './cron.js';
 
 /** `systemctl is-active` answers active, inactive, failed, or unknown for a unit that does not exist. */
 export async function unitState(exec: Executor, unit: string): Promise<'running' | 'stopped' | 'missing'> {
@@ -20,8 +21,18 @@ export async function unitState(exec: Executor, unit: string): Promise<'running'
 
 const firstLine = (r: ExecResult) => (r.code === 0 ? (r.stdout.trim().split('\n')[0] ?? '') : '');
 
+/** How many tasks of the panel and lines of your own the crontab has. */
+function cronDetail(crontab: ExecResult): string {
+  if (crontab.code !== 0 && !/no crontab for/i.test(crontab.stderr)) return 'runs your crontab and the system\'s';
+  const parsed = parseCrontab(crontab.code === 0 ? crontab.stdout : '');
+  const tasks = tasksOf(parsed).length;
+  const own = [...parsed.before, ...parsed.after].filter((l) => l.trim() && !l.trim().startsWith('#') && !/^\s*[A-Za-z_][A-Za-z0-9_]*\s*=/.test(l)).length;
+  const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+  return `${n(tasks, 'task', 'tasks')} of the panel, ${n(own, 'line', 'lines')} of your own`;
+}
+
 export async function servicesReport(config: SystemConfig, exec: Executor, now = Date.now, mailpitBin?: string): Promise<ServicesReport> {
-  const [apache, mysql, mariadb, mailpit, apacheVersion, mysqlVersion, cli] = await Promise.all([
+  const [apache, mysql, mariadb, mailpit, apacheVersion, mysqlVersion, cli, cron, crontab] = await Promise.all([
     unitState(exec, 'apache2'),
     unitState(exec, 'mysql'),
     unitState(exec, 'mariadb'),
@@ -29,6 +40,8 @@ export async function servicesReport(config: SystemConfig, exec: Executor, now =
     exec('apache2ctl', ['-v']),
     exec('mysql', ['--version']),
     exec('php', ['-r', 'echo PHP_VERSION;']),
+    unitState(exec, 'cron'),
+    exec('crontab', ['-l']),
   ]);
   const db = mysql !== 'missing' ? { unit: 'mysql', state: mysql } : { unit: 'mariadb', state: mariadb };
   const apacheLabel = /Apache\/[\d.]+/.exec(apacheVersion.stdout)?.[0] ?? 'Apache';
@@ -47,6 +60,7 @@ export async function servicesReport(config: SystemConfig, exec: Executor, now =
         canRestart: false,
         ...(!mailpit && mailpitBin ? { offer: existsSync(mailpitBin) ? ('start' as const) : ('install' as const) } : {}),
       },
+      { id: 'cron', label: 'Cron', state: cron, detail: cron === 'missing' ? 'not installed: sudo apt install cron' : cronDetail(crontab), canRestart: false },
     ],
     php: { ...(phpApache ? { apache: phpApache } : {}), ...(phpFpm ? { fpm: phpFpm } : {}), ...(firstLine(cli) ? { cli: firstLine(cli) } : {}) },
   };

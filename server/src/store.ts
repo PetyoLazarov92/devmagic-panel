@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { InstallHow, Proposal, QueuedProposal, SiteInstall } from '@devmagic-panel/shared';
+import type { CronRunStatus, CronRunView, InstallHow, Proposal, QueuedProposal, SiteInstall } from '@devmagic-panel/shared';
 import { actions, isActionId } from '@devmagic-panel/shared';
 
 /**
@@ -124,7 +124,18 @@ export class RunStore {
         db TEXT NOT NULL,
         reason TEXT NOT NULL,
         created_at TEXT NOT NULL
-      )
+      );
+      CREATE TABLE IF NOT EXISTS cron_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        duration_ms INTEGER,
+        exit_code INTEGER,
+        output TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS cron_runs_task ON cron_runs (task, id)
     `);
     this.addColumn('runs', 'skipped', 'INTEGER');
     this.addColumn('kept_databases', 'before_tables', 'TEXT');
@@ -462,7 +473,87 @@ export class RunStore {
     }
   }
 
+  /** A run of a cron task starts: recorded as running, so the page shows it. */
+  startCronRun(task: string, trigger: CronRunView['trigger'], startedAt = new Date().toISOString()): number {
+    const r = this.db.prepare("INSERT INTO cron_runs (task, trigger, status, started_at) VALUES (?, ?, 'running', ?)").run(task, trigger, startedAt);
+    return Number(r.lastInsertRowid);
+  }
+
+  /** A run that never started, like one skipped while the last still runs. */
+  addCronRun(task: string, trigger: CronRunView['trigger'], status: CronRunStatus, output: string, startedAt = new Date().toISOString()): number {
+    const r = this.db
+      .prepare('INSERT INTO cron_runs (task, trigger, status, started_at, duration_ms, exit_code, output) VALUES (?, ?, ?, ?, 0, NULL, ?)')
+      .run(task, trigger, status, startedAt, output);
+    return Number(r.lastInsertRowid);
+  }
+
+  finishCronRun(id: number, status: CronRunStatus, exitCode: number | null, durationMs: number, output: string): void {
+    this.db.prepare('UPDATE cron_runs SET status = ?, exit_code = ?, duration_ms = ?, output = ? WHERE id = ?').run(status, exitCode, durationMs, output, id);
+  }
+
+  /** A task's runs, newest first, without their output. */
+  cronRuns(task: string, limit = 100): CronRunView[] {
+    return (this.db.prepare(`SELECT ${CRON_COLUMNS} FROM cron_runs WHERE task = ? ORDER BY id DESC LIMIT ?`).all(task, limit) as unknown as CronRow[]).map(cronRun);
+  }
+
+  /** The newest run of each task. */
+  lastCronRuns(): Map<string, CronRunView> {
+    const rows = this.db.prepare(`SELECT ${CRON_COLUMNS} FROM cron_runs WHERE id IN (SELECT MAX(id) FROM cron_runs GROUP BY task)`).all() as unknown as CronRow[];
+    return new Map(rows.map((r) => [r.task, cronRun(r)]));
+  }
+
+  /** One run with its output. */
+  cronRun(id: number): CronRunView | undefined {
+    const row = this.db.prepare(`SELECT ${CRON_COLUMNS}, output FROM cron_runs WHERE id = ?`).get(id) as unknown as (CronRow & { output: string }) | undefined;
+    return row ? { ...cronRun(row), output: row.output } : undefined;
+  }
+
+  clearCronRuns(task: string): number {
+    return Number(this.db.prepare('DELETE FROM cron_runs WHERE task = ?').run(task).changes);
+  }
+
+  /**
+   * Keeps the last 100 runs of each task, and a failed one for 14 days even
+   * past those; a task no longer in the crontab (live, when known) keeps its
+   * runs for 14 days.
+   */
+  pruneCronRuns(now = Date.now(), live?: readonly string[]): number {
+    const cutoff = new Date(now - CRON_KEEP_DAYS * 24 * 3600 * 1000).toISOString();
+    let n = Number(
+      this.db
+        .prepare(
+          `DELETE FROM cron_runs WHERE id IN (
+             SELECT id FROM (SELECT id, status, started_at, ROW_NUMBER() OVER (PARTITION BY task ORDER BY id DESC) AS n FROM cron_runs)
+             WHERE n > ${CRON_KEEP_RUNS} AND (status != 'failed' OR started_at < ?))`,
+        )
+        .run(cutoff).changes,
+    );
+    if (live) {
+      const keep = new Set(live);
+      const gone = (this.db.prepare('SELECT DISTINCT task FROM cron_runs').all() as Array<{ task: string }>).map((r) => r.task).filter((t) => !keep.has(t));
+      for (const task of gone) n += Number(this.db.prepare('DELETE FROM cron_runs WHERE task = ? AND started_at < ?').run(task, cutoff).changes);
+    }
+    return n;
+  }
+
   close(): void {
     this.db.close();
   }
 }
+
+interface CronRow {
+  id: number;
+  task: string;
+  trigger: CronRunView['trigger'];
+  status: CronRunStatus;
+  startedAt: string;
+  durationMs: number | null;
+  exitCode: number | null;
+}
+
+const CRON_COLUMNS = 'id, task, trigger, status, started_at AS startedAt, duration_ms AS durationMs, exit_code AS exitCode';
+/** Runs kept per task, and how long a failed one or one of a removed task stays past those. */
+export const CRON_KEEP_RUNS = 100;
+export const CRON_KEEP_DAYS = 14;
+
+const cronRun = (r: CronRow): CronRunView => ({ id: r.id, task: r.task, trigger: r.trigger, status: r.status, startedAt: r.startedAt, durationMs: r.durationMs, exitCode: r.exitCode });

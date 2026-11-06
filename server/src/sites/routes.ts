@@ -5,7 +5,7 @@ import { actions, branchName, cleanCopyName, gitUrl, isActionId, mountPath, repo
 import type { FastifyInstance } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
-import { readAura } from '../aura.js';
+import { readAura, wpCronSites } from '../aura.js';
 import type { Executor } from '../exec.js';
 import type { Secrets } from '../secrets.js';
 import type { Jobs } from '../jobs.js';
@@ -28,6 +28,9 @@ import { productionOnlyFor, readPlugins } from './plugins.js';
 import { readNetworkAdmins } from './network-admin.js';
 import { SiteActionRefused, siteFor, SiteNotFoundError, siteKey } from './site-actions.js';
 import { parseWpConfig } from './wpconfig.js';
+import type { WpCronReport } from '@devmagic-panel/shared';
+import { type CronContext, CronRefused } from '../cron.js';
+import { readWpCron, testWpCron } from './wp-cron.js';
 
 export interface SiteRouteDeps {
   config: SystemConfig;
@@ -42,6 +45,8 @@ export interface SiteRouteDeps {
   /** Running jobs, to mark sites that are still being installed. */
   jobs?: Jobs;
   dmpRoot: string;
+  /** The crontab and its runs, for a site's Cron tab and Aura. */
+  cron: () => CronContext;
 }
 
 const CACHE_MS = 3000;
@@ -109,7 +114,8 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
 
   api.get('/api/sites', async () => marked(await sites()));
 
-  const aura = async (): Promise<AuraReport> => readAura({ config: deps.config, exec: deps.exec, localConstants: readLocalConstants(deps.store), compatScans: (key) => deps.store.compatScans(key) as CompatScan[] }, await sites());
+  const aura = async (): Promise<AuraReport> =>
+    readAura({ config: deps.config, exec: deps.exec, localConstants: readLocalConstants(deps.store), compatScans: (key) => deps.store.compatScans(key) as CompatScan[], wpCronTasks: () => wpCronSites(deps.exec) }, await sites());
   api.get('/api/aura', aura);
 
   // ?path=/learn picks the WordPress install under that path of the domain.
@@ -163,6 +169,34 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     } catch (error) {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       if (error instanceof SiteActionRefused) return reply.code(502).send({ error: error.message });
+      throw error;
+    }
+  });
+
+  // A site's WP-Cron events and intervals, how WP-Cron runs there, and the panel's cron tasks for it.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; url?: string } }>('/api/sites/:domain/wp-cron', async (request, reply): Promise<WpCronReport | undefined> => {
+    const { domain } = request.params;
+    const { path, url } = request.query;
+    if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
+    if (url !== undefined && !/^https?:\/\/[^\s]{1,490}$/.test(url)) return reply.code(400).send({ error: 'url must be a site address' });
+    try {
+      return await readWpCron(deps.cron(), siteFor(deps.config, domain, path), url);
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      if (error instanceof SiteActionRefused || error instanceof CronRefused) return reply.code(502).send({ error: error.message });
+      throw error;
+    }
+  });
+
+  // Whether WordPress can start WP-Cron by itself (wp cron test); changes nothing.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; url?: string } }>('/api/sites/:domain/wp-cron/test', async (request, reply): Promise<{ ok: boolean; output: string } | undefined> => {
+    const { path, url } = request.query;
+    if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
+    if (url !== undefined && !/^https?:\/\/[^\s]{1,490}$/.test(url)) return reply.code(400).send({ error: 'url must be a site address' });
+    try {
+      return await testWpCron(deps.exec, siteFor(deps.config, request.params.domain, path), url);
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       throw error;
     }
   });

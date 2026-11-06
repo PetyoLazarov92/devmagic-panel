@@ -455,7 +455,7 @@ export interface CleanPreview {
 export interface ServicesReport {
   checkedAt: string;
   services: Array<{
-    id: 'apache' | 'mysql' | 'mailpit';
+    id: 'apache' | 'mysql' | 'mailpit' | 'cron';
     label: string;
     state: 'running' | 'stopped' | 'missing';
     detail: string;

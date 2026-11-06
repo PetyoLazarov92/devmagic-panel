@@ -1,4 +1,4 @@
-import type { ActionId, ActionRunResult, ApacheReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { ActionId, ActionRunResult, ApacheReport, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -106,6 +106,16 @@ export interface Api {
   cleanPreview: (domain: string, path?: string) => Promise<CleanPreview>;
   /** Every plugin of a site, read with WP-CLI. */
   plugins: (domain: string, path?: string) => Promise<SitePlugins>;
+  /** Your crontab: the panel's tasks with their last run, your own lines, and system cron read only. */
+  cron: () => Promise<CronReport>;
+  /** A task's runs, newest first, without output. */
+  cronRuns: (id: string) => Promise<CronRunView[]>;
+  /** One run with its output. */
+  cronRun: (run: number) => Promise<CronRunView>;
+  /** A site's WP-Cron events and intervals, how WP-Cron runs there, and its cron tasks; url picks a network site. */
+  wpCron: (domain: string, path?: string, url?: string) => Promise<WpCronReport>;
+  /** wp cron test: whether WordPress can start WP-Cron by itself. */
+  wpCronTest: (domain: string, path?: string, url?: string) => Promise<{ ok: boolean; output: string }>;
   networkAdmins: (domain: string, path?: string) => Promise<NetworkAdmins>;
   /** A repo's default branch, and the answers from its last install here. */
   inspectRepo: (url: string, branch?: string) => Promise<RepoInspection>;
@@ -262,6 +272,11 @@ const realApi: Api = {
   keptDatabases: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/kept-databases${atPath(path, '?')}`),
   cleanPreview: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/clean-preview${atPath(path, '?')}`),
   plugins: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/plugins${atPath(path, '?')}`),
+  cron: () => request('GET', '/api/cron'),
+  cronRuns: (id) => request('GET', `/api/cron/tasks/${encodeURIComponent(id)}/runs`),
+  cronRun: (run) => request('GET', `/api/cron/runs/${run}`),
+  wpCron: (domain, path, url) => request('GET', `/api/sites/${encodeURIComponent(domain)}/wp-cron?${new URLSearchParams({ ...(path ? { path } : {}), ...(url ? { url } : {}) })}`),
+  wpCronTest: (domain, path, url) => request('GET', `/api/sites/${encodeURIComponent(domain)}/wp-cron/test?${new URLSearchParams({ ...(path ? { path } : {}), ...(url ? { url } : {}) })}`),
   networkAdmins: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/network-admins${atPath(path, '?')}`),
   inspectRepo: (url, branch) => request('GET', `/api/repo/inspect?url=${encodeURIComponent(url)}${branch ? `&branch=${encodeURIComponent(branch)}` : ''}`),
   repoHelpers: (url, branch) => request('GET', `/api/repo/helpers?url=${encodeURIComponent(url)}&branch=${encodeURIComponent(branch)}`),

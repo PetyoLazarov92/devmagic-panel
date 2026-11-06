@@ -80,7 +80,7 @@ export interface ChatReply {
  * Actions Claude may not propose: they delete data or need your own typed
  * confirmation or upload, so they stay on their own pages.
  */
-export const ASSISTANT_EXCLUDED_ACTIONS: readonly ActionId[] = ['site.remove', 'site.create', 'org.readRepo', 'org.checkAccess', 'dump.download', 'dump.useDownloaded', 'db.restore', 'db.import', 'db.deleteSnapshot', 'core.remove', 'trash.delete', 'panel.update', 'panel.switchRelease', 'panel.installRelease', 'history.clear'];
+export const ASSISTANT_EXCLUDED_ACTIONS: readonly ActionId[] = ['site.remove', 'site.create', 'org.readRepo', 'org.checkAccess', 'dump.download', 'dump.useDownloaded', 'db.restore', 'db.import', 'db.deleteSnapshot', 'core.remove', 'trash.delete', 'panel.update', 'panel.switchRelease', 'panel.installRelease', 'history.clear', 'cron.undo', 'cron.clearRuns', 'wpcron.undo'];
 
 /** Claude's settings for the new site wizard, shaped like a repo preset so the wizard fills itself the same way. */
 export interface WizardSuggestion {

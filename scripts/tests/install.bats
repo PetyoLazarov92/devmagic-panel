@@ -10,6 +10,9 @@ setup() {
     printf '#!/bin/sh\necho "CALLED %s $*" >&2\nexit 99\n' "$cmd" > "$STUBS/$cmd"
     chmod +x "$STUBS/$cmd"
   done
+  # No crontab: the uninstaller only reads it, and never this machine's.
+  printf '#!/bin/sh\n[ "$1" = -l ] || { echo "CALLED crontab $*" >&2; exit 99; }\necho "no crontab for me" >&2\nexit 1\n' > "$STUBS/crontab"
+  chmod +x "$STUBS/crontab"
   # Lingering is off, so the installer would only offer it.
   printf '#!/bin/sh\necho no\n' > "$STUBS/loginctl"
   chmod +x "$STUBS/loginctl"
@@ -269,6 +272,33 @@ installed_machine() {
   [ "$vhost_line" -lt "$ca_line" ]
   [ "$ca_line" -lt "$sudoers_line" ]
   [[ "$output" == *"dry run done: nothing was changed"* ]]
+}
+
+@test "uninstall lists and takes out only the panel's block of your crontab" {
+  installed_machine
+  printf '#!/bin/sh\n[ "$1" = -l ] || { echo "CALLED crontab $*" >&2; exit 99; }\nprintf "%%s\\n" "0 4 * * * /home/me/bin/backup.sh" "" "# BEGIN devmagic-panel (managed by the panel, edit tasks there)" "# task k3f9q2: WP-Cron" "*/5 * * * * /usr/bin/node /x/cli.js cron-run --id=k3f9q2 --timeout=10 wp-cron --site=local.shop.com" "# END devmagic-panel"\n' > "$STUBS/crontab"
+  chmod +x "$STUBS/crontab"
+  run "$INSTALL" --uninstall --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"CALLED "* ]]
+  [[ "$output" == *"the devmagic-panel block in your crontab  (1 task(s) of the panel; your own lines stay)"* ]]
+  [[ "$output" == *"[dry-run] crontab - (your crontab without the devmagic-panel block)"* ]]
+}
+
+@test "the crontab filter drops only the panel's block" {
+  # shellcheck source=/dev/null
+  source <(sed -n -e '/^CRON_BEGIN=/p' -e '/^CRON_END=/p' -e '/^crontab_without_block()/,/^}/p' "$INSTALL")
+  out="$(printf '%s\n' 'MAILTO=me@example.com' '0 4 * * * /home/me/bin/backup.sh' '' "$CRON_BEGIN" '# task k3f9q2: WP-Cron' '*/5 * * * * node cli.js cron-run --id=k3f9q2' "$CRON_END" '30 1 * * * /home/me/bin/after.sh' | crontab_without_block)"
+  [ "$out" = "$(printf '%s\n' 'MAILTO=me@example.com' '0 4 * * * /home/me/bin/backup.sh' '' '30 1 * * * /home/me/bin/after.sh')" ]
+}
+
+@test "uninstall leaves a crontab without the panel's block alone" {
+  installed_machine
+  printf '#!/bin/sh\n[ "$1" = -l ] || { echo "CALLED crontab $*" >&2; exit 99; }\necho "0 4 * * * /home/me/bin/backup.sh"\n' > "$STUBS/crontab"
+  chmod +x "$STUBS/crontab"
+  run "$INSTALL" --uninstall --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"crontab"* ]]
 }
 
 @test "uninstall keeps the panel's CA by default while a site certificate is signed with it" {

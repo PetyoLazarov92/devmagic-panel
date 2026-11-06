@@ -42,6 +42,9 @@ import { writeAutostart } from './autostart.js';
 import { planTrashRestore, TrashRefused } from './sites/trash.js';
 import { checkUpdate, installedReleases, panelCli, planSwitch, planUpdate, type UpdateContext } from './update.js';
 import { installRunning, planInstallRelease } from './update-install.js';
+import { changeCrontab, type CronChange, type CronCommand, cronCommand, type CronContext, cronLockDir, CronRefused, findTask, newTaskId, type PanelTask, parseCrontab, readCrontab, taskArgs, tasksOf, undoCrontab } from './cron.js';
+import { runCronTask, taskRefusal } from './cron-run.js';
+import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } from './sites/wp-cron.js';
 
 export interface ActionContext {
   config: SystemConfig;
@@ -69,6 +72,13 @@ export interface ActionContext {
   drafts?: Drafts;
   /** Where Claude Code is looked for and works, for the organization install's steps. */
   claudeCode?: { home: string; searchPath: string; workDir: string };
+  /** What the panel's crontab lines run, and /etc for the system cron; tests pass their own. */
+  cron?: CronSetup;
+}
+
+export interface CronSetup {
+  command?: CronCommand;
+  etcDir?: string;
 }
 
 type Handler<Id extends ActionId> = (ctx: ActionContext, input: ActionInput<Id>) => Promise<ExecResult[] | HandlerOutcome>;
@@ -83,6 +93,66 @@ const mysqlCtx = (ctx: ActionContext): MysqlContext => ({
   kept: () => ctx.store.keptDatabases(),
   backupsDir: mysqlBackupsDir(ctx.uploadsDir),
 });
+
+/** What the cron actions need: the crontab, the run history and what the panel's lines run. */
+export const cronCtx = (ctx: Pick<ActionContext, 'config' | 'exec' | 'store' | 'uploadsDir' | 'update' | 'cron'>): CronContext => ({
+  config: ctx.config,
+  exec: ctx.exec,
+  store: ctx.store,
+  command: ctx.cron?.command ?? cronCommand(process.execPath, dirname(ctx.uploadsDir), panelCli(ctx.update)),
+  ...(ctx.cron?.etcDir ? { etcDir: ctx.cron.etcDir } : {}),
+});
+
+/** A crontab change, with its saved copy for the toast's Undo. */
+const cronOutcome = (change: Pick<CronChange, 'results' | 'backup'>): HandlerOutcome => ({ results: change.results, data: { backup: change.backup } });
+
+/** Refuses a task that cannot run as asked before it goes into the crontab. */
+async function checkTask(ctx: ActionContext, task: ActionInput<'cron.add'>['task']): Promise<void> {
+  const refusal = await taskRefusal(ctx.exec, ctx.config, task);
+  if (refusal) throw new CronRefused(refusal);
+}
+
+const REMOVED_CRON = (domain: string) => `cron-removed:${domain}`;
+
+/**
+ * The first step of a removal: the site's cron tasks leave the crontab, so
+ * they do not fail every few minutes, and are kept for a restore. A crontab
+ * the panel cannot change never stops the removal.
+ */
+function removeCronStep(ctx: ActionContext, domain: string): JobStep {
+  return {
+    id: 'cron',
+    label: 'Remove its cron tasks',
+    run: async () => {
+      const ours = (t: PanelTask) => 'domain' in t.task && t.task.domain === domain;
+      try {
+        const removed = tasksOf(parseCrontab(await readCrontab(ctx.exec))).filter(ours);
+        if (removed.length === 0) return { code: 0, stdout: 'no cron tasks of the panel run for this site', stderr: '' };
+        const change = await changeCrontab(cronCtx(ctx), (tasks) => tasks.filter((t) => !ours(t)), `removed ${removed.length} cron task${removed.length === 1 ? '' : 's'}; a restore puts ${removed.length === 1 ? 'it' : 'them'} back`);
+        if (change.results.every((r) => r.code === 0)) ctx.store.setMeta(REMOVED_CRON(domain), JSON.stringify(removed));
+        return change.results;
+      } catch (error) {
+        return { code: 0, stdout: `left the crontab as it is: ${(error as Error).message}`, stderr: '' };
+      }
+    },
+  };
+}
+
+/** A restored site gets back the cron tasks its removal took out. */
+async function restoreCronTasks(ctx: ActionContext, domain: string): Promise<void> {
+  const kept = ctx.store.getMeta(REMOVED_CRON(domain));
+  if (!kept) return;
+  try {
+    const back = JSON.parse(kept) as PanelTask[];
+    await changeCrontab(cronCtx(ctx), (tasks) => {
+      const ids = new Set(tasks.map((t) => t.id));
+      return [...tasks, ...back.map((t) => (ids.has(t.id) ? { ...t, id: newTaskId([...ids]) } : t))];
+    }, `put back ${back.length} cron task${back.length === 1 ? '' : 's'} of ${domain}`);
+    ctx.store.deleteMeta(REMOVED_CRON(domain));
+  } catch {
+    // The tasks stay noted for the next restore; the site is back either way.
+  }
+}
 
 /** Runs steps in order and stops at the first failure. */
 async function steps(...run: Array<() => Promise<ExecResult>>): Promise<ExecResult[]> {
@@ -242,9 +312,10 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     const steps = [...first, ...(await planTrashRestore(ctx, input, current?.dbName ? { replacingDb: current.dbName } : {}))];
     const before = ctx.store.archivedInstall(input.id);
     return startJob(ctx, steps, `Restore ${domain}`, domain, {
-      onDone: () => {
+      onDone: async () => {
         ctx.store.setInstall(domain, undefined, { ...(before?.repo ? { repo: before.repo } : {}), ...(before?.org ? { org: before.org } : {}), how: 'restore', at: new Date().toISOString(), archivedAt: stampDate(input.id.slice(-15)) });
         ctx.store.forgetArchive(input.id);
+        await restoreCronTasks(ctx, domain);
       },
     });
   },
@@ -295,6 +366,64 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     return [{ code: 0, stdout: `${input.label}: marked done on ${site}`, stderr: '' }];
   },
   'history.clear': async (ctx) => [{ code: 0, stdout: `deleted ${ctx.store.clearRuns()} runs`, stderr: '' }],
+  'cron.add': async (ctx, input) => {
+    await checkTask(ctx, input.task);
+    const { title, schedule, enabled, timeoutMinutes, task } = input;
+    return cronOutcome(await changeCrontab(cronCtx(ctx), (tasks) => [...tasks, { id: newTaskId(tasks.map((t) => t.id)), title, schedule, enabled, timeoutMinutes, task }], `added the task ${title}: ${schedule}`));
+  },
+  'cron.update': async (ctx, input) => {
+    await checkTask(ctx, input.task);
+    const { id, title, schedule, enabled, timeoutMinutes, task } = input;
+    return cronOutcome(
+      await changeCrontab(cronCtx(ctx), (tasks) => {
+        findTask(tasks, id);
+        return tasks.map((t) => (t.id === id ? { id, title, schedule, enabled, timeoutMinutes, task } : t));
+      }, `changed the task ${title}`),
+    );
+  },
+  'cron.setEnabled': async (ctx, { id, enabled }) =>
+    cronOutcome(
+      await changeCrontab(cronCtx(ctx), (tasks) => {
+        findTask(tasks, id);
+        return tasks.map((t) => (t.id === id ? { ...t, enabled } : t));
+      }, `turned ${enabled ? 'on' : 'off'} the task ${id}`),
+    ),
+  'cron.remove': async (ctx, { id }) =>
+    cronOutcome(
+      await changeCrontab(cronCtx(ctx), (tasks) => {
+        findTask(tasks, id);
+        return tasks.filter((t) => t.id !== id);
+      }, `removed the task ${id}; its runs are kept 14 days`),
+    ),
+  'cron.undo': async (ctx, { backup }) => cronOutcome(await undoCrontab(cronCtx(ctx), backup)),
+  'cron.clearRuns': async (ctx, { id }) => [{ code: 0, stdout: `deleted ${ctx.store.clearCronRuns(id)} runs of the task ${id}`, stderr: '' }],
+  'cron.runNow': async (ctx, { id }) => {
+    const task = findTask(tasksOf(parseCrontab(await readCrontab(ctx.exec))), id);
+    const runner = { config: ctx.config, exec: ctx.exec, store: ctx.store, lockDir: cronLockDir(dirname(ctx.uploadsDir)), home: ctx.home };
+    return startJob(
+      ctx,
+      [
+        {
+          id: 'run',
+          label: `Run ${task.title}`,
+          run: async () => {
+            const run = await runCronTask(runner, taskArgs(task), 'manual');
+            const code = run.status === 'ok' ? 0 : (run.exitCode ?? 1) || 1;
+            return code === 0 ? { code, stdout: run.output || 'done, it printed nothing', stderr: '' } : { code, stdout: '', stderr: run.output || run.status };
+          },
+        },
+      ],
+      `Run ${task.title}`,
+      `cron task ${id}`,
+    );
+  },
+  'cron.setSiteWpCron': async (ctx, { domain, path, fromCron, schedule }) => cronOutcome(await setSiteWpCron(cronCtx(ctx), siteFor(ctx.config, domain, path), fromCron, schedule)),
+  'wpcron.run': async (ctx, { domain, path, url, hook }) => runWpCronHook(ctx.exec, siteFor(ctx.config, domain, path), hook, url),
+  'wpcron.delete': async (ctx, { domain, path, url, hook, time, sig }) => {
+    const r = await deleteWpCronEvent(cronCtx(ctx), siteFor(ctx.config, domain, path), { hook, time, sig, ...(url ? { url } : {}) });
+    return { results: r.results, ...(r.backup ? { data: { backup: r.backup } } : {}) };
+  },
+  'wpcron.undo': async (ctx, { domain, path, url, backup }) => restoreWpCronEvent(cronCtx(ctx), siteFor(ctx.config, domain, path), backup, url),
   'mail.clear': async (ctx, input) => [await clearMail(ctx.mailpit ?? mailpitFetch, input.domain)],
   'panel.update': async (ctx, input) => {
     if (!ctx.update) throw new ActionInputError('updates are not set up in this panel');
@@ -370,7 +499,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'core.add': async (ctx, input) => startJob(ctx, await planAddCore(ctx, input), `Add WordPress ${input.version}`, `WordPress ${input.version}`),
   'core.remove': (ctx, input) => removeCore(ctx, input),
   'site.remove': async (ctx, input) => {
-    const steps = planRemove(ctx, input);
+    const steps = [removeCronStep(ctx, input.domain), ...planRemove(ctx, input)];
     const view = ctx.jobs.start(steps, { runId: ctx.runId as number, title: `Remove ${input.domain}`, target: input.domain, kind: 'site.remove' });
     return { results: [{ code: 0, stdout: `started ${view.id}`, stderr: '' }], data: { jobId: view.id }, detached: true };
   },
@@ -436,6 +565,8 @@ export function lockKey(id: ActionId, input: unknown): string | undefined {
   if (LOCK_FREE.has(id)) return undefined;
   const { domain, path, id: entry, version, database } = input as { domain?: unknown; path?: unknown; id?: unknown; version?: unknown; database?: unknown };
   if (typeof domain === 'string') return `${domain}${typeof path === 'string' ? path : ''}`;
+  // One change of the crontab at a time; a run and its history lock nothing.
+  if (id.startsWith('cron.') && id !== 'cron.runNow' && id !== 'cron.clearRuns') return 'crontab';
   if (id.startsWith('mysql.') && typeof database === 'string') return `database ${database}`;
   if (id.startsWith('trash.') && typeof entry === 'string') return entry.replace(/-\d{8}-\d{6}$/, '');
   if (id.startsWith('core.') && typeof version === 'string') return `WordPress ${version}`;
@@ -487,7 +618,7 @@ export async function runAction(ctx: ActionContext, id: ActionId, rawInput: unkn
     const result = await handler({ ...ctx, runId, actionId: id }, parsed.data as ActionInput<ActionId>);
     outcome = Array.isArray(result) ? { results: result } : result;
   } catch (error) {
-    if (error instanceof SiteNotFoundError || error instanceof SiteActionRefused || error instanceof DumpRefused || error instanceof TrashRefused || error instanceof CreateRefused || error instanceof RemoveRefused || error instanceof DbRefused || error instanceof CoreRefused || error instanceof MysqlRefused || error instanceof PhpSettingsRefused) {
+    if (error instanceof SiteNotFoundError || error instanceof SiteActionRefused || error instanceof DumpRefused || error instanceof TrashRefused || error instanceof CreateRefused || error instanceof RemoveRefused || error instanceof DbRefused || error instanceof CoreRefused || error instanceof MysqlRefused || error instanceof PhpSettingsRefused || error instanceof CronRefused) {
       ctx.store.finish(runId, 2, error.message);
       throw new ActionInputError(error.message);
     }
