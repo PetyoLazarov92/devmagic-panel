@@ -1,7 +1,7 @@
 import { closeSync, constants, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { InstallStatus } from '@devmagic-panel/shared';
+import type { InstalledRelease, InstallStatus } from '@devmagic-panel/shared';
 import type { ExecResult, Executor } from './exec.js';
 import type { JobStep } from './jobs.js';
 import type { RunStore } from './store.js';
@@ -41,6 +41,24 @@ export const statusFile = (dataDir: string) => join(dataDir, 'update-status.json
 const pendingFile = (dataDir: string) => join(dataDir, 'update-run.json');
 const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 const failed = (stderr: string): ExecResult => ({ code: 1, stdout: '', stderr: `${stderr}\n` });
+
+/**
+ * The last install from the Updates page, while it is still news: an update
+ * or switch from the panel since writes no update-status.json, so without this
+ * the page would go on saying "Installed v1.1.2" over the v1.1.3 that came
+ * after it. A finished install shows while the release it put in runs and was
+ * installed no later than it ended; one under way always shows.
+ */
+export function installStillNews<T extends Pick<InstallStatus, 'release' | 'state' | 'finished'>>(last: T | undefined, releases: Pick<InstalledRelease, 'name' | 'current' | 'installedAt'>[]): T | undefined {
+  if (!last || last.state === 'running') return last;
+  const running = releases.find((r) => r.current);
+  if (!running) return last;
+  if (last.state === 'done' && running.name !== last.release) return undefined;
+  const ended = Date.parse(last.finished);
+  // The release folder is written a little before install.sh ends; a minute covers that.
+  if (Number.isFinite(ended) && Date.parse(running.installedAt) > ended + 60_000) return undefined;
+  return last;
+}
 
 /** install.sh's update-status.json, when it is there and reads as one. */
 export function readInstallStatus(dataDir: string): InstallStatus | undefined {

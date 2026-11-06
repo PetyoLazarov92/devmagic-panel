@@ -1,5 +1,8 @@
 # Changelog
 
+### v1.1.4 (2026-11-06)
+* **Panel:** the Updates page no longer shows "Installed" for an install with your password once a later update or a switch replaced that release. Before, after updating from v1.1.2 to v1.1.3 from the panel, it still said "Installed v1.1.2, replacing v1.0.5". A failed install still shows until a later install puts another release in. An update installs this release from the panel as usual
+
 ### v1.1.3 (2026-11-06)
 * **Panel:** a job that restarts Apache, like making a PHP version the default, no longer stops at "Failed to fetch" while it goes on. The panel sits behind Apache, so the restart cuts it off for a moment; the job's view now keeps asking, after 1, 2, 4 and 8 seconds and then every 10, and shows how the job ended without a refresh. After two minutes without an answer it says the job goes on and to refresh. An update installs this release from the panel as usual
 

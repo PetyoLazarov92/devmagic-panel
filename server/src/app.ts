@@ -13,7 +13,7 @@ import { WPCORE_BIN, type SystemConfig } from './config.js';
 import type { CoreStatusSource } from './core-status.js';
 import { defaultLogsDir, developerReport, type DeveloperContext, listFolder, readLog, REPO_DIR, startupLog } from './developer.js';
 import { panelCli, UpdateChecker, type UpdateContext } from './update.js';
-import { settleInstall } from './update-install.js';
+import { installStillNews, settleInstall } from './update-install.js';
 import { DraftRefused, draftId, draftInput, Drafts } from './drafts.js';
 import { checkEnvironment, type HostPaths } from './environment.js';
 import type { Executor } from './exec.js';
@@ -424,7 +424,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     // Whether a newer release is out; ?refresh=1 reads the releases again.
     api.get<{ Querystring: { refresh?: string } }>('/api/update', async (request): Promise<UpdateStatus> => {
-      const [status, last] = await Promise.all([updates.status(request.query.refresh === '1'), install()]);
+      const [status, found] = await Promise.all([updates.status(request.query.refresh === '1'), install()]);
+      const last = installStillNews(found, status.releases);
       return last ? { ...status, install: last } : status;
     });
 

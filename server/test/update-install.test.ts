@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { type ActionContext, runAction } from '../src/actions.js';
 import { Jobs, type JobRuntime, type JobView } from '../src/jobs.js';
 import { RunStore } from '../src/store.js';
-import { type InstallContext, planInstallRelease, readInstallStatus, settleInstall, statusFile } from '../src/update-install.js';
+import { type InstallContext, installStillNews, planInstallRelease, readInstallStatus, settleInstall, statusFile } from '../src/update-install.js';
 import { installedReleases, type UpdateContext } from '../src/update.js';
 import { type FakeCall, fakeExec, tempTree } from './helpers.js';
 
@@ -171,5 +171,32 @@ describe('after the restart', () => {
     const s = setup();
     writeFileSync(statusFile(s.dataDir), '{"state":"weird"}');
     expect(readInstallStatus(s.dataDir)).toBeUndefined();
+  });
+});
+
+describe('the last install on the Updates page', () => {
+  const release = (name: string, installedAt: string, current = false) => ({ name, installedAt, current });
+  const done = { release: 'v1.2.0', state: 'done' as const, finished: '2026-11-06T10:00:30Z' };
+
+  it('shows while the release it put in runs, the folder written a moment before it ended', () => {
+    expect(installStillNews(done, [release('v1.2.0', '2026-11-06T10:00:10Z', true), release('v1.1.0', '2026-11-01T09:00:00Z')])).toBe(done);
+  });
+
+  it('goes once an update from the panel put in a newer release, or a switch moved off it', () => {
+    expect(installStillNews(done, [release('v1.3.0', '2026-11-06T10:12:00Z', true), release('v1.2.0', '2026-11-06T10:00:10Z')])).toBeUndefined();
+    expect(installStillNews(done, [release('v1.2.0', '2026-11-06T10:00:10Z'), release('v1.1.0', '2026-11-01T09:00:00Z', true)])).toBeUndefined();
+  });
+
+  it('keeps a failure while the release before runs, until a later install', () => {
+    const failed = { release: 'v1.2.0', state: 'failed' as const, finished: '2026-11-06T10:00:30Z' };
+    expect(installStillNews(failed, [release('v1.1.0', '2026-11-01T09:00:00Z', true)])).toBe(failed);
+    expect(installStillNews(failed, [release('v1.3.0', '2026-11-06T11:00:00Z', true), release('v1.1.0', '2026-11-01T09:00:00Z')])).toBeUndefined();
+  });
+
+  it('always shows an install under way, and anything when no release is known', () => {
+    const running = { release: 'v1.3.0', state: 'running' as const, finished: '' };
+    expect(installStillNews(running, [release('v1.2.0', '2026-11-06T10:00:10Z', true)])).toBe(running);
+    expect(installStillNews(done, [])).toBe(done);
+    expect(installStillNews(undefined, [])).toBeUndefined();
   });
 });
