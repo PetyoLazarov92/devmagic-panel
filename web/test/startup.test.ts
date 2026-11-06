@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_DELAY_MS, panelNotAnswering, startPanel, startupDelay } from '../src/lib/startup.js';
+import { loadThroughRestart, MAX_DELAY_MS, panelNotAnswering, startPanel, startupDelay } from '../src/lib/startup.js';
 
 /** An error like the API client's, with the answer's status and body. */
 const answer = (status: number, data: Record<string, unknown> = {}) => Object.assign(new Error(`Request failed (${status})`), { status, data });
@@ -99,5 +99,39 @@ describe('starting the page while the panel starts', () => {
     await vi.advanceTimersByTimeAsync(30_000);
     expect(load).toHaveBeenCalledTimes(1);
     expect(ready).not.toHaveBeenCalled();
+  });
+});
+
+describe('a job view through an Apache restart', () => {
+  const down = () => new TypeError('Failed to fetch');
+  const noWait = async () => {};
+
+  it('keeps asking while the panel does not answer, and gives the view once it does', async () => {
+    const load = vi.fn<() => Promise<string>>()
+      .mockRejectedValueOnce(down())
+      .mockRejectedValueOnce(answer(503))
+      .mockResolvedValueOnce('done');
+    const waits: number[] = [];
+    await expect(loadThroughRestart(load, { wait: async (ms) => void waits.push(ms) })).resolves.toBe('done');
+    expect(load).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([1000, 2000]);
+  });
+
+  it('stops at once on an answer from the panel, or when the page stops following', async () => {
+    const refused = answer(404, { error: 'no such job' });
+    const load = vi.fn<() => Promise<string>>().mockRejectedValue(refused);
+    await expect(loadThroughRestart(load, { wait: noWait })).rejects.toBe(refused);
+    expect(load).toHaveBeenCalledTimes(1);
+    const gone = vi.fn<() => Promise<string>>().mockRejectedValue(down());
+    await expect(loadThroughRestart(gone, { wait: noWait, stopped: () => true })).rejects.toBeInstanceOf(TypeError);
+    expect(gone).toHaveBeenCalledTimes(1);
+  });
+
+  it('says the job goes on once the panel has not answered for maxMs', async () => {
+    let clock = 0;
+    const load = vi.fn<() => Promise<string>>().mockRejectedValue(down());
+    const result = loadThroughRestart(load, { maxMs: 5000, now: () => clock, wait: async (ms) => void (clock += ms) });
+    await expect(result).rejects.toThrow('The job goes on without this page');
+    expect(load).toHaveBeenCalledTimes(4);
   });
 });

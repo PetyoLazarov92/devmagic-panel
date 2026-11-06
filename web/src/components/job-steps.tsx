@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AnsiText } from '@/components/ansi-text';
 import { api } from '@/lib/api';
 import { duration } from '@/lib/format';
+import { loadThroughRestart } from '@/lib/startup';
 import { cn } from '@/lib/utils';
 
 /** True once a job stopped moving: done, failed, or undone. A queued job has not started yet. */
@@ -19,8 +20,17 @@ export function useJob() {
 
   useEffect(() => {
     if (!job || settled(job)) return;
-    const timer = window.setTimeout(() => api.job(job.id).then(setJob, (err: Error) => setError(err.message)), 600);
-    return () => window.clearTimeout(timer);
+    let live = true;
+    const timer = window.setTimeout(() => {
+      loadThroughRestart(() => api.job(job.id), { stopped: () => !live }).then(
+        (view) => live && setJob(view),
+        (err: Error) => live && setError(err.message),
+      );
+    }, 600);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
   }, [job]);
 
   async function follow(started: Promise<string>) {

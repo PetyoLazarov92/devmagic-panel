@@ -10,6 +10,7 @@ import { waitForRestart } from '@/lib/restart';
 import { Link, navigate } from '@/lib/router';
 import { expectRestart } from '@/lib/session-watch';
 import { lastLine, openWpAdmin } from '@/lib/site-actions';
+import { loadThroughRestart } from '@/lib/startup';
 import { cn } from '@/lib/utils';
 
 /** Jobs an install from an organization starts on its way: their target is the install draft. */
@@ -27,8 +28,17 @@ export function JobScreen({ jobId, wordpress }: { jobId: string; wordpress?: boo
 
   useEffect(() => {
     if (settled(job)) return;
-    const timer = window.setTimeout(() => api.job(jobId).then(setJob, (err: Error) => setError(err.message)), job ? 700 : 0);
-    return () => window.clearTimeout(timer);
+    let live = true;
+    const timer = window.setTimeout(() => {
+      loadThroughRestart(() => api.job(jobId), { stopped: () => !live }).then(
+        (view) => live && setJob(view),
+        (err: Error) => live && setError(err.message),
+      );
+    }, job ? 700 : 0);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
   }, [job, jobId]);
 
   // A finished update or switch restarts the panel a few seconds later; once the new one answers, the Updates page shows its version.

@@ -28,6 +28,7 @@ import { api } from '@/lib/api';
 import { bytes, shortDate, timeAgo } from '@/lib/format';
 import { Link, navigate, useQueryParam } from '@/lib/router';
 import { useReloadWhileBusy } from '@/lib/jobs';
+import { loadThroughRestart } from '@/lib/startup';
 import { useAsync } from '@/lib/use-async';
 import { ConfigTab, LocalConstants, SaltsConfirm, saltsSummary, setConstant } from '@/pages/site-config';
 import { CronTab } from '@/pages/site-cron';
@@ -1176,8 +1177,17 @@ function RemoveDialog({ site, open, onClose }: { site: Site; open: boolean; onCl
       }
       return;
     }
-    const timer = window.setTimeout(() => api.job(job.id).then(setJob, (err: Error) => setError(err.message)), 600);
-    return () => window.clearTimeout(timer);
+    let live = true;
+    const timer = window.setTimeout(() => {
+      loadThroughRestart(() => api.job(job.id), { stopped: () => !live }).then(
+        (view) => live && setJob(view),
+        (err: Error) => live && setError(err.message),
+      );
+    }, 600);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
   }, [job, site.domain, days]);
 
   async function remove() {

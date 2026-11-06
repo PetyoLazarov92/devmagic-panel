@@ -87,6 +87,32 @@ export function startPanel<T>(load: () => Promise<T>, on: PanelStartEvents<T>, d
   };
 }
 
+/** How long a job's view keeps asking while the panel does not answer. */
+export const JOB_GAP_MS = 120_000;
+
+/**
+ * Loads a job's view, asking again while the panel does not answer: a job that
+ * restarts Apache cuts the panel off for a moment too, since it sits behind
+ * Apache, and its view would otherwise stop at "Failed to fetch" while the job
+ * goes on. Waits 1, 2, 4 and 8 seconds between tries, then 10, for up to
+ * maxMs; any other error, or stopped(), ends it at once.
+ */
+export async function loadThroughRestart<T>(
+  load: () => Promise<T>,
+  { maxMs = JOB_GAP_MS, wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)), now = Date.now, stopped = () => false }: { maxMs?: number; wait?: (ms: number) => Promise<void>; now?: () => number; stopped?: () => boolean } = {},
+): Promise<T> {
+  const started = now();
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await load();
+    } catch (error) {
+      if (!panelNotAnswering(error) || stopped()) throw error;
+      if (now() - started >= maxMs) throw new Error('The panel has not answered for a while. The job goes on without this page: refresh it to see how the job ended.');
+      await wait(startupDelay(attempt));
+    }
+  }
+}
+
 /** Tries again at once when the tab is shown, the network comes back or the page returns from the cache; returns the stop. */
 export function retryOnWake(retry: () => void): () => void {
   const onVisibility = () => document.visibilityState === 'visible' && retry();
