@@ -1,5 +1,8 @@
 # Changelog
 
+### v1.1.1 (2026-11-06)
+* **Panel:** after an install from the Updates page, the page now reloads as soon as the new version answers, so the version under your name changes with it. Before, when the new panel answered before the page saw the old one stop, the page kept waiting up to five minutes and still showed the old version until you refreshed it. The page that waits is the one from before the update, so this works from the next update on: after installing this one, refresh once if the old version still shows
+
 ### v1.1.0 (2026-11-06)
 * **Panel:** a Cron tab on the Services page manages the tasks cron runs for you: a site's WP-Cron, a WP-CLI command (`action-scheduler run`, `cron event run <hook>`, `transient delete`, `cache flush`, or a command of the site's own), a PHP file in a site, a local URL, or a program with its arguments. Each has a schedule with presets, shown in words with its next runs, a time limit, an on and off switch, Run now, and a history of its runs with their output. The panel writes only its own marked block of your crontab; lines you wrote yourself are shown and never changed. Every change saves your crontab first, and Undo in the notice puts the panel's block back. System cron (`/etc/crontab`, `/etc/cron.d`, the daily and weekly folders) and the systemd timers are shown read only
 * **Panel:** tasks run through the panel's runner, never a shell: cron calls `cli.js cron-run` with the task's checked arguments, it runs one at a time per task, stops one that takes too long, and keeps the last 100 runs and failed ones for 14 days. The Services overview has a Cron card

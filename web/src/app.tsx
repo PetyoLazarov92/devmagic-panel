@@ -7,6 +7,7 @@ import { SessionDialog } from '@/components/session-dialog';
 import { StartingScreen } from '@/components/starting-screen';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { notePanelVersion } from '@/lib/restart';
 import { match, navigate, usePath } from '@/lib/router';
 import { isSessionLost, listenToOtherTabs, onSessionChange, sessionBack, sessionLost, startSessionWatch, tellOtherTabs } from '@/lib/session-watch';
 import { type PanelStart, retryOnWake, startPanel } from '@/lib/startup';
@@ -81,6 +82,7 @@ export function App() {
     setError(null);
     start.current = startPanel(() => api.session(), {
       ready: (value) => {
+        if (value.version) notePanelVersion(value.version);
         setSession(value);
         setWaiting(null);
       },

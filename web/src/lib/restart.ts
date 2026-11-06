@@ -1,12 +1,25 @@
+/** The version of the panel this page loaded from, once its session answered. */
+let pageVersion: string | undefined;
+export function notePanelVersion(version: string): void {
+  pageVersion = version;
+}
+
 /**
  * Waiting for the panel to come back after an update restarts it: done runs
- * once /healthz answers with a new version, or answers again after it did
- * not, or after maxMs whatever it says. Returns the stop.
+ * once /healthz answers with a version other than the one this page loaded
+ * from (`from`), or answers again after it did not, or after maxMs whatever it
+ * says. Without `from`, the first answer stands in for it. Returns the stop.
  */
-export function waitForRestart(health: () => Promise<string | null>, done: () => void, { everyMs = 1000, maxMs = 60_000, now = Date.now } = {}): () => void {
+export function waitForRestart(
+  health: () => Promise<string | null>,
+  done: () => void,
+  { everyMs = 1000, maxMs = 60_000, now = Date.now, from = pageVersion }: { everyMs?: number; maxMs?: number; now?: () => number; from?: string | undefined } = {},
+): () => void {
   const started = now();
-  // undefined until the first answer; null when the panel did not answer.
-  let first: string | null | undefined;
+  // The version before the restart: the page's own, else the first answer
+  // (null when the panel did not answer). The new panel can answer first, so
+  // the page's version is the one to trust.
+  let first: string | null | undefined = from;
   let wentDown = false;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
