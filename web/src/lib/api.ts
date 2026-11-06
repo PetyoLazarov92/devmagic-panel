@@ -1,4 +1,4 @@
-import type { ActionId, ActionRunResult, ApacheReport, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, DbStructure, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -73,6 +73,11 @@ export interface Api {
   services: () => Promise<ServicesReport>;
   /** Every database and account on the MySQL server, for the Services page's MySQL tab. */
   mysql: () => Promise<MysqlReport>;
+  /** The database browser: a database's tables, a table's structure, a page of its rows and one value in full. */
+  dbOverview: (database: string) => Promise<DbOverview>;
+  dbStructure: (database: string, table: string) => Promise<DbStructure>;
+  dbRows: (database: string, table: string, query: DbRowsQuery) => Promise<DbRowsPage>;
+  dbCell: (database: string, table: string, query: DbCellQuery) => Promise<DbCellValue>;
   /** The vhosts, modules and configtest for the Apache tab, and Apache's own error log. */
   apache: () => Promise<ApacheReport>;
   apacheLog: () => Promise<SiteLog>;
@@ -247,6 +252,11 @@ const realApi: Api = {
   suggestWizard: (input) => request('POST', '/api/assistant/wizard', input),
   services: () => request('GET', '/api/services'),
   mysql: () => request('GET', '/api/mysql'),
+  dbOverview: (database) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}`),
+  dbStructure: (database, table) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}`),
+  // POSTs: a filter's value or a row's key is data, and stays out of URLs and Apache's log.
+  dbRows: (database, table, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/rows`, query),
+  dbCell: (database, table, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/cell`, query),
   apache: () => request('GET', '/api/apache'),
   apacheLog: () => request('GET', '/api/apache/log'),
   nginx: () => request('GET', '/api/nginx'),

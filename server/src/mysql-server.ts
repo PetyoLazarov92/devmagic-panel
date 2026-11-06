@@ -48,6 +48,8 @@ export interface SiteDatabase extends MysqlSiteRef {
   db?: string;
   user?: string;
   dbHost?: string;
+  /** Its table prefix, like wp_. */
+  prefix?: string;
 }
 
 export function siteDatabases(config: SystemConfig): SiteDatabase[] {
@@ -66,15 +68,15 @@ export function siteDatabases(config: SystemConfig): SiteDatabase[] {
       }
       const wp = parseWpConfig(text);
       if (!isLocalDbHost(wp.dbHost)) continue;
-      out.push({ domain, ...(path ? { path } : {}), ...(wp.dbName ? { db: wp.dbName } : {}), ...(wp.dbUser ? { user: wp.dbUser } : {}), ...(wp.dbHost ? { dbHost: wp.dbHost } : {}) });
+      out.push({ domain, ...(path ? { path } : {}), ...(wp.dbName ? { db: wp.dbName } : {}), ...(wp.dbUser ? { user: wp.dbUser } : {}), ...(wp.dbHost ? { dbHost: wp.dbHost } : {}), ...(wp.tablePrefix ? { prefix: wp.tablePrefix } : {}) });
     }
   }
   return out;
 }
 
-const siteRef = (s: MysqlSiteRef): MysqlSiteRef => ({ domain: s.domain, ...(s.path ? { path: s.path } : {}) });
+export const siteRef = (s: MysqlSiteRef): MysqlSiteRef => ({ domain: s.domain, ...(s.path ? { path: s.path } : {}) });
 /** A kept database's site key (local.shop.com@learn) as a site. */
-const keyToSite = (key: string): MysqlSiteRef => {
+export const keyToSite = (key: string): MysqlSiteRef => {
   const [domain, ...rest] = key.split('@');
   return { domain: domain as string, ...(rest.length ? { path: `/${rest.join('/')}` } : {}) };
 };

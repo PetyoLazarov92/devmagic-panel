@@ -2,6 +2,7 @@ import type { CleanCopyInfo, CleanPreview, KeptDatabaseInfo, Site, SnapshotInfo,
 import { CLEAN_FORM_TABLES, CLEAN_LOG_TABLES, CLEAN_WOO_TABLES, isLocalName } from '@devmagic-panel/shared';
 import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCircle, PackageCheck, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
@@ -11,11 +12,13 @@ import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
+import { Segmented } from '@/components/ui/segmented';
 import { api, cleanCopyUrl, isMockup, snapshotUrl } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
-import { siteName, siteTarget } from '@/lib/site-ref';
+import { navigate, useQueryParam } from '@/lib/router';
+import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { useAsync } from '@/lib/use-async';
 
 type JobKind = 'snapshot' | 'restore' | 'import' | 'preview' | 'replace' | 'clean' | 'cleanCurrent' | 'export' | 'restoreKept';
@@ -25,13 +28,51 @@ const JOB_ACTIONS = {
   clean: 'db.cleanCopy', cleanCurrent: 'db.cleanCurrent', export: 'db.exportClean', restoreKept: 'db.restoreKept',
 } as const;
 
+type DbView = 'tables' | 'tools';
+
+/** The Database tab's address: its view, and in Tables the table and what of it shows. */
+export function databaseHref(site: Pick<Site, 'domain' | 'path'>, view: DbView, location: DbLocation = { table: null, show: 'rows' }): string {
+  const q = new URLSearchParams({ tab: 'database' });
+  if (view === 'tools') q.set('view', 'tools');
+  else if (location.table) {
+    q.set('table', location.table);
+    if (location.show === 'structure') q.set('show', 'structure');
+  }
+  return `${siteHref(site)}?${q.toString()}`;
+}
+
+/**
+ * A site's database: its tables to browse, read only, and the backups and
+ * tools that change it. Each view and table is in the address, so Back and a
+ * reload keep the place.
+ */
+export function DatabaseTab({ site }: { site: Site }) {
+  const view: DbView = useQueryParam('view') === 'tools' ? 'tools' : 'tables';
+  const table = useQueryParam('table');
+  const show = useQueryParam('show') === 'structure' ? 'structure' : 'rows';
+  if (!site.db) {
+    return <p className="rounded-xl border bg-card px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p>;
+  }
+  const go = (next: DbView, location?: DbLocation) => navigate(databaseHref(site, next, location), { scroll: false });
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+      <Segmented label="Database" value={view} onChange={(v) => go(v)} options={[['tables', 'Tables'], ['tools', 'Backups and tools']]} className="justify-self-start" />
+      {view === 'tools' ? (
+        <DatabaseTools site={site} />
+      ) : (
+        <DatabaseBrowser key={site.db.name} database={site.db.name} location={{ table, show }} onNavigate={(location) => go('tables', location)} />
+      )}
+    </div>
+  );
+}
+
 /**
  * Snapshots, search and replace, and dump import for one site. A restore and
  * a replace take a snapshot of the current database first, so it can be
  * restored; an import is swapped in from a side database, with Undo until it
  * ends.
  */
-export function DatabaseTab({ site }: { site: Site }) {
+function DatabaseTools({ site }: { site: Site }) {
   const list = useAsync(() => api.snapshots(site.domain, site.path), [site.domain, site.path]);
   const copies = useAsync(() => api.cleanCopies(site.domain, site.path), [site.domain, site.path]);
   const kept = useAsync(() => api.keptDatabases(site.domain, site.path), [site.domain, site.path]);

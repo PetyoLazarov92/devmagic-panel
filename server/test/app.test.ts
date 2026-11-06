@@ -324,4 +324,20 @@ describe('services tabs', () => {
     expect((await app.inject({ method: 'GET', url: '/api/apache/log', headers })).json()).toMatchObject({ exists: false, lines: [] });
     await app.close();
   });
+
+  it('answers the database browser only when signed in, and its POSTs only from the panel', async () => {
+    const tree = tempTree();
+    const app = await buildApp({ config: tree.config, exec: fakeExec().exec, store, secrets: () => ({ panelPasswordHash: secrets?.panelPasswordHash as string }), hostPaths: tree.hostPaths, dmpRoot: DMP, version: '9.9.9', uploadsDir: join(tree.root, 'uploads'), production: true });
+    const rows = '/api/mysql/databases/shop_com/tables/wp_options/rows';
+    expect((await app.inject({ method: 'GET', url: '/api/mysql/databases/shop_com', headers: { host: HOST } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: rows, headers: { host: HOST, origin: ORIGIN }, payload: {} })).statusCode).toBe(401);
+    const res = await app.inject({ method: 'POST', url: '/api/login', headers: { host: HOST, origin: ORIGIN }, payload: { password: 'correct horse' } });
+    const cookie = `dmp_session=${res.cookies.find((c) => c.name === 'dmp_session')?.value}`;
+    expect((await app.inject({ method: 'POST', url: rows, headers: { host: HOST, origin: 'https://evil.test', cookie }, payload: {} })).statusCode).toBe(403);
+    const none = await app.inject({ method: 'GET', url: '/api/mysql/databases/shop_com', headers: { host: HOST, cookie } });
+    expect(none.statusCode).toBe(503);
+    expect(none.json()).toEqual({ error: expect.stringMatching(/no MySQL admin account/) });
+    expect((await app.inject({ method: 'POST', url: rows, headers: { host: HOST, origin: ORIGIN, cookie }, payload: { pageSize: 7 } })).statusCode).toBe(400);
+    await app.close();
+  });
 });

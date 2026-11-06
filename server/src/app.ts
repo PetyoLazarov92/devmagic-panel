@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, DbStructure, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { isActionId, localConstants, localName, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -23,7 +23,9 @@ import { servicesReport } from './services.js';
 import { apacheErrorLog, apacheReport } from './apache.js';
 import { nginxErrorLog, nginxReport, nginxSetUp } from './nginx.js';
 import { nginxPhpVersion } from './sites/server-switch.js';
+import { type BrowseContext, dbCell, dbOverview, dbRows, dbStructure } from './mysql-browse.js';
 import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
+import { BrowseError } from './mysql-sql.js';
 import { Jobs } from './jobs.js';
 import { defaultClaude, type ClaudeFactory } from './assistant/briefing.js';
 import { defaultConventions, readConventions } from './assistant/conventions.js';
@@ -344,6 +346,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // The Services page's MySQL and Apache tabs, read only; their changes are registry actions.
     api.get('/api/mysql', async (): Promise<MysqlReport> =>
       mysqlReport({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases(), backupsDir: mysqlBackupsDir(deps.uploadsDir) }));
+    // The database browser: reads only, in a read-only transaction with a time limit. Rows and full
+    // values are POSTs, so a filter's value or a row's key never reaches a URL or Apache's log.
+    const browse = (): BrowseContext => ({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases() });
+    const browsing = async <T>(reply: FastifyReply, read: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        return await read();
+      } catch (error) {
+        if (error instanceof BrowseError) return reply.code(error.status).send({ error: error.message });
+        throw error;
+      }
+    };
+    type TableParams = { Params: { database: string; table: string } };
+    api.get<{ Params: { database: string } }>('/api/mysql/databases/:database', async (request, reply): Promise<DbOverview | undefined> =>
+      browsing(reply, () => dbOverview(browse(), request.params.database)));
+    api.get<TableParams>('/api/mysql/databases/:database/tables/:table', async (request, reply): Promise<DbStructure | undefined> =>
+      browsing(reply, () => dbStructure(browse(), request.params.database, request.params.table)));
+    api.post<TableParams>('/api/mysql/databases/:database/tables/:table/rows', async (request, reply): Promise<DbRowsPage | undefined> =>
+      browsing(reply, () => dbRows(browse(), request.params.database, request.params.table, request.body)));
+    api.post<TableParams>('/api/mysql/databases/:database/tables/:table/cell', async (request, reply): Promise<DbCellValue | undefined> =>
+      browsing(reply, () => dbCell(browse(), request.params.database, request.params.table, request.body)));
     api.get('/api/apache', async (): Promise<ApacheReport> => apacheReport(deps.config, deps.exec, deps.dmpRoot));
     api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));
     api.get('/api/nginx', async (): Promise<NginxReport> => nginxReport(deps.config, deps.exec, deps.dmpRoot));

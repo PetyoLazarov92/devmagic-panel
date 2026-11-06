@@ -1,6 +1,7 @@
 import type { ActionId, MysqlBackup, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
-import { Archive, Database, Gauge, KeyRound, LoaderCircle, RotateCcw, Trash2, Users, Wand2 } from 'lucide-react';
+import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, RotateCcw, Table2, Trash2, Users, Wand2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Menu, type MenuItem } from '@/components/ui/menu';
 import { api } from '@/lib/api';
 import { bytes, shortDate, timeAgo } from '@/lib/format';
-import { Link, navigate } from '@/lib/router';
+import { Link, navigate, useQueryParam } from '@/lib/router';
 import { lastLine, runWithToast } from '@/lib/site-actions';
 import { siteHref, siteName } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
@@ -64,6 +65,40 @@ function SiteLinks({ sites, tab }: { sites?: MysqlSiteRef[]; tab?: string }) {
  * deletions are saved first so the job's Undo puts them back.
  */
 export function MysqlTab({ refresh, onLoading }: { refresh: number; onLoading: (loading: boolean) => void }) {
+  const database = useQueryParam('db');
+  return database ? <MysqlDatabaseView database={database} onLoading={onLoading} /> : <MysqlOverview refresh={refresh} onLoading={onLoading} />;
+}
+
+/** The browser's address for a database no site's tab holds: /services/mysql?db=reports&table=t&show=structure. */
+export function mysqlDatabaseHref(database: string, location: DbLocation = { table: null, show: 'rows' }): string {
+  const q = new URLSearchParams({ db: database });
+  if (location.table) q.set('table', location.table);
+  if (location.table && location.show === 'structure') q.set('show', 'structure');
+  return `/services/mysql?${q.toString()}`;
+}
+
+/** Where a database opens: a site's in the site's Database tab, any other here. */
+function browseHref(d: MysqlDatabase): string {
+  const site = d.kind === 'site' ? d.sites?.[0] : undefined;
+  return site ? `${siteHref(site)}?tab=database` : mysqlDatabaseHref(d.name);
+}
+
+/** One database's tables, rows and structure, read only, under the MySQL tab. */
+function MysqlDatabaseView({ database, onLoading }: { database: string; onLoading: (loading: boolean) => void }) {
+  const table = useQueryParam('table');
+  const show = useQueryParam('show') === 'structure' ? 'structure' : 'rows';
+  useEffect(() => onLoading(false), [onLoading]);
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+      <Link href="/services/mysql" className="inline-flex items-center gap-1.5 justify-self-start text-sm font-medium text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="size-4" />All databases
+      </Link>
+      <DatabaseBrowser key={database} database={database} location={{ table, show }} onNavigate={(location) => navigate(mysqlDatabaseHref(database, location), { scroll: false })} />
+    </div>
+  );
+}
+
+function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (loading: boolean) => void }) {
   const report = useAsync(() => api.mysql(), [refresh]);
   const runner = useJob();
   const [filter, setFilter] = useState<DbFilter>('all');
@@ -121,10 +156,12 @@ export function MysqlTab({ refresh, onLoading }: { refresh: number; onLoading: (
   const leftovers = data.users.filter((u) => u.kind === 'leftover');
 
   const dbMenu = (d: MysqlDatabase): MenuItem[] => {
-    if (d.kind === 'system') return [];
+    const browse = { label: 'Browse tables', icon: <Table2 />, onSelect: () => navigate(browseHref(d)) };
+    if (d.kind === 'system') return [browse];
     const site = d.sites?.[0];
     return [
-      ...(site ? [{ label: d.kind === 'kept' ? 'Open the site it is kept for' : "Open the site's Database tab", icon: <Database />, onSelect: () => navigate(`${siteHref(site)}?tab=database`) }] : []),
+      ...(d.kind === 'site' ? [] : [browse]),
+      ...(site ? [{ label: d.kind === 'kept' ? 'Open the site it is kept for' : "Open the site's Database tab", icon: <Database />, onSelect: () => navigate(`${siteHref(site)}?tab=database${d.kind === 'kept' ? '&view=tools' : ''}`) }] : []),
       { label: 'Analyze', icon: <Gauge />, disabled: analyzing !== null, onSelect: () => void analyze(d.name) },
       { label: 'Optimize...', icon: <Wand2 />, disabled: busy, onSelect: () => setOptimizing(d) },
       ...(d.kind === 'unused' ? [{ label: 'Delete...', icon: <Trash2 />, danger: true, disabled: busy, onSelect: () => setDropping(d) }] : []),
@@ -208,7 +245,7 @@ export function MysqlTab({ refresh, onLoading }: { refresh: number; onLoading: (
             <li key={d.name} className="flex items-center gap-3 px-5 py-3 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[13px] break-all">{d.name}</span>
+                  <Link href={browseHref(d)} className="font-mono text-[13px] break-all hover:underline">{d.name}</Link>
                   <Badge tone={DB_KIND[d.kind].tone}>{DB_KIND[d.kind].label}</Badge>
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">

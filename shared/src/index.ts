@@ -27,6 +27,7 @@ export interface ActionRunResult {
 export * from './org.js';
 export * from './preferences.js';
 export * from './mysql.js';
+export * from './db-browser.js';
 export * from './apache.js';
 export * from './nginx.js';
 export * from './php.js';

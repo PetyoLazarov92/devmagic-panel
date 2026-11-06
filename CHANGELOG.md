@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.9.0 (2026-11-06)
+* **Sites:** the Database tab opens on Tables: every table with its engine, rows, size and free space, a filter for this site's prefix and other prefixes, and each table's rows a page at a time (25 to 250), sorted by any column, with filters (is, contains, starts with, more or less than, NULL). A row opens with all its values; long ones load in full on request, and PHP serialized values and JSON show as a tree. Structure shows the columns, indexes, CREATE TABLE and what deserves a look (no primary key, MyISAM, an old character set, free space). Snapshots, import, search and replace and the other tools moved to Backups and tools on the same tab
+* **Services:** each database on the MySQL tab opens its tables: a site's in the site's Database tab, any other (MySQL's own included) under the MySQL tab
+* **Databases:** the browser only reads. Each read runs in a read-only transaction with a time limit (15 seconds, 5 for counting), its SQL on stdin; values go to MySQL as hex literals in the column's collation and names only once MySQL listed them, and a filter's value never reaches a URL. Open in phpMyAdmin goes to the database or table on a site Apache serves, when phpMyAdmin is installed
+
 ### v1.8.0 (2026-11-06)
 * **Sites:** a site with WordPress installs under its paths (`local.acme.com/learn`) moves to nginx with them: each is served from its own folder with `alias`, its own PHP-FPM upstream (its pool, or the default version's), WordPress's fallback to its own `index.php`, and the same deny rules. A new site under a path of a site on nginx goes into its nginx file. Checked with nginx 1.24's own `nginx -t` and with requests against it
 * **Sites:** the new site wizard asks which web server a site of its own gets, once nginx runs next to Apache: Apache, or nginx with the PHP-FPM version it would run on. The install writes the nginx file with WordPress's rules for what the dump is (a single site, or its kind of network). A site under a path runs on its parent's server

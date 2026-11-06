@@ -31,6 +31,13 @@ alwaysApply: true
   every root step with `sudo -n`, so nothing ever waits for a terminal. The
   action is in `ASSISTANT_EXCLUDED_ACTIONS` and offered only for a release
   whose install.sh has `--from-panel`.
+- The database browser builds SQL in one place (`server/src/mysql-sql.ts`):
+  a table or column name only once information_schema listed it, in
+  backticks; a value only as a hex literal of its UTF-8 bytes, converted to
+  the column's character set and collation, or a number that reads as one.
+  Every run starts `SET SESSION TRANSACTION READ ONLY` and a time limit, and
+  the statements go on stdin. A filter's value or a row's key is data: it
+  goes in a POST body, never a URL. Rows never go to the assistant.
 - Git URLs and branches are validated (`gitUrl`, `branchName`) and passed after
   `--`, so nothing can be read as a git option.
 - Root deletes need proof of ownership: `site-dir-remove` only removes a folder
