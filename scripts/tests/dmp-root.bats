@@ -748,6 +748,8 @@ pool_tree() {
   stub php-fpm8.3 ':'
   # No real PHP-FPM makes the pool's socket here: the wait for it goes by at once.
   stub sleep ':'
+  # Nothing listens on a socket here, whatever this computer runs.
+  stub ss ':'
 }
 
 @test "php-pool-write gives a site its own pool with its settings and sends its PHP there" {
@@ -793,6 +795,8 @@ pool_tree() {
   [ -f "$T/php/8.3/fpm/pool.d/dmp-local.shop.com.conf" ]
   grep -qx 'systemctl reload php8.3-fpm' "$STUB_LOG"
   grep -qx 'systemctl reload php8.1-fpm' "$STUB_LOG"
+  # 8.1 lets the pool's socket go before 8.3 takes it.
+  [ "$(grep -nx 'systemctl reload php8.1-fpm' "$STUB_LOG" | cut -d: -f1)" -lt "$(grep -nx 'systemctl reload php8.3-fpm' "$STUB_LOG" | cut -d: -f1)" ]
   grep -q '# local.shop.com: PHP 8.3' "$T/conf-available/devmagic-panel-php.conf"
 }
 
@@ -1045,6 +1049,40 @@ switch_tree() {
   [ ! -e "$T/php/8.3/fpm/pool.d/dmp-phpmyadmin.conf" ]
 }
 
+@test "php-switch-fpm to another version waits for the old one to let phpMyAdmin's socket go before the new one starts" {
+  switch_tree
+  dmp php-switch-fpm 8.3
+  : > "$STUB_LOG"
+  # PHP-FPM 8.3 holds the socket until it reloads without phpMyAdmin's pool.
+  stub systemctl '[[ "$1 $2" == "reload php8.3-fpm" ]] && : > "'"$T"'/released"; exit 0'
+  stub ss '[[ -e "'"$T"'/released" ]] || printf "u_str LISTEN 0 4096 /run/php/dmp-phpmyadmin.sock 1 * 0\n"'
+  run dmp php-switch-fpm 8.1
+  [ "$status" -eq 0 ]
+  [ "$(grep -nx 'systemctl reload php8.3-fpm' "$STUB_LOG" | cut -d: -f1)" -lt "$(grep -nx 'systemctl reload php8.1-fpm' "$STUB_LOG" | cut -d: -f1)" ]
+  [[ "$output" != *"still in use"* ]]
+  [ -f "$T/php/8.1/fpm/pool.d/dmp-phpmyadmin.conf" ]
+  # A socket another process keeps is named.
+  rm -f "$T/released"
+  stub systemctl ':'
+  stub ss 'printf "u_str LISTEN 0 4096 /run/php/dmp-phpmyadmin.sock 1 * 0\n"'
+  run dmp php-switch-fpm 8.3
+  [[ "$output" == *"/run/php/dmp-phpmyadmin.sock is still in use after php8.1-fpm reloaded"* ]]
+}
+
+@test "php-switch-fpm puts the sites and phpMyAdmin back on the version before when the new PHP-FPM does not start" {
+  switch_tree
+  dmp php-switch-fpm 8.3
+  stub systemctl 'case "$1 ${3:-}" in "is-active php8.1-fpm") exit 3 ;; "enable php8.1-fpm") exit 1 ;; esac; exit 0'
+  run dmp php-switch-fpm 8.1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"php8.1-fpm would not start: journalctl -u php8.1-fpm"* ]]
+  [[ "$output" == *"PHP-FPM 8.1 did not start, sites are back on PHP 8.3"* ]]
+  [ "$(cat "$T/state/php-default")" = 8.3 ]
+  [ -f "$T/php/8.3/fpm/pool.d/dmp-phpmyadmin.conf" ]
+  [ ! -e "$T/php/8.1/fpm/pool.d/dmp-phpmyadmin.conf" ]
+  grep -q 'SetHandler "proxy:fcgi://php8.3"' "$T/conf-available/devmagic-panel-php.conf"
+}
+
 @test "php-switch-fpm puts mod_php back when the configtest fails, and refuses a version without FPM" {
   switch_tree
   STUB_CONFIGTEST_FAIL=1 run dmp php-switch-fpm 8.3
@@ -1068,6 +1106,8 @@ switch_tree() {
   [ ! -e "$T/php/8.3/fpm/pool.d/dmp-phpmyadmin.conf" ]
   grep -qx 'a2dismod -q mpm_event' "$STUB_LOG"
   grep -qx 'a2enmod -q mpm_prefork php8.3' "$STUB_LOG"
+  # PHP-FPM 8.3 lets phpMyAdmin's socket go, for a later switch to PHP-FPM.
+  grep -qx 'systemctl reload php8.3-fpm' "$STUB_LOG"
   ! grep -q 'Every other site' "$T/conf-available/devmagic-panel-php.conf"
   run dmp php-switch-modphp 8.1
   [ "$status" -eq 1 ]

@@ -168,7 +168,8 @@ dmp_mod_enabled() { [[ -e "$(dmp_apache_dir)/mods-enabled/$1.load" ]]; }
 # without a pool of its own on PHP <version> through PHP-FPM (phpMyAdmin
 # through its own pool). Everything goes back when a check fails.
 dmp_php_switch_fpm() {
-  local version="$1" modphp previous="" pmafile v
+  local version="$1" modphp previous="" pmafile v sock="$DMP_PHP_RUN_DIR/dmp-phpmyadmin.sock"
+  local -a olds=()
   dmp_php_version_arg "$version"
   dmp_php_require_installed "$version"
   [[ -e "$PHP_LIB_DIR/$version/sapi/fpm" ]] || dmp_die "PHP-FPM is not installed for PHP $version: apt install php$version-fpm"
@@ -179,14 +180,15 @@ dmp_php_switch_fpm() {
   install -d -m 0755 "$STATE_DIR"
   printf '%s\n' "$version" > "$STATE_DIR/php-default"
   chmod 0644 "$STATE_DIR/php-default"
-  for v in "$PHP_CONF_DIR"/*/fpm/pool.d/dmp-phpmyadmin.conf; do
-    [[ -f "$v" ]] && rm -f "${v:?}"
-  done
+  mapfile -t olds < <(dmp_phpmyadmin_pool_take "$version")
   dmp_phpmyadmin_pool "$version"
   pmafile="$(dmp_pool_file "$version" phpmyadmin)"
 
   dmp_switch_back() {
     rm -f "${pmafile:?}"
+    for v in "${olds[@]}"; do
+      dmp_phpmyadmin_pool "$v"
+    done
     if [[ -n "$previous" ]]; then printf '%s\n' "$previous" > "$STATE_DIR/php-default"; else rm -f "${STATE_DIR:?}/php-default"; fi
     if [[ -n "$modphp" ]]; then
       a2dismod -q mpm_event >/dev/null 2>&1 || true
@@ -209,9 +211,25 @@ dmp_php_switch_fpm() {
     dmp_switch_back
     dmp_die "Apache's configtest failed, mod_php is back on"
   fi
-  dmp_fpm_apply "$version"
+  # The version phpMyAdmin ran on lets its socket go first, or this one cannot start.
+  for v in "${olds[@]}"; do
+    dmp_fpm_release "$v" "$sock"
+  done
+  if ! dmp_fpm_try_apply "$version"; then
+    dmp_switch_back
+    for v in "${olds[@]}"; do
+      dmp_fpm_try_apply "$v" >/dev/null || true
+    done
+    systemctl restart apache2 || true
+    if [[ -n "$previous" ]]; then dmp_die "PHP-FPM $version did not start, sites are back on PHP $previous"; fi
+    if [[ -n "$modphp" ]]; then dmp_die "PHP-FPM $version did not start, mod_php $modphp is back on"; fi
+    dmp_die "PHP-FPM $version did not start, sites are as they were"
+  fi
   if ! systemctl restart apache2; then
     dmp_switch_back
+    for v in "${olds[@]}"; do
+      dmp_fpm_try_apply "$v" >/dev/null || true
+    done
     systemctl restart apache2 || true
     dmp_die "Apache would not restart on PHP-FPM, mod_php is back on"
   fi
@@ -222,18 +240,20 @@ dmp_php_switch_fpm() {
 # mpm_prefork, and sites without a pool back on mod_php.
 dmp_php_switch_modphp() {
   local version="$1" v
+  local -a olds=()
   dmp_php_version_arg "$version"
   [[ -f "$(dmp_apache_dir)/mods-available/php$version.load" ]] || dmp_die "mod_php is not installed for PHP $version: apt install libapache2-mod-php$version"
   rm -f "${STATE_DIR:?}/php-default"
-  for v in "$PHP_CONF_DIR"/*/fpm/pool.d/dmp-phpmyadmin.conf; do
-    [[ -f "$v" ]] && rm -f "${v:?}"
-  done
+  mapfile -t olds < <(dmp_phpmyadmin_pool_take)
   if dmp_mod_enabled mpm_event; then
     a2dismod -q mpm_event >/dev/null || dmp_die "a2dismod mpm_event failed"
   fi
   a2enmod -q mpm_prefork "php$version" >/dev/null || dmp_die "a2enmod mpm_prefork php$version failed"
   dmp_php_conf_write || dmp_die "Apache's configtest failed with mod_php $version back on"
   systemctl restart apache2 || dmp_die "apache restart failed"
+  for v in "${olds[@]}"; do
+    dmp_fpm_release "$v" "$DMP_PHP_RUN_DIR/dmp-phpmyadmin.sock"
+  done
   dmp_ok "sites without a PHP of their own run on mod_php $version again; Apache runs mpm_prefork"
 }
 
@@ -281,15 +301,51 @@ dmp_fpm_wait_socket() {
 }
 
 # Starts a version's FPM (and keeps it on at boot) or reloads it when it runs.
-dmp_fpm_apply() {
+# dmp_fpm_try_apply returns 1 where dmp_fpm_apply stops.
+dmp_fpm_try_apply() {
   local unit="php$1-fpm"
   if systemctl is-active --quiet "$unit"; then
-    systemctl reload "$unit" || dmp_die "$unit reload failed"
+    systemctl reload "$unit" || { dmp_error "$unit reload failed: journalctl -u $unit"; return 1; }
     dmp_ok "$unit reloaded"
   else
-    systemctl enable --now "$unit" >/dev/null 2>&1 || dmp_die "$unit would not start"
+    systemctl enable --now "$unit" >/dev/null 2>&1 || { dmp_error "$unit would not start: journalctl -u $unit"; return 1; }
     dmp_ok "$unit started"
   fi
+}
+dmp_fpm_apply() { dmp_fpm_try_apply "$1" || exit 1; }
+
+# True while a process listens on this unix socket.
+dmp_socket_listening() {
+  ss -xlH 2>/dev/null | awk -v p="$1" '$5 == p { found = 1 } END { exit !found }'
+}
+
+# A pool left this version: its FPM, when it runs, reloads to let the pool's
+# socket go, and the wait ends once nothing listens there (up to 10 seconds).
+# Until then the version taking the pool cannot start: "Another FPM instance
+# seems to already listen".
+dmp_fpm_release() {
+  local version="$1" sock="$2" i
+  systemctl is-active --quiet "php$version-fpm" || return 0
+  systemctl reload "php$version-fpm" || dmp_warn "php$version-fpm reload failed"
+  for (( i = 0; i < 50; i++ )); do
+    dmp_socket_listening "$sock" || return 0
+    sleep 0.2
+  done
+  dmp_warn "$sock is still in use after php$version-fpm reloaded"
+}
+
+# Takes phpMyAdmin's pool out of every version but <keep> and prints the
+# versions it was in, one per line.
+dmp_phpmyadmin_pool_take() {
+  local keep="${1:-}" file v
+  for file in "$PHP_CONF_DIR"/*/fpm/pool.d/dmp-phpmyadmin.conf; do
+    [[ -f "$file" ]] || continue
+    v="${file#"$PHP_CONF_DIR"/}"
+    v="${v%%/*}"
+    [[ "$v" == "$keep" ]] && continue
+    rm -f "${file:?}"
+    printf '%s\n' "$v"
+  done
 }
 
 # php-pool-write <folder> <version> [key=value...]: the site in WEB_DIR/<folder>
@@ -355,10 +411,11 @@ dmp_php_pool_write() {
     dmp_die "Apache's configtest failed, the site's pools are as they were"
   fi
   rm -rf "${backup:?}"
-  dmp_fpm_apply "$version"
+  # The version the pool leaves lets its socket go first, or this one cannot take it.
   for v in "${others[@]}"; do
-    dmp_fpm_apply "$v"
+    dmp_fpm_release "$v" "$DMP_PHP_RUN_DIR/dmp-$folder.sock"
   done
+  dmp_fpm_apply "$version"
   systemctl reload apache2 || dmp_die "apache reload failed"
   dmp_fpm_wait_socket "$DMP_PHP_RUN_DIR/dmp-$folder.sock"
   dmp_ok "$folder runs on PHP $version through its pool dmp-$folder${body:+, with $(printf '%s' "$body" | tr '\n' ',' | sed 's/,$//; s/,/, /g')}"

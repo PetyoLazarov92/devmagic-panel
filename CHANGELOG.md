@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.1.2 (2026-11-06)
+* **Panel:** making another PHP version the default for every site works again when phpMyAdmin runs on the one before. The version before now reloads and lets phpMyAdmin's socket go before the new one starts; before, the new PHP-FPM would not start ("Another FPM instance seems to already listen") and every site without a PHP of its own answered 503. The same goes for a site's own pool moved to another version, and for going back to mod_php
+* **Panel:** when the new version's PHP-FPM still does not start, the sites and phpMyAdmin go back to the version they ran on, and the message names its `journalctl` command. This changes the root scripts, so the update finishes with its installer, which asks for your password
+
 ### v1.1.1 (2026-11-06)
 * **Panel:** after an install from the Updates page, the page now reloads as soon as the new version answers, so the version under your name changes with it. Before, when the new panel answered before the page saw the old one stop, the page kept waiting up to five minutes and still showed the old version until you refreshed it. The page that waits is the one from before the update, so this works from the next update on: after installing this one, refresh once if the old version still shows
 
