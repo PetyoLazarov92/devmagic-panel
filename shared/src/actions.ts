@@ -1,10 +1,18 @@
 import { z } from 'zod';
 import { apacheModuleLock, apacheModuleName } from './apache.js';
 import { mysqlAccount, mysqlBackupName, mysqlDatabaseName } from './mysql.js';
+import { mysqlIdentifier } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
 import { cronSchedule } from './cron.js';
 import { namespaceRef } from './repo-host.js';
+
+/** A row's primary key values, in the key's column order. */
+const rowKey = z.array(z.string().max(4096)).min(1).max(16);
+/** Column values for a row: text as MySQL shows it, null for NULL. Kept out of run history (withoutPasswords). */
+const rowValues = z.record(mysqlIdentifier, z.string().max(900_000).nullable()).refine((v) => Object.keys(v).length > 0 && Object.keys(v).length <= 300, 'Between 1 and 300 columns');
+/** A row change's saved copy, by its name in BACKUP_DIR/row-changes. */
+export const rowChangeId = z.string().regex(/^\d{8}-\d{6}-[a-z0-9]{6}$/, 'A row change like 20261107-101500-a1b2c3');
 
 /**
  * The action registry: every change the panel can make, defined once.
@@ -560,6 +568,31 @@ export const actions = {
       "Makes devmagic_panel_ro@localhost with the admin account, with SELECT and SHOW VIEW on every database and nothing else, and a new password saved in the panel's secrets file. The SQL runner reads with it, so MySQL itself refuses any change a query would make. Run again, it gets a new password and loses any other right it was given.",
     changesSystem: true,
     input: z.object({}),
+  },
+  'mysql.updateRow': {
+    title: 'Change a row',
+    description:
+      "Changes the values of one row, found by its primary key, but only while the changed columns still hold what you saw: a row changed since is left as it is. The row as it was is saved first (14 days), so Undo puts it back. Not for MySQL's own databases or the ones the panel keeps for a site.",
+    changesSystem: true,
+    input: z.object({ database: mysqlDatabaseName, table: mysqlIdentifier, rowKey: rowKey, rowValues: rowValues, rowWas: rowValues }),
+  },
+  'mysql.insertRow': {
+    title: 'Add a row',
+    description: 'Adds one row with the values given; the columns left out get their defaults (an auto_increment key its next number). Undo deletes it again.',
+    changesSystem: true,
+    input: z.object({ database: mysqlDatabaseName, table: mysqlIdentifier, rowValues: rowValues }),
+  },
+  'mysql.deleteRows': {
+    title: 'Delete rows',
+    description: 'Deletes up to 500 rows by their primary key. Each row is saved first (14 days), so Undo puts them back.',
+    changesSystem: true,
+    input: z.object({ database: mysqlDatabaseName, table: mysqlIdentifier, rowKeys: z.array(rowKey).min(1).max(500) }),
+  },
+  'mysql.undoRowChange': {
+    title: 'Undo a row change',
+    description: 'Puts back what a row change, addition or deletion changed, from the copy saved before it, while the rows still hold what that change left.',
+    changesSystem: true,
+    input: z.object({ database: mysqlDatabaseName, table: mysqlIdentifier, change: rowChangeId }),
   },
   'mysql.resetSiteUser': {
     title: "Reset a site's database user",

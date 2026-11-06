@@ -45,7 +45,15 @@ const NUMERIC_TYPES = new Set(['tinyint', 'smallint', 'mediumint', 'int', 'integ
 
 export const isBinary = (c: ColumnMeta) => BINARY_TYPES.has(c.dataType) || c.charset === 'binary';
 export const isNumeric = (c: ColumnMeta) => NUMERIC_TYPES.has(c.dataType);
-export const columnHead = (c: ColumnMeta): DbColumnHead => ({ name: c.name, type: c.type, binary: isBinary(c), numeric: isNumeric(c) });
+export const columnHead = (c: ColumnMeta): DbColumnHead => ({
+  name: c.name,
+  type: c.type,
+  binary: isBinary(c),
+  numeric: isNumeric(c),
+  ...(c.nullable ? { nullable: true } : {}),
+  ...(/auto_increment/i.test(c.extra) ? { autoIncrement: true } : {}),
+  ...(/GENERATED/i.test(c.extra) ? { generated: true } : {}),
+});
 
 /** A name in backticks, a backtick in it doubled. Only for names MySQL listed. */
 export const ident = (name: string) => `\`${name.replaceAll('`', '``')}\``;

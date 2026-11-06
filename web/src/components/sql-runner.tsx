@@ -1,6 +1,6 @@
 import type { DbQueryResult } from '@devmagic-panel/shared';
 import { Download, History, KeyRound, LoaderCircle, Play, ScanSearch, ShieldCheck, Trash2 } from 'lucide-react';
-import { type KeyboardEvent, useState } from 'react';
+import { Component, type KeyboardEvent, lazy, type ReactNode, Suspense, useState } from 'react';
 import { ValueView } from '@/components/db-browser';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,21 @@ import { Menu } from '@/components/ui/menu';
 import { api, ApiError } from '@/lib/api';
 import { runWithToast } from '@/lib/site-actions';
 import { addHistory, clearHistory, readHistory, toCsv } from '@/lib/sql-history';
+import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+
+const SqlEditor = lazy(() => import('@/components/sql-editor'));
+
+/** The plain text area when the editor's code cannot load (after an update, or offline): the runner still works. */
+class EditorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  override render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
 
 const number = (n: number) => n.toLocaleString('en-US');
 /** The longest a cell shows in the grid; the row opens with all of it. */
@@ -31,6 +45,21 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
   const [running, setRunning] = useState<'run' | 'explain' | null>(null);
   const [history, setHistory] = useState(() => readHistory(database));
   const [open, setOpen] = useState<number | null>(null);
+  // Table and column names for the suggestions; without them the editor still suggests keywords.
+  const schema = useAsync(() => api.dbSchema(database), [database]);
+  const hint = placeholder ?? "SELECT * FROM wp_options WHERE autoload = 'on' LIMIT 50";
+  const plain = (
+    <Textarea
+      id={`sql-${database}`}
+      value={sql}
+      onChange={(e) => setSql(e.target.value)}
+      onKeyDown={onKey}
+      rows={6}
+      spellCheck={false}
+      placeholder={hint}
+      className="font-mono text-[13px] leading-relaxed"
+    />
+  );
 
   async function run(explain = false) {
     if (!sql.trim() || running) return;
@@ -87,16 +116,12 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
         </CardHeader>
         <div className="grid gap-3 p-5">
           <label htmlFor={`sql-${database}`} className="sr-only">Statement</label>
-          <Textarea
-            id={`sql-${database}`}
-            value={sql}
-            onChange={(e) => setSql(e.target.value)}
-            onKeyDown={onKey}
-            rows={6}
-            spellCheck={false}
-            placeholder={placeholder ?? 'SELECT * FROM wp_options WHERE autoload = \'on\' LIMIT 50'}
-            className="font-mono text-[13px] leading-relaxed"
-          />
+          {/* The editor loads with this view; the plain text area stands in until it has, and if it cannot load. */}
+          <EditorBoundary fallback={plain}>
+            <Suspense fallback={plain}>
+              <SqlEditor value={sql} onChange={setSql} onRun={() => void run()} {...(schema.data ? { schema: schema.data.tables } : {})} label={`SQL on ${database}`} placeholder={hint} />
+            </Suspense>
+          </EditorBoundary>
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => void run()} disabled={!sql.trim() || running !== null}>
               {running === 'run' ? <LoaderCircle className="animate-spin" /> : <Play />}Run
@@ -114,7 +139,7 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
                 ]}
               />
             )}
-            <span className="ml-auto text-xs text-muted-foreground">Ctrl+Enter runs. One statement that reads, up to 1,000 rows and 30 seconds.</span>
+            <span className="ml-auto text-xs text-muted-foreground">Ctrl+Enter runs, Tab takes a suggestion. One statement that reads, up to 1,000 rows and 30 seconds.</span>
           </div>
           {error && (
             <div role="alert" className="grid gap-2 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">

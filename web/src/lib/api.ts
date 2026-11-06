@@ -1,4 +1,4 @@
-import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, DbQuery, DbQueryResult, DbStructure, WpDbReport, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, DbQuery, DbQueryResult, DbSchema, DbStructure, RowChangeInfo, WpDbReport, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -78,6 +78,10 @@ export interface Api {
   dbStructure: (database: string, table: string) => Promise<DbStructure>;
   dbRows: (database: string, table: string, query: DbRowsQuery) => Promise<DbRowsPage>;
   dbCell: (database: string, table: string, query: DbCellQuery) => Promise<DbCellValue>;
+  /** Table and column names, for the SQL editor's suggestions. */
+  dbSchema: (database: string) => Promise<DbSchema>;
+  /** The row changes saved for Undo on a table, newest first. */
+  rowChanges: (database: string, table: string) => Promise<RowChangeInfo[]>;
   /** One statement that reads, run as the read-only account. */
   dbQuery: (database: string, query: DbQuery) => Promise<DbQueryResult>;
   /** A WordPress site's database as WordPress sees it; blog picks a site of a network. */
@@ -261,6 +265,8 @@ const realApi: Api = {
   // POSTs: a filter's value or a row's key is data, and stays out of URLs and Apache's log.
   dbRows: (database, table, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/rows`, query),
   dbCell: (database, table, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/cell`, query),
+  dbSchema: (database) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/schema`),
+  rowChanges: (database, table) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/row-changes?table=${encodeURIComponent(table)}`),
   dbQuery: (database, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/query`, query),
   wordpressDb: (domain, path, blog) => request('GET', `/api/sites/${encodeURIComponent(domain)}/db/wordpress${atPath(path, '?')}${blog && blog !== 1 ? `${path ? '&' : '?'}blog=${blog}` : ''}`),
   apache: () => request('GET', '/api/apache'),

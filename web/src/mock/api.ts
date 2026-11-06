@@ -3,7 +3,7 @@ import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockWordpressDb } from './db-browser';
+import { mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockDbSchema, mockRowAction, mockRowChanges, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
@@ -824,6 +824,8 @@ export const mockApi: Api = {
     await wait(700);
     const cron = mockCronAction(id, input);
     if (cron) return cron;
+    const row = mockRowAction(id, input);
+    if (row) return row;
     if (id === 'git.pull') {
       // As git answers with color.ui = always: a diffstat with its colors.
       const g = '\u001b[32m', r = '\u001b[31m', x = '\u001b[m';
@@ -1128,6 +1130,14 @@ export const mockApi: Api = {
   dbRows: async (database, table, query) => {
     await wait(250);
     return mockDbRows(database, table, query);
+  },
+  dbSchema: async (database) => {
+    await wait(150);
+    return mockDbSchema(database);
+  },
+  rowChanges: async (database, table) => {
+    await wait(150);
+    return mockRowChanges(database, table);
   },
   dbQuery: async (database, query) => {
     await wait(300);

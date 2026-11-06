@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.12.0 (2026-11-07)
+* **Sites:** rows change from the Database tab's Tables: Edit, Duplicate and Delete on a row, Add a row, and tick rows on a page to delete them together. Long values load in full before you edit them, a PHP serialized value whose string lengths no longer add up (or JSON that no longer reads) is flagged, with Count the lengths again, and NULL is a tick of its own
+* **Databases:** a change applies only while the row still holds what you saw, so an edit made since is never overwritten. Each change saves the rows as they were to `row-changes` in the backups folder (private to you, 14 days) before the panel answers, and Undo, in the toast or under Changes you can undo, puts them back while they still hold what the change left. MySQL's own databases, the ones kept for a site, views, tables without a primary key, binary and computed columns stay read only, and a site's rows wait while a job works on it
+* **Panel:** run history keeps no row values or keys: they are hidden like passwords
+* **Sites:** the SQL runner has a code editor (CodeMirror 6, loaded only with the SQL view): MySQL keywords coloured and suggested, the database's own tables as you type and a table's columns after `table.`, Tab to take a suggestion or indent (Escape then Tab leaves it), brackets closed and matched, and Ctrl+Enter to run. Where it cannot load, the plain text area takes its place
+
 ### v1.11.0 (2026-11-07)
 * **Sites:** the Database tab has an SQL runner: one statement that reads (SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE or VALUES) against the site's database, Ctrl+Enter to run, Explain to see how MySQL would run it, up to 1,000 rows in a grid where a row opens with all its values (PHP serialized and JSON as a tree), CSV of the result, and the last 30 statements kept in this browser
 * **Services:** each database under the MySQL tab has the same SQL runner next to its tables

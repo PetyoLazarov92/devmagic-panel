@@ -14,6 +14,7 @@ import { findVhost } from './sites/discover.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
 import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
 import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
+import { deleteRows, insertRow, type RowsContext, undoRowChange, updateRow } from './mysql-rows.js';
 import { CoreRefused, planAddCore, removeCore } from './sites/cores.js';
 import { CreateRefused, planCreate } from './sites/create.js';
 import { planCleanCopy } from './sites/clean.js';
@@ -161,6 +162,18 @@ async function restoreCronTasks(ctx: ActionContext, domain: string): Promise<voi
 }
 
 /** Runs steps in order and stops at the first failure. */
+const rowsCtx = (ctx: ActionContext): RowsContext => ({
+  config: ctx.config,
+  exec: ctx.exec,
+  mysql: ctx.secrets?.mysql,
+  kept: () => ctx.store.keptDatabases(),
+  siteBusy: (site) => ctx.jobs.busyFor(site) !== undefined,
+});
+
+function rowOutcome({ change, ...result }: ExecResult & { change?: string }): HandlerOutcome {
+  return { results: [result], ...(change ? { data: { backup: change } } : {}) };
+}
+
 /** Makes the SQL runner's read-only account with the admin account and saves it next to the admin account in secrets.json. */
 async function makeReadOnlyAccount(ctx: ActionContext): Promise<ExecResult> {
   const admin = ctx.secrets?.mysql;
@@ -291,6 +304,11 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     startJob(ctx, await planDropUsers(mysqlCtx(ctx), input), `Delete ${input.accounts.length === 1 ? `${input.accounts[0]?.user}@${input.accounts[0]?.host}` : `${input.accounts.length} MySQL users`}`, 'mysql users'),
   'mysql.resetSiteUser': (ctx, input) => resetSiteUser(mysqlCtx(ctx), input),
   'mysql.makeReadOnlyAccount': async (ctx) => [await makeReadOnlyAccount(ctx)],
+  // A row change answers with the name of its saved copy, for the Undo in its toast.
+  'mysql.updateRow': async (ctx, input) => rowOutcome(await updateRow(rowsCtx(ctx), input)),
+  'mysql.insertRow': async (ctx, input) => rowOutcome(await insertRow(rowsCtx(ctx), input)),
+  'mysql.deleteRows': async (ctx, input) => rowOutcome(await deleteRows(rowsCtx(ctx), input)),
+  'mysql.undoRowChange': async (ctx, input) => [await undoRowChange(rowsCtx(ctx), input)],
   'mysql.deleteBackup': async (ctx, input) => [deleteMysqlBackup(mysqlBackupsDir(ctx.uploadsDir), input)],
   'php.setXdebug': (ctx, input) => setXdebug(ctx.config, ctx.exec, ctx.dmpRoot, input),
   'php.setModule': (ctx, input) => setPhpModule(ctx.config, ctx.exec, ctx.dmpRoot, input),
@@ -601,11 +619,14 @@ export function lockKey(id: ActionId, input: unknown): string | undefined {
   return undefined;
 }
 
-/** The input as run history keeps it: any field called password is blanked out. */
+/** Inputs run history never keeps: passwords, and a row's values and key (data from a database). */
+const HIDDEN_INPUTS = new Set(['password', 'rowKey', 'rowKeys', 'rowValues', 'rowWas']);
+
+/** The input as run history keeps it: any field called password, or holding a row's data, is blanked out. */
 export function withoutPasswords(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutPasswords);
   if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, k === 'password' ? '(hidden)' : withoutPasswords(v)]));
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, HIDDEN_INPUTS.has(k) ? '(hidden)' : withoutPasswords(v)]));
 }
 
 /**

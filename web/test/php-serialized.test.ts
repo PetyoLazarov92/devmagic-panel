@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseJsonValue, parsePhpSerialized } from '../src/lib/php-serialized';
+import { fixSerializedLengths, parseJsonValue, parsePhpSerialized } from '../src/lib/php-serialized';
 
 describe('PHP serialized values', () => {
   it('reads nested arrays with every scalar type', () => {
@@ -40,5 +40,19 @@ describe('PHP serialized values', () => {
     expect(parseJsonValue('{"a":[1,2]}')).toEqual({ a: [1, 2] });
     expect(parseJsonValue('42')).toBeUndefined();
     expect(parseJsonValue('{broken')).toBeUndefined();
+  });
+});
+
+describe('fixing serialized lengths after an edit', () => {
+  it('counts each string again in UTF-8 bytes', () => {
+    const edited = 'a:2:{s:4:"home";s:22:"https://local.acme-bikes.com";s:4:"name";s:4:"Café Acme";}';
+    expect(parsePhpSerialized(edited)).toBeNull();
+    const fixed = fixSerializedLengths(edited);
+    expect(fixed).toBe('a:2:{s:4:"home";s:28:"https://local.acme-bikes.com";s:4:"name";s:10:"Café Acme";}');
+    expect(parsePhpSerialized(fixed as string)).not.toBeNull();
+  });
+
+  it('gives up on what still does not read', () => {
+    expect(fixSerializedLengths('a:2:{s:4:"home";}')).toBeNull();
   });
 });

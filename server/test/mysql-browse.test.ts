@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { type BrowseContext, dbCell, dbOverview, dbRows, dbStructure, phpMyAdminUrl, structureWarnings, unescapeBatch } from '../src/mysql-browse.js';
+import { type BrowseContext, dbCell, dbOverview, dbRows, dbSchema, dbStructure, phpMyAdminUrl, structureWarnings, unescapeBatch } from '../src/mysql-browse.js';
 import { BrowseError, type ColumnMeta, cellSql, escapeLike, literalFor, parseRows, rowsSql, textLiteral, toCell, whereSql } from '../src/mysql-sql.js';
 import { type FakeCall, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
@@ -262,6 +262,13 @@ describe('the database browser', () => {
     expect(await dbCell(ctxFor(fake), 'shop_com', 'wp_options', { column: 'option_value', key: ['7'] })).toEqual({ value: 'a long value', cut: false });
     await expect(dbCell(ctxFor(fake), 'shop_com', 'wp_options', { column: 'option_value', key: ['8'] })).rejects.toMatchObject({ status: 404 });
     await expect(dbCell(ctxFor(fake), 'shop_com', 'wp_options', { column: 'nope', key: ['7'] })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('lists every table with its columns in order, names only, for the editor', async () => {
+    const fake = fakeMysql((sql) => (sql.includes('information_schema.COLUMNS') ? json(['wp_options', 'option_id'], ['wp_options', 'option_name'], ['wp_posts', 'ID']) : { code: 1 }));
+    expect(await dbSchema(ctxFor(fake), 'shop_com')).toEqual({ database: 'shop_com', tables: { wp_options: ['option_id', 'option_name'], wp_posts: ['ID'] } });
+    expect(fake.calls.find((c) => c.input?.includes('COLUMNS'))?.input).toContain(`TABLE_SCHEMA = _utf8mb4 X'${hex('shop_com')}' ORDER BY TABLE_NAME, ORDINAL_POSITION`);
+    await expect(dbSchema(ctxFor(fake), 'a;b')).rejects.toMatchObject({ status: 400 });
   });
 
   it('unescapes what mysql --batch escaped', () => {

@@ -38,6 +38,15 @@ alwaysApply: true
   Every run starts `SET SESSION TRANSACTION READ ONLY` and a time limit, and
   the statements go on stdin. A filter's value or a row's key is data: it
   goes in a POST body, never a URL. Rows never go to the assistant.
+- Row changes (`mysql.updateRow`, `insertRow`, `deleteRows`, `undoRowChange`
+  in `server/src/mysql-rows.ts`) read the rows they touch FOR UPDATE, change
+  them and print the copy in one transaction, and save it before answering.
+  An update matches the key and the old values of the changed columns, so a
+  change made since is never overwritten; Undo matches what the change left.
+  Values go through `literalFor` like every other value. Not for MySQL's own
+  or kept databases, views, keyless tables, binary or generated columns. Run
+  history hides `rowKey`, `rowKeys`, `rowValues` and `rowWas`; the assistant
+  never gets these actions.
 - The SQL runner (`server/src/mysql-query.ts`) takes one statement of a kind
   that reads, refuses a second statement, a `/*!` comment and a backslash
   outside a string, and runs it as `devmagic_panel_ro` (SELECT and SHOW VIEW

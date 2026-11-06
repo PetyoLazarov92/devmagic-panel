@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { DbCellValue, DbColumn, DbIndex, DbOverview, DbRowsPage, DbStructure, DbTable, MysqlDatabase } from '@devmagic-panel/shared';
+import type { DbCellValue, DbColumn, DbSchema, DbIndex, DbOverview, DbRowsPage, DbStructure, DbTable, MysqlDatabase } from '@devmagic-panel/shared';
 import { dbCellQuery, dbRowsQuery, isSystemDatabase, mysqlDatabaseName, mysqlIdentifier } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { ExecResult, Executor } from './exec.js';
@@ -174,7 +174,7 @@ export async function dbOverview(ctx: BrowseContext, database: string, now = Dat
   };
 }
 
-interface TableMeta {
+export interface TableMeta {
   table: DbTable;
   columns: ColumnMeta[];
   indexes: DbIndex[];
@@ -182,7 +182,7 @@ interface TableMeta {
 }
 
 /** A table's row in information_schema, its columns and its indexes; refuses a table the database does not have. */
-async function tableMeta(ctx: BrowseContext, database: string, table: string): Promise<TableMeta> {
+export async function tableMeta(ctx: BrowseContext, database: string, table: string): Promise<TableMeta> {
   const db = textLiteral(checkDatabase(database));
   const t = textLiteral(checkTable(table));
   const lines = await read(
@@ -312,4 +312,16 @@ export async function dbCell(ctx: BrowseContext, database: string, table: string
   const binary = isBinary(column);
   const value = toCell(head, length, binary);
   return { value, cut: num(length) > (binary ? CELL_BINARY_MAX : CELL_TEXT_MAX) };
+}
+
+/** Every table and its columns in order, names only, for the SQL editor's suggestions. */
+export async function dbSchema(ctx: BrowseContext, database: string): Promise<DbSchema> {
+  const db = checkDatabase(database);
+  const lines = await read(ctx, `SELECT JSON_ARRAY(TABLE_NAME, COLUMN_NAME) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ${textLiteral(db)} ORDER BY TABLE_NAME, ORDINAL_POSITION;\n`);
+  const tables: Record<string, string[]> = {};
+  for (const line of lines) {
+    const [table, column] = parseJson(line);
+    (tables[String(table)] ??= []).push(String(column));
+  }
+  return { database: db, tables };
 }

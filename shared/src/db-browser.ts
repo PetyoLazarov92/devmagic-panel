@@ -120,6 +120,12 @@ export interface DbColumnHead {
   binary: boolean;
   /** Filtered as a number. */
   numeric: boolean;
+  /** It takes NULL. */
+  nullable?: boolean;
+  /** MySQL numbers it (auto_increment): left out when a row is added. */
+  autoIncrement?: boolean;
+  /** MySQL computes it from other columns: never written. */
+  generated?: boolean;
 }
 
 /** A value cut short, with its full length: characters for text, bytes for binary (head is then hex). */
@@ -229,4 +235,20 @@ export interface DbQueryResult {
   /** More rows than the 1,000 shown. */
   hasMore: boolean;
   ms: number;
+}
+
+/** A row change saved for Undo, as the table's Recent changes list shows it (no values). */
+export interface RowChangeInfo {
+  id: string;
+  kind: 'update' | 'insert' | 'delete';
+  table: string;
+  rows: number;
+  savedAt: string;
+  purgeAt: string;
+}
+
+/** A database's tables and their columns, names only, for the SQL editor's suggestions. */
+export interface DbSchema {
+  database: string;
+  tables: Record<string, string[]>;
 }

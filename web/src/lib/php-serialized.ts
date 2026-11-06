@@ -135,3 +135,14 @@ export function parseJsonValue(text: string): unknown {
     return undefined;
   }
 }
+
+/**
+ * Counts every s:N:"..." length again after a hand edit, in UTF-8 bytes as
+ * PHP does. A string ends at the "; that is followed by what may follow a
+ * value (another value, a closing brace or the end), so a "; inside a string
+ * rarely misleads it. Null when even the result does not read as a whole value.
+ */
+export function fixSerializedLengths(text: string): string | null {
+  const fixed = text.replace(/s:\d+:"([\s\S]*?)";(?=[}]|[sibdaO]:|N;|$)/g, (_, inner: string) => `s:${encoder.encode(inner).length}:"${inner}";`);
+  return parsePhpSerialized(fixed) ? fixed : null;
+}

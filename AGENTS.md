@@ -83,7 +83,8 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    password (`server/src/mysql-admin.ts`).
    Passwords go to MySQL through `MYSQL_PWD` or stdin, and to WP-CLI through
    stdin (`--prompt`), never argv. Run history stores any input field called
-   `password` as `(hidden)`. Never log them or send them to an AI.
+   `password`, and a row's values and keys (`rowKey`, `rowKeys`, `rowValues`,
+   `rowWas`), as `(hidden)`. Never log them or send them to an AI.
    The panel password changes in the panel (the current one first) and resets
    on the login page with the computer password: `sudo -k -S -v` on stdin,
    offered only where sudo asks this account for a password, behind a global
@@ -99,7 +100,10 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
 10. **Bump the version on every change**, once per session: `package.json`,
     the README badge and `CHANGELOG.md`.
 11. **No new runtime dependencies without a reason.** Run history uses
-    `node:sqlite` on purpose. Prefer what Fastify, zod and React already give.
+    `node:sqlite` on purpose. The SQL runner's editor is CodeMirror 6, in the
+    web app only and loaded with the SQL view: a code editor with
+    suggestions is not worth writing by hand. Prefer what Fastify, zod and
+    React already give.
 12. **Respect the existing setup.** The panel lives next to sites made by hand
     or by devmagic:
     - **A site is a domain, or a domain and a path**: a WordPress install a

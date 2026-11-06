@@ -1,7 +1,8 @@
 import type { DbCell, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable } from '@devmagic-panel/shared';
 import { DB_FILTER_LABELS, DB_FILTER_OPS, DB_PAGE_SIZES } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Filter, KeyRound, LoaderCircle, Plus, RefreshCw, Rows3, Search, Table2, TriangleAlert, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { DeleteRowsDialog, deleteRowsNow, type EditorMode, RowChangesCard, RowEditor, toastRowChange } from '@/components/row-editor';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -174,6 +175,13 @@ function tableMeta(t: DbTable): string {
   return parts.join(' · ');
 }
 
+/** Rows of a table change here unless its database is MySQL's own or kept for a site, or the table is a view. */
+function editableIn(overview: DbOverview | undefined, table: string): boolean {
+  if (!overview || overview.kind === 'system' || overview.kind === 'kept') return false;
+  const info = overview.tables.find((t) => t.name === table);
+  return Boolean(info && !info.view);
+}
+
 function TableView({ database, table, show, overview, onNavigate }: { database: string; table: string; show: DbShow; overview: DbOverview | undefined; onNavigate: Props['onNavigate'] }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
@@ -194,7 +202,7 @@ function TableView({ database, table, show, overview, onNavigate }: { database: 
           )}
         </div>
       </div>
-      {show === 'structure' ? <StructureView database={database} table={table} /> : <RowsView key={`${database}.${table}`} database={database} table={table} />}
+      {show === 'structure' ? <StructureView database={database} table={table} /> : <RowsView key={`${database}.${table}`} database={database} table={table} editable={editableIn(overview, table)} />}
     </div>
   );
 }
@@ -205,13 +213,20 @@ type Sort = { column: string; dir: 'asc' | 'desc' } | undefined;
 
 const needsValue = (op: DbFilterOp) => op !== 'isNull' && op !== 'notNull';
 
-function RowsView({ database, table }: { database: string; table: string }) {
+const keyOf = (row: DbRow) => row.key?.join('\u0000') ?? '';
+
+function RowsView({ database, table, editable }: { database: string; table: string; editable: boolean }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof DB_PAGE_SIZES)[number]>(50);
   const [sort, setSort] = useState<Sort>(undefined);
   const [filters, setFilters] = useState<DbFilter[]>([]);
   const [drafts, setDrafts] = useState<DbFilter[]>([]);
   const [open, setOpen] = useState<DbRow | null>(null);
+  const [editor, setEditor] = useState<{ mode: EditorMode; row: DbRow | null } | null>(null);
+  const [deleting, setDeleting] = useState<DbRow[] | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [changes, setChanges] = useState(0);
   const query = useMemo(() => ({ page, pageSize, ...(sort ? { sort } : {}), filters }), [page, pageSize, sort, filters]);
   const rows = useAsync(() => api.dbRows(database, table, query), [database, table, query]);
   const data = rows.data;
@@ -220,6 +235,36 @@ function RowsView({ database, table }: { database: string; table: string }) {
   useEffect(() => {
     if (data) setColumns(data.columns);
   }, [data]);
+  // A selection belongs to the page it was made on.
+  useEffect(() => setSelected(new Set()), [query]);
+  const canChange = editable && Boolean(data?.primaryKey.length);
+
+  /** After a change: the page and the list of changes read again, the selection cleared, a toast with Undo. */
+  function changed(title: string, change?: string) {
+    setEditor(null);
+    setOpen(null);
+    setDeleting(null);
+    setSelected(new Set());
+    rows.reload();
+    setChanges((n) => n + 1);
+    toastRowChange(title, database, table, change, () => {
+      rows.reload();
+      setChanges((n) => n + 1);
+    });
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    const r = await deleteRowsNow(database, table, deleting.map((row) => row.key ?? []));
+    setDeleteBusy(false);
+    if (!r.ok) {
+      setDeleting(null);
+      toast({ tone: 'danger', title: 'Not deleted', detail: r.error });
+      return;
+    }
+    changed(deleting.length === 1 ? 'Row deleted' : `${deleting.length} rows deleted`, r.change);
+  }
 
   function toggleSort(column: string) {
     setPage(1);
@@ -240,9 +285,11 @@ function RowsView({ database, table }: { database: string; table: string }) {
 
   // A new filter starts on the first text column: most searches are for a name or a value.
   const first = (columns.find((c) => !c.numeric && !c.binary) ?? columns[0])?.name;
-  const changed = JSON.stringify(drafts) !== JSON.stringify(filters);
+  const draftsChanged = JSON.stringify(drafts) !== JSON.stringify(filters);
+  const picked = data?.rows.filter((r) => selected.has(keyOf(r))) ?? [];
 
   return (
+    <>
     <Card>
       <form onSubmit={apply} className="grid gap-2 border-b px-4 py-3">
         {drafts.map((f, i) => (
@@ -266,8 +313,12 @@ function RowsView({ database, table }: { database: string; table: string }) {
             {drafts.length ? <Plus /> : <Filter />}
             {drafts.length ? 'Add a filter' : 'Filter'}
           </Button>
-          {drafts.length > 0 && <Button size="sm" type="submit" disabled={!changed}>Apply</Button>}
+          {drafts.length > 0 && <Button size="sm" type="submit" disabled={!draftsChanged}>Apply</Button>}
           {(drafts.length > 0 || filters.length > 0) && <Button size="sm" variant="ghost" onClick={clear}>Clear</Button>}
+          {canChange && <Button size="sm" variant="outline" onClick={() => setEditor({ mode: 'add', row: null })}><Plus />Add a row</Button>}
+          {canChange && picked.length > 0 && (
+            <Button size="sm" variant="outline" className="text-danger" onClick={() => setDeleting(picked)}><Trash2 />Delete {picked.length === 1 ? 'the row' : `${picked.length} rows`}</Button>
+          )}
           <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
             {rows.loading && <LoaderCircle className="size-4 animate-spin" aria-label="Reading rows" />}
             <label htmlFor={`${table}-page-size`}>Rows a page</label>
@@ -278,7 +329,7 @@ function RowsView({ database, table }: { database: string; table: string }) {
         </div>
       </form>
       {rows.error && <p role="alert" className="mx-4 mt-3 rounded-lg border border-danger/30 bg-danger/8 px-4 py-2.5 text-sm text-danger">{rows.error}</p>}
-      {data && <RowsGrid page={data} sort={sort} onSort={toggleSort} onOpen={setOpen} />}
+      {data && <RowsGrid page={data} sort={sort} onSort={toggleSort} onOpen={setOpen} {...(canChange ? { selected, onSelect: setSelected } : {})} />}
       {!data && rows.loading && <div className="m-4 h-48 animate-pulse rounded-lg bg-muted" />}
       {data && (
         <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2.5 text-xs text-muted-foreground">
@@ -291,8 +342,27 @@ function RowsView({ database, table }: { database: string; table: string }) {
           </Button>
         </div>
       )}
-      <RowDialog row={open} page={data} database={database} table={table} onClose={() => setOpen(null)} />
+      <RowDialog
+        row={open}
+        page={data}
+        database={database}
+        table={table}
+        onClose={() => setOpen(null)}
+        {...(canChange
+          ? {
+              onEdit: (row: DbRow) => (setOpen(null), setEditor({ mode: 'edit', row })),
+              onDuplicate: (row: DbRow) => (setOpen(null), setEditor({ mode: 'duplicate', row })),
+              onDelete: (row: DbRow) => (setOpen(null), setDeleting([row])),
+            }
+          : {})}
+      />
+      {editor && data && (
+        <RowEditor mode={editor.mode} database={database} table={table} columns={data.columns} primaryKey={data.primaryKey} row={editor.row} onClose={() => setEditor(null)} onDone={changed} />
+      )}
+      {deleting && <DeleteRowsDialog count={deleting.length} table={table} busy={deleteBusy} onClose={() => setDeleting(null)} onConfirm={() => void confirmDelete()} />}
     </Card>
+    {canChange && <RowChangesCard database={database} table={table} refresh={changes} onUndone={() => rows.reload()} />}
+    </>
   );
 }
 
@@ -304,12 +374,33 @@ function pageLine(p: DbRowsPage): string {
   return `Rows ${number(from)} to ${number(to)}${of}`;
 }
 
-function RowsGrid({ page, sort, onSort, onOpen }: { page: DbRowsPage; sort: Sort; onSort: (column: string) => void; onOpen: (row: DbRow) => void }) {
+function RowsGrid({ page, sort, onSort, onOpen, selected, onSelect }: {
+  page: DbRowsPage;
+  sort: Sort;
+  onSort: (column: string) => void;
+  onOpen: (row: DbRow) => void;
+  /** Rows ticked to delete together, by key; no tick column without it. */
+  selected?: Set<string>;
+  onSelect?: (next: Set<string>) => void;
+}) {
+  const all = page.rows.length > 0 && page.rows.every((r) => selected?.has(keyOf(r)));
+  const toggle = (row: DbRow) => {
+    if (!selected || !onSelect) return;
+    const next = new Set(selected);
+    if (next.has(keyOf(row))) next.delete(keyOf(row));
+    else next.add(keyOf(row));
+    onSelect(next);
+  };
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-left text-[13px]">
         <thead>
           <tr className="border-b bg-muted/50">
+            {onSelect && (
+              <th scope="col" className="w-8 px-3 py-2">
+                <input type="checkbox" aria-label="Tick every row on this page" checked={all} onChange={() => onSelect(all ? new Set() : new Set(page.rows.map(keyOf)))} />
+              </th>
+            )}
             {page.columns.map((c) => {
               const sorted = sort?.column === c.name ? sort.dir : undefined;
               return (
@@ -328,6 +419,11 @@ function RowsGrid({ page, sort, onSort, onOpen }: { page: DbRowsPage; sort: Sort
         <tbody>
           {page.rows.map((row, i) => (
             <tr key={row.key?.join('\u0000') ?? i} tabIndex={0} onClick={() => onOpen(row)} onKeyDown={(e) => e.key === 'Enter' && onOpen(row)} className="cursor-pointer border-b last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted focus-visible:outline-none">
+              {onSelect && (
+                <td className="px-3 py-1.5 align-top" onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" aria-label="Tick this row" checked={selected?.has(keyOf(row)) ?? false} onChange={() => toggle(row)} />
+                </td>
+              )}
               {row.cells.map((cell, j) => (
                 <td key={j} className="max-w-[22rem] px-3 py-1.5 align-top">
                   <CellPreview cell={cell} numeric={Boolean(page.columns[j]?.numeric)} />
@@ -358,7 +454,17 @@ function CellPreview({ cell, numeric }: { cell: DbCell; numeric: boolean }) {
 
 // ── one row ──────────────────────────────────────────────────
 
-function RowDialog({ row, page, database, table, onClose }: { row: DbRow | null; page: DbRowsPage | undefined; database: string; table: string; onClose: () => void }) {
+function RowDialog({ row, page, database, table, onClose, onEdit, onDuplicate, onDelete }: {
+  row: DbRow | null;
+  page: DbRowsPage | undefined;
+  database: string;
+  table: string;
+  onClose: () => void;
+  /** Present when the table's rows can change here. */
+  onEdit?: (row: DbRow) => void;
+  onDuplicate?: (row: DbRow) => void;
+  onDelete?: (row: DbRow) => void;
+}) {
   return (
     <Dialog open={row !== null} onClose={onClose} title={`A row of ${table}`} className="w-[min(48rem,calc(100vw-2rem))]">
       {row && page && (
@@ -375,8 +481,11 @@ function RowDialog({ row, page, database, table, onClose }: { row: DbRow | null;
           {!row.key && <p className="text-xs text-muted-foreground">This table has no primary key, so long values show only their start here.</p>}
         </div>
       )}
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        {row?.key && onDelete && <Button variant="ghost" className="mr-auto text-danger" onClick={() => onDelete(row)}><Trash2 />Delete</Button>}
         <Button variant="outline" onClick={onClose}>Close</Button>
+        {row?.key && onDuplicate && <Button variant="outline" onClick={() => onDuplicate(row)}><Copy />Duplicate</Button>}
+        {row?.key && onEdit && <Button onClick={() => onEdit(row)}><Pencil />Edit</Button>}
       </div>
     </Dialog>
   );
