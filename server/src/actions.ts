@@ -12,7 +12,8 @@ import {
 } from './sites/site-actions.js';
 import { findVhost } from './sites/discover.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
-import type { Secrets } from './secrets.js';
+import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
+import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
 import { CoreRefused, planAddCore, removeCore } from './sites/cores.js';
 import { CreateRefused, planCreate } from './sites/create.js';
 import { planCleanCopy } from './sites/clean.js';
@@ -60,6 +61,8 @@ export interface ActionContext {
   jobs: Jobs;
   uploadsDir: string;
   secrets: Secrets | null;
+  /** Where secrets are saved, for an action that adds one (the read-only MySQL account). */
+  secretsFile?: string;
   /** WordPress.org's status per release, to check a core before downloading it. */
   coreStatus?: () => Promise<CoreStatusMap | null>;
   /** The run history row of the current call. */
@@ -158,6 +161,20 @@ async function restoreCronTasks(ctx: ActionContext, domain: string): Promise<voi
 }
 
 /** Runs steps in order and stops at the first failure. */
+/** Makes the SQL runner's read-only account with the admin account and saves it next to the admin account in secrets.json. */
+async function makeReadOnlyAccount(ctx: ActionContext): Promise<ExecResult> {
+  const admin = ctx.secrets?.mysql;
+  if (!admin) throw new MysqlRefused('The panel has no MySQL admin account: add one on the Environment page');
+  if (!ctx.secretsFile) throw new MysqlRefused('The panel cannot write its secrets file here');
+  const made = await createReadOnlyAccount(ctx.exec, admin);
+  if ('problem' in made) return { code: 1, stdout: '', stderr: made.problem };
+  // Read again just before writing: the file may have changed since this request began.
+  const current = readSecrets(ctx.secretsFile);
+  if (!current) return { code: 1, stdout: '', stderr: 'The secrets file is gone: run setup again' };
+  writeSecrets(ctx.secretsFile, { ...current, mysqlReadOnly: made.account });
+  return { code: 0, stdout: `${READ_ONLY_MYSQL_USER}@localhost can read every database and change none; its password is in the panel's secrets file`, stderr: '' };
+}
+
 async function steps(...run: Array<() => Promise<ExecResult>>): Promise<ExecResult[]> {
   const results: ExecResult[] = [];
   for (const step of run) {
@@ -273,6 +290,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'mysql.dropUsers': async (ctx, input) =>
     startJob(ctx, await planDropUsers(mysqlCtx(ctx), input), `Delete ${input.accounts.length === 1 ? `${input.accounts[0]?.user}@${input.accounts[0]?.host}` : `${input.accounts.length} MySQL users`}`, 'mysql users'),
   'mysql.resetSiteUser': (ctx, input) => resetSiteUser(mysqlCtx(ctx), input),
+  'mysql.makeReadOnlyAccount': async (ctx) => [await makeReadOnlyAccount(ctx)],
   'mysql.deleteBackup': async (ctx, input) => [deleteMysqlBackup(mysqlBackupsDir(ctx.uploadsDir), input)],
   'php.setXdebug': (ctx, input) => setXdebug(ctx.config, ctx.exec, ctx.dmpRoot, input),
   'php.setModule': (ctx, input) => setPhpModule(ctx.config, ctx.exec, ctx.dmpRoot, input),

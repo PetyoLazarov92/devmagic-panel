@@ -13,7 +13,7 @@ import { pingMysql } from './environment.js';
 import { runCommand } from './exec.js';
 import { planInstallMailpit } from './mailpit.js';
 import { runMcpStdio } from './mcp.js';
-import { createPanelAccount, PANEL_MYSQL_USER } from './mysql-admin.js';
+import { createPanelAccount, createReadOnlyAccount, PANEL_MYSQL_USER, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
 import { hashPassword, readSecrets, writeSecrets, type Secrets } from './secrets.js';
 import { RunStore } from './store.js';
 import { panelCli } from './update.js';
@@ -192,7 +192,20 @@ async function main(): Promise<void> {
     const mysql = await askMysql(current?.mysql);
     // Keep what setup does not ask about, like a saved Anthropic key; a GitHub token an older panel saved goes.
     const { mysql: _old, github: _token, ...rest } = (current ?? {}) as Partial<Secrets> & { github?: unknown };
-    writeSecrets(secretsFile, { ...rest, panelPasswordHash, ...(changedAt ? { panelPasswordChangedAt: changedAt } : {}), ...(mysql ? { mysql } : {}) });
+    // The SQL runner's read-only account, made with the admin account; kept when it still signs in.
+    let readOnly = rest.mysqlReadOnly;
+    if (mysql && !(readOnly && (await pingMysql(runCommand, readOnly)).code === 0)) {
+      const made = await createReadOnlyAccount(runCommand, mysql);
+      if ('account' in made) {
+        readOnly = made.account;
+        console.log(`Made ${READ_ONLY_MYSQL_USER}@localhost, the read-only account the SQL runner uses.`);
+      } else {
+        readOnly = undefined;
+        console.log(`Could not make the read-only MySQL account (${made.problem}); the Environment page offers it again.`);
+      }
+    }
+    const { mysqlReadOnly: _ro, ...others } = rest;
+    writeSecrets(secretsFile, { ...others, panelPasswordHash, ...(changedAt ? { panelPasswordChangedAt: changedAt } : {}), ...(mysql ? { mysql } : {}), ...(mysql && readOnly ? { mysqlReadOnly: readOnly } : {}) });
     console.log(`Saved to ${secretsFile} (readable only by you).`);
     return;
   }

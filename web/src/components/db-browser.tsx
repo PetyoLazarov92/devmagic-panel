@@ -432,7 +432,7 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
 }
 
 /** A value as text, or as a tree when it is PHP serialized or JSON. */
-function ValueView({ cell }: { cell: DbCell }) {
+export function ValueView({ cell }: { cell: DbCell }) {
   const text = cell === null ? null : typeof cell === 'string' ? cell : cell.head;
   const binary = cell !== null && typeof cell !== 'string' && cell.binary;
   const php = useMemo(() => (text && !binary && typeof cell === 'string' ? parsePhpSerialized(text) : null), [text, binary, cell]);

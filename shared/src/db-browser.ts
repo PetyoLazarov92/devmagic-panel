@@ -210,3 +210,23 @@ export interface WpDbReport {
   errors: Partial<Record<'autoload' | 'transients' | 'content' | 'orphans' | 'metaKeys' | 'users', string>>;
   checkedAt: string;
 }
+
+/** One statement for the SQL runner; explain asks MySQL how it would run it instead. */
+export const dbQuery = z.object({
+  sql: z.string().max(100_000, 'A statement under 100,000 characters'),
+  explain: z.boolean().optional(),
+});
+export type DbQuery = z.infer<typeof dbQuery>;
+
+/** What a statement of the SQL runner read: up to 1,000 rows, NULL kept apart from the text NULL. */
+export interface DbQueryResult {
+  /** The statement's first word, like SELECT. */
+  statement: string;
+  explain: boolean;
+  /** The result's column names, in order; empty when no row came back. */
+  columns: string[];
+  rows: Array<Array<string | null>>;
+  /** More rows than the 1,000 shown. */
+  hasMore: boolean;
+  ms: number;
+}

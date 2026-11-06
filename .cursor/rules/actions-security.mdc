@@ -38,6 +38,12 @@ alwaysApply: true
   Every run starts `SET SESSION TRANSACTION READ ONLY` and a time limit, and
   the statements go on stdin. A filter's value or a row's key is data: it
   goes in a POST body, never a URL. Rows never go to the assistant.
+- The SQL runner (`server/src/mysql-query.ts`) takes one statement of a kind
+  that reads, refuses a second statement, a `/*!` comment and a backslash
+  outside a string, and runs it as `devmagic_panel_ro` (SELECT and SHOW VIEW
+  only, made by `mysql.makeReadOnlyAccount`) with `mysql --binary-mode`, so
+  the text is never a client command. It never falls back to the admin
+  account. A query past its limit is stopped on the server with KILL QUERY.
 - Git URLs and branches are validated (`gitUrl`, `branchName`) and passed after
   `--`, so nothing can be read as a git option.
 - Root deletes need proof of ownership: `site-dir-remove` only removes a folder

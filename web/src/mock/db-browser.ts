@@ -1,4 +1,4 @@
-import type { DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport } from '@devmagic-panel/shared';
+import type { DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport } from '@devmagic-panel/shared';
 import { DB_CELL_HEAD, isSystemDatabase, WP_AUTOLOAD_LIMIT } from '@devmagic-panel/shared';
 import { sites } from './fixtures';
 
@@ -316,4 +316,28 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
     errors: {},
     checkedAt: new Date().toISOString(),
   };
+}
+
+/** The mockup's SQL runner: SELECT * FROM a mock table (with LIMIT), SHOW TABLES and EXPLAIN; anything that changes is refused as the server would. */
+export function mockDbQuery(database: string, query: DbQuery): DbQueryResult {
+  const sql = query.sql.trim().replace(/;\s*$/, '');
+  const kind = (/^[\s(]*([A-Za-z]+)/.exec(sql)?.[1] ?? '').toUpperCase();
+  if (!['SELECT', 'WITH', 'SHOW', 'EXPLAIN', 'DESCRIBE', 'DESC', 'TABLE', 'VALUES'].includes(kind)) {
+    throw new Error(`${kind || 'That'} changes or does not read: the SQL runner runs SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE and VALUES`);
+  }
+  if (sql.includes(';')) throw new Error('One statement at a time');
+  const ms = 4 + Math.round(Math.random() * 30);
+  if (query.explain) {
+    return { statement: kind, explain: true, columns: ['id', 'select_type', 'table', 'type', 'possible_keys', 'key', 'rows', 'Extra'], rows: [['1', 'SIMPLE', 'wp_options', 'ref', 'autoload', 'autoload', '412', 'Using where']], hasMore: false, ms };
+  }
+  if (kind === 'SHOW') {
+    const tables = mockDbOverview(database).tables.map((t) => [t.name]);
+    return { statement: kind, explain: false, columns: [`Tables_in_${database}`], rows: tables, hasMore: false, ms };
+  }
+  const from = /\bfrom\s+`?([A-Za-z0-9_]+)`?/i.exec(sql)?.[1];
+  if (!from) return { statement: kind, explain: false, columns: ['1'], rows: [['1']], hasMore: false, ms };
+  const t = find(database, from);
+  const limit = Number(/\blimit\s+(\d+)/i.exec(sql)?.[1] ?? 1000);
+  const rows = t.rows.slice(0, Math.min(limit, 1000));
+  return { statement: kind, explain: false, columns: rows.length ? t.columns.map((c) => c.name) : [], rows, hasMore: t.rows.length > 1000 && limit > 1000, ms };
 }

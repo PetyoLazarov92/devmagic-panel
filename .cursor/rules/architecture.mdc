@@ -39,7 +39,7 @@ browser ─https─> Apache (local.devmagic, local CA cert) ─proxy─> Fastify
 | `server/src/self-check.ts` | The Environment page's Panel installation group: install.sh's listed files, root scripts against the panel's code, build against the code. The panel runs from a release in `~/.local/share/devmagic-panel/releases/<name>`, the one `current` points at; `install.sh` puts it there (`prepare_release`), built from the checked out commit when run from a checkout |
 | `server/src/nginx.ts` | nginx next to Apache: installed and set up (the panel's `conf.d/devmagic-panel.conf`), the nginx tab's report, configs that take Apache's ports, and the setup and teardown jobs; root work in `scripts/lib/nginx.sh` |
 | `server/src/sites/server-switch.ts` | `site.setServer`: moving a site between Apache and nginx, what keeps it on Apache, and what nginx leaves out of its `.htaccess` |
-| `server/src/mysql-browse.ts`, `mysql-sql.ts` | The database browser: a database's tables, a table's structure, its rows a page at a time, one value in full. Read only (a read-only transaction and a time limit on every run); all its SQL is built in `mysql-sql.ts`. `mysql-wordpress.ts` reads a WordPress site's database as WordPress sees it (autoload, transients, clean-up counts, users) and the assistant's summary of it |
+| `server/src/mysql-browse.ts`, `mysql-sql.ts` | The database browser: a database's tables, a table's structure, its rows a page at a time, one value in full. Read only (a read-only transaction and a time limit on every run); all its SQL is built in `mysql-sql.ts`. `mysql-query.ts` is the SQL runner (one statement that reads, as the read-only account). `mysql-wordpress.ts` reads a WordPress site's database as WordPress sees it (autoload, transients, clean-up counts, users) and the assistant's summary of it |
 | `server/src/cron.ts` | Your crontab: the panel's marked block, its task lines, saved copies for Undo, and the Cron tab's report |
 | `server/src/cron-run.ts` | The runner cron starts as `cli.js cron-run`: checks a task's arguments again, runs it without a shell, one at a time, and records the run |
 | `server/src/sites/wp-cron.ts` | A site's WP-Cron through WP-CLI: events, intervals, run, delete with Undo, and the switch to run it from cron |
@@ -62,7 +62,7 @@ Files on a machine:
 | `/etc/hosts` | root | The panel's lines sit between `# BEGIN devmagic-panel` and `# END devmagic-panel` |
 | `~/devmagic-panel-backups/` | user, 0700 | Backups (0600 each, they hold private keys), and the saved crontab and WP-Cron events behind Undo |
 | The panel user's crontab | user | The panel's tasks between `# BEGIN devmagic-panel` and `# END devmagic-panel`; every other line is yours |
-| `~/.config/devmagic-panel/secrets.json` | user, 0600 | Panel password hash, MySQL admin account, Anthropic key |
+| `~/.config/devmagic-panel/secrets.json` | user, 0600 | Panel password hash, MySQL admin account, the SQL runner's read-only account, Anthropic key |
 | `~/.local/share/devmagic-panel/releases/` | user | Installed releases (built code and runtime dependencies); `current` points at the running one |
 | `~/.local/share/devmagic-panel/update-status.json` | user | How the last `install.sh --from-panel` went (release, step, state, rolled back, log); `update-run.json` next to it names its run and unit until a panel finishes the run |
 | `~/.local/share/devmagic-panel/node/` | user | Node.js for the panel only, when install.sh found none; `current` points at it and the service runs it |

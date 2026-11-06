@@ -3,7 +3,7 @@ import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { mockDbCell, mockDbOverview, mockDbRows, mockDbStructure, mockWordpressDb } from './db-browser';
+import { mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
@@ -34,6 +34,10 @@ const environment: EnvironmentReport = {
       fixes: [{ action: 'hosts.add', input: { domain: 'local.dailypost.com', aliases: [] }, label: 'Add to hosts' }],
     },
     { id: 'mysql.reachable', group: 'database', label: 'MySQL admin account', status: 'ok', detail: 'connected as root@localhost' },
+    {
+      id: 'mysql.readonly', group: 'database', label: 'Read-only MySQL account', status: 'warn', optional: true, detail: 'not made yet: the SQL runner on the Database tab needs it',
+      fixes: [{ action: 'mysql.makeReadOnlyAccount', input: {}, label: 'Make it' }],
+    },
     { id: 'php.version', group: 'php', label: 'PHP', status: 'ok', detail: '8.3.6' },
     { id: 'php.imagick', group: 'php', label: 'Imagick', status: 'ok', detail: 'installed', recommended: true },
     { id: 'tools.wpcli', group: 'tools', label: 'WP-CLI', status: 'ok', detail: 'WP-CLI 2.11.0' },
@@ -1124,6 +1128,10 @@ export const mockApi: Api = {
   dbRows: async (database, table, query) => {
     await wait(250);
     return mockDbRows(database, table, query);
+  },
+  dbQuery: async (database, query) => {
+    await wait(300);
+    return mockDbQuery(database, query);
   },
   wordpressDb: async (domain, path, blog) => {
     await wait(350);

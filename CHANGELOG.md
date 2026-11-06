@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.11.0 (2026-11-07)
+* **Sites:** the Database tab has an SQL runner: one statement that reads (SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE or VALUES) against the site's database, Ctrl+Enter to run, Explain to see how MySQL would run it, up to 1,000 rows in a grid where a row opens with all its values (PHP serialized and JSON as a tree), CSV of the result, and the last 30 statements kept in this browser
+* **Services:** each database under the MySQL tab has the same SQL runner next to its tables
+* **Databases:** the runner reads as its own MySQL account, devmagic_panel_ro, which has SELECT and SHOW VIEW only, so MySQL itself refuses a change; it runs inside a read-only transaction, stops at 30 seconds (on the server too) and 4 MB, and a second statement, a client command like `\!` or a `/*!` comment is refused before anything runs. Setup makes the account, and the Environment page offers Make it when it is missing
+
 ### v1.10.0 (2026-11-07)
 * **Sites:** a WordPress site's Database tab has a WordPress view: autoloaded options against Site Health's 800 KB limit with the biggest by name, transients (and the expired ones still stored), what a clean-up would find (revisions, auto-drafts, trash, spam, meta and terms left behind by something deleted), the postmeta keys that take the most room, and the users with their roles. On a network you pick the site, and its own tables are read. It only reads; a section MySQL stops for taking too long says so and the rest still shows
 * **Assistant:** a database overview tool for the chat and MCP gives Claude a site's database in names, sizes and counts (the biggest tables and options by name, transients, clean-up counts, the biggest postmeta keys), never a value from a row, a user or an email

@@ -164,7 +164,7 @@ async function nginxChecks(ctx: CheckContext): Promise<Check[]> {
  * mysqladmin: mysqladmin refuses client options it does not know, like a
  * max_allowed_packet under [client] in my.cnf.
  */
-export function pingMysql(exec: Executor, account: NonNullable<Secrets['mysql']>): Promise<ExecResult> {
+export function pingMysql(exec: Executor, account: { user: string; host: string; password: string }): Promise<ExecResult> {
   return exec('mysql', ['--user', account.user, '--host', account.host, '--batch', '--skip-column-names', '-e', 'SELECT 1'], {
     env: { MYSQL_PWD: account.password },
     timeoutMs: 10_000,
@@ -181,7 +181,20 @@ async function databaseChecks(ctx: CheckContext): Promise<Check[]> {
     ping.code === 0
       ? ok('mysql.reachable', 'MySQL admin account', `connected as ${mysql.user}@${mysql.host}`)
       : fail('mysql.reachable', 'MySQL admin account', firstLine(ping.stderr) || 'cannot connect'),
+    ...(ping.code === 0 ? [await readOnlyCheck(ctx)] : []),
   ];
+}
+
+/** The SQL runner's account: it reads with SELECT and SHOW VIEW only, so a query can change nothing. */
+async function readOnlyCheck(ctx: CheckContext): Promise<Check> {
+  const label = 'Read-only MySQL account';
+  const fixes: CheckFix[] = [{ action: 'mysql.makeReadOnlyAccount', input: {}, label: ctx.secrets?.mysqlReadOnly ? 'Make it again' : 'Make it' }];
+  const account = ctx.secrets?.mysqlReadOnly;
+  if (!account) return warn('mysql.readonly', label, 'not made yet: the SQL runner on the Database tab needs it', { optional: true, fixes });
+  const ping = await pingMysql(ctx.exec, account);
+  return ping.code === 0
+    ? ok('mysql.readonly', label, `${account.user}@${account.host} signs in, for the SQL runner`, { optional: true })
+    : warn('mysql.readonly', label, `${account.user}@${account.host} does not sign in: ${firstLine(ping.stderr) || 'cannot connect'}`, { optional: true, fixes });
 }
 
 // ── PHP and tools ────────────────────────────────────────────

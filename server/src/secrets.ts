@@ -19,6 +19,12 @@ export interface Secrets {
     password: string;
     host: string;
   };
+  /** The SQL runner's account: SELECT and SHOW VIEW only (mysql-admin.ts). */
+  mysqlReadOnly?: {
+    user: string;
+    password: string;
+    host: string;
+  };
   /** The assistant's Anthropic API key, when saved in the panel. */
   anthropic?: { apiKey: string };
 }

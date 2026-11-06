@@ -4,6 +4,7 @@ import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCirc
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { settled, StepList, useJob } from '@/components/job-steps';
+import { SqlRunner } from '@/components/sql-runner';
 import { WordpressDbView } from '@/components/wordpress-db';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
@@ -29,7 +30,7 @@ const JOB_ACTIONS = {
   clean: 'db.cleanCopy', cleanCurrent: 'db.cleanCurrent', export: 'db.exportClean', restoreKept: 'db.restoreKept',
 } as const;
 
-type DbView = 'tables' | 'wordpress' | 'tools';
+type DbView = 'tables' | 'wordpress' | 'sql' | 'tools';
 
 /** The Database tab's address: its view, in Tables the table and what of it shows, in WordPress the site of a network. */
 export function databaseHref(site: Pick<Site, 'domain' | 'path'>, view: DbView, location: DbLocation = { table: null, show: 'rows' }, blog = 1): string {
@@ -52,7 +53,7 @@ export function databaseHref(site: Pick<Site, 'domain' | 'path'>, view: DbView, 
 export function DatabaseTab({ site }: { site: Site }) {
   const wordpress = site.core.kind !== 'none';
   const requested = useQueryParam('view');
-  const view: DbView = requested === 'tools' ? 'tools' : requested === 'wordpress' && wordpress ? 'wordpress' : 'tables';
+  const view: DbView = requested === 'tools' || requested === 'sql' ? requested : requested === 'wordpress' && wordpress ? 'wordpress' : 'tables';
   const table = useQueryParam('table');
   const show = useQueryParam('show') === 'structure' ? 'structure' : 'rows';
   const blogParam = Number(useQueryParam('blog'));
@@ -61,12 +62,14 @@ export function DatabaseTab({ site }: { site: Site }) {
     return <p className="rounded-xl border bg-card px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p>;
   }
   const go = (next: DbView, location?: DbLocation, nextBlog = 1) => navigate(databaseHref(site, next, location, nextBlog), { scroll: false });
-  const views: Array<[DbView, string]> = [['tables', 'Tables'], ...(wordpress ? [['wordpress', 'WordPress'] as [DbView, string]] : []), ['tools', 'Backups and tools']];
+  const views: Array<[DbView, string]> = [['tables', 'Tables'], ...(wordpress ? [['wordpress', 'WordPress'] as [DbView, string]] : []), ['sql', 'SQL'], ['tools', 'Backups and tools']];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <Segmented label="Database" value={view} onChange={(v) => go(v)} options={views} className="justify-self-start" />
       {view === 'tools' ? (
         <DatabaseTools site={site} />
+      ) : view === 'sql' ? (
+        <SqlRunner key={site.db.name} database={site.db.name} />
       ) : view === 'wordpress' ? (
         <WordpressDbView site={site} blog={blog} onBlog={(b) => go('wordpress', undefined, b)} onTable={(t) => go('tables', { table: t, show: 'rows' })} />
       ) : (

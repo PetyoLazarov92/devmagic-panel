@@ -554,6 +554,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({ name: mysqlBackupName }),
   },
+  'mysql.makeReadOnlyAccount': {
+    title: 'Make the read-only MySQL account',
+    description:
+      "Makes devmagic_panel_ro@localhost with the admin account, with SELECT and SHOW VIEW on every database and nothing else, and a new password saved in the panel's secrets file. The SQL runner reads with it, so MySQL itself refuses any change a query would make. Run again, it gets a new password and loses any other right it was given.",
+    changesSystem: true,
+    input: z.object({}),
+  },
   'mysql.resetSiteUser': {
     title: "Reset a site's database user",
     description:

@@ -67,7 +67,8 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    temp tree and stub Apache and system commands. `install.sh` is tested with
    `--dry-run` and a `sudo` stub that fails if called.
 7. **Secrets stay local.** The panel password is a scrypt hash and the MySQL
-   admin account and the optional Anthropic API key live in
+   admin account, the SQL runner's read-only account (`devmagic_panel_ro`,
+   SELECT and SHOW VIEW only) and the optional Anthropic API key live in
    `~/.config/devmagic-panel/secrets.json` (0600). The key never goes back to
    the browser, and the assistant's settings are never registry actions.
    Updates need no token: the panel reads its releases through public HTTPS,

@@ -20,6 +20,8 @@ export interface BrowseContext {
   config: SystemConfig;
   exec: Executor;
   mysql: MysqlAccount | null | undefined;
+  /** The SQL runner's account, which can only read (mysql-query.ts). */
+  readOnly?: MysqlAccount | null | undefined;
   /** The databases the panel keeps a site's tables in, with the site's key. */
   kept: () => Array<{ name: string; site: string }>;
 }
@@ -40,13 +42,14 @@ function account(ctx: BrowseContext): MysqlAccount {
   return ctx.mysql;
 }
 
-const baseArgs = (mysql: MysqlAccount) => ['--batch', '--skip-column-names', '--default-character-set=utf8mb4', '--user', mysql.user, '--host', mysql.host];
+// --binary-mode: the text on stdin is SQL only, never a command of the mysql client like \! or source.
+const baseArgs = (mysql: MysqlAccount) => ['--batch', '--skip-column-names', '--binary-mode', '--default-character-set=utf8mb4', '--user', mysql.user, '--host', mysql.host];
 
 /** MySQL and MariaDB name the time limit differently; asked once per executor, so once per panel start. */
-async function flavor(ctx: BrowseContext): Promise<'mysql' | 'mariadb'> {
+export async function flavor(ctx: BrowseContext): Promise<'mysql' | 'mariadb'> {
   const known = flavors.get(ctx.exec);
   if (known) return known;
-  const mysql = account(ctx);
+  const mysql = ctx.mysql ?? ctx.readOnly ?? account(ctx);
   const r = await ctx.exec('mysql', [...baseArgs(mysql), '-e', 'SELECT VERSION()'], { env: { MYSQL_PWD: mysql.password }, timeoutMs: 10_000 });
   if (r.code !== 0) throw new BrowseError(`MySQL refused the admin account: ${firstLine(r)}`, 502);
   const found = /mariadb/i.test(r.stdout) ? 'mariadb' : 'mysql';

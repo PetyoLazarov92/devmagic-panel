@@ -2,6 +2,8 @@ import type { ActionId, MysqlBackup, MysqlDatabase, MysqlDatabaseKind, MysqlRepo
 import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, RotateCcw, Table2, Trash2, Users, Wand2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
+import { SqlRunner } from '@/components/sql-runner';
+import { Segmented } from '@/components/ui/segmented';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,9 +72,10 @@ export function MysqlTab({ refresh, onLoading }: { refresh: number; onLoading: (
 }
 
 /** The browser's address for a database no site's tab holds: /services/mysql?db=reports&table=t&show=structure. */
-export function mysqlDatabaseHref(database: string, location: DbLocation = { table: null, show: 'rows' }): string {
+export function mysqlDatabaseHref(database: string, location: DbLocation = { table: null, show: 'rows' }, sql = false): string {
   const q = new URLSearchParams({ db: database });
-  if (location.table) q.set('table', location.table);
+  if (sql) q.set('view', 'sql');
+  else if (location.table) q.set('table', location.table);
   if (location.table && location.show === 'structure') q.set('show', 'structure');
   return `/services/mysql?${q.toString()}`;
 }
@@ -87,13 +90,21 @@ function browseHref(d: MysqlDatabase): string {
 function MysqlDatabaseView({ database, onLoading }: { database: string; onLoading: (loading: boolean) => void }) {
   const table = useQueryParam('table');
   const show = useQueryParam('show') === 'structure' ? 'structure' : 'rows';
+  const sql = useQueryParam('view') === 'sql';
   useEffect(() => onLoading(false), [onLoading]);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
-      <Link href="/services/mysql" className="inline-flex items-center gap-1.5 justify-self-start text-sm font-medium text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" />All databases
-      </Link>
-      <DatabaseBrowser key={database} database={database} location={{ table, show }} onNavigate={(location) => navigate(mysqlDatabaseHref(database, location), { scroll: false })} />
+      <div className="flex flex-wrap items-center gap-3">
+        <Link href="/services/mysql" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4" />All databases
+        </Link>
+        <Segmented label="Database" value={sql ? 'sql' : 'tables'} onChange={(v) => navigate(mysqlDatabaseHref(database, undefined, v === 'sql'), { scroll: false })} options={[['tables', 'Tables'], ['sql', 'SQL']]} />
+      </div>
+      {sql ? (
+        <SqlRunner key={database} database={database} placeholder="SELECT * FROM a_table LIMIT 50" />
+      ) : (
+        <DatabaseBrowser key={database} database={database} location={{ table, show }} onNavigate={(location) => navigate(mysqlDatabaseHref(database, location), { scroll: false })} />
+      )}
     </div>
   );
 }

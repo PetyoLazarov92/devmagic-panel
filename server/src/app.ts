@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, DbStructure, WpDbReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, DbQueryResult, DbStructure, WpDbReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { isActionId, localConstants, localName, mountPath, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -24,6 +24,7 @@ import { apacheErrorLog, apacheReport } from './apache.js';
 import { nginxErrorLog, nginxReport, nginxSetUp } from './nginx.js';
 import { nginxPhpVersion } from './sites/server-switch.js';
 import { type BrowseContext, dbCell, dbOverview, dbRows, dbStructure } from './mysql-browse.js';
+import { runQuery } from './mysql-query.js';
 import { databaseSummary, wordpressReport } from './mysql-wordpress.js';
 import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
 import { BrowseError } from './mysql-sql.js';
@@ -327,7 +328,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           {
             config: deps.config, exec: deps.exec, store: deps.store, dmpRoot: deps.dmpRoot,
             wpcoreBin: deps.wpcoreBin ?? WPCORE_BIN, wpcoreConf: deps.hostPaths.wpcoreConf, home: deps.hostPaths.home,
-            jobs, uploadsDir: deps.uploadsDir, secrets: deps.secrets(), ...(deps.coreStatus ? { coreStatus: deps.coreStatus } : {}),
+            jobs, uploadsDir: deps.uploadsDir, secrets: deps.secrets(), ...(deps.secretsFile ? { secretsFile: deps.secretsFile } : {}), ...(deps.coreStatus ? { coreStatus: deps.coreStatus } : {}),
             ...(deps.mailpit ? { mailpit: deps.mailpit } : {}), ...(deps.download ? { download: deps.download } : {}), update, drafts,
             claudeCode: { home: deps.hostPaths.home, searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '', workDir: join(deps.uploadsDir, '..', 'tmp') },
             ...(deps.cron ? { cron: deps.cron } : {}),
@@ -349,7 +350,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       mysqlReport({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases(), backupsDir: mysqlBackupsDir(deps.uploadsDir) }));
     // The database browser: reads only, in a read-only transaction with a time limit. Rows and full
     // values are POSTs, so a filter's value or a row's key never reaches a URL or Apache's log.
-    const browse = (): BrowseContext => ({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases() });
+    const browse = (): BrowseContext => ({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, readOnly: deps.secrets()?.mysqlReadOnly, kept: () => deps.store.keptDatabases() });
     const browsing = async <T>(reply: FastifyReply, read: () => Promise<T>): Promise<T | undefined> => {
       try {
         return await read();
@@ -367,6 +368,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       browsing(reply, () => dbRows(browse(), request.params.database, request.params.table, request.body)));
     api.post<TableParams>('/api/mysql/databases/:database/tables/:table/cell', async (request, reply): Promise<DbCellValue | undefined> =>
       browsing(reply, () => dbCell(browse(), request.params.database, request.params.table, request.body)));
+    // The SQL runner: one statement that reads, as the read-only account. A POST: the SQL can hold data.
+    api.post<{ Params: { database: string } }>('/api/mysql/databases/:database/query', async (request, reply): Promise<DbQueryResult | undefined> =>
+      browsing(reply, () => runQuery(browse(), request.params.database, request.body)));
     // A WordPress site's database as WordPress sees it: autoload, transients, clean-up counts, users. ?blog= picks a site of a network.
     api.get<{ Params: { domain: string }; Querystring: { path?: string; blog?: string } }>('/api/sites/:domain/db/wordpress', async (request, reply): Promise<WpDbReport | undefined> =>
       browsing(reply, async () => {
