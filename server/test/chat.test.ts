@@ -9,7 +9,7 @@ import { RunStore } from '../src/store.js';
 import { fakeExec, NO_DEBUG_CONSTANTS, wpSiteTree } from './helpers.js';
 
 const SITE: Site = {
-  domain: 'local.shop.com', aliases: [], docroot: '/var/www/local.shop.com', vhostManaged: false, removable: false, panelMade: false,
+  domain: 'local.shop.com', aliases: [], docroot: '/var/www/local.shop.com', vhostManaged: false, server: 'apache', removable: false, panelMade: false,
   core: { kind: 'wpcore', version: '7.1.3' }, debug: { enabled: true, logBytes: 0, constants: NO_DEBUG_CONSTANTS }, health: 'warn',
   issues: [{ id: 'cert.legacy', status: 'warn', text: 'Cert still signed by the old LocalhostCA' }],
 };

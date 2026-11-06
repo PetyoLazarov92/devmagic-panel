@@ -5,7 +5,8 @@ import type { LogLine } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
 import { debugLogPath, findVhost } from '../sites/discover.js';
-import { parseApacheErrorLog, parseDebugLog } from '../sites/logs.js';
+import { siteAddress } from '../sites/vhost.js';
+import { parseApacheErrorLog, parseDebugLog, parseNginxErrorLog } from '../sites/logs.js';
 import { loginLink, type SiteRef } from '../sites/site-actions.js';
 
 /**
@@ -18,7 +19,7 @@ import { loginLink, type SiteRef } from '../sites/site-actions.js';
 
 /** A log and how big it was before the switch. */
 export interface LogMark {
-  kind: 'apache' | 'debug';
+  kind: 'apache' | 'nginx' | 'debug';
   file: string;
   size: number;
   /** For a log other sites write to as well: the lines that are this site's. */
@@ -33,10 +34,17 @@ const sizeOf = (file: string) => {
   }
 };
 
-/** The site's Apache error log (filtered when it is shared) and its debug.log, as they are now. */
+/** The site's server error log (Apache's filtered when it is shared, nginx's its own) and its debug.log, as they are now. */
 export function markLogs(config: SystemConfig, site: SiteRef): LogMark[] {
   const marks: LogMark[] = [];
   const vhost = findVhost(config, site.domain);
+  if (vhost?.server === 'nginx') {
+    const file = vhost.errorLog ?? join(config.NGINX_LOG_DIR, 'error.log');
+    marks.push({ kind: 'nginx', file, size: sizeOf(file) });
+    const debug = debugLogPath(site.docroot, site.wp);
+    marks.push({ kind: 'debug', file: debug, size: sizeOf(debug) });
+    return marks;
+  }
   const apache = vhost?.errorLog ?? join(config.APACHE_LOG_DIR, 'error.log');
   const shared = site.path !== undefined || !site.names.some((n) => apache.includes(n));
   marks.push({
@@ -74,7 +82,7 @@ function since(mark: LogMark): string {
 
 /** The lines the site's logs got since the marks, oldest first. */
 export function newLogLines(marks: LogMark[]): LogLine[] {
-  return marks.flatMap((m) => (m.kind === 'apache' ? parseApacheErrorLog(since(m), m.keep, 2000) : parseDebugLog(since(m), 2000)).reverse());
+  return marks.flatMap((m) => (m.kind === 'apache' ? parseApacheErrorLog(since(m), m.keep, 2000) : m.kind === 'nginx' ? parseNginxErrorLog(since(m), 2000) : parseDebugLog(since(m), 2000)).reverse());
 }
 
 export interface TrialContext {
@@ -82,11 +90,11 @@ export interface TrialContext {
   exec: Executor;
 }
 
-/** One page as a browser would load it: through Apache on this machine, with the panel's CA. */
+/** One page as a browser would load it: through the server that has the site on this machine, with the panel's CA. */
 async function visit(ctx: TrialContext, site: SiteRef, url: string, jar?: string): Promise<{ status: number; error?: string }> {
   const r = await ctx.exec('curl', [
     '-sS', '--max-time', '60', '--noproxy', '*', '--cacert', join(ctx.config.CA_DIR, 'ca.pem'),
-    '--resolve', `${site.domain}:443:127.0.0.1`,
+    '--resolve', `${site.domain}:443:${siteAddress(ctx.config, findVhost(ctx.config, site.domain))}`,
     ...(jar ? ['-L', '--max-redirs', '5', '-c', jar, '-b', jar] : []),
     '-o', '/dev/null', '-w', '%{http_code}', url,
   ], { timeoutMs: 70_000 });

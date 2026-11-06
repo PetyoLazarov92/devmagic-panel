@@ -499,6 +499,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({}),
   },
+  'site.setServer': {
+    title: 'Move a site between Apache and nginx',
+    description:
+      "Moves a site to nginx or back to Apache. Both servers answer on ports 80 and 443, each on its own address, and a site goes to the one its hosts line points at. To nginx: writes the site's nginx file (WordPress's rules for a single site or its kind of network, the uploads redirect, PHP through its own PHP-FPM pool or the default version's), points the hosts line at nginx, checks the site answers, then removes the Apache vhost. Back to Apache: the other way round. Its folder, database and certificate stay. Only for a site the panel made the vhost of, in the usual folder, without sites under paths, once nginx is set up; nginx reads no .htaccess, so a site whose .htaccess has rules beyond WordPress's needs acceptIgnored. On nginx already, writes its nginx file again (after it became a network). Starts a job; Undo moves it back.",
+    changesSystem: true,
+    input: z.object({ domain: localName, server: z.enum(['apache', 'nginx']), acceptIgnored: z.boolean().default(false) }),
+  },
   'nginx.reload': {
     title: 'Reload nginx',
     description: 'Runs nginx -t and reloads nginx when it passes.',

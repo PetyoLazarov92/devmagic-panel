@@ -349,7 +349,8 @@ export function enabledSiteNames(sitesEnabled: string): Map<string, string[]> {
     }
     const names: string[] = [];
     for (const line of text.split('\n')) {
-      const m = /^\s*Server(?:Name|Alias)\s+(.+)$/i.exec(line);
+      // Apache's ServerName and ServerAlias, or nginx's server_name.
+      const m = /^\s*Server(?:Name|Alias)\s+(.+)$/i.exec(line) ?? /^\s*server_name\s+([^;]+);/.exec(line);
       if (!m?.[1]) continue;
       for (const name of m[1].trim().toLowerCase().split(/\s+/)) if (!names.includes(name)) names.push(name);
     }
@@ -373,7 +374,7 @@ export function hostsNames(hostsText: string): Set<string> {
 
 function hostsChecks(ctx: CheckContext): Check[] {
   const { config } = ctx;
-  const sites = enabledSiteNames(config.APACHE_SITES_ENABLED);
+  const sites = new Map([...enabledSiteNames(config.APACHE_SITES_ENABLED), ...enabledSiteNames(config.NGINX_SITES_ENABLED)]);
   const known = hostsNames(existsSync(config.HOSTS_FILE) ? readFileSync(config.HOSTS_FILE, 'utf8') : '');
   if (sites.size === 0) return [ok('hosts.none', 'Site hosts entries', 'no enabled sites yet')];
 

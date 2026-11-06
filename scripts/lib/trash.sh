@@ -3,7 +3,7 @@
 # root-owned folder, $STATE_DIR/trash/<domain>-<stamp>/:
 #
 #   site.tar.gz     the site folder, owners and modes kept
-#   config.tar.gz   its vhost files and certificate folder
+#   config.tar.gz   its vhost files (Apache's, and nginx's for a site on nginx) and certificate folder
 #   db.sql.gz       the database dump the panel exported (when there is one)
 #   manifest.env    plain KEY=value facts, read without sourcing
 #   SHA256SUMS      checksums of the files above
@@ -28,14 +28,17 @@ dmp_trash_require_id() {
   dmp_require_local_name "${BASH_REMATCH[1]}"
 }
 
-# The vhost files a site may have, by the names the panel and devmagic use.
+# The vhost files a site may have, by the names the panel and devmagic use,
+# and the panel's nginx file for a site on nginx.
 dmp_trash_vhost_files() {
   local domain="$1" f
-  for f in "$APACHE_SITES_AVAILABLE/$domain-ssl.conf" "$APACHE_SITES_AVAILABLE/$domain.conf"; do
+  for f in "$APACHE_SITES_AVAILABLE/$domain-ssl.conf" "$APACHE_SITES_AVAILABLE/$domain.conf" "$(dmp_nginx_site_file "$domain")"; do
     [[ -f "$f" && ! -L "$f" ]] && printf '%s\n' "$f"
   done
   return 0
 }
+
+dmp_trash_is_nginx() { [[ "$1" == "$NGINX_SITES_AVAILABLE/"* ]]; }
 
 # Reads one KEY from a manifest without running anything in it.
 dmp_trash_get() {
@@ -70,13 +73,20 @@ dmp_trash_site() {
   [[ -d "$folder" && ! -L "$folder" ]] || dmp_die "$folder is not a plain folder"
   [[ ! -e "$entry" ]] || dmp_die "$entry already exists"
 
-  local -a vhosts=() members=() enabled=()
+  local -a vhosts=() members=() enabled=() apache=()
+  local nginx="" nginx_enabled=""
   mapfile -t vhosts < <(dmp_trash_vhost_files "$domain")
   (( ${#vhosts[@]} > 0 )) || dmp_die "no vhost named $domain-ssl.conf or $domain.conf; remove this site by hand"
   local f
   for f in "${vhosts[@]}"; do
     members+=("${f#/}")
-    [[ -e "$APACHE_SITES_ENABLED/${f##*/}" ]] && enabled+=("${f##*/}")
+    if dmp_trash_is_nginx "$f"; then
+      nginx="${f##*/}"
+      [[ -e "$NGINX_SITES_ENABLED/$nginx" ]] && nginx_enabled="$nginx"
+    else
+      apache+=("$f")
+      [[ -e "$APACHE_SITES_ENABLED/${f##*/}" ]] && enabled+=("${f##*/}")
+    fi
   done
   [[ -d "$cert" && ! -L "$cert" ]] && members+=("${cert#/}")
 
@@ -110,8 +120,10 @@ dmp_trash_site() {
     printf 'DB_NAME=%s\n' "$db_name"
     printf 'DB_USER=%s\n' "$db_user"
     printf 'NAMES=%s\n' "${names[*]}"
-    printf 'VHOSTS=%s\n' "${vhosts[*]##*/}"
+    printf 'VHOSTS=%s\n' "${apache[*]##*/}"
     printf 'ENABLED=%s\n' "${enabled[*]}"
+    printf 'NGINX=%s\n' "$nginx"
+    printf 'NGINX_ENABLED=%s\n' "$nginx_enabled"
   } > "$entry/manifest.env"
   (cd "$entry" && sha256sum -- *.gz > SHA256SUMS)
   chmod 0600 "$entry"/*
@@ -122,7 +134,7 @@ dmp_trash_site() {
 
 # trash-remove <domain> <stamp>: removes the site, only when its archive checks out.
 dmp_trash_remove() {
-  local domain="$1" stamp="$2" entry folder cert f
+  local domain="$1" stamp="$2" entry folder cert f nginx=0
   [[ "$stamp" =~ $DMP_TRASH_STAMP ]] || dmp_usage_error "not a stamp: '$stamp'"
   entry="$(dmp_trash_dir)/$domain-$stamp"
   [[ -d "$entry" ]] || dmp_die "no archive of $domain at $entry; archive it first"
@@ -133,7 +145,12 @@ dmp_trash_remove() {
   cert="$(dmp_cert_dir "$domain")"
   dmp_step "Removing $domain (archived in $entry)"
   while IFS= read -r f; do
-    a2dissite -q "${f##*/}" >/dev/null 2>&1 || true
+    if dmp_trash_is_nginx "$f"; then
+      rm -f -- "$NGINX_SITES_ENABLED/${f##*/}"
+      nginx=1
+    else
+      a2dissite -q "${f##*/}" >/dev/null 2>&1 || true
+    fi
     rm -f -- "$f"
   done < <(dmp_trash_vhost_files "$domain")
   [[ -d "$cert" && ! -L "$cert" ]] && rm -rf -- "$cert"
@@ -143,6 +160,10 @@ dmp_trash_remove() {
   fi
   rm -f -- "$(dmp_site_registry_entry "$domain")"
   dmp_apache_reload
+  if (( nginx )); then
+    dmp_nginx_php_write || dmp_warn "nginx -t fails after taking $domain out"
+    dmp_nginx_reload_if_active
+  fi
   dmp_ok "removed $domain; restore it from Deleted sites until it is purged"
 }
 
@@ -197,7 +218,7 @@ dmp_trash_purge() {
 # trash-restore <id>: puts a site back when nothing of it exists again. Prints
 # the database dump it left for the panel to import, if any.
 dmp_trash_restore() {
-  local id="$1" entry manifest domain folder cert f member
+  local id="$1" entry manifest domain folder cert f member nginx nginx_enabled
   dmp_trash_require_id "$id"
   entry="$(dmp_trash_dir)/$id"
   manifest="$entry/manifest.env"
@@ -208,6 +229,13 @@ dmp_trash_restore() {
   [[ "$id" == "$domain-"* ]] || dmp_die "$id does not belong to $domain"
   folder="$WEB_DIR/$domain"
   cert="$(dmp_cert_dir "$domain")"
+  nginx="$(dmp_trash_get "$manifest" NGINX)"
+  nginx_enabled="$(dmp_trash_get "$manifest" NGINX_ENABLED)"
+  [[ -z "$nginx" || "$nginx" == "$domain.conf" ]] || dmp_die "$id names an nginx file of another site: $nginx"
+  [[ -z "$nginx_enabled" || "$nginx_enabled" == "$domain.conf" ]] || dmp_die "$id names an nginx file of another site: $nginx_enabled"
+  if [[ -n "$nginx" ]] && ! dmp_nginx_is_setup; then
+    dmp_die "$domain ran on nginx; set nginx up next to Apache first (dmp-root nginx-setup)"
+  fi
 
   # Installed again since? Then nothing is restored over it.
   local -a taken=()
@@ -216,12 +244,13 @@ dmp_trash_restore() {
   for f in $(dmp_trash_get "$manifest" VHOSTS); do
     [[ -e "$APACHE_SITES_AVAILABLE/$f" ]] && taken+=("vhost $APACHE_SITES_AVAILABLE/$f")
   done
+  [[ -n "$nginx" && -e "$NGINX_SITES_AVAILABLE/$nginx" ]] && taken+=("nginx site $NGINX_SITES_AVAILABLE/$nginx")
   (( ${#taken[@]} == 0 )) || dmp_die "$domain exists again ($(IFS=,; printf '%s' "${taken[*]}")); remove that first"
 
   # The config archive may only hold this site's vhosts and certificate.
   while IFS= read -r member; do
     case "/$member" in
-      "$APACHE_SITES_AVAILABLE/$domain-ssl.conf" | "$APACHE_SITES_AVAILABLE/$domain.conf" | "$cert" | "$cert/" | "$cert/"*) ;;
+      "$APACHE_SITES_AVAILABLE/$domain-ssl.conf" | "$APACHE_SITES_AVAILABLE/$domain.conf" | "$NGINX_SITES_AVAILABLE/$domain.conf" | "$cert" | "$cert/" | "$cert/"*) ;;
       *) dmp_die "unexpected file in the archive: $member" ;;
     esac
   done < <(tar -tzf "$entry/config.tar.gz")
@@ -232,6 +261,8 @@ dmp_trash_restore() {
   for f in $(dmp_trash_get "$manifest" ENABLED); do
     a2ensite -q "$f" >/dev/null || dmp_warn "a2ensite $f failed"
   done
+  # Before the hosts line, which follows where the site runs.
+  [[ -z "$nginx_enabled" ]] || ln -sfn "$NGINX_SITES_AVAILABLE/$nginx_enabled" "$NGINX_SITES_ENABLED/$nginx_enabled"
   local -a names=()
   read -r -a names <<< "$(dmp_trash_get "$manifest" NAMES)"
   for f in "${names[@]}"; do dmp_require_local_name "$f"; done
@@ -240,17 +271,22 @@ dmp_trash_restore() {
     dmp_site_register "$domain" "$folder"
   fi
 
-  if ! dmp_apache_configtest; then
+  if ! dmp_apache_configtest || ! dmp_nginx_php_write; then
     for f in $(dmp_trash_get "$manifest" VHOSTS); do
       a2dissite -q "$f" >/dev/null 2>&1 || true
       rm -f -- "$APACHE_SITES_AVAILABLE/$f"
     done
+    if [[ -n "$nginx" ]]; then
+      rm -f -- "$NGINX_SITES_ENABLED/$nginx" "$NGINX_SITES_AVAILABLE/$nginx"
+      dmp_nginx_php_write >/dev/null 2>&1 || true
+    fi
     rm -rf -- "$cert" "$folder"
     rm -f -- "$(dmp_site_registry_entry "$domain")"
     dmp_hosts_rewrite "$domain"
-    dmp_die "Apache refused the restored vhost; nothing was restored"
+    dmp_die "Apache or nginx refused the restored site; nothing was restored"
   fi
   systemctl reload apache2 || dmp_die "apache reload failed"
+  [[ -z "$nginx" ]] || dmp_nginx_reload_if_active
 
   if [[ -f "$entry/db.sql.gz" ]]; then
     local out="$BACKUP_DIR/sites/restore-$id.sql.gz"

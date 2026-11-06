@@ -61,7 +61,7 @@ dmp_cert_remove() {
     return 0
   fi
   [[ -d "$dir" && ! -L "$dir" ]] || dmp_die "$dir is not a plain folder, leaving it as is"
-  for file in "$APACHE_SITES_AVAILABLE"/*.conf "$APACHE_SITES_ENABLED"/*.conf; do
+  for file in "$APACHE_SITES_AVAILABLE"/*.conf "$APACHE_SITES_ENABLED"/*.conf "$NGINX_SITES_AVAILABLE"/* "$NGINX_SITES_ENABLED"/*; do
     [[ -f "$file" ]] || continue
     if grep -qF "$(dmp_cert_file "$domain")" "$file"; then
       dmp_die "$file still uses this certificate; remove the vhost first"
@@ -71,12 +71,12 @@ dmp_cert_remove() {
   dmp_ok "certificate removed for $domain"
 }
 
-# Prints every ServerName and ServerAlias in a vhost file, one per line,
-# in file order and without duplicates.
+# Prints every ServerName and ServerAlias in a vhost file, or server_name in
+# an nginx site, one per line, in file order and without duplicates.
 dmp_vhost_names() {
   local file="$1"
-  awk 'tolower($1) == "servername" || tolower($1) == "serveralias" {
-         for (i = 2; i <= NF; i++) if (!seen[$i]++) print $i
+  awk 'tolower($1) == "servername" || tolower($1) == "serveralias" || $1 == "server_name" {
+         for (i = 2; i <= NF; i++) { n = $i; sub(/;$/, "", n); if (n != "" && n != "_" && !seen[n]++) print n }
        }' "$file"
 }
 
@@ -85,7 +85,9 @@ dmp_vhost_names() {
 dmp_cert_reissue_from_vhost() {
   local domain="$1" file name
   file="$APACHE_SITES_AVAILABLE/$domain-ssl.conf"
-  [[ -f "$file" ]] || dmp_die "vhost not found: $file"
+  # A site on nginx: its nginx file has the names.
+  [[ -f "$file" ]] || file="$(dmp_nginx_site_file "$domain")"
+  [[ -f "$file" ]] || dmp_die "vhost not found: $APACHE_SITES_AVAILABLE/$domain-ssl.conf"
   grep -qF "$(dmp_cert_file "$domain")" "$file" \
     || dmp_die "$file does not use $(dmp_cert_file "$domain"), refusing to issue a cert it would not load"
 

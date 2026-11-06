@@ -6,7 +6,9 @@
 #   # END devmagic-panel
 #
 # One line per site, keyed by its primary domain (the first name). Lines
-# outside the block, written by hand or by devmagic, are never changed.
+# outside the block, written by hand or by devmagic, are never changed. The
+# address is where the site runs, read from the system: NGINX_ADDRESS when
+# nginx serves it (dmp_nginx_site_on), else APACHE_ADDRESS.
 
 DMP_HOSTS_BEGIN="# BEGIN devmagic-panel (managed by the panel, edit sites there)"
 DMP_HOSTS_END="# END devmagic-panel"
@@ -60,8 +62,10 @@ dmp_hosts_add() {
   local -a names
   mapfile -t names < <(dmp_unique_aliases "$domain" "$@")
   names=("$domain" "${names[@]}")
+  local address="$APACHE_ADDRESS"
+  dmp_nginx_site_on "$domain" && address="$NGINX_ADDRESS"
   dmp_step "Adding $domain to $HOSTS_FILE"
-  dmp_hosts_rewrite "$domain" "127.0.0.1 ${names[*]}"
+  dmp_hosts_rewrite "$domain" "$address ${names[*]}"
   dmp_ok "hosts entry written for $domain"
 }
 

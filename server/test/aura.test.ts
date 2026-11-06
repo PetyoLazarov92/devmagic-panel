@@ -162,7 +162,7 @@ describe('Local mode plugin', () => {
 
 describe('readAura', () => {
   const site = (domain: string, extra: Partial<Site> = {}): Site => ({
-    domain, aliases: [], docroot: `/var/www/${domain}`, vhostManaged: false, removable: false, panelMade: false, core: { kind: 'none' },
+    domain, aliases: [], docroot: `/var/www/${domain}`, vhostManaged: false, server: 'apache', removable: false, panelMade: false, core: { kind: 'none' },
     debug: { enabled: false, logBytes: 0, constants: NO_DEBUG_CONSTANTS }, health: 'ok', issues: [], ...extra,
   });
 

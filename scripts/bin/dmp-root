@@ -29,6 +29,11 @@ Usage: dmp-root <command> [args]
                                       --mount serves the folder WEB_DIR/<folder> at /path
   vhost-write-panel                   write the vhost that proxies to the panel
   vhost-remove <domain>               disable and remove a site vhost
+  nginx-site-write <domain> [--kind single|subdirectory|subdomain] [--uploads-proxy <host>] [alias...]
+                                      the site on nginx (NGINX_ADDRESS), from WEB_DIR/<domain>,
+                                      its PHP through PHP-FPM; kind picks WordPress's rules;
+                                      nginx -t, then reload; hosts-add then points it there
+  nginx-site-remove <domain>          take a site off nginx
   hosts-add <domain> [alias...]       add or replace the site's /etc/hosts line
   hosts-remove <domain>               remove the site's /etc/hosts line
   site-dir-create <domain>            create the site folder under the web root
@@ -150,6 +155,26 @@ vhost_write() {
   dmp_vhost_write_site "$domain" "$proxy" "$@"
 }
 
+# nginx-site-write <domain> [--kind single|subdirectory|subdomain] [--uploads-proxy <host>] [alias...]
+nginx_site_write() {
+  (( $# >= 1 )) || dmp_usage_error "a domain is required"
+  local domain="$1" kind=single proxy="" name
+  shift
+  while [[ "${1:-}" == --* ]]; do
+    (( $# >= 2 )) || dmp_usage_error "$1 needs a value"
+    case "$1" in
+      --kind) dmp_in_list "$2" "${DMP_NGINX_KINDS[@]}" || dmp_usage_error "--kind takes ${DMP_NGINX_KINDS[*]}, not: $2"; kind="$2" ;;
+      --uploads-proxy) dmp_require_hostname "$2"; proxy="$2" ;;
+      *) dmp_usage_error "unknown option: $1" ;;
+    esac
+    shift 2
+  done
+  for name in "$domain" "$@"; do
+    dmp_require_local_name "$name"
+  done
+  dmp_nginx_site_write "$domain" "$kind" "$proxy" "$@"
+}
+
 main() {
   local cmd="${1:-}"
   [[ -n "$cmd" ]] || { usage; exit 2; }
@@ -190,6 +215,8 @@ main() {
     nginx-setup) (( $# == 0 )) || dmp_usage_error "nginx-setup takes no arguments"; dmp_require_local_name "$PANEL_DOMAIN"; dmp_nginx_setup ;;
     nginx-teardown) (( $# == 0 )) || dmp_usage_error "nginx-teardown takes no arguments"; dmp_nginx_teardown ;;
     nginx-configtest) (( $# == 0 )) || dmp_usage_error "nginx-configtest takes no arguments"; dmp_nginx_require_installed; dmp_nginx_configtest || exit 1 ;;
+    nginx-site-write) nginx_site_write "$@" ;;
+    nginx-site-remove) (( $# == 1 )) || dmp_usage_error "nginx-site-remove takes one domain"; with_names dmp_nginx_site_remove "$@" ;;
     nginx-reload) (( $# == 0 )) || dmp_usage_error "nginx-reload takes no arguments"; dmp_nginx_reload ;;
     xdebug-enable) (( $# == 2 || $# == 3 )) || dmp_usage_error "xdebug-enable takes an optional version, a mode and a start value"; dmp_xdebug_enable "$@" ;;
     xdebug-disable) (( $# <= 1 )) || dmp_usage_error "xdebug-disable takes an optional version"; dmp_xdebug_disable "$@" ;;

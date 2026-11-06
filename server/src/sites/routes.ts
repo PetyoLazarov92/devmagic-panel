@@ -19,7 +19,7 @@ import { listKept } from './kept.js';
 import { cleanPreview } from './clean-current.js';
 import { readLocalConstants } from '../local-constants.js';
 import { gitFolder, readGitDetails, readPullRequests } from './git.js';
-import { parseApacheErrorLog, parseDebugLog, tailFile } from './logs.js';
+import { parseApacheErrorLog, parseDebugLog, parseNginxErrorLog, tailFile } from './logs.js';
 import { removalRefusal } from './remove.js';
 import { inspectRepo, repoLookup, RepoRefused } from './repo.js';
 import { currentSite } from './archive.js';
@@ -58,6 +58,11 @@ export function readSiteLog(config: SystemConfig, domain: string, source: 'debug
   // A site under a path has its own folder, and shares its parent's vhost and Apache log.
   const docroot = path === undefined ? vhost.docroot : vhost.mounts.find((m) => m.path === path)?.docroot;
   if (!docroot) return null;
+  if (source === 'apache' && vhost.server === 'nginx') {
+    // A site on nginx logs to its own file, PHP's errors among them (FastCGI sent in stderr).
+    const file = vhost.errorLog ?? join(config.NGINX_LOG_DIR, 'error.log');
+    return { file, shared: false, exists: existsSync(file), lines: parseNginxErrorLog(tailFile(file, 512 * 1024)) };
+  }
   if (source === 'apache') {
     const file = vhost.errorLog ?? join(config.APACHE_LOG_DIR, 'error.log');
     const shared = path !== undefined || !vhost.names.some((n) => file.includes(n));

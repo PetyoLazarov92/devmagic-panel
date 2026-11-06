@@ -35,6 +35,7 @@ import { CronTab } from '@/pages/site-cron';
 import { DatabaseTab } from '@/pages/site-database';
 import { PhpTab } from '@/pages/site-php';
 import { PluginsTab } from '@/pages/site-plugins';
+import { ServerCard } from '@/pages/site-server';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { debugLabel, debugValues, siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
 import { cn } from '@/lib/utils';
@@ -1091,7 +1092,7 @@ function LogsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
       {site.core.kind !== 'none' && <DebugSettings site={site} onChanged={onChanged} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="radiogroup" aria-label="Log" className="inline-flex rounded-lg border bg-muted p-0.5 text-sm">
-          {([['debug', 'debug.log'], ['apache', 'Apache errors']] as const).map(([value, label]) => (
+          {([['debug', 'debug.log'], ['apache', site.server === 'nginx' ? 'nginx errors' : 'Apache errors']] as const).map(([value, label]) => (
             <button
               key={value}
               type="button"
@@ -1143,6 +1144,7 @@ function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) 
 
   return (
     <div className="grid gap-4">
+      {!site.path && <ServerCard site={site} onChanged={onChanged} />}
       <Card>
         <CardHeader>
           <CardTitle>Certificate</CardTitle>
@@ -1194,7 +1196,7 @@ function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) 
       </div>
       {site.vhostManaged ? (
         <p className="text-xs text-muted-foreground">
-          One certificate, one vhost and one hosts line cover all of these names. Add or remove domains and the panel updates all three together.
+          One certificate, one {site.server === 'nginx' ? 'nginx site' : 'vhost'} and one hosts line cover all of these names. Add or remove domains and the panel updates all three together.
         </p>
       ) : (
         <p className="rounded-lg border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">

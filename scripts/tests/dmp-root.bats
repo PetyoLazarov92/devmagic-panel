@@ -1462,3 +1462,186 @@ nginx_default_site() {
   archive="$(ls "$T"/backups/devmagic-panel-backup-*.tar.gz)"
   tar -tzf "$archive" | grep -q 'nginx/sites-available/manual$'
 }
+
+# ── Sites on nginx ───────────────────────────────────────────
+
+# local.acme.com on Apache with an alias, mod_php 8.3 and its PHP-FPM, and nginx set up.
+nginx_site_tree() {
+  php_tree
+  : > "$T/php-lib/8.3/sapi/fpm"
+  dmp ca-create >/dev/null
+  dmp cert-issue local.acme.com local.acme.de >/dev/null
+  mkdir -p "$T/www/local.acme.com"
+  printf '<?php echo 1;' > "$T/www/local.acme.com/index.php"
+  dmp vhost-write local.acme.com local.acme.de >/dev/null
+  dmp hosts-add local.acme.com local.acme.de >/dev/null
+  dmp nginx-setup >/dev/null
+  : > "$STUB_LOG"
+}
+
+@test "nginx-site-write serves the site on nginx's address, its PHP through mod_php's version on PHP-FPM" {
+  nginx_site_tree
+  run dmp nginx-site-write local.acme.com local.acme.de
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.acme.com.conf"
+  head -n 1 "$site" | grep -qx '# Managed by devmagic-panel. Edits here are overwritten.'
+  grep -qx '# kind: single' "$site"
+  grep -q 'listen 127.0.0.2:80;' "$site"
+  grep -q 'listen 127.0.0.2:443 ssl http2;' "$site"
+  [ "$(grep -c 'server_name local.acme.com local.acme.de;' "$site")" -eq 2 ]
+  grep -q "root $T/www/local.acme.com;" "$site"
+  grep -q "ssl_certificate $T/certs/local.acme.com/local.acme.com.crt;" "$site"
+  grep -q "error_log $T/nginx/log/local.acme.com-error.log;" "$site"
+  grep -q 'try_files $uri $uri/ /index.php?$args;' "$site"
+  grep -q 'fastcgi_pass dmp-php-local.acme.com;' "$site"
+  grep -q 'deny all;' "$site"
+  run grep -q 'rewrite' "$site"
+  [ "$status" -ne 0 ]
+  [ "$(readlink "$T/nginx/sites-enabled/local.acme.com.conf")" = "$site" ]
+  grep -q 'server unix:/run/php/php8.3-fpm.sock;' "$T/nginx/conf.d/devmagic-panel-php.conf"
+  grep -qx 'systemctl reload nginx' "$STUB_LOG"
+  # Where the site runs decides its hosts line.
+  dmp hosts-add local.acme.com local.acme.de
+  grep -qx '127.0.0.2 local.acme.com local.acme.de' "$T/hosts"
+}
+
+@test "nginx-site-write takes WordPress's rules for a network under paths, and the uploads redirect" {
+  nginx_site_tree
+  run dmp nginx-site-write local.acme.com --kind subdirectory --uploads-proxy www.acme.com
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.acme.com.conf"
+  grep -qx '# kind: subdirectory' "$site"
+  grep -qF 'rewrite ^(/[^/]+)?(/wp-.*) $2 last;' "$site"
+  grep -qF 'return 302 https://www.acme.com$request_uri;' "$site"
+  grep -qx 'server_name local.acme.com;' <(sed 's/^ *//' "$site")
+}
+
+@test "nginx-site-write uses the http2 directive on nginx 1.25.1 and newer" {
+  nginx_site_tree
+  STUB_NGINX_VERSION=1.26.0 run dmp nginx-site-write local.acme.com
+  [ "$status" -eq 0 ]
+  grep -q 'listen 127.0.0.2:443 ssl;' "$T/nginx/sites-available/local.acme.com.conf"
+  grep -q 'http2 on;' "$T/nginx/sites-available/local.acme.com.conf"
+}
+
+@test "nginx-site-write sends a site with its own pool to that pool, and a new pool follows on nginx" {
+  nginx_site_tree
+  mkdir -p "$T/php/8.1/fpm/pool.d" "$T/php/8.1/mods-available" "$T/php-lib/8.1/sapi" "$T/mods-available" "$T/conf-available"
+  : > "$T/php-lib/8.1/sapi/fpm"
+  : > "$T/mods-available/proxy_fcgi.load"
+  stub php-fpm8.1 ':'
+  stub a2enconf ':'
+  stub sleep ':'
+  dmp nginx-site-write local.acme.com
+  : > "$STUB_LOG"
+  run dmp php-pool-write local.acme.com 8.1
+  [ "$status" -eq 0 ]
+  grep -q 'server unix:/run/php/dmp-local.acme.com.sock;' "$T/nginx/conf.d/devmagic-panel-php.conf"
+  grep -qx 'systemctl reload nginx' "$STUB_LOG"
+  run dmp php-pool-remove local.acme.com
+  [ "$status" -eq 0 ]
+  grep -q 'server unix:/run/php/php8.3-fpm.sock;' "$T/nginx/conf.d/devmagic-panel-php.conf"
+}
+
+@test "nginx-site-write refuses before nginx is set up, for the panel's site, and a vhost made by hand" {
+  php_tree
+  : > "$T/php-lib/8.3/sapi/fpm"
+  dmp ca-create >/dev/null
+  dmp cert-issue local.acme.com >/dev/null
+  mkdir -p "$T/www/local.acme.com"
+  run dmp nginx-site-write local.acme.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not set up"* ]]
+  dmp nginx-setup >/dev/null
+  run dmp nginx-site-write local.devmagic
+  [ "$status" -eq 2 ]
+  printf '<VirtualHost *:443>\n ServerName local.acme.com\n</VirtualHost>\n' > "$T/sites-available/local.acme.com-ssl.conf"
+  run dmp nginx-site-write local.acme.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"was not created by devmagic-panel"* ]]
+  [ ! -e "$T/nginx/sites-available/local.acme.com.conf" ]
+}
+
+@test "nginx-site-write refuses a name in a hosts line outside the panel's block, and a site without PHP-FPM" {
+  nginx_site_tree
+  printf '127.0.0.1 local.acme.de\n' >> "$T/hosts"
+  run dmp nginx-site-write local.acme.com local.acme.de
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"local.acme.de in $T/hosts outside the panel's block"* ]]
+  sed -i '$d' "$T/hosts"
+  rm "$T/php-lib/8.3/sapi/fpm"
+  run dmp nginx-site-write local.acme.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no PHP-FPM"* ]]
+  [ ! -e "$T/nginx/sites-available/local.acme.com.conf" ]
+}
+
+@test "nginx-site-write refuses bad kinds, proxies and options with exit 2" {
+  nginx_site_tree
+  for args in "local.acme.com --kind multi" "local.acme.com --uploads-proxy https://x" "local.acme.com --mount /x=y" "local.acme.com --kind" "example.com"; do
+    # shellcheck disable=SC2086
+    run dmp nginx-site-write $args
+    [ "$status" -eq 2 ]
+  done
+}
+
+@test "nginx-site-write takes a new site back when nginx -t fails, and keeps a rewritten one as it was" {
+  nginx_site_tree
+  STUB_NGINX_FAIL=1 run dmp nginx-site-write local.acme.com
+  [ "$status" -eq 1 ]
+  [ ! -e "$T/nginx/sites-available/local.acme.com.conf" ]
+  [ ! -e "$T/nginx/sites-enabled/local.acme.com.conf" ]
+  dmp nginx-site-write local.acme.com local.acme.de
+  before="$(cat "$T/nginx/sites-available/local.acme.com.conf")"
+  STUB_NGINX_FAIL=1 run dmp nginx-site-write local.acme.com
+  [ "$status" -eq 1 ]
+  [ "$(cat "$T/nginx/sites-available/local.acme.com.conf")" = "$before" ]
+}
+
+@test "nginx-site-remove takes the site off nginx and its hosts line back to Apache" {
+  nginx_site_tree
+  dmp nginx-site-write local.acme.com local.acme.de
+  dmp hosts-add local.acme.com local.acme.de
+  run dmp nginx-site-remove local.acme.com
+  [ "$status" -eq 0 ]
+  [ ! -e "$T/nginx/sites-available/local.acme.com.conf" ]
+  [ ! -e "$T/nginx/sites-enabled/local.acme.com.conf" ]
+  run grep -q 'local.acme.com' "$T/nginx/conf.d/devmagic-panel-php.conf"
+  [ "$status" -ne 0 ]
+  dmp hosts-add local.acme.com local.acme.de
+  grep -qx '127.0.0.1 local.acme.com local.acme.de' "$T/hosts"
+  printf 'server {}\n' > "$T/nginx/sites-available/local.hand.com.conf"
+  run dmp nginx-site-remove local.hand.com
+  [ "$status" -eq 1 ]
+  [ -f "$T/nginx/sites-available/local.hand.com.conf" ]
+}
+
+@test "certificates know sites on nginx: no removal while nginx uses one, and a reissue from its names" {
+  nginx_site_tree
+  dmp nginx-site-write local.acme.com local.acme.de
+  dmp vhost-remove local.acme.com
+  run dmp cert-remove local.acme.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"local.acme.com.conf still uses this certificate"* ]]
+  run dmp cert-reissue-from-vhost local.acme.com
+  [ "$status" -eq 0 ]
+  [ "$(san_of "$T/certs/local.acme.com/local.acme.com.crt")" = 'DNS:local.acme.com,DNS:local.acme.de' ]
+}
+
+@test "a site on nginx goes to the trash and comes back on nginx" {
+  nginx_site_tree
+  dmp nginx-site-write local.acme.com local.acme.de
+  dmp vhost-remove local.acme.com
+  dmp hosts-add local.acme.com local.acme.de
+  dmp trash-site local.acme.com 20261106-120000 - -
+  grep -qx 'NGINX=local.acme.com.conf' "$T/state/trash/local.acme.com-20261106-120000/manifest.env"
+  grep -qx 'NAMES=local.acme.com local.acme.de' "$T/state/trash/local.acme.com-20261106-120000/manifest.env"
+  run dmp trash-remove local.acme.com 20261106-120000
+  [ "$status" -eq 0 ]
+  [ ! -e "$T/nginx/sites-available/local.acme.com.conf" ] && [ ! -e "$T/nginx/sites-enabled/local.acme.com.conf" ]
+  run dmp trash-restore local.acme.com-20261106-120000
+  [ "$status" -eq 0 ]
+  [ -L "$T/nginx/sites-enabled/local.acme.com.conf" ]
+  grep -qx '127.0.0.2 local.acme.com local.acme.de' "$T/hosts"
+  grep -q 'upstream dmp-php-local.acme.com' "$T/nginx/conf.d/devmagic-panel-php.conf"
+}

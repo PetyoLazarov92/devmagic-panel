@@ -131,11 +131,20 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       turns Debian's default nginx site off and writes
       `conf.d/devmagic-panel.conf` (the panel's marker, the record that nginx
       is set up), so nginx answers on `NGINX_ADDRESS` (127.0.0.2), both on
-      ports 80 and 443; `nginx-teardown` puts it all back. A site goes to the
-      server its hosts line points at, never through a proxy. The panel,
-      phpMyAdmin and vhosts made by hand stay on Apache; nginx configs made
-      by hand are only read, and one that listens on port 80 or 443 off
-      nginx's address makes the setup refuse with its name.
+      ports 80 and 443; `nginx-teardown` puts it all back, once no site runs
+      on nginx. A site goes to the server its hosts line points at, never
+      through a proxy: `hosts-add` reads the address from the system (an
+      enabled `nginx-site-write` file of the panel's for the domain means
+      `NGINX_ADDRESS`), never from the caller. A site on nginx has
+      `sites-available/<domain>.conf` with the marker and a `# kind:` line,
+      no mounts, and its PHP through the upstream `dmp-php-<domain>` in
+      `conf.d/devmagic-panel-php.conf` (its pool or the default version's
+      FPM), written with Apache's PHP conf. `site.setServer` moves a site;
+      every rewrite of a site's config goes through `siteWriteArgs`, so it
+      lands on the server that has the site. The panel, phpMyAdmin and vhosts
+      made by hand stay on Apache; nginx configs made by hand are only read,
+      and one that listens on port 80 or 443 off nginx's address makes the
+      setup refuse with its name.
     - **wpcore is shared**: one `/etc/wpcore.conf` and its cores folder for the
       CLI and the panel. Never a second config or cores folder.
     - **The old devmagic CLI is left alone**: no warning, and never edits to

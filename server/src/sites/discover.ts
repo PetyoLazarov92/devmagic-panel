@@ -11,13 +11,15 @@ import { poolFolder, readPools } from '../php/pools.js';
 import { apachePhpVersion, fpmDefaultVersion, installedVersions } from '../php/versions.js';
 import type { Secrets } from '../secrets.js';
 import { installedCores, readWpcoreConfig } from '../wpcore.js';
-import { hasNetworkRules, readHtaccess, siteKind } from './htaccess.js';
+import { hasNetworkRules, htaccessIgnored, readHtaccess, siteKind } from './htaccess.js';
+import { hostsBlockAddress } from './hosts-block.js';
 import { readLocalMode } from './local-mode.js';
 import { parseDebugLog, tailFile } from './logs.js';
-import { readSiteVhosts, type VhostInfo } from './vhost.js';
+import { readSiteVhosts, siteAddress, type VhostInfo } from './vhost.js';
 import { saltStatus } from './salts.js';
 import { parseWpConfig, parseWpVersion, type WpConfig } from './wpconfig.js';
 import { removalRefusal } from './remove.js';
+import { moveFacts } from './server-switch.js';
 
 export interface DiscoverContext {
   config: SystemConfig;
@@ -400,7 +402,7 @@ export function isPanelFolder(config: SystemConfig, docroot: string, domain: str
   }
 }
 
-type Shared = { legacyIssuer: string | null; sizes: Map<string, { sizeBytes: number; tables: number }>; hosts: Set<string>; cores: string[]; mysql: Mysql | null };
+type Shared = { legacyIssuer: string | null; sizes: Map<string, { sizeBytes: number; tables: number }>; hosts: Set<string>; hostsText: string; cores: string[]; mysql: Mysql | null };
 
 /** A mounted folder that is a WordPress install of its own: it shows as a site, not as a folder of its parent. */
 const isWordPressMount = (m: { docroot: string }) => existsSync(join(m.docroot, 'wp-config.php'));
@@ -443,7 +445,7 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
 
   // dmp-root reissues only certs it can find by the site's own names.
   const reissue: SiteIssue['fix'] =
-    basename(vhost.file) === `${domain}-ssl.conf` && vhost.certFile === join(ctx.config.CERTS_DIR, domain, `${domain}.crt`)
+    basename(vhost.file) === (vhost.server === 'nginx' ? `${domain}.conf` : `${domain}-ssl.conf`) && vhost.certFile === join(ctx.config.CERTS_DIR, domain, `${domain}.crt`)
       ? { action: 'cert.reissue', input: { domain }, label: 'Reissue cert' }
       : undefined;
   const certHint = reissue ? {} : { hint: `The vhost loads its cert from ${vhost.certFile ?? 'nowhere'}; reissue it by hand.` };
@@ -470,6 +472,17 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
       status: 'warn',
       text: `${notInHosts.join(', ')} ${notInHosts.length === 1 ? 'is' : 'are'} missing from /etc/hosts`,
       fix: { action: 'hosts.add', input: { domain, aliases: names.slice(1) }, label: 'Add to hosts' },
+    });
+  }
+  // The panel's hosts line goes where the site runs: another address sends it to the other server.
+  const lineAddress = mount ? undefined : hostsBlockAddress(shared.hostsText, domain);
+  const wanted = siteAddress(ctx.config, vhost);
+  if (lineAddress && lineAddress !== wanted && (vhost.server === 'nginx' || lineAddress === ctx.config.NGINX_ADDRESS)) {
+    issues.push({
+      id: 'hosts.server',
+      status: 'fail',
+      text: `/etc/hosts sends ${domain} to ${lineAddress}, but it runs on ${vhost.server === 'nginx' ? 'nginx' : 'Apache'} at ${wanted}`,
+      fix: { action: 'hosts.add', input: { domain, aliases: names.slice(1) }, label: 'Point it there' },
     });
   }
 
@@ -534,7 +547,26 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
   if (coreIssue) issues.push(coreIssue);
   if (git && 'error' in git) issues.push({ id: 'git.error', status: 'warn', text: git.error });
 
-  if (wp) {
+  if (wp && vhost.server === 'nginx') {
+    // nginx reads no .htaccess: the panel's nginx file has WordPress's rules, anything else there does nothing.
+    const ignored = htaccessIgnored(readHtaccess(docroot) ?? '');
+    if (ignored.length) {
+      issues.push({
+        id: 'nginx.htaccess',
+        status: 'warn',
+        text: `nginx does not read .htaccess, so these rules do nothing: ${ignored.join(', ')}`,
+        hint: 'Move the site back to Apache on its Domains and SSL tab when it needs them.',
+      });
+    }
+    if (!mount && siteKind(wp) !== (vhost.kind ?? 'single')) {
+      issues.push({
+        id: 'nginx.kind',
+        status: 'warn',
+        text: `The site is a ${siteKind(wp) === 'single' ? 'single site' : `${siteKind(wp)} network`} now, but its nginx rules are for a ${vhost.kind === 'subdirectory' ? 'subdirectory network' : vhost.kind === 'subdomain' ? 'subdomain network' : 'single site'}`,
+        fix: { action: 'site.setServer', input: { domain, server: 'nginx' }, label: 'Write its nginx rules again' },
+      });
+    }
+  } else if (wp) {
     const htaccess = readHtaccess(docroot);
     if (htaccess === null) {
       issues.push({
@@ -620,6 +652,8 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
     aliases: mount ? [] : names.slice(1),
     docroot,
     vhostManaged: vhost.managed,
+    server: vhost.server,
+    ...(mount ? {} : { move: moveFacts(ctx.config, vhost, domain) }),
     // A site under a path goes with its parent; the panel does not remove one on its own.
     removable: !mount && removalRefusal(ctx.config, domain, docroot, vhost.file) === null,
     panelMade: !mount && vhost.managed && isPanelFolder(ctx.config, docroot, domain),
@@ -652,9 +686,10 @@ export async function discoverSites(ctx: DiscoverContext): Promise<Site[]> {
   const mysql = mysqlRunner(ctx.exec, ctx.secrets);
   const wpcore = readWpcoreConfig(ctx.wpcoreConf);
   const [legacyIssuer, sizes] = await Promise.all([legacyIssuerOf(ctx.exec, ctx.config), databaseSizes(mysql, () => (ctx.secrets?.mysql ? freshStatsSql(ctx.exec, ctx.secrets.mysql) : Promise.resolve('')))]);
-  const hosts = hostsNames(existsSync(ctx.config.HOSTS_FILE) ? readFileSync(ctx.config.HOSTS_FILE, 'utf8') : '');
+  const hostsText = existsSync(ctx.config.HOSTS_FILE) ? readFileSync(ctx.config.HOSTS_FILE, 'utf8') : '';
+  const hosts = hostsNames(hostsText);
   const cores = wpcore ? installedCores(wpcore.coresDir) : [];
-  const shared = { legacyIssuer, sizes, hosts, mysql, cores };
+  const shared = { legacyIssuer, sizes, hosts, hostsText, mysql, cores };
   // Each vhost's own site, followed by the WordPress installs it serves under a path.
   const list = await Promise.all(vhosts.map((v) => Promise.all([discoverOne(ctx, v, shared), ...v.mounts.filter(isWordPressMount).map((m) => discoverOne(ctx, v, shared, m))])));
   return withPhp(ctx.config, list.flat());

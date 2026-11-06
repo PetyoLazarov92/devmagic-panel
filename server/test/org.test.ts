@@ -146,7 +146,7 @@ describe('the GitHub CLI', () => {
 });
 
 describe('an organization scan', () => {
-  const site = (over: Partial<Site>): Site => ({ domain: 'local.acme.com', aliases: [], docroot: '/var/www/local.acme.com', vhostManaged: false, removable: true, panelMade: false, core: { kind: 'wpcore', version: '7.1.3' }, debug: { enabled: false, logBytes: 0, constants: { WP_DEBUG: null, WP_DEBUG_LOG: null, WP_DEBUG_DISPLAY: null, SCRIPT_DEBUG: null, SAVEQUERIES: null } }, health: 'ok', issues: [], ...over });
+  const site = (over: Partial<Site>): Site => ({ domain: 'local.acme.com', aliases: [], docroot: '/var/www/local.acme.com', vhostManaged: false, server: 'apache', removable: true, panelMade: false, core: { kind: 'wpcore', version: '7.1.3' }, debug: { enabled: false, logBytes: 0, constants: { WP_DEBUG: null, WP_DEBUG_LOG: null, WP_DEBUG_DISPLAY: null, SCRIPT_DEBUG: null, SAVEQUERIES: null } }, health: 'ok', issues: [], ...over });
   const none = { sites: [], installs: new Map(), trash: [], drafts: [] };
   const repo = (name: string, pushed: string, extra: Record<string, unknown> = {}) => ({ name, archived: false, pushed_at: pushed, default_branch: 'main', ssh_url: `git@github.com:acme/${name}.git`, html_url: `https://github.com/acme/${name}`, ...extra });
 

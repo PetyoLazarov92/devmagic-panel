@@ -204,6 +204,7 @@ function SiteCard({ site }: { site: Site }) {
           </h2>
           {siteSubtitle(site) && <p className="truncate text-sm text-muted-foreground">{siteSubtitle(site)}</p>}
           {site.network && <NetworkBadge site={site} className="mt-1.5" />}
+          {site.server === 'nginx' && <Badge tone="primary" className="mt-1.5" title="Runs on nginx, next to Apache">nginx</Badge>}
           {site.installing && <Badge tone="warning" className="mt-1.5"><LoaderCircle className="size-3 animate-spin" />Installing: see progress</Badge>}
           {site.busy && (
             <Link href={site.busy.jobId ? `/jobs/${encodeURIComponent(site.busy.jobId)}` : href} className="relative z-10 mt-1.5 block w-fit">
@@ -295,6 +296,7 @@ function SiteRow({ site }: { site: Site }) {
         </p>
         {site.title && <p className="truncate text-xs text-muted-foreground">{site.title}</p>}
       </div>
+      {site.server === 'nginx' && <Badge tone="primary" className="hidden shrink-0 sm:inline-flex" title="Runs on nginx, next to Apache">nginx</Badge>}
       {site.installing && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Installing</Badge>}
       {site.busy && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Busy</Badge>}
       {issues > 0 && <Badge tone={site.health === 'fail' ? 'danger' : 'warning'} className="hidden shrink-0 sm:inline-flex">{issues === 1 ? '1 issue' : `${issues} issues`}</Badge>}

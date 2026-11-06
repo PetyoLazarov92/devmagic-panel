@@ -8,8 +8,9 @@ import { NSS_NICKNAME } from './environment.js';
 import type { ExecResult, Executor } from './exec.js';
 import { runRoot } from './exec.js';
 import {
-  addAliases, clearCache, clearDebugLog, fixWritable, flushRewrites, login, removeLegacySalts, setConstant, setDebug, setLocalMode, shuffleSalts, setUploadsFrom, SiteActionRefused, siteFor, siteKey, SiteNotFoundError, switchCore, writeHtaccess, type HandlerOutcome,
+  addAliases, clearCache, reloadArgs, clearDebugLog, fixWritable, flushRewrites, login, removeLegacySalts, setConstant, setDebug, setLocalMode, shuffleSalts, setUploadsFrom, SiteActionRefused, siteFor, siteKey, SiteNotFoundError, switchCore, writeHtaccess, type HandlerOutcome,
 } from './sites/site-actions.js';
+import { findVhost } from './sites/discover.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
 import type { Secrets } from './secrets.js';
 import { CoreRefused, planAddCore, removeCore } from './sites/cores.js';
@@ -36,6 +37,7 @@ import { forgetCompat, planCheckCompat, planCheckCompatAll, wordpressSites } fro
 import { planInstallVersion, planPhpPackage, planRemoveVersion, planUpgradeVersion, setCliVersion } from './php/apt.js';
 import { planSwitchToFpm, planSwitchToModPhp } from './php/switch.js';
 import { planNginxSetup, planNginxTeardown } from './nginx.js';
+import { planSetServer } from './sites/server-switch.js';
 import { analyzeDatabases, deleteMysqlBackup, type MysqlContext, mysqlBackupsDir, MysqlRefused, planDropDatabase, planDropUsers, planOptimize, resetSiteUser } from './mysql-server.js';
 import type { RunStore } from './store.js';
 import { clearMail, type Downloader, mailpitFetch, type MailpitFetch, planInstallMailpit } from './mailpit.js';
@@ -260,6 +262,8 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'nginx.setup': async (ctx) => startJob(ctx, planNginxSetup(ctx), 'Set nginx up next to Apache', 'nginx'),
   'nginx.teardown': async (ctx) => startJob(ctx, planNginxTeardown(ctx), 'Turn nginx off', 'nginx'),
   'nginx.reload': (ctx) => steps(() => root(ctx, 'nginx-reload')),
+  'site.setServer': async (ctx, input) =>
+    startJob(ctx, planSetServer(ctx, input), input.server === 'nginx' ? `Run ${input.domain} on nginx` : `Run ${input.domain} on Apache again`, input.domain),
   'mysql.analyze': (ctx, input) => analyzeDatabases(mysqlCtx(ctx), input),
   'mysql.optimize': async (ctx, input) =>
     startJob(ctx, await planOptimize(mysqlCtx(ctx), input, (s) => ctx.jobs.busyFor(`${s.domain}${s.path ?? ''}`) !== undefined), `Optimize ${input.database}`, input.database),
@@ -304,7 +308,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'ca.untrustLegacy': (ctx) => steps(() => root(ctx, 'ca-untrust-legacy')),
   'hosts.add': (ctx, { domain, aliases }) => steps(() => root(ctx, 'hosts-add', domain, ...aliases)),
   'hosts.remove': (ctx, { domain }) => steps(() => root(ctx, 'hosts-remove', domain)),
-  'cert.reissue': (ctx, { domain }) => steps(() => root(ctx, 'cert-reissue-from-vhost', domain), () => root(ctx, 'apache-reload')),
+  'cert.reissue': (ctx, { domain }) => steps(() => root(ctx, 'cert-reissue-from-vhost', domain), () => root(ctx, ...reloadArgs(findVhost(ctx.config, domain)))),
   'site.setLocalMode': setLocalMode,
   'site.writeHtaccess': writeHtaccess,
   'trash.restore': async (ctx, input) => {

@@ -238,6 +238,14 @@ export interface Site {
   docroot: string;
   /** False for vhosts made by hand or by devmagic: the panel leaves those files as they are. */
   vhostManaged: boolean;
+  /** The web server that has the site: Apache, or nginx once the panel moved it there (its hosts line points at nginx's address). */
+  server: 'apache' | 'nginx';
+  /**
+   * Moving the site to the other server (site.setServer), for a site of its
+   * own (not one under a path): why it cannot, what nginx would leave out of
+   * its .htaccess, and the PHP-FPM version it would run on there.
+   */
+  move?: { refusal?: string; ignored: string[]; php?: string };
   /** True when the panel can move the site to Deleted sites: its folder is WEB_DIR/<domain> and its vhost <domain>-ssl.conf or <domain>.conf. */
   removable: boolean;
   /** True for sites the panel created (its vhost marker and its folder in the registry). */

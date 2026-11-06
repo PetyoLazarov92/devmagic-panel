@@ -346,3 +346,258 @@ dmp_nginx_teardown() {
   rm -rf "${work:?}" "${state:?}"
   dmp_ok "nginx is stopped and Apache answers on every address again; sudo apt remove nginx removes nginx itself"
 }
+
+# ── Sites on nginx ───────────────────────────────────────────
+#
+# A site on nginx has the file sites-available/<domain>.conf with the panel's
+# marker, linked from sites-enabled, and its hosts line on NGINX_ADDRESS
+# (hosts-add reads where the site runs from these files). Its PHP goes
+# through PHP-FPM only: the upstream dmp-php-<domain> in
+# conf.d/devmagic-panel-php.conf points at the site's own pool, or at the
+# default version's FPM (php-default once mod_php is off, else mod_php's).
+
+DMP_NGINX_PHP_CONF_NAME="devmagic-panel-php.conf"
+# The first nginx with the http2 directive; older ones take "listen ... ssl http2".
+DMP_NGINX_HTTP2_DIRECTIVE="1.25.1"
+# shellcheck disable=SC2034 # read by dmp-root, which checks --kind against it
+DMP_NGINX_KINDS=(single subdirectory subdomain)
+
+dmp_nginx_site_file() { printf '%s/%s.conf' "$NGINX_SITES_AVAILABLE" "$1"; }
+dmp_nginx_site_link() { printf '%s/%s.conf' "$NGINX_SITES_ENABLED" "$1"; }
+dmp_nginx_php_conf() { printf '%s/conf.d/%s' "$(dmp_nginx_dir)" "$DMP_NGINX_PHP_CONF_NAME"; }
+
+# True when the site runs on nginx: the panel's file, enabled.
+dmp_nginx_site_on() {
+  local file
+  file="$(dmp_nginx_site_file "$1")"
+  [[ -f "$file" && -e "$(dmp_nginx_site_link "$1")" ]] && dmp_vhost_is_managed "$file"
+}
+
+# The domains of the panel's site files in sites-available, one per line.
+dmp_nginx_sites() {
+  local file domain
+  for file in "$NGINX_SITES_AVAILABLE"/*.conf; do
+    [[ -f "$file" ]] || continue
+    dmp_vhost_is_managed "$file" || continue
+    domain="$(basename "$file" .conf)"
+    dmp_is_local_name "$domain" && printf '%s\n' "$domain"
+  done
+  return 0
+}
+
+# The PHP-FPM socket a folder's PHP goes to on nginx: its own pool's, else
+# the default version's. Nothing when no FPM can run it.
+dmp_nginx_php_socket() {
+  local folder="$1" version
+  if dmp_pools | awk -v f="$folder" '$2 == f { found = 1 } END { exit !found }'; then
+    printf '%s/dmp-%s.sock' "$DMP_PHP_RUN_DIR" "$folder"
+    return 0
+  fi
+  version="$(dmp_php_default || dmp_php_apache_version || true)"
+  [[ -n "$version" && -e "$PHP_LIB_DIR/$version/sapi/fpm" ]] || return 1
+  printf '%s/php%s-fpm.sock' "$DMP_PHP_RUN_DIR" "$version"
+}
+
+# conf.d/devmagic-panel-php.conf: one upstream per site on nginx.
+dmp_nginx_php_render() {
+  local domain socket
+  printf '%s\n' "$DMP_VHOST_MARKER"
+  printf '# The PHP of each site on nginx: its own PHP-FPM pool, or the default version'\''s.\n'
+  while IFS= read -r domain; do
+    if socket="$(dmp_nginx_php_socket "$domain")"; then
+      printf 'upstream dmp-php-%s {\n    server unix:%s;\n}\n' "$domain" "$socket"
+    else
+      # No FPM for it: nginx still starts, and the site answers 502 until there is one.
+      printf '# %s: no PHP-FPM for its PHP version\nupstream dmp-php-%s {\n    server unix:%s/dmp-none.sock down;\n}\n' "$domain" "$domain" "$DMP_PHP_RUN_DIR"
+    fi
+  done < <(dmp_nginx_sites)
+}
+
+# Writes the upstreams and runs nginx -t; returns 1 with the previous file back when it fails.
+dmp_nginx_php_write() {
+  local conf previous=""
+  dmp_nginx_is_setup || return 0
+  conf="$(dmp_nginx_php_conf)"
+  if [[ -f "$conf" ]]; then
+    previous="$(mktemp "$(dirname "$conf")/.dmp-php.prev.XXXXXX")"
+    cp -p "$conf" "$previous"
+  fi
+  dmp_nginx_php_render | dmp_nginx_put "$conf"
+  if ! dmp_nginx_configtest; then
+    if [[ -n "$previous" ]]; then mv -f "$previous" "$conf"; else rm -f "${conf:?}"; fi
+    return 1
+  fi
+  [[ -z "$previous" ]] || rm -f "${previous:?}"
+  return 0
+}
+
+# Reloads nginx when it runs; the caller ran nginx -t.
+dmp_nginx_reload_if_active() {
+  systemctl is-active --quiet nginx || return 0
+  systemctl reload nginx || dmp_die "nginx reload failed: journalctl -u nginx"
+}
+
+# Usage: dmp_nginx_site_render <domain> <kind> <uploads-proxy-host or ""> [alias...]
+dmp_nginx_site_render() {
+  local domain="$1" kind="$2" proxy="$3" version names listen443 http2="" rewrites="" uploads=""
+  shift 3
+  names="$domain${*:+ $*}"
+  version="$(dmp_nginx_version)"
+  if [[ -n "$version" ]] && dmp_version_at_least "$version" "$DMP_NGINX_HTTP2_DIRECTIVE"; then
+    listen443="listen $NGINX_ADDRESS:443 ssl;"
+    http2=$'\n'"    http2 on;"
+  else
+    listen443="listen $NGINX_ADDRESS:443 ssl http2;"
+  fi
+  if [[ "$kind" == subdirectory ]]; then
+    # WordPress's rules for a network whose sites live under paths.
+    rewrites=$'\n'"    # A network whose sites live under paths: /site/wp-admin and the rest go to WordPress's own files."
+    rewrites+=$'\n'"    if (!-e \$request_filename) {"
+    rewrites+=$'\n'"        rewrite /wp-admin\$ \$scheme://\$host\$uri/ permanent;"
+    rewrites+=$'\n'"        rewrite ^(/[^/]+)?(/wp-.*) \$2 last;"
+    rewrites+=$'\n'"        rewrite ^(/[^/]+)?(/.*\\.php) \$2 last;"
+    rewrites+=$'\n'"    }"$'\n'
+  fi
+  if [[ -n "$proxy" ]]; then
+    uploads=$'\n'"    # Uploads missing locally load from production."
+    uploads+=$'\n'"    location ^~ /wp-content/uploads/ {"
+    uploads+=$'\n'"        location ~ \\.php\$ { deny all; }"
+    uploads+=$'\n'"        try_files \$uri @dmp_uploads;"
+    uploads+=$'\n'"    }"
+    uploads+=$'\n'"    location @dmp_uploads {"
+    uploads+=$'\n'"        return 302 https://$proxy\$request_uri;"
+    uploads+=$'\n'"    }"$'\n'
+  fi
+  cat <<EOF
+$DMP_VHOST_MARKER
+# kind: $kind
+server {
+    listen $NGINX_ADDRESS:80;
+    server_name $names;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    $listen443$http2
+    server_name $names;
+    root $WEB_DIR/$domain;
+    index index.php index.html;
+
+    ssl_certificate $(dmp_cert_file "$domain");
+    ssl_certificate_key $(dmp_cert_key_file "$domain");
+
+    access_log $NGINX_LOG_DIR/$domain-access.log;
+    error_log $NGINX_LOG_DIR/$domain-error.log;
+
+    # Never served: .htaccess, .git and the like, but .well-known.
+    location ~ /\.(?!well-known/) {
+        deny all;
+    }
+    # PHP never runs from uploads.
+    location ~* ^/wp-content/uploads/.*\.php\$ {
+        deny all;
+    }
+$uploads$rewrites
+    location / {
+        try_files \$uri \$uri/ /index.php?\$args;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass dmp-php-$domain;
+    }
+}
+EOF
+}
+
+# The names in a hosts line outside the panel's block, among the given ones.
+# glibc answers with the first line naming a host, so one of those keeps the
+# panel's line from deciding where the site goes.
+dmp_hosts_outside_block() {
+  local line state=before name field
+  local -a fields
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$DMP_HOSTS_BEGIN" ]]; then state=block; continue; fi
+    if [[ "$line" == "$DMP_HOSTS_END" ]]; then state=after; continue; fi
+    [[ "$state" == block ]] && continue
+    line="${line%%#*}"
+    read -r -a fields <<< "$line"
+    (( ${#fields[@]} > 1 )) || continue
+    for name in "$@"; do
+      for field in "${fields[@]:1}"; do
+        [[ "$field" == "$name" ]] && printf '%s\n' "$name"
+      done
+    done
+  done < "$HOSTS_FILE"
+  return 0
+}
+
+# Refuses a site whose PHP has no PHP-FPM to run on nginx.
+dmp_nginx_socket_or_die() {
+  dmp_nginx_php_socket "$1" >/dev/null && return 0
+  dmp_die "$1 has no PHP-FPM to run on: install PHP-FPM for the PHP version sites run (apt install php<version>-fpm)"
+}
+
+# nginx-site-write <domain> <kind> <uploads-proxy-host or ""> [alias...]:
+# the site on nginx, with these names, its folder WEB_DIR/<domain> and its
+# certificate; then nginx -t and a reload, or the file as it was.
+dmp_nginx_site_write() {
+  local domain="$1" kind="$2" proxy="$3" file link apache previous="" tmp outside
+  shift 3
+  local -a aliases
+  mapfile -t aliases < <(dmp_unique_aliases "$domain" "$@")
+  dmp_nginx_is_setup || dmp_die "nginx is not set up next to Apache: run dmp-root nginx-setup first"
+  [[ "$domain" != "$PANEL_DOMAIN" ]] || dmp_usage_error "the panel's own site stays on Apache"
+  [[ -d "$WEB_DIR/$domain" && ! -L "$WEB_DIR/$domain" ]] || dmp_die "no site folder $WEB_DIR/$domain"
+  [[ -f "$(dmp_cert_file "$domain")" ]] || dmp_die "no certificate for $domain yet, run: dmp-root cert-issue $domain"
+  # A site whose vhost was made by hand stays on Apache, as it is.
+  for apache in "$APACHE_SITES_AVAILABLE/$domain-ssl.conf" "$APACHE_SITES_AVAILABLE/$domain.conf"; do
+    dmp_vhost_require_managed "$apache"
+  done
+  outside="$(dmp_hosts_outside_block "$domain" "${aliases[@]}" | sort -u | tr '\n' ' ')"
+  [[ -z "$outside" ]] || dmp_die "${outside% } in $HOSTS_FILE outside the panel's block would keep the site on Apache; remove that line first"
+  dmp_nginx_socket_or_die "$domain"
+
+  file="$(dmp_nginx_site_file "$domain")"
+  link="$(dmp_nginx_site_link "$domain")"
+  dmp_vhost_require_managed "$file"
+  dmp_step "Writing the nginx site for $domain"
+  install -d -m 0755 "$NGINX_SITES_AVAILABLE" "$NGINX_SITES_ENABLED" "$NGINX_LOG_DIR"
+  if [[ -f "$file" ]]; then
+    previous="$(mktemp "$NGINX_SITES_AVAILABLE/.$domain.prev.XXXXXX")"
+    cp -p "$file" "$previous"
+  fi
+  tmp="$(mktemp "$NGINX_SITES_AVAILABLE/.$domain.XXXXXX")"
+  dmp_nginx_site_render "$domain" "$kind" "$proxy" "${aliases[@]}" > "$tmp"
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$file"
+  ln -sfn "$file" "$link"
+  if ! dmp_nginx_php_write; then
+    if [[ -n "$previous" ]]; then
+      mv -f "$previous" "$file"
+    else
+      rm -f "${file:?}" "${link:?}"
+    fi
+    dmp_nginx_php_write >/dev/null 2>&1 || true
+    dmp_die "nginx refused the site for $domain; it is as it was"
+  fi
+  [[ -z "$previous" ]] || rm -f "${previous:?}"
+  dmp_nginx_reload_if_active
+  dmp_ok "nginx site enabled: $file"
+}
+
+# nginx-site-remove <domain>: the site leaves nginx (only the panel's file).
+dmp_nginx_site_remove() {
+  local domain="$1" file
+  file="$(dmp_nginx_site_file "$domain")"
+  if [[ ! -f "$file" ]]; then
+    dmp_ok "no nginx site for $domain"
+    return 0
+  fi
+  dmp_vhost_require_managed "$file"
+  dmp_step "Removing the nginx site for $domain"
+  rm -f "$(dmp_nginx_site_link "$domain")" "${file:?}"
+  dmp_nginx_php_write || dmp_die "nginx -t failed after taking $domain out"
+  dmp_nginx_reload_if_active
+  dmp_ok "nginx site removed for $domain"
+}

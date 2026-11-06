@@ -38,6 +38,7 @@ browser ─https─> Apache (local.devmagic, local CA cert) ─proxy─> Fastify
 | `server/src/sites/create.ts` | The new site steps; each one registers its undo |
 | `server/src/self-check.ts` | The Environment page's Panel installation group: install.sh's listed files, root scripts against the panel's code, build against the code. The panel runs from a release in `~/.local/share/devmagic-panel/releases/<name>`, the one `current` points at; `install.sh` puts it there (`prepare_release`), built from the checked out commit when run from a checkout |
 | `server/src/nginx.ts` | nginx next to Apache: installed and set up (the panel's `conf.d/devmagic-panel.conf`), the nginx tab's report, configs that take Apache's ports, and the setup and teardown jobs; root work in `scripts/lib/nginx.sh` |
+| `server/src/sites/server-switch.ts` | `site.setServer`: moving a site between Apache and nginx, what keeps it on Apache, and what nginx leaves out of its `.htaccess` |
 | `server/src/cron.ts` | Your crontab: the panel's marked block, its task lines, saved copies for Undo, and the Cron tab's report |
 | `server/src/cron-run.ts` | The runner cron starts as `cli.js cron-run`: checks a task's arguments again, runs it without a shell, one at a time, and records the run |
 | `server/src/sites/wp-cron.ts` | A site's WP-Cron through WP-CLI: events, intervals, run, delete with Undo, and the switch to run it from cron |

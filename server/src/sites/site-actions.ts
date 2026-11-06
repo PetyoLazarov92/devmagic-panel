@@ -8,6 +8,7 @@ import type { ExecResult, Executor } from '../exec.js';
 import { runRoot } from '../exec.js';
 import { installedCores, keepRepoIndex, readWpcoreConfig } from '../wpcore.js';
 import { debugLogPath, findVhost, readCore, unwritableByWeb } from './discover.js';
+import type { VhostInfo } from './vhost.js';
 import { ensureHtaccess, siteKind } from './htaccess.js';
 import { readLocalMode, setLocalMode as writeLocalMode } from './local-mode.js';
 import { installMuPlugin } from './mu-plugins.js';
@@ -54,6 +55,21 @@ export interface SiteRef {
 export function mountArgs(config: SystemConfig, mounts: Array<{ path: string; docroot: string }>): string[] {
   return mounts.filter((m) => dirname(m.docroot) === config.WEB_DIR).flatMap((m) => ['--mount', `${m.path}=${basename(m.docroot)}`]);
 }
+
+/**
+ * dmp-root's command that writes a site's server config again: the Apache
+ * vhost (with the sites under its paths) or, for a site on nginx, its nginx
+ * file with the WordPress rules it has.
+ */
+export function siteWriteArgs(config: SystemConfig, vhost: VhostInfo, domain: string, proxy: string | null, aliases: string[]): string[] {
+  const redirect = proxy ? ['--uploads-proxy', proxy] : [];
+  return vhost.server === 'nginx'
+    ? ['nginx-site-write', domain, '--kind', vhost.kind ?? 'single', ...redirect, ...aliases]
+    : ['vhost-write', domain, ...redirect, ...mountArgs(config, vhost.mounts), ...aliases];
+}
+
+/** The reload that picks up a reissued certificate: the server that has the site. */
+export const reloadArgs = (vhost: Pick<VhostInfo, 'server'> | undefined) => (vhost?.server === 'nginx' ? ['nginx-reload'] : ['apache-reload']);
 
 /** The address of a site, with its path when it has one. */
 export const siteHost = (domain: string, path?: string) => `${domain}${path ?? ''}`;
@@ -219,7 +235,7 @@ async function redirectUploads(ctx: SiteActionContext, site: SiteRef, host: stri
     if (onlyIfSet && !vhost.uploadsProxy) return null;
     // The panel's vhost is rebuilt from its names, with or without the redirect; dmp-root tests the config and reloads Apache.
     const aliases = vhost.names.slice(1).filter(isLocalName);
-    return runRoot(ctx.exec, ctx.dmpRoot, ['vhost-write', site.domain, ...(host ? ['--uploads-proxy', host] : []), ...mountArgs(ctx.config, vhost.mounts), ...aliases]);
+    return runRoot(ctx.exec, ctx.dmpRoot, siteWriteArgs(ctx.config, vhost, site.domain, host, aliases));
   }
   const localMode = readLocalMode(site.docroot);
   if (onlyIfSet && !localMode.uploadsFrom) return null;
@@ -249,10 +265,10 @@ export async function addAliases(ctx: SiteActionContext, { domain, aliases }: Ac
   const root = (...args: string[]) => () => runRoot(ctx.exec, ctx.dmpRoot, args);
   return {
     results: await steps(
-      root('vhost-write', domain, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...mountArgs(ctx.config, vhost.mounts), ...names),
+      root(...siteWriteArgs(ctx.config, vhost, domain, vhost.uploadsProxy, names)),
       root('cert-reissue-from-vhost', domain),
       root('hosts-add', domain, ...names),
-      root('apache-reload'),
+      root(...reloadArgs(vhost)),
     ),
   };
 }

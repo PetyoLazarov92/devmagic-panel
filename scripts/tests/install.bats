@@ -601,3 +601,18 @@ nginx_tree() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"nginx-teardown"* ]]
 }
+
+@test "uninstall moves sites on nginx back to Apache before it turns nginx off" {
+  installed_machine
+  nginx_tree set-up
+  printf '# Managed by devmagic-panel. Edits here are overwritten.\nserver {\n    server_name local.acme.com local.acme.de;\n    location @dmp_uploads {\n        return 302 https://www.acme.com$request_uri;\n    }\n}\n' > "$NGINX/sites-available/local.acme.com.conf"
+  run "$INSTALL" --uninstall --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"1 site(s) on nginx go back to Apache"* ]]
+  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root vhost-write local.acme.com --uploads-proxy www.acme.com local.acme.de"* ]]
+  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root nginx-site-remove local.acme.com"* ]]
+  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root hosts-add local.acme.com local.acme.de"* ]]
+  back_line="$(grep -n 'nginx-site-remove local.acme.com' <<< "$output" | cut -d: -f1)"
+  teardown_line="$(grep -n 'dmp-root nginx-teardown' <<< "$output" | cut -d: -f1)"
+  [ "$back_line" -lt "$teardown_line" ]
+}

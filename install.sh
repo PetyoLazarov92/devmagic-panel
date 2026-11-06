@@ -515,6 +515,33 @@ WANT_ORG=0
 WANT_NGINX_PACKAGE=0
 WANT_NGINX=0
 
+# The panel's files in nginx's sites-available: sites it moved to nginx, one per line.
+nginx_panel_sites() {
+  local file
+  for file in "$NGINX_SITES_AVAILABLE"/*.conf; do
+    [[ -r "$file" && "$(head -n 1 "$file")" == "# Managed by devmagic-panel. Edits here are overwritten." ]] && printf '%s\n' "$file"
+  done
+  return 0
+}
+
+# Every site on nginx back to Apache, as site.setServer does: a vhost with its
+# names and uploads redirect, then off nginx, then its hosts line follows.
+nginx_sites_back_to_apache() {
+  local file domain proxy
+  local -a names
+  while IFS= read -r file; do
+    domain="$(basename "$file" .conf)"
+    read -r -a names <<< "$(sed -nE 's/^[[:space:]]*server_name[[:space:]]+([^;]+);.*$/\1/p' "$file" | head -n 1)"
+    [[ "${names[0]:-}" == "$domain" ]] || { dmp_warn "left $file alone: its first name is not $domain"; continue; }
+    # shellcheck disable=SC2016 # $request_uri is nginx's, matched as text
+    proxy="$(sed -nE 's#^[[:space:]]*return 302 https://([a-z0-9.-]+)\$request_uri;.*$#\1#p' "$file" | head -n 1)"
+    dmp_step "Moving $domain back to Apache"
+    as_root "$DMP" vhost-write "$domain" ${proxy:+--uploads-proxy "$proxy"} "${names[@]:1}" || { dmp_warn "could not write the Apache vhost of $domain"; continue; }
+    as_root "$DMP" nginx-site-remove "$domain" || dmp_warn "could not take $domain off nginx"
+    as_root "$DMP" hosts-add "${names[@]}" || dmp_warn "could not point the hosts line of $domain at Apache"
+  done < <(nginx_panel_sites)
+}
+
 # The panel's nginx settings, written by dmp-root nginx-setup: their marker says nginx runs next to Apache.
 nginx_conf_file() { printf '%s/conf.d/devmagic-panel.conf' "$(dirname "$NGINX_SITES_AVAILABLE")"; }
 nginx_set_up() {
@@ -1566,9 +1593,11 @@ uninstall_main() {
   fi
   (( ${#site_files[@]} > 0 )) && asked+=("the panel's ${#site_files[@]} files in your sites (Local mode and the login helper)")
   # nginx next to Apache goes back as it was, listed or not (installs before the panel knew it).
-  local nginx_on=0
+  local nginx_on=0 nginx_sites
   if nginx_set_up; then
     nginx_on=1
+    nginx_sites="$(nginx_panel_sites | wc -l)"
+    (( nginx_sites == 0 )) || removed+=("$nginx_sites site(s) on nginx go back to Apache, with their names, folders, databases and certificates as they are")
     if ! printf '%s\n' "${entries[@]}" | grep -q $'^setting\tnginx:'; then
       removed+=("nginx:$NGINX_ADDRESS  (nginx next to Apache: Apache goes back on every address, Debian's default nginx site back on, and nginx stops; nginx stays installed)")
     fi
@@ -1627,6 +1656,7 @@ uninstall_main() {
 
   # nginx and the panel's own site go while dmp-root is still there.
   if (( nginx_on )); then
+    nginx_sites_back_to_apache
     dmp_step "Turning nginx off; Apache answers on every address again"
     as_root "$DMP" nginx-teardown || dmp_warn "could not turn nginx off: put /etc/apache2/ports.conf back from $STATE_DIR/nginx/ports.conf by hand"
   fi

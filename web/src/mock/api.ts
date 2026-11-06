@@ -1351,6 +1351,10 @@ export const mockApi: Api = {
     // The mockup's Mailpit "runs" once its install job has had time to finish.
     if (id === 'mailpit.install') window.setTimeout(() => (mailpitRunning = true), 3500);
     if (id === 'nginx.setup' || id === 'nginx.teardown') window.setTimeout(() => (mockNginxSetUp = id === 'nginx.setup'), 3500);
+    if (id === 'site.setServer') {
+      const moved = sites.find((s) => s.domain === input.domain && !s.path);
+      if (moved) moved.server = input.server === 'nginx' ? 'nginx' : 'apache';
+    }
     return mockDbJob(id, input);
   },
   logs: async (domain, source) => {

@@ -277,7 +277,13 @@ dmp_php_conf_write() {
     if [[ -n "$previous" ]]; then mv -f "$previous" "$conf"; else rm -f "${conf:?}"; fi
     return 1
   fi
+  # Sites on nginx follow the same pools and default version.
+  if ! dmp_nginx_php_write; then
+    if [[ -n "$previous" ]]; then mv -f "$previous" "$conf"; else rm -f "${conf:?}"; fi
+    return 1
+  fi
   [[ -z "$previous" ]] || rm -f "${previous:?}"
+  if dmp_nginx_is_setup; then dmp_nginx_reload_if_active; fi
   return 0
 }
 

@@ -62,6 +62,7 @@ export async function precheck(ctx: CreateContext, input: CreateInput): Promise<
     // Under a path: the domain is an existing site's, the path free, and the folder new.
     const parent = vhosts.find((v) => v.names[0] === input.domain);
     if (!parent) throw new CreateRefused(`no site called ${input.domain} to put ${input.path} under`);
+    if (parent.server === 'nginx') throw new CreateRefused(`${input.domain} runs on nginx, where sites under a path are not served yet; move it to Apache on its Domains and SSL tab first`);
     if (parent.mounts.some((m) => m.path === input.path)) throw new CreateRefused(`${input.domain}${input.path} is already served`);
     const folder = mountFolder(input.domain, input.path) as string;
     if (taken.has(folder)) throw new CreateRefused(`${folder} is already used by another site`);

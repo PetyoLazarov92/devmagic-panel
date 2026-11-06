@@ -2,11 +2,15 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { isLocalName } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
+import type { SiteKind } from './htaccess.js';
+import { hostsBlockAddress, readHosts } from './hosts-block.js';
 
 /** Same marker line as DMP_VHOST_MARKER in scripts/lib/vhost.sh. */
 export const VHOST_MARKER = '# Managed by devmagic-panel. Edits here are overwritten.';
 
 export interface VhostInfo {
+  /** The server that has this file: an Apache vhost, or the panel's nginx site (scripts/lib/nginx.sh). */
+  server: 'apache' | 'nginx';
   file: string;
   managed: boolean;
   /** ServerName and ServerAlias from every block, lowercase, in file order. */
@@ -21,6 +25,8 @@ export interface VhostInfo {
   mounts: Array<{ path: string; docroot: string }>;
   /** The production host the panel's own vhost sends missing uploads to (scripts/lib/vhost.sh). */
   uploadsProxy: string | null;
+  /** For a site on nginx: the WordPress rules its file was written with (the "# kind:" line). */
+  kind?: SiteKind;
 }
 
 const directive = (line: string, name: string) => new RegExp(`^\\s*${name}\\s+(.+?)\\s*$`, 'i').exec(line)?.[1];
@@ -73,6 +79,7 @@ export function parseVhost(text: string, file: string, apacheLogDir: string): Vh
   }
 
   return {
+    server: 'apache',
     file,
     managed: text.split('\n', 1)[0] === VHOST_MARKER,
     names,
@@ -86,10 +93,73 @@ export function parseVhost(text: string, file: string, apacheLogDir: string): Vh
 }
 
 /**
- * Every enabled vhost that serves a local site from the web root. Apache's
- * defaults and the panel's own vhost are skipped.
+ * The panel's nginx site (scripts/lib/nginx.sh dmp_nginx_site_render): its
+ * names, folder, certificate, log, uploads redirect and WordPress rules.
+ */
+export function parseNginxSite(text: string, file: string): VhostInfo {
+  const names: string[] = [];
+  const value = (name: string) => new RegExp(`^\\s*${name}\\s+([^;\\s]+);`, 'm').exec(text)?.[1] ?? null;
+  for (const m of text.matchAll(/^\s*server_name\s+([^;]+);/gm)) {
+    for (const n of (m[1] as string).toLowerCase().split(/\s+/)) if (n && n !== '_' && !names.includes(n)) names.push(n);
+  }
+  const kind = /^# kind: (single|subdirectory|subdomain)$/m.exec(text)?.[1] as SiteKind | undefined;
+  return {
+    server: 'nginx',
+    file,
+    managed: text.split('\n', 1)[0] === VHOST_MARKER,
+    names,
+    byPort: { http: [...names], https: [...names] },
+    docroot: value('root'),
+    certFile: value('ssl_certificate'),
+    errorLog: value('error_log'),
+    mounts: [],
+    uploadsProxy: /^\s*return 302 https:\/\/([a-z0-9.-]+)\$request_uri;\s*$/m.exec(text)?.[1] ?? null,
+    ...(kind ? { kind } : {}),
+  };
+}
+
+/** The panel's enabled nginx sites, from sites-enabled. */
+function readNginxSites(config: SystemConfig): VhostInfo[] {
+  if (!existsSync(config.NGINX_SITES_ENABLED)) return [];
+  const out: VhostInfo[] = [];
+  for (const entry of readdirSync(config.NGINX_SITES_ENABLED).filter((f) => f.endsWith('.conf')).sort()) {
+    let file: string;
+    let text: string;
+    try {
+      file = realpathSync(join(config.NGINX_SITES_ENABLED, entry));
+      text = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const info = parseNginxSite(text, file);
+    const primary = info.names[0];
+    // Only the panel's files are sites here; nginx configs made by hand are listed on the nginx tab.
+    if (!info.managed || !primary || !isLocalName(primary) || primary === config.PANEL_DOMAIN) continue;
+    if (!info.docroot?.startsWith(`${config.WEB_DIR}/`)) continue;
+    out.push(info);
+  }
+  return out;
+}
+
+/** The address a site answers on: nginx's for a site on nginx, else Apache's. */
+export const siteAddress = (config: SystemConfig, vhost: Pick<VhostInfo, 'server'> | undefined) => (vhost?.server === 'nginx' ? config.NGINX_ADDRESS : config.APACHE_ADDRESS);
+
+/**
+ * Every enabled vhost that serves a local site from the web root, and the
+ * panel's nginx sites. Apache's defaults and the panel's own vhost are
+ * skipped. A site both servers have (halfway through a move) is the one its
+ * hosts line points at.
  */
 export function readSiteVhosts(config: SystemConfig): VhostInfo[] {
+  const apache = readApacheVhosts(config);
+  const nginx = readNginxSites(config);
+  if (nginx.length === 0) return apache;
+  const hosts = readHosts(config);
+  const onNginx = new Set(nginx.map((n) => n.names[0] as string).filter((d) => !apache.some((a) => a.names[0] === d) || hostsBlockAddress(hosts, d) === config.NGINX_ADDRESS));
+  return [...apache.filter((a) => !onNginx.has(a.names[0] as string)), ...nginx.filter((n) => onNginx.has(n.names[0] as string))];
+}
+
+function readApacheVhosts(config: SystemConfig): VhostInfo[] {
   if (!existsSync(config.APACHE_SITES_ENABLED)) return [];
   const out: VhostInfo[] = [];
   for (const entry of readdirSync(config.APACHE_SITES_ENABLED).filter((f) => f.endsWith('.conf')).sort()) {

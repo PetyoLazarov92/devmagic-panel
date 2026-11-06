@@ -6,7 +6,9 @@ import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
 import { runRoot } from '../exec.js';
 import type { JobStep } from '../jobs.js';
+import { findVhost } from '../sites/discover.js';
 import { SiteActionRefused, type SiteRef } from '../sites/site-actions.js';
+import { siteAddress } from '../sites/vhost.js';
 import { effectiveIni, phpDirectivesOutsideModPhp } from './fpm-check.js';
 import { diffIni } from './ini.js';
 import { PhpInfoUnavailable, webInfo, webInfoSettled } from './info.js';
@@ -68,7 +70,7 @@ export async function checkSite(ctx: SitePhpContext, site: Pick<SiteRef, 'host' 
   for (let attempt = 1; ; attempt++) {
     r = await ctx.exec('curl', [
       '-sS', '--max-time', '30', '--noproxy', '*', '--cacert', join(ctx.config.CA_DIR, 'ca.pem'),
-      '--resolve', `${site.domain}:443:${ctx.config.APACHE_ADDRESS}`, '-o', '-', '-w', '\n%{http_code}', url,
+      '--resolve', `${site.domain}:443:${siteAddress(ctx.config, findVhost(ctx.config, site.domain))}`, '-o', '-', '-w', '\n%{http_code}', url,
     ], { timeoutMs: 40_000 });
     status = Number(r.stdout.trim().split('\n').at(-1));
     if (r.code !== 0 || status < 502 || status > 504 || attempt >= tries) break;

@@ -126,7 +126,7 @@ function SetupCard({ report, busy, onStart, children }: { report: NginxReport; b
 
         {report.setUp && (
           <p>
-            nginx answers on <code className="font-mono">{nginx}</code> and Apache on <code className="font-mono">{apache}</code>, both on ports 80 and 443. Every site runs on Apache until you give one to nginx. Turning nginx off puts Apache back on every address and stops nginx; it stays installed.
+            nginx answers on <code className="font-mono">{nginx}</code> and Apache on <code className="font-mono">{apache}</code>, both on ports 80 and 443. A site moves to nginx, and back, on its Domains and SSL tab. Turning nginx off, once every site is back on Apache, puts Apache back on every address and stops nginx; it stays installed.
           </p>
         )}
 
