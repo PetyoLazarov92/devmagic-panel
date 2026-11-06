@@ -61,6 +61,27 @@ function responses(docroot: string, cert: string) {
 }
 
 describe('discoverSites', () => {
+  it('lists the repos inside a site, a theme on GitLab next to the site\'s own, and leaves one git refuses out', async () => {
+    const t = siteTree();
+    mkdirSync(join(t.docroot, 'wp-content/themes/acme/.git'), { recursive: true });
+    mkdirSync(join(t.docroot, 'wp-content/plugins/broken/.git'), { recursive: true });
+    const theme = `git -C ${join(t.docroot, 'wp-content/themes/acme')}`;
+    const { exec } = fakeExec({
+      ...responses(t.docroot, t.cert),
+      [`${theme} rev-parse --abbrev-ref HEAD`]: { stdout: 'main\n' },
+      [`${theme} remote get-url origin`]: { stdout: 'git@gitlab.com:acme/web/acme-theme.git\n' },
+      [`${theme} rev-parse --abbrev-ref @{upstream}`]: { stdout: 'origin/main\n' },
+      [`${theme} rev-list --left-right --count @{upstream}...HEAD`]: { stdout: '2\t0\n' },
+      [`${theme} status --porcelain`]: { stdout: '' },
+      [`${theme} log -1`]: { stdout: 'def5678\x1fHeader spacing\x1fAlex Morgan\x1f2026-10-24T08:00:00+00:00\n' },
+    });
+    const [site] = await discoverSites({ config: t.config, exec, secrets, wpcoreConf: join(t.root, 'wpcore.conf'), now: () => NOW });
+    expect(site?.git?.branch).toBe('feature/cart');
+    expect(site?.repos).toEqual([
+      { folder: 'wp-content/themes/acme', kind: 'theme', name: 'acme', git: { remote: 'git@gitlab.com:acme/web/acme-theme.git', branch: 'main', upstream: 'origin/main', dirty: 0, ahead: 0, behind: 2, lastCommit: { hash: 'def5678', subject: 'Header spacing', author: 'Alex Morgan', date: '2026-10-24T08:00:00+00:00' } } },
+    ]);
+  });
+
   it('builds a site from its vhost, wp-config, core, cert, git, database and log', async () => {
     const t = siteTree();
     const { exec } = fakeExec(responses(t.docroot, t.cert));

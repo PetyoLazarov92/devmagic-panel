@@ -88,6 +88,14 @@ describe('site routes', () => {
     expect(list.json().map((s: { install: unknown }) => s.install)).toEqual([{ how: 'hand' }, { how: 'wordpress', at: '2026-10-25T08:00:00Z' }]);
   });
 
+  it('refuse a git repo folder that is not one of a site\'s, before any command', async () => {
+    for (const repo of ['../local.other.com', 'wp-content/uploads', 'wp-content/themes/../../x']) {
+      expect((await get(`/api/sites/local.shop.com/git?repo=${encodeURIComponent(repo)}`)).statusCode).toBe(400);
+      expect((await get(`/api/sites/local.shop.com/git/pulls?repo=${encodeURIComponent(repo)}`)).statusCode).toBe(400);
+    }
+    expect((await get('/api/sites/local.shop.com/git?repo=wp-content%2Fthemes%2Facme')).statusCode).toBe(404);
+  });
+
   it('say what an organization install needs, keep its settings per step, and start no read without Claude Code', async () => {
     const send = (method: 'PUT' | 'POST', url: string, payload: Record<string, unknown>) => app.inject({ method, url, headers: { host: HOST, origin: ORIGIN, cookie }, payload });
     expect((await get('/api/org/status')).json()).toMatchObject({ claude: { found: false }, gh: { installed: false }, glab: { installed: false, hosts: [{ host: 'gitlab.com', installed: false }] }, rclone: { installed: false }, settings: { selected: [] } });

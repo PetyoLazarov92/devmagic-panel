@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { registerGitlabHosts } from '@devmagic-panel/shared';
 import { ActionInputError, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs } from '../src/jobs.js';
+import { findSiteRepos, MAX_SITE_REPOS } from '../src/sites/discover.js';
 import { gitFolder, parseBranches, parseChanges, readGitDetails, readPullRequests } from '../src/sites/git.js';
 import { RunStore } from '../src/store.js';
 import { DMP, fakeExec, wpSiteTree } from './helpers.js';
@@ -156,6 +157,62 @@ describe('open pull requests', () => {
       'gh pr list': { stdout: JSON.stringify([{ number: 1, title: 'x', url: 'javascript:alert(1)', headRefName: 'a', isDraft: false, isCrossRepository: false }]) },
     });
     expect(await readPullRequests(odd.exec, s.docroot)).toEqual([]);
+  });
+});
+
+describe('repos inside a site', () => {
+  /** A site with wp-content, a theme, a plugin and a must-use plugin as repos, and a theme that is only a folder. */
+  function withRepos() {
+    const s = setup();
+    for (const dir of ['wp-content', 'wp-content/themes/acme', 'wp-content/plugins/acme-blocks', 'wp-content/mu-plugins/acme-tools']) mkdirSync(join(s.docroot, dir, '.git'), { recursive: true });
+    mkdirSync(join(s.docroot, 'wp-content/themes/twentytwentyfive'), { recursive: true });
+    return s;
+  }
+
+  it('are found in wp-content, its themes, plugins and must-use plugins, in that order', () => {
+    const s = withRepos();
+    expect(findSiteRepos(s.docroot)).toEqual([
+      { folder: 'wp-content', kind: 'wp-content', name: 'wp-content' },
+      { folder: 'wp-content/themes/acme', kind: 'theme', name: 'acme' },
+      { folder: 'wp-content/plugins/acme-blocks', kind: 'plugin', name: 'acme-blocks' },
+      { folder: 'wp-content/mu-plugins/acme-tools', kind: 'mu-plugin', name: 'acme-tools' },
+    ]);
+  });
+
+  it('leave out a folder reached through a link, and stop at the limit', () => {
+    const s = setup();
+    const elsewhere = join(s.root, 'elsewhere/shared-theme');
+    mkdirSync(join(elsewhere, '.git'), { recursive: true });
+    mkdirSync(join(s.docroot, 'wp-content/themes'), { recursive: true });
+    symlinkSync(elsewhere, join(s.docroot, 'wp-content/themes/shared-theme'));
+    expect(findSiteRepos(s.docroot)).toEqual([]);
+    for (let i = 0; i < MAX_SITE_REPOS + 5; i++) mkdirSync(join(s.docroot, `wp-content/plugins/p${String(i).padStart(2, '0')}/.git`), { recursive: true });
+    expect(findSiteRepos(s.docroot)).toHaveLength(MAX_SITE_REPOS);
+  });
+
+  it('are reached by gitFolder only as a real folder of the site, never through a link or another path', () => {
+    const s = withRepos();
+    expect(gitFolder(s.config, 'local.shop.com', undefined, 'wp-content/themes/acme')).toBe(join(s.docroot, 'wp-content/themes/acme'));
+    expect(gitFolder(s.config, 'local.shop.com', undefined, 'wp-content')).toBe(join(s.docroot, 'wp-content'));
+    expect(() => gitFolder(s.config, 'local.shop.com', undefined, 'wp-content/themes/twentytwentyfive')).toThrow('not a git repository');
+    expect(() => gitFolder(s.config, 'local.shop.com', undefined, 'wp-content/../../etc')).toThrow('not a repo folder');
+    expect(() => gitFolder(s.config, 'local.shop.com', undefined, 'wp-content/uploads/x')).toThrow('not a repo folder');
+    const elsewhere = join(s.root, 'elsewhere/linked');
+    mkdirSync(join(elsewhere, '.git'), { recursive: true });
+    symlinkSync(elsewhere, join(s.docroot, 'wp-content/plugins/linked'));
+    expect(() => gitFolder(s.config, 'local.shop.com', undefined, 'wp-content/plugins/linked')).toThrow('reached through a link');
+  });
+
+  it('run git actions in that folder, and refuse a repo folder the schema does not take before any command', async () => {
+    const s = withRepos();
+    const git = `git -C ${join(s.docroot, 'wp-content/themes/acme')}`;
+    const fake = fakeExec({ [`${git} fetch --prune origin`]: { stdout: '' }, [`${git} status --porcelain --untracked-files=no`]: { stdout: '' }, [`${git} rev-parse --abbrev-ref HEAD`]: { stdout: 'main\n' }, [`${git} switch develop`]: { stdout: '' } });
+    s.ctx.exec = fake.exec;
+    expect((await runAction(s.ctx, 'git.fetch', { domain: 'local.shop.com', repo: 'wp-content/themes/acme' })).ok).toBe(true);
+    expect((await runAction(s.ctx, 'git.switch', { domain: 'local.shop.com', repo: 'wp-content/themes/acme', branch: 'develop' })).ok).toBe(true);
+    expect(lines(fake.calls)).toEqual([`${git} fetch --prune origin`, `${git} status --porcelain --untracked-files=no`, `${git} rev-parse --abbrev-ref HEAD`, `${git} switch develop`]);
+    await expect(runAction(s.ctx, 'git.fetch', { domain: 'local.shop.com', repo: '../local.other.com' })).rejects.toThrow(ActionInputError);
+    expect(fake.calls).toHaveLength(4);
   });
 });
 

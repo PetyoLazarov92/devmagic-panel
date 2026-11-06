@@ -1052,11 +1052,14 @@ function OrgCard({ status, checking, error, onRecheck, checked, onPick, buttonRe
 
 // ── Repo and database ────────────────────────────────────────
 
-/** Existing sites (and their mounted folders) whose git remote is this repo. */
+/** Existing sites (their themes and plugins, and their mounted folders) whose git remote is this repo. */
 export function sitesUsingRepo(sites: Site[], url: string): Array<{ domain: string; path?: string; branch: string }> {
   if (!gitUrl.safeParse(url).success) return [];
   return sites.flatMap((site) => [
     ...(site.git?.remote && sameRepo(site.git.remote, url) ? [{ domain: site.domain, ...(site.path ? { path: site.path } : {}), branch: site.git.branch }] : []),
+    ...(site.repos ?? []).flatMap((r) =>
+      r.git.remote && sameRepo(r.git.remote, url) ? [{ domain: site.domain, ...(site.path ? { path: site.path } : {}), branch: r.git.branch }] : [],
+    ),
     ...(site.mounts ?? []).flatMap((m) =>
       m.git?.remote && sameRepo(m.git.remote, url) ? [{ domain: site.domain, path: m.path, branch: m.git.branch }] : [],
     ),

@@ -8,9 +8,9 @@ import { HostRefused, type RepoHost } from './types.js';
 export { HostRefused, type HostRepo, type RepoHost } from './types.js';
 export { GitHostDetector } from './detect.js';
 
-/** Every git remote of the sites, mounts under a path included. */
+/** Every git remote of the sites: their own, the repos inside them (themes, plugins) and mounted folders'. */
 export const remotesOf = (sites: Site[]): string[] =>
-  sites.flatMap((s) => [s.git?.remote, ...(s.mounts ?? []).map((m) => m.git?.remote)]).filter((r): r is string => Boolean(r));
+  sites.flatMap((s) => [s.git?.remote, ...(s.repos ?? []).map((r) => r.git.remote), ...(s.mounts ?? []).map((m) => m.git?.remote)]).filter((r): r is string => Boolean(r));
 
 /** A check reads back this far before the last one, for clocks that differ a little. */
 const GITHUB_OVERLAP_MS = 10 * 60_000;

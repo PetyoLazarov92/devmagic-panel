@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry } from '@devmagic-panel/shared';
-import { actions, branchName, cleanCopyName, gitUrl, isActionId, mountPath, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
+import { actions, branchName, cleanCopyName, gitUrl, isActionId, mountPath, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
@@ -215,24 +215,26 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     }
   });
 
-  // Branches, recent commits and uncommitted changes of the site's repo, or a mounted folder's (?mount=/learn).
-  api.get<{ Params: { domain: string }; Querystring: { mount?: string } }>('/api/sites/:domain/git', async (request, reply): Promise<GitDetails | undefined> => {
-    const { mount } = request.query;
+  // Branches, recent commits and uncommitted changes of the site's repo, a mounted folder's (?mount=/learn) or a repo inside it (?repo=wp-content/themes/acme).
+  api.get<{ Params: { domain: string }; Querystring: { mount?: string; repo?: string } }>('/api/sites/:domain/git', async (request, reply): Promise<GitDetails | undefined> => {
+    const { mount, repo } = request.query;
     if (mount !== undefined && !mountPath.safeParse(mount).success) return reply.code(400).send({ error: 'mount must be a path like /learn' });
+    if (repo !== undefined && !repoFolder.safeParse(repo).success) return reply.code(400).send({ error: 'repo must be a folder like wp-content/themes/acme' });
     try {
-      return await readGitDetails(deps.exec, gitFolder(deps.config, request.params.domain, mount));
+      return await readGitDetails(deps.exec, gitFolder(deps.config, request.params.domain, mount, repo));
     } catch (error) {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       throw error;
     }
   });
 
-  // Open pull requests on GitHub, for the Git card's branches. Its own request, as gh can take seconds.
-  api.get<{ Params: { domain: string }; Querystring: { mount?: string } }>('/api/sites/:domain/git/pulls', async (request, reply): Promise<GitPullRequest[] | undefined> => {
-    const { mount } = request.query;
+  // Open pull or merge requests, for the Git card's branches. Its own request, as gh or glab can take seconds.
+  api.get<{ Params: { domain: string }; Querystring: { mount?: string; repo?: string } }>('/api/sites/:domain/git/pulls', async (request, reply): Promise<GitPullRequest[] | undefined> => {
+    const { mount, repo } = request.query;
     if (mount !== undefined && !mountPath.safeParse(mount).success) return reply.code(400).send({ error: 'mount must be a path like /learn' });
+    if (repo !== undefined && !repoFolder.safeParse(repo).success) return reply.code(400).send({ error: 'repo must be a folder like wp-content/themes/acme' });
     try {
-      return await readPullRequests(deps.exec, gitFolder(deps.config, request.params.domain, mount));
+      return await readPullRequests(deps.exec, gitFolder(deps.config, request.params.domain, mount, repo));
     } catch (error) {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       throw error;

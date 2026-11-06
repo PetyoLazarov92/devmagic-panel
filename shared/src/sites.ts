@@ -70,6 +70,35 @@ export interface SiteGit {
   lastCommit: { hash: string; subject: string; author: string; date: string };
 }
 
+/** Where a repo inside a site's folder sits; the site's own repo is `git` on the site. */
+export type SiteRepoKind = 'wp-content' | 'theme' | 'plugin' | 'mu-plugin';
+
+/** A repo inside a site's own folder: wp-content, or a theme or plugin folder. */
+export interface SiteRepo {
+  /** From the site's folder: wp-content, wp-content/themes/acme. */
+  folder: string;
+  kind: SiteRepoKind;
+  /** The theme or plugin folder's name; wp-content for wp-content. */
+  name: string;
+  git: SiteGit;
+}
+
+const REPO_KIND_NAMES: Record<SiteRepoKind, string> = { 'wp-content': 'wp-content', theme: 'Theme', plugin: 'Plugin', 'mu-plugin': 'Must-use plugin' };
+
+/** wp-content, Theme: acme, Plugin: acme-blocks */
+export const siteRepoLabel = (repo: Pick<SiteRepo, 'kind' | 'name'>): string => (repo.kind === 'wp-content' ? 'wp-content' : `${REPO_KIND_NAMES[repo.kind]}: ${repo.name}`);
+
+/** The site's repos in the order the Git card shows them: its own, those inside it, then mounted folders'. */
+export function siteRepos(site: Pick<Site, 'git' | 'repos' | 'mounts' | 'path'>): Array<{ label: string; git: SiteGit; repo?: string; mount?: string }> {
+  // A site under a path reaches its own folder through that mount.
+  const own = site.path ? { mount: site.path } : {};
+  return [
+    ...(site.git ? [{ label: 'Site', git: site.git, ...own }] : []),
+    ...(site.repos ?? []).map((r) => ({ label: siteRepoLabel(r), git: r.git, repo: r.folder, ...own })),
+    ...(site.mounts ?? []).flatMap((m) => (m.git ? [{ label: m.path, git: m.git, mount: m.path }] : [])),
+  ];
+}
+
 /** The longer git view of one repo, loaded when its Git card opens. */
 export interface GitDetails {
   /** Local branches, then branches only on origin; the current one is marked. */
@@ -223,6 +252,8 @@ export interface Site {
   /** Names of the site that /etc/hosts does not point to this machine; left out when all are there. */
   notInHosts?: string[];
   git?: SiteGit;
+  /** Repos inside the site's folder: wp-content, themes, plugins; at most 20. */
+  repos?: SiteRepo[];
   db?: { name: string; sizeBytes: number; tables: number };
   debug: {
     enabled: boolean;

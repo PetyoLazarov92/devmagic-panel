@@ -1,6 +1,6 @@
 {
   "name": "devmagic-panel",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Local WordPress control panel for Ubuntu/Debian: create sites from git and DB dumps, local SSL, Apache vhosts, WP core management, logs and cache tools, with an optional Claude assistant.",
   "license": "MIT",

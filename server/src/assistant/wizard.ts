@@ -45,7 +45,7 @@ You get the developer's description, this machine's conventions, the repo's docs
 Decide the local domains (the first is the primary domain; pair each production host from the dump with its local name), what the repo holds, the branch, the WordPress core (only an installed version), plugins to deactivate after the import, where missing uploads load from and the build.
 Follow the repo's docs and the last install's answers first, then the conventions, then what similar existing sites do. In notes, say in one or two plain sentences what you assumed or could not decide. Write without em dashes.`;
 
-const compact = (s: Site) => ({ domain: s.domain, aliases: s.aliases.length, core: s.core, multisite: s.network?.mode, remote: s.git?.remote, database: s.db?.name });
+const compact = (s: Site) => ({ domain: s.domain, aliases: s.aliases.length, core: s.core, multisite: s.network?.mode, remote: s.git?.remote, ...(s.repos?.length ? { innerRepos: s.repos.map((r) => ({ folder: r.folder, remote: r.git.remote })) } : {}), database: s.db?.name });
 
 /** Turns Claude's answer into a repo preset, dropping anything the panel would refuse. */
 export function toPreset(out: z.infer<typeof Output>, cores: string[]): RepoPreset {

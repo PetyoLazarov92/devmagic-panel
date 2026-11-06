@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { repoFullName, actions } from '../src/actions.js';
+import { repoFolder, repoFullName, actions } from '../src/actions.js';
+import { siteRepoLabel, siteRepos } from '../src/sites.js';
 import { coveringGroups, gitlabHost, gitlabHostsWith, gitlabPath, isShared, namespaceLabel, namespaceRefOf, namespaceShortLabel, parseNamespaceRef } from '../src/repo-host.js';
 
 describe('namespace refs', () => {
@@ -55,5 +56,32 @@ describe('repos in subgroups', () => {
     const base = { source: 'repo', domain: 'local.shop.com', core: { mode: 'wpcore', version: '7.1.3' }, admin: { user: 'dev', email: 'dev@example.com' }, repo: { url: 'git@gitlab.com:acme/web/shop.git', branch: 'main', layout: 'site-root' } };
     expect(create.safeParse({ ...base, organization: 'gitlab.com/acme/web' }).success).toBe(true);
     expect(create.safeParse({ ...base, organization: 'gitlab.com/../x' }).success).toBe(false);
+  });
+});
+
+describe('repos inside a site', () => {
+  const git = (branch: string) => ({ branch, upstream: null, dirty: 0, ahead: 0, behind: 0, lastCommit: { hash: 'abc1234', subject: 'x', author: 'Alex Morgan', date: '2026-10-01T00:00:00Z' } });
+
+  it.each(['wp-content', 'wp-content/themes/acme', 'wp-content/plugins/acme-blocks', 'wp-content/mu-plugins/acme.tools'])('take %s', (folder) => {
+    expect(repoFolder.safeParse(folder).success).toBe(true);
+  });
+
+  it.each(['', '.', 'wp-content/', 'wp-content/themes', 'wp-content/uploads/x', 'wp-content/themes/..', 'wp-content/themes/a/b', '../wp-content', '/var/www/x', 'wp-content/themes/a b'])('refuse %j', (folder) => {
+    expect(repoFolder.safeParse(folder).success).toBe(false);
+  });
+
+  it('come in the Git card after the site\'s own and before mounted folders, labelled by kind, through the site\'s path', () => {
+    const repos = [
+      { folder: 'wp-content', kind: 'wp-content' as const, name: 'wp-content', git: git('main') },
+      { folder: 'wp-content/themes/acme', kind: 'theme' as const, name: 'acme', git: git('develop') },
+    ];
+    expect(siteRepos({ git: git('master'), repos, mounts: [{ path: '/docs', docroot: '/x', git: git('gh-pages') }] }).map((r) => [r.label, r.repo, r.mount])).toEqual([
+      ['Site', undefined, undefined],
+      ['wp-content', 'wp-content', undefined],
+      ['Theme: acme', 'wp-content/themes/acme', undefined],
+      ['/docs', undefined, '/docs'],
+    ]);
+    expect(siteRepos({ path: '/learn', repos: [repos[1] as (typeof repos)[number]] })).toMatchObject([{ label: 'Theme: acme', repo: 'wp-content/themes/acme', mount: '/learn' }]);
+    expect([siteRepoLabel({ kind: 'plugin', name: 'acme-blocks' }), siteRepoLabel({ kind: 'mu-plugin', name: 'tools' })]).toEqual(['Plugin: acme-blocks', 'Must-use plugin: tools']);
   });
 });

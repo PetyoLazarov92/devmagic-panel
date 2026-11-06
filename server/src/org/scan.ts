@@ -45,7 +45,7 @@ export function localOf(sshUrl: string, local: LocalState): OrgRepo['local'] | u
   if (!key) return undefined;
   const same = (url?: string) => Boolean(url) && repoKey(url as string) === key;
   const installed = local.sites
-    .filter((s) => same(s.git?.remote) || same(local.installs.get(`${s.domain}${s.path ?? ''}`)?.repo) || s.mounts?.some((m) => same(m.git?.remote)))
+    .filter((s) => same(s.git?.remote) || same(local.installs.get(`${s.domain}${s.path ?? ''}`)?.repo) || s.repos?.some((r) => same(r.git.remote)) || s.mounts?.some((m) => same(m.git?.remote)))
     .map((s) => ({ domain: s.domain, ...(s.path ? { path: s.path } : {}), how: s.install?.how ?? 'hand' }));
   const archived = local.trash.filter((e) => same(e.install?.repo));
   const draft = local.drafts.find((d) => d.status !== 'installing' && same(((d.state ?? {}) as { repoUrl?: string }).repoUrl));

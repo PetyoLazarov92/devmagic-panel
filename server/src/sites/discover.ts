@@ -1,6 +1,6 @@
 import { type Dirent, existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, type Stats, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import type { Site, SiteCert, SiteConstant, SiteGit, SiteIssue, SiteNetwork } from '@devmagic-panel/shared';
+import type { Site, SiteCert, SiteConstant, SiteGit, SiteIssue, SiteNetwork, SiteRepo, SiteRepoKind } from '@devmagic-panel/shared';
 import { isLocalName, isSecretConstant, MEDIA_PLUGIN, MEDIA_PLUGIN_URL, networkType, SYSTEM_DATABASES, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import { latestOf, type CoreStatusMap } from '../core-status.js';
@@ -102,6 +102,45 @@ export async function readGit(exec: Executor, dir: string): Promise<SiteGit | { 
 }
 
 // ── WordPress core ───────────────────────────────────────────
+
+/** A site has at most this many repos inside its folder; more is a vendor folder, not a site. */
+export const MAX_SITE_REPOS = 20;
+
+const isRealDir = (path: string) => {
+  try {
+    return lstatSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The repos inside a site's own folder: wp-content itself, then each theme,
+ * plugin and must-use plugin folder one level down that has a .git, by name.
+ * A folder reached through a symlink is left out, as it is another place.
+ */
+export function findSiteRepos(docroot: string): Array<Omit<SiteRepo, 'git'>> {
+  const content = join(docroot, 'wp-content');
+  if (!isRealDir(content)) return [];
+  const found: Array<Omit<SiteRepo, 'git'>> = [];
+  if (existsSync(join(content, '.git'))) found.push({ folder: 'wp-content', kind: 'wp-content', name: 'wp-content' });
+  const kinds: Array<[string, SiteRepoKind]> = [['themes', 'theme'], ['plugins', 'plugin'], ['mu-plugins', 'mu-plugin']];
+  for (const [dir, kind] of kinds) {
+    const parent = join(content, dir);
+    if (!isRealDir(parent)) continue;
+    let names: string[];
+    try {
+      names = readdirSync(parent).filter((n) => /^[A-Za-z0-9._-]{1,100}$/.test(n) && n !== '.' && n !== '..').sort((a, b) => a.localeCompare(b));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const folder = join(parent, name);
+      if (isRealDir(folder) && existsSync(join(folder, '.git'))) found.push({ folder: `wp-content/${dir}/${name}`, kind, name });
+    }
+  }
+  return found.slice(0, MAX_SITE_REPOS);
+}
 
 export function readCore(docroot: string): Site['core'] {
   const includes = join(docroot, 'wp-includes');
@@ -387,10 +426,12 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
   // Folders mounted into the site that are not WordPress installs of their own; those show as sites.
   const folders = mount ? [] : vhost.mounts.filter((m) => !isWordPressMount(m));
 
-  const [cert, git, mountGits, wpData, mediaActive] = await Promise.all([
+  const inner = findSiteRepos(docroot);
+  const [cert, git, mountGits, innerGits, wpData, mediaActive] = await Promise.all([
     vhost.certFile && !mount ? readCert(ctx.exec, vhost.certFile, shared.legacyIssuer) : Promise.resolve(undefined),
     readGit(ctx.exec, docroot),
     Promise.all(folders.map((m) => readGit(ctx.exec, m.docroot))),
+    Promise.all(inner.map((r) => readGit(ctx.exec, join(docroot, r.folder)))),
     wp ? readWordPressData(shared.mysql, wp) : Promise.resolve<{ title?: string; network?: SiteNetwork }>({}),
     // Only asked when the site has the plugin; without the database it counts as on.
     wp && hasMediaPlugin ? mediaPluginActive(shared.mysql, wp) : Promise.resolve(null),
@@ -562,6 +603,10 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
   }
 
   const db = wp?.dbName ? shared.sizes.get(wp.dbName) : undefined;
+  const repos = inner.flatMap((r, i): SiteRepo[] => {
+    const g = innerGits[i];
+    return g && !('error' in g) ? [{ ...r, git: g }] : [];
+  });
   const mounts = folders.map((m, i) => {
     const g = mountGits[i];
     return g && !('error' in g) ? { ...m, git: g } : { ...m };
@@ -584,6 +629,7 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
     ...(cert ? { cert } : {}),
     ...(notInHosts.length ? { notInHosts } : {}),
     ...(git && !('error' in git) ? { git } : {}),
+    ...(repos.length ? { repos } : {}),
     ...(wp?.dbName ? { db: { name: wp.dbName, sizeBytes: db?.sizeBytes ?? 0, tables: db?.tables ?? 0 } } : {}),
     debug: {
       enabled: wp?.debug ?? false,

@@ -189,6 +189,9 @@ describe('an organization scan', () => {
     // Archived repos are not looked into.
     expect(looked()).toEqual(['theme', 'site']);
     expect(localOf('git@github.com:acme/none.git', local)).toBeUndefined();
+    // A theme repo inside a site counts as that site having it installed.
+    const themed = { ...local, sites: [site({ repos: [{ folder: 'wp-content/themes/brand', kind: 'theme', name: 'brand', git: { remote: 'git@github.com:acme/brand-theme.git', branch: 'main', upstream: null, dirty: 0, ahead: 0, behind: 0, lastCommit: { hash: 'abc1234', subject: 'x', author: 'Alex Morgan', date: '2026-10-01T00:00:00Z' } } }] })] };
+    expect(localOf('https://github.com/acme/brand-theme', themed)).toEqual({ installed: [{ domain: 'local.acme.com', how: 'hand' }] });
   });
 
   it('keeps the list in the database: it shows without GitHub after a restart, and is not read again within the hour', async () => {

@@ -1,5 +1,5 @@
 import type { InstallHow, Preferences, Site, SiteGit } from '@devmagic-panel/shared';
-import { branchWebUrl, INSTALL_HOW_LABELS, INSTALL_HOWS, repoWeb, SITES_SORT_LABELS, SITES_SORTS } from '@devmagic-panel/shared';
+import { branchWebUrl, INSTALL_HOW_LABELS, INSTALL_HOWS, repoWeb, siteRepoLabel, SITES_SORT_LABELS, SITES_SORTS } from '@devmagic-panel/shared';
 import { ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LayoutGrid, List, LoaderCircle, LogIn, PackageOpen, Plus, Search } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { SitesSkeleton } from '@/components/skeletons';
@@ -220,12 +220,17 @@ function SiteCard({ site }: { site: Site }) {
         <Meta icon={<Layers />} label="Core">{coreLabel(site)}</Meta>
         {site.php && <Meta icon={<Code2 />} label="PHP"><PhpLabel php={site.php} /></Meta>}
         <Meta icon={<PackageOpen />} label="Installed"><span className="truncate">{installLabel(site.install)}</span></Meta>
-        {site.git && (
-          <Meta icon={<GitBranch />} label="Branch">
-            <BranchLink git={site.git} />
-            <GitState git={site.git} />
-          </Meta>
-        )}
+        {(() => {
+          const main = mainRepo(site);
+          return main ? (
+            <Meta icon={<GitBranch />} label={main.label === 'Site' ? 'Branch' : `Branch of ${main.label}`}>
+              {main.label !== 'Site' && <span className="shrink-0 truncate text-xs text-muted-foreground">{main.label}</span>}
+              <BranchLink git={main.git} />
+              <GitState git={main.git} />
+              {main.more > 0 && <span className="shrink-0 text-xs text-muted-foreground">+{main.more} {main.more === 1 ? 'repo' : 'repos'}</span>}
+            </Meta>
+          ) : null;
+        })()}
         {site.mounts?.map((m) =>
           m.git ? (
             <Meta key={m.path} icon={<GitBranch />} label={`Branch of ${m.path}`}>
@@ -294,15 +299,7 @@ function SiteRow({ site }: { site: Site }) {
       {site.busy && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Busy</Badge>}
       {issues > 0 && <Badge tone={site.health === 'fail' ? 'danger' : 'warning'} className="hidden shrink-0 sm:inline-flex">{issues === 1 ? '1 issue' : `${issues} issues`}</Badge>}
       <div className="hidden w-52 min-w-0 shrink-0 items-center gap-2 text-sm md:flex">
-        {site.git ? (
-          <>
-            <GitBranch className="size-4 shrink-0 text-muted-foreground" />
-            <BranchLink git={site.git} />
-            {site.git.dirty > 0 && <span className="shrink-0 text-xs text-warning">{site.git.dirty} changed</span>}
-          </>
-        ) : (
-          <span className="text-xs text-muted-foreground">no git</span>
-        )}
+        <RowBranch site={site} />
       </div>
       <span className="hidden w-28 shrink-0 truncate text-xs text-muted-foreground lg:block" title={coreLabel(site)}>
         {site.core.kind === 'none' ? 'Not WordPress' : `WP ${site.core.version ?? ''}${site.core.kind === 'wpcore' ? ' · shared' : ''}`}
@@ -335,6 +332,32 @@ function siteMenuItems(site: Site) {
     ...gitMenuItems(site),
     { label: 'Copy folder path', icon: <FolderOpen />, onSelect: () => void navigator.clipboard?.writeText(site.docroot) },
   ];
+}
+
+/**
+ * The repo a site shows first in the list: its own, else the first one
+ * inside it (wp-content, a theme, a plugin), with how many more it has
+ * inside. Mounted folders show on their own lines.
+ */
+function mainRepo(site: Site): { label: string; git: SiteGit; more: number } | null {
+  const inner = (site.repos ?? []).map((r) => ({ label: siteRepoLabel(r), git: r.git }));
+  const all = [...(site.git ? [{ label: 'Site', git: site.git }] : []), ...inner];
+  const first = all[0];
+  return first ? { ...first, more: all.length - 1 } : null;
+}
+
+/** The list row's git column: the main repo's branch, its changes and how many more repos. */
+function RowBranch({ site }: { site: Site }) {
+  const main = mainRepo(site);
+  if (!main) return <span className="text-xs text-muted-foreground">no git</span>;
+  return (
+    <>
+      <GitBranch className="size-4 shrink-0 text-muted-foreground" />
+      <BranchLink git={main.git} />
+      {main.git.dirty > 0 && <span className="shrink-0 text-xs text-warning">{main.git.dirty} changed</span>}
+      {main.more > 0 && <span className="shrink-0 text-xs text-muted-foreground" title={`${main.more} more ${main.more === 1 ? 'repo' : 'repos'} in this site`}>+{main.more}</span>}
+    </>
+  );
 }
 
 /** The branch name, linking to the branch on its host (GitHub, GitLab, Bitbucket, Gitea) when the remote is known. */

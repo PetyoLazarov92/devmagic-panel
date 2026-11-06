@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.5.0 (2026-11-06)
+* **Sites:** repos inside a site's folder show on its Git card, each in a section of its own after the site's: wp-content, and each theme, plugin and must-use plugin folder with a `.git` of its own (`Theme: acme`, `Plugin: acme-blocks`). Each has its branch picker, ahead and behind, uncommitted changes, Pull, Fetch, Switch and its pull or merge requests, and the one the site was installed from is marked. Before, a site whose theme or plugin was its repo, as the panel installs one with the Theme or Plugin layout, showed no Git card at all
+* **Sites:** the Sites list shows a site's own branch, or its first theme or plugin repo's when it has none, with how many more repos it has. A folder reached through a symlink is left out, and a site shows at most 20 repos
+* **Sites:** the new site wizard, the organization list's "installed as" and the GitLab host checks count these repos too. The root scripts do not change: the Updates page installs this release as usual
+
 ### v1.4.0 (2026-11-06)
 * **Sites:** installed sites on your own GitLab whose name does not say so (`git.acme.test`), on Gitea or Forgejo, or cloned through an SSH alias (`git@gitlab-work:acme/site.git`) get the right branch, commit and repository links and their merge requests with no setting. The panel resolves aliases with `ssh -G` and asks each unknown host once a week with the same SSH hello `git fetch` makes; no token, and no new host key is accepted for you
 * **Sites:** From an organization or group ticks your own account on each signed-in host the first time, so its repos list without a visit to Organizations and groups to scan. A list you saved stays as you left it

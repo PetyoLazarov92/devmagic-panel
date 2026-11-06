@@ -22,6 +22,11 @@ export const sites: Site[] = [
     core: { kind: 'wpcore', version: '7.1.3' },
     cert: { expiresAt: '2028-05-23T00:00:10Z', names: ['local.northwind.com', 'local.northwind.de', 'local.northwind.fr', 'local.northwind.es', 'local.northwind.pt', 'local.northwind.co.jp'], issuer: 'legacy' },
     git: { remote: 'git@github.com:AcmeCo/marketing-northwind.git', branch: 'feature/translation-export', upstream: 'origin/feature/translation-export', dirty: 0, ahead: 0, behind: 0, lastCommit: { hash: '03df05b55', subject: "Fix: skip video embeds on import", author: 'Alex Morgan', date: '2026-10-21T16:46:46+08:00' } },
+    // A theme and a plugin with repos of their own inside the site's folder.
+    repos: [
+      { folder: 'wp-content/themes/northwind', kind: 'theme', name: 'northwind', git: { remote: 'git@gitlab.com:acme-web/themes/northwind.git', branch: 'main', upstream: 'origin/main', dirty: 1, ahead: 0, behind: 2, lastCommit: { hash: '8c21d0a4e', subject: 'Header: keep the menu open on tablets (!14)', author: 'Alex Morgan', date: '2026-10-24T10:12:00+03:00' } } },
+      { folder: 'wp-content/plugins/northwind-blocks', kind: 'plugin', name: 'northwind-blocks', git: { remote: 'git@github.com:AcmeCo/northwind-blocks.git', branch: 'feature/hero-block', upstream: null, dirty: 0, ahead: 0, behind: 0, lastCommit: { hash: 'b77e1f320', subject: 'Hero block: add a video background option', author: 'Sam Lee', date: '2026-10-23T15:40:00+03:00' } } },
+    ],
     db: { name: 'northwinddb', sizeBytes: 1_480_000_000, tables: 214 },
     debug: { enabled: true, logBytes: 182_000, constants: DEBUG_LOG_ONLY },
     localMode: { enabled: true, current: true, blockedHosts: [...LOCAL_MODE_DEFAULT_BLOCKED_HOSTS] },

@@ -1,6 +1,7 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ActionInput, GitDetails, GitPullRequest } from '@devmagic-panel/shared';
+import { repoFolder } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
 import { openPullsOf } from '../repo-hosts/index.js';
@@ -16,13 +17,27 @@ export const NO_PROMPTS = { GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: 'ssh -o B
 
 /**
  * The repo folder for a site or one of its mounted folders, read from the
- * vhost; never a path from the request.
+ * vhost; never a path from the request. With `repo`, one of the repos inside
+ * that folder (wp-content, a theme or plugin folder), already checked by
+ * repoFolder; it must be a real folder there, reached through no symlink.
  */
-export function gitFolder(config: SystemConfig, domain: string, mount?: string): string {
+export function gitFolder(config: SystemConfig, domain: string, mount?: string, repo?: string): string {
   const vhost = findVhost(config, domain);
   if (!vhost?.docroot || vhost.names[0] !== domain) throw new SiteNotFoundError(`no site called ${domain}`);
-  const folder = mount === undefined ? vhost.docroot : vhost.mounts.find((m) => m.path === mount)?.docroot;
-  if (!folder) throw new SiteNotFoundError(`${domain} serves nothing under ${mount}`);
+  const base = mount === undefined ? vhost.docroot : vhost.mounts.find((m) => m.path === mount)?.docroot;
+  if (!base) throw new SiteNotFoundError(`${domain} serves nothing under ${mount}`);
+  let folder = base;
+  if (repo !== undefined) {
+    if (!repoFolder.safeParse(repo).success) throw new SiteNotFoundError(`${repo} is not a repo folder of a site`);
+    folder = join(base, repo);
+    let real: string;
+    try {
+      real = realpathSync(folder);
+    } catch {
+      throw new SiteNotFoundError(`${folder} does not exist`);
+    }
+    if (real !== join(realpathSync(base), repo)) throw new SiteNotFoundError(`${folder} is reached through a link, so the panel leaves it alone`);
+  }
   if (!existsSync(join(folder, '.git'))) throw new SiteNotFoundError(`${folder} is not a git repository`);
   return folder;
 }
@@ -87,21 +102,21 @@ export interface GitActionContext {
   exec: Executor;
 }
 
-export async function fetchOrigin(ctx: GitActionContext, { domain, mount }: ActionInput<'git.fetch'>): Promise<HandlerOutcome> {
-  const dir = gitFolder(ctx.config, domain, mount);
+export async function fetchOrigin(ctx: GitActionContext, { domain, mount, repo }: ActionInput<'git.fetch'>): Promise<HandlerOutcome> {
+  const dir = gitFolder(ctx.config, domain, mount, repo);
   const r = await git(ctx.exec, dir, ['fetch', '--prune', 'origin'], true);
   return { results: [r.code === 0 ? { ...r, stdout: r.stdout || r.stderr || 'Fetched, nothing new' } : r] };
 }
 
-export async function pull(ctx: GitActionContext, { domain, mount }: ActionInput<'git.pull'>): Promise<HandlerOutcome> {
-  const dir = gitFolder(ctx.config, domain, mount);
+export async function pull(ctx: GitActionContext, { domain, mount, repo }: ActionInput<'git.pull'>): Promise<HandlerOutcome> {
+  const dir = gitFolder(ctx.config, domain, mount, repo);
   const upstream = await git(ctx.exec, dir, ['rev-parse', '--abbrev-ref', '@{upstream}']);
   if (upstream.code !== 0) return { results: [failed('This branch has no remote branch to pull from. Push it first, or switch to a branch on origin.')] };
   return { results: [await git(ctx.exec, dir, ['pull', '--ff-only'], true)] };
 }
 
-export async function switchBranch(ctx: GitActionContext, { domain, mount, branch }: ActionInput<'git.switch'>): Promise<HandlerOutcome> {
-  const dir = gitFolder(ctx.config, domain, mount);
+export async function switchBranch(ctx: GitActionContext, { domain, mount, repo, branch }: ActionInput<'git.switch'>): Promise<HandlerOutcome> {
+  const dir = gitFolder(ctx.config, domain, mount, repo);
   const status = await git(ctx.exec, dir, ['status', '--porcelain', '--untracked-files=no']);
   if (status.code !== 0) return { results: [status] };
   const changed = parseChanges(status.stdout).length;

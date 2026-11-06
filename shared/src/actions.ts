@@ -139,7 +139,18 @@ export const releaseName = z.string().regex(/^v\d{1,4}\.\d{1,4}\.\d{1,6}(-[0-9A-
 
 export const mountPath = z.string().max(200).regex(/^(\/(?!\.\.?(\/|$))[A-Za-z0-9._-]+)+$/, 'A path like /learn');
 
-const gitTarget = { domain: localName, mount: mountPath.optional() };
+/**
+ * A repo inside a site's own folder, as found there: wp-content itself, or
+ * one theme, plugin or must-use plugin folder (wp-content/themes/acme).
+ * Nothing else, so an action can never reach another folder.
+ */
+export const repoFolder = z
+  .string()
+  .max(200)
+  .regex(/^wp-content(?:\/(?:themes|plugins|mu-plugins)\/[A-Za-z0-9._-]{1,100})?$/, 'A folder like wp-content/themes/acme')
+  .refine((f) => !f.split('/').some((s) => s === '.' || s === '..'), 'A folder like wp-content/themes/acme');
+
+const gitTarget = { domain: localName, mount: mountPath.optional(), repo: repoFolder.optional() };
 
 /**
  * The folder a site under a path gets, named like a domain so dmp-root takes
@@ -669,7 +680,7 @@ export const actions = {
   },
   'git.fetch': {
     title: 'Fetch from origin',
-    description: 'Fetches branches and commits from origin (pruning deleted branches) for the site, or one of its mounted folders. Changes no files.',
+    description: 'Fetches branches and commits from origin (pruning deleted branches) for the site, one of its mounted folders, or a repo in it (repo: wp-content, or a theme or plugin folder). Changes no files.',
     changesSystem: false,
     input: z.object(gitTarget),
   },
@@ -681,7 +692,7 @@ export const actions = {
   },
   'git.switch': {
     title: 'Switch branch',
-    description: 'Switches the site (or a mounted folder) to another branch; a branch that exists only on origin is checked out tracking it. Refused while there are uncommitted changes.',
+    description: 'Switches the site (or a mounted folder, or a repo in it such as a theme or plugin folder) to another branch; a branch that exists only on origin is checked out tracking it. Refused while there are uncommitted changes.',
     changesSystem: true,
     input: z.object({ ...gitTarget, branch: branchName }),
   },

@@ -1181,11 +1181,12 @@ export const mockApi: Api = {
     if (site?.constants) site.salts = mockSalts(site.constants);
     return site ? withBusy(site) : null;
   },
-  gitDetails: async (domain, mount): Promise<GitDetails> => {
+  gitDetails: async (domain, mount, inner): Promise<GitDetails> => {
     await wait(200);
     const site = sites.find((s) => s.domain === domain && !s.path);
-    // A site under a path has its own repo; other mounted folders are its parent's.
-    const repo = mount ? (sites.find((s) => s.domain === domain && s.path === mount)?.git ?? site?.mounts?.find((m) => m.path === mount)?.git) : site?.git;
+    // A site under a path has its own repo; other mounted folders are its parent's; a theme or plugin has its own.
+    const owner = mount ? sites.find((s) => s.domain === domain && s.path === mount) : site;
+    const repo = inner ? owner?.repos?.find((r) => r.folder === inner)?.git : mount ? (owner?.git ?? site?.mounts?.find((m) => m.path === mount)?.git) : site?.git;
     const branch = repo?.branch ?? 'master';
     const last = repo?.lastCommit;
     return {
@@ -1206,11 +1207,12 @@ export const mockApi: Api = {
       fetchedAt: new Date(Date.now() - 42 * 60_000).toISOString(),
     };
   },
-  gitPulls: async (domain, mount): Promise<GitPullRequest[]> => {
+  gitPulls: async (domain, mount, inner): Promise<GitPullRequest[]> => {
     // Slower than the Git card's own data, as gh is.
     await wait(900);
     const site = sites.find((s) => s.domain === domain && !s.path);
-    const repo = mount ? (sites.find((s) => s.domain === domain && s.path === mount)?.git ?? site?.mounts?.find((m) => m.path === mount)?.git) : site?.git;
+    const owner = mount ? sites.find((s) => s.domain === domain && s.path === mount) : site;
+    const repo = inner ? owner?.repos?.find((r) => r.folder === inner)?.git : mount ? (owner?.git ?? site?.mounts?.find((m) => m.path === mount)?.git) : site?.git;
     const github = repo?.remote ? /github\.com[:/](.+?)(\.git)?$/.exec(repo.remote)?.[1] : undefined;
     const gitlab = repo?.remote ? /gitlab\.com[:/](.+?)(\.git)?$/.exec(repo.remote)?.[1] : undefined;
     if (!repo || (!github && !gitlab)) return [];

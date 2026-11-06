@@ -1,5 +1,5 @@
 import type { ActionId, JobView, Site, SiteGit, SiteLocalMode, WpCronReport, WpDebugConstant } from '@devmagic-panel/shared';
-import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
+import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, sameRepo, siteRepos, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import {
   ArrowDownToLine, ArrowLeft, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LoaderCircle, LogIn, Network, RefreshCw,
   ShieldCheck, SkipForward, SquareTerminal, Trash2, Wrench, X,
@@ -372,7 +372,9 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
   const [salting, setSalting] = useState<'missing' | 'all' | null>(null);
   const salts = site.salts ? saltsSummary(site.salts) : null;
   const saltsName = salts && salts.bad.length > 0 ? salts.fixLabel : 'Make keys and salts new';
-  const hasGit = Boolean(site.git || site.mounts?.some((m) => m.git));
+  const repos = siteRepos(site);
+  // The repo the site was installed from, marked in its section.
+  const installedFrom = site.install?.repo;
 
   async function markDone(label: string) {
     setMarking(label);
@@ -426,14 +428,29 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
       <SiteTiles site={site} cron={cron} logErrors={logErrors} onOpen={onOpen} />
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
-        {hasGit && (
+        {repos.length > 0 && (
           <Card>
-            <CardHeader><CardTitle>Git</CardTitle><GitBranch className="size-4 text-muted-foreground" /></CardHeader>
+            <CardHeader>
+              <CardTitle>Git</CardTitle>
+              <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                {repos.length > 1 && `${repos.length} repos`}
+                <GitBranch className="size-4" />
+              </span>
+            </CardHeader>
             <div className="divide-y">
-              {site.git && <RepoSection domain={site.domain} {...(site.path ? { mount: site.path } : {})} label="Site" folder={site.docroot} git={site.git} onChanged={onChanged} />}
-              {site.mounts?.map((m) =>
-                m.git ? <RepoSection key={m.path} domain={site.domain} mount={m.path} label={m.path} folder={m.docroot} git={m.git} onChanged={onChanged} /> : null,
-              )}
+              {repos.map((r) => (
+                <RepoSection
+                  key={`${r.mount ?? ''}:${r.repo ?? ''}`}
+                  domain={site.domain}
+                  {...(r.mount ? { mount: r.mount } : {})}
+                  {...(r.repo ? { repo: r.repo } : {})}
+                  label={r.label}
+                  folder={r.mount && r.mount !== site.path ? (site.mounts?.find((m) => m.path === r.mount)?.docroot ?? site.docroot) : r.repo ? `${site.docroot}/${r.repo}` : site.docroot}
+                  git={r.git}
+                  installedFrom={Boolean(installedFrom && r.git.remote && sameRepo(r.git.remote, installedFrom))}
+                  onChanged={onChanged}
+                />
+              ))}
             </div>
           </Card>
         )}
@@ -525,21 +542,24 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
   );
 }
 
-function RepoSection({ domain, mount, label, folder, git, onChanged }: {
+function RepoSection({ domain, mount, repo, label, folder, git, installedFrom = false, onChanged }: {
   domain: string;
   mount?: string;
+  /** A repo inside the site's folder: wp-content, or a theme or plugin folder. */
+  repo?: string;
+  installedFrom?: boolean;
   label: string;
   folder: string;
   git: SiteGit;
   onChanged: () => void;
 }) {
-  const details = useAsync(() => api.gitDetails(domain, mount), [domain, mount, git.branch, git.lastCommit.hash, git.dirty]);
+  const details = useAsync(() => api.gitDetails(domain, mount, repo), [domain, mount, repo, git.branch, git.lastCommit.hash, git.dirty]);
   // Its own request: gh or glab can take seconds, and the card does not wait for it. No pull or merge requests on any failure.
-  const pulls = useAsync(() => api.gitPulls(domain, mount), [domain, mount]);
+  const pulls = useAsync(() => api.gitPulls(domain, mount, repo), [domain, mount, repo]);
   const [branch, setBranch] = useState(git.branch);
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<{ name: string; ok: boolean; output: string } | null>(null);
-  const target = { domain, ...(mount ? { mount } : {}) };
+  const target = { domain, ...(mount ? { mount } : {}), ...(repo ? { repo } : {}) };
   const branches = details.data?.branches ?? [{ name: git.branch, current: true, remoteOnly: false }];
   const commits = details.data?.commits ?? [git.lastCommit];
   const changes = details.data?.changes ?? [];
@@ -572,6 +592,7 @@ function RepoSection({ domain, mount, label, folder, git, onChanged }: {
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground" title={folder}>{label}</span>
         <span className="font-mono">{git.branch}</span>
+        {installedFrom && <Badge title="The site was installed from this repo">installed from</Badge>}
         {currentPull && <PullBadge pull={currentPull} withTitle />}
         {git.dirty > 0 && <Badge tone="warning">{git.dirty} changed</Badge>}
         {git.upstream === null ? (
@@ -1205,9 +1226,8 @@ function RemoveDialog({ site, open, onClose }: { site: Site; open: boolean; onCl
     site.panelMade ? 'Its /etc/hosts line' : null,
   ].filter(Boolean) as string[];
   // Work that exists only in this copy: it is in the archive, but worth a look before removing.
-  const unsaved = [site.git, ...(site.mounts ?? []).map((m) => m.git)].flatMap((g, i) => {
-    if (!g) return [];
-    const where = i === 0 ? 'the site' : site.mounts?.[i - 1]?.path ?? '';
+  const unsaved = siteRepos(site).flatMap(({ git: g, label }) => {
+    const where = label === 'Site' ? 'the site' : label;
     return [
       g.dirty > 0 ? `${g.dirty} uncommitted change${g.dirty === 1 ? '' : 's'} in ${where}` : null,
       g.upstream === null ? `branch ${g.branch} in ${where} is not pushed` : g.ahead > 0 ? `${g.ahead} commit${g.ahead === 1 ? '' : 's'} in ${where} not pushed` : null,

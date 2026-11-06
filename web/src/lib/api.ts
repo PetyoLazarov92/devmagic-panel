@@ -94,9 +94,9 @@ export interface Api {
   site: (domain: string, path?: string) => Promise<Site | null>;
   logs: (domain: string, source: 'debug' | 'apache', path?: string) => Promise<SiteLog>;
   /** The site's repo, or a mounted folder's when `mount` is set (like /learn). */
-  gitDetails: (domain: string, mount?: string) => Promise<GitDetails>;
+  gitDetails: (domain: string, mount?: string, repo?: string) => Promise<GitDetails>;
   /** Open pull requests (GitHub) or merge requests (GitLab) by branch; none when the CLI is missing or signed out, or origin is elsewhere. */
-  gitPulls: (domain: string, mount?: string) => Promise<GitPullRequest[]>;
+  gitPulls: (domain: string, mount?: string, repo?: string) => Promise<GitPullRequest[]>;
   snapshots: (domain: string, path?: string) => Promise<SnapshotInfo[]>;
   /** Gzipped clean copies of the site's database, to share with the team. */
   cleanCopies: (domain: string, path?: string) => Promise<CleanCopyInfo[]>;
@@ -266,10 +266,8 @@ const realApi: Api = {
     }
   },
   logs: (domain, source, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/logs?source=${source}${atPath(path, '&')}`),
-  gitDetails: (domain, mount) =>
-    request('GET', `/api/sites/${encodeURIComponent(domain)}/git${mount ? `?mount=${encodeURIComponent(mount)}` : ''}`),
-  gitPulls: (domain, mount) =>
-    request('GET', `/api/sites/${encodeURIComponent(domain)}/git/pulls${mount ? `?mount=${encodeURIComponent(mount)}` : ''}`),
+  gitDetails: (domain, mount, repo) => request('GET', `/api/sites/${encodeURIComponent(domain)}/git${gitQuery(mount, repo)}`),
+  gitPulls: (domain, mount, repo) => request('GET', `/api/sites/${encodeURIComponent(domain)}/git/pulls${gitQuery(mount, repo)}`),
   snapshots: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/snapshots${atPath(path, '?')}`),
   cleanCopies: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/clean-copies${atPath(path, '?')}`),
   keptDatabases: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/kept-databases${atPath(path, '?')}`),
@@ -397,6 +395,12 @@ const base: Api = isMockup ? withMockSession(mockApi) : realApi;
 
 /** Fired when an action starts a job, so the header shows it without waiting for its next poll. */
 export const JOB_STARTED = 'dmp:job-started';
+
+/** ?mount=/learn&repo=wp-content/themes/acme for one repo of a site; empty for its own. */
+function gitQuery(mount?: string, repo?: string): string {
+  const q = new URLSearchParams({ ...(mount ? { mount } : {}), ...(repo ? { repo } : {}) }).toString();
+  return q ? `?${q}` : '';
+}
 
 export const api: Api = {
   ...base,
