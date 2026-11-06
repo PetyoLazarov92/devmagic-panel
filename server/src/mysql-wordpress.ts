@@ -38,7 +38,17 @@ export function rolesOf(capabilities: unknown): string[] {
 
 const tagged = (lines: string[], tag: string) => lines.map(parseJson).filter((r) => r[0] === tag).map((r) => r.slice(1));
 
-export async function wordpressReport(ctx: BrowseContext, domain: string, path: string | undefined, blog = 1, now = Date.now): Promise<WpDbReport> {
+/** A WordPress site's database as the report and the clean-ups read it: its tables, its network's sites, and the prefix of the site picked. */
+export interface WordpressTables {
+  database: string;
+  prefix: string;
+  blog: number;
+  blogPrefix: string;
+  names: Set<string>;
+  network?: WpDbBlog[];
+}
+
+export async function wordpressTables(ctx: BrowseContext, domain: string, path: string | undefined, blog = 1): Promise<WordpressTables> {
   const { database, prefix } = siteDatabase(ctx, domain, path);
   const db = ident(database);
   const names = new Set(await read(ctx, `SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${textLiteral(database)};\n`, { raw: false }));
@@ -60,6 +70,12 @@ export async function wordpressReport(ctx: BrowseContext, domain: string, path: 
   if (!Number.isInteger(blog) || blog < 1) throw new BrowseError('A site of the network by its number, like 2');
   if (blog !== 1 && !network?.some((b) => b.id === blog)) throw new BrowseError(`This network has no site ${blog}`, 404);
   const blogPrefix = blog === 1 ? prefix : `${prefix}${blog}_`;
+  return { database, prefix, blog, blogPrefix, names, ...(network ? { network } : {}) };
+}
+
+export async function wordpressReport(ctx: BrowseContext, domain: string, path: string | undefined, blog = 1, now = Date.now): Promise<WpDbReport> {
+  const { database, prefix, blogPrefix, names, network } = await wordpressTables(ctx, domain, path, blog);
+  const db = ident(database);
 
   /** A table of this site (or the network's shared one), qualified and in backticks, when the database has it. */
   const table = (name: string, shared = false): string | null => {

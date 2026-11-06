@@ -224,7 +224,7 @@ function FieldRow({ column, field, original, locked, mode, onChange }: { column:
           <TriangleAlert className="size-3.5" aria-label="Warning" />
           {broken === 'serialized' ? 'No longer a whole PHP serialized value (a string length does not add up): WordPress would read it as plain text.' : 'No longer valid JSON.'}
           {broken === 'serialized' && fixSerializedLengths(field.value) && (
-            <Button size="sm" variant="ghost" onClick={() => onChange({ value: fixSerializedLengths(field.value) as string })}><Wand2 />Count the lengths again</Button>
+            <Button size="sm" variant="outline" onClick={() => onChange({ value: fixSerializedLengths(field.value) as string })}><Wand2 />Count the lengths again</Button>
           )}
         </p>
       )}

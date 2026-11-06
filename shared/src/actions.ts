@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { apacheModuleLock, apacheModuleName } from './apache.js';
 import { mysqlAccount, mysqlBackupName, mysqlDatabaseName } from './mysql.js';
-import { mysqlIdentifier } from './db-browser.js';
+import { mysqlIdentifier, WP_CONTENT_KINDS, WP_ORPHAN_KINDS } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
 import { cronSchedule } from './cron.js';
@@ -13,6 +13,13 @@ const rowKey = z.array(z.string().max(4096)).min(1).max(16);
 const rowValues = z.record(mysqlIdentifier, z.string().max(900_000).nullable()).refine((v) => Object.keys(v).length > 0 && Object.keys(v).length <= 300, 'Between 1 and 300 columns');
 /** A row change's saved copy, by its name in BACKUP_DIR/row-changes. */
 export const rowChangeId = z.string().regex(/^\d{8}-\d{6}-[a-z0-9]{6}$/, 'A row change like 20261107-101500-a1b2c3');
+
+/** A clean-up's saved copy, by its folder in BACKUP_DIR/cleanups. */
+export const cleanupId = z.string().regex(/^\d{8}-\d{6}-[a-z0-9]{6}$/, 'A clean-up like 20261107-101500-a1b2c3');
+/** A site of a network by its number; 1, the first, for a single site. */
+const blogNumber = z.number().int().min(1).max(1_000_000).optional();
+/** The typed name of the table, to confirm. */
+const confirmTable = (v: { table: string; confirm: string }) => v.confirm.trim() === v.table;
 
 /**
  * The action registry: every change the panel can make, defined once.
@@ -594,6 +601,24 @@ export const actions = {
     changesSystem: true,
     input: z.object({ database: mysqlDatabaseName, table: mysqlIdentifier, change: rowChangeId }),
   },
+  'mysql.emptyTable': {
+    title: 'Empty a table',
+    description: "Deletes every row of a table after saving them (14 days), so Undo puts them back. Not for MySQL's own databases or the ones kept for a site. Starts a job.",
+    changesSystem: true,
+    input: z.object({ database: mysqlDatabaseName, table: mysqlIdentifier, confirm: z.string() }).refine(confirmTable, { path: ['confirm'], message: 'Type the table name to confirm' }),
+  },
+  'mysql.dropTable': {
+    title: 'Delete a table',
+    description: "Deletes a table after saving it whole, its CREATE TABLE included (14 days), so Undo makes it again while no table of that name is there. Not for MySQL's own databases or the ones kept for a site. Starts a job.",
+    changesSystem: true,
+    input: z.object({ database: mysqlDatabaseName, table: mysqlIdentifier, confirm: z.string() }).refine(confirmTable, { path: ['confirm'], message: 'Type the table name to confirm' }),
+  },
+  'mysql.undoCleanup': {
+    title: 'Undo a clean-up',
+    description: 'Puts back the rows or the table a clean-up removed, from the copy it saved first; a row made again since stays as it is.',
+    changesSystem: true,
+    input: z.object({ database: mysqlDatabaseName, cleanup: cleanupId }),
+  },
   'mysql.resetSiteUser': {
     title: "Reset a site's database user",
     description:
@@ -769,6 +794,34 @@ export const actions = {
     description: 'Switches the site (or a mounted folder, or a repo in it such as a theme or plugin folder) to another branch; a branch that exists only on origin is checked out tracking it. Refused while there are uncommitted changes.',
     changesSystem: true,
     input: z.object({ ...gitTarget, branch: branchName }),
+  },
+  'db.cleanTransients': {
+    title: 'Delete transients',
+    description:
+      "Deletes a WordPress site's transients, the cached values plugins keep with an expiry: only the expired ones still stored, or all of them (plugins make them again when they need them). On a network, the first site's run takes the network's own. Saved first (14 days), so Undo puts them back. Starts a job.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, blog: blogNumber, scope: z.enum(['expired', 'all']) }),
+  },
+  'db.cleanContent': {
+    title: 'Delete revisions, drafts, trash and spam',
+    description:
+      "Deletes the kinds picked of a WordPress site: post revisions, auto-drafts, posts in the trash, spam comments, comments in the trash; with a post go its meta, terms and comments, as WordPress does. Saved first (14 days), so Undo puts them back. Starts a job.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, blog: blogNumber, kinds: z.array(z.enum(WP_CONTENT_KINDS)).min(1) }),
+  },
+  'db.cleanOrphans': {
+    title: 'Delete what was left behind',
+    description:
+      "Deletes the rows of a WordPress site that belong to something deleted: post, comment, term and user meta without theirs, and terms on posts that are gone (never a link's). Saved first (14 days), so Undo puts them back. Starts a job.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, blog: blogNumber, kinds: z.array(z.enum(WP_ORPHAN_KINDS)).min(1) }),
+  },
+  'db.setAutoload': {
+    title: 'Turn autoload on or off for an option',
+    description:
+      "Sets whether WordPress loads an option on every page, in the way its version writes it (on and off, or yes and no before 6.6). A big option a plugin reads only now and then can stay off. Undo puts it back.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, blog: blogNumber, option: z.string().min(1).max(191), autoload: z.enum(['on', 'off']) }),
   },
   'db.snapshot': {
     title: 'Take a database snapshot',

@@ -14,6 +14,7 @@ import { findVhost } from './sites/discover.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
 import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
 import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
+import { planContent, planDropTable, planEmptyTable, planOrphans, planTransients, setAutoload, undoCleanup } from './mysql-cleanup.js';
 import { deleteRows, insertRow, type RowsContext, undoRowChange, updateRow } from './mysql-rows.js';
 import { CoreRefused, planAddCore, removeCore } from './sites/cores.js';
 import { CreateRefused, planCreate } from './sites/create.js';
@@ -162,6 +163,8 @@ async function restoreCronTasks(ctx: ActionContext, domain: string): Promise<voi
 }
 
 /** Runs steps in order and stops at the first failure. */
+const siteKeyOf = (input: { domain: string; path?: string | undefined }) => `${input.domain}${input.path ?? ''}`;
+
 const rowsCtx = (ctx: ActionContext): RowsContext => ({
   config: ctx.config,
   exec: ctx.exec,
@@ -309,6 +312,14 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'mysql.insertRow': async (ctx, input) => rowOutcome(await insertRow(rowsCtx(ctx), input)),
   'mysql.deleteRows': async (ctx, input) => rowOutcome(await deleteRows(rowsCtx(ctx), input)),
   'mysql.undoRowChange': async (ctx, input) => [await undoRowChange(rowsCtx(ctx), input)],
+  // Clean-ups are jobs: save what they remove, then remove it; their Undo, and mysql.undoCleanup later, put it back.
+  'db.cleanTransients': async (ctx, input) => startJob(ctx, await planTransients(rowsCtx(ctx), input), input.scope === 'expired' ? 'Delete expired transients' : 'Delete every transient', siteKeyOf(input)),
+  'db.cleanContent': async (ctx, input) => startJob(ctx, await planContent(rowsCtx(ctx), input), 'Delete revisions, drafts, trash and spam', siteKeyOf(input)),
+  'db.cleanOrphans': async (ctx, input) => startJob(ctx, await planOrphans(rowsCtx(ctx), input), 'Delete what was left behind', siteKeyOf(input)),
+  'db.setAutoload': async (ctx, input) => rowOutcome(await setAutoload(rowsCtx(ctx), input)),
+  'mysql.emptyTable': async (ctx, input) => startJob(ctx, await planEmptyTable(rowsCtx(ctx), input), `Empty ${input.table}`, `database ${input.database}`),
+  'mysql.dropTable': async (ctx, input) => startJob(ctx, await planDropTable(rowsCtx(ctx), input), `Delete table ${input.table}`, `database ${input.database}`),
+  'mysql.undoCleanup': async (ctx, input) => [await undoCleanup(rowsCtx(ctx), input)],
   'mysql.deleteBackup': async (ctx, input) => [deleteMysqlBackup(mysqlBackupsDir(ctx.uploadsDir), input)],
   'php.setXdebug': (ctx, input) => setXdebug(ctx.config, ctx.exec, ctx.dmpRoot, input),
   'php.setModule': (ctx, input) => setPhpModule(ctx.config, ctx.exec, ctx.dmpRoot, input),

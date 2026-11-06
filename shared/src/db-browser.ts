@@ -252,3 +252,18 @@ export interface DbSchema {
   database: string;
   tables: Record<string, string[]>;
 }
+
+/** A saved clean-up for Undo, as its list shows it: what it removed, never the rows. */
+export interface CleanupInfo {
+  id: string;
+  title: string;
+  kind: 'transients' | 'content' | 'orphans' | 'empty' | 'drop';
+  tables: Array<{ table: string; rows: number }>;
+  /** The copy's size, gzipped. */
+  bytes: number;
+  savedAt: string;
+  purgeAt: string;
+}
+
+export const WP_CONTENT_KINDS = ['revisions', 'autoDrafts', 'trashedPosts', 'spamComments', 'trashedComments'] as const;
+export const WP_ORPHAN_KINDS = ['postmeta', 'commentmeta', 'termmeta', 'termRelationships', 'usermeta'] as const;

@@ -3,7 +3,7 @@ import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockDbSchema, mockRowAction, mockRowChanges, mockWordpressDb } from './db-browser';
+import { mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCleanups, mockCleanupStarted, mockDbSchema, mockRowAction, mockUndoCleanup, mockRowChanges, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
@@ -400,6 +400,15 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     'mysql.dropDatabase': [{ id: 'export', label: `Export ${String(input.database)} to the MySQL backups` }, { id: 'drop', label: `Delete database ${String(input.database)}` }],
     'mysql.dropUsers': [{ id: 'save', label: `Save ${accounts.length === 1 ? accounts[0] : `${accounts.length} accounts`} and their rights` }, { id: 'drop', label: `Delete ${accounts.join(', ')}` }],
     'mysql.optimize': [{ id: 'optimize', label: `Optimize the tables of ${String(input.database)}` }],
+    ...Object.fromEntries(
+      (['db.cleanTransients', 'db.cleanContent', 'db.cleanOrphans', 'mysql.emptyTable', 'mysql.dropTable'] as const).map((k) => [
+        k,
+        [
+          { id: 'save', label: 'Save what it removes, for Undo' },
+          { id: 'remove', label: k === 'db.cleanTransients' ? (input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients') : k === 'db.cleanContent' ? 'Delete revisions, drafts, trash and spam' : k === 'db.cleanOrphans' ? 'Delete what was left behind' : k === 'mysql.emptyTable' ? `Empty ${String(input.table)}` : `Delete table ${String(input.table)}` },
+        ],
+      ]),
+    ),
     'db.snapshot': [{ id: 'snapshot', label: `Snapshot the database${input.label ? ` (${String(input.label)})` : ''}` }],
     'db.restore': [snapshot, { id: 'restore', label: `Import ${String(input.snapshot)}` }, { id: 'flush', label: 'Flush caches and rewrite rules' }],
     'db.import': [{ id: 'import', label: 'Import the dump' }, { id: 'swap', label: 'Swap the imported tables in' }, { id: 'replace', label: 'Replace production domains' }, { id: 'flush', label: 'Flush caches and rewrite rules' }, { id: 'cleanup', label: 'Remove the tables from before the import' }],
@@ -525,7 +534,10 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     };
     done();
   }
-  if (id.startsWith('mysql.')) {
+  if (id === 'mysql.emptyTable' || id === 'mysql.dropTable' || id.startsWith('db.clean')) {
+    job.title = (job.steps.at(-1)?.label ?? job.title);
+    job.undoable = ['Put back what it removed'];
+  } else if (id.startsWith('mysql.')) {
     job.title = id === 'mysql.optimize' ? `Optimize ${String(input.database)}` : id === 'mysql.dropDatabase' ? `Delete database ${String(input.database)}` : `Delete ${accounts.length === 1 ? accounts[0] : `${accounts.length} MySQL users`}`;
     if (id !== 'mysql.optimize') job.undoable = [id === 'mysql.dropDatabase' ? `Put ${String(input.database)} back from its export` : 'Make the accounts again'];
     afterMysqlJob(job, input);
@@ -826,6 +838,8 @@ export const mockApi: Api = {
     if (cron) return cron;
     const row = mockRowAction(id, input);
     if (row) return row;
+    const undone = mockUndoCleanup(id, input);
+    if (undone) return undone;
     if (id === 'git.pull') {
       // As git answers with color.ui = always: a diffstat with its colors.
       const g = '\u001b[32m', r = '\u001b[31m', x = '\u001b[m';
@@ -1131,6 +1145,10 @@ export const mockApi: Api = {
     await wait(250);
     return mockDbRows(database, table, query);
   },
+  cleanups: async (database, site) => {
+    await wait(150);
+    return mockCleanups(database, site);
+  },
   dbSchema: async (database) => {
     await wait(150);
     return mockDbSchema(database);
@@ -1391,6 +1409,7 @@ export const mockApi: Api = {
     // The mockup's Mailpit "runs" once its install job has had time to finish.
     if (id === 'mailpit.install') window.setTimeout(() => (mailpitRunning = true), 3500);
     if (id === 'nginx.setup' || id === 'nginx.teardown') window.setTimeout(() => (mockNginxSetUp = id === 'nginx.setup'), 3500);
+    mockCleanupStarted(id, input);
     if (id === 'sites.setServerAll') {
       for (const s of sites) if (!s.path && !s.move?.refusal) s.server = input.server === 'nginx' ? 'nginx' : 'apache';
     }

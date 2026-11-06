@@ -1,6 +1,6 @@
 import type { DbQueryResult } from '@devmagic-panel/shared';
 import { Download, History, KeyRound, LoaderCircle, Play, ScanSearch, ShieldCheck, Trash2 } from 'lucide-react';
-import { Component, type KeyboardEvent, lazy, type ReactNode, Suspense, useState } from 'react';
+import { Component, type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
 import { ValueView } from '@/components/db-browser';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,53 @@ import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 
 const SqlEditor = lazy(() => import('@/components/sql-editor'));
+
+const HEIGHT_KEY = 'dmp:sql-editor-height';
+const DEFAULT_HEIGHT = 176;
+
+function savedHeight(): number {
+  try {
+    const n = Number(localStorage.getItem(HEIGHT_KEY));
+    return Number.isFinite(n) && n >= 96 ? n : DEFAULT_HEIGHT;
+  } catch {
+    return DEFAULT_HEIGHT;
+  }
+}
+
+/** A box resized by dragging its bottom corner; its height stays for the next visit, in this browser only. */
+function ResizableBox({ children }: { children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [height] = useState(savedHeight);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let timer: number | undefined;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        try {
+          localStorage.setItem(HEIGHT_KEY, String(Math.round(el.getBoundingClientRect().height)));
+        } catch {
+          // A private window: the height is only for this visit.
+        }
+      }, 300);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, []);
+  return (
+    <div
+      ref={box}
+      className="resize-y overflow-hidden rounded-md border border-input bg-card shadow-xs transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/25"
+      style={{ height, minHeight: '6rem', maxHeight: '80vh' }}
+    >
+      {children}
+    </div>
+  );
+}
 
 /** The plain text area when the editor's code cannot load (after an update, or offline): the runner still works. */
 class EditorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
@@ -54,10 +101,9 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
       value={sql}
       onChange={(e) => setSql(e.target.value)}
       onKeyDown={onKey}
-      rows={6}
       spellCheck={false}
       placeholder={hint}
-      className="font-mono text-[13px] leading-relaxed"
+      className="h-full min-h-0 resize-none rounded-none border-0 font-mono text-[13px] leading-relaxed shadow-none focus-visible:ring-0"
     />
   );
 
@@ -117,11 +163,14 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
         <div className="grid gap-3 p-5">
           <label htmlFor={`sql-${database}`} className="sr-only">Statement</label>
           {/* The editor loads with this view; the plain text area stands in until it has, and if it cannot load. */}
-          <EditorBoundary fallback={plain}>
-            <Suspense fallback={plain}>
-              <SqlEditor value={sql} onChange={setSql} onRun={() => void run()} {...(schema.data ? { schema: schema.data.tables } : {})} label={`SQL on ${database}`} placeholder={hint} />
-            </Suspense>
-          </EditorBoundary>
+          {/* One box for both, so nothing moves when the editor takes over; drag its corner to resize it. */}
+          <ResizableBox>
+            <EditorBoundary fallback={plain}>
+              <Suspense fallback={plain}>
+                <SqlEditor value={sql} onChange={setSql} onRun={() => void run()} {...(schema.data ? { schema: schema.data.tables } : {})} label={`SQL on ${database}`} placeholder={hint} />
+              </Suspense>
+            </EditorBoundary>
+          </ResizableBox>
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => void run()} disabled={!sql.trim() || running !== null}>
               {running === 'run' ? <LoaderCircle className="animate-spin" /> : <Play />}Run
@@ -181,10 +230,11 @@ function ResultCard({ result, onOpen, onCsv }: { result: DbQueryResult; onOpen: 
       <CardHeader>
         <CardTitle>{result.explain ? 'How MySQL would run it' : 'Result'}</CardTitle>
         {n > 0 && (
-          <Button size="sm" variant="ghost" onClick={onCsv}><Download />CSV</Button>
+          <Button size="sm" variant="outline" onClick={onCsv}><Download />CSV</Button>
         )}
       </CardHeader>
-      <p className="px-5 pt-3 text-xs text-muted-foreground">
+      {/* Without a grid below it, the line keeps the card's padding at the bottom too. */}
+      <p className={cn('px-5 pt-3 text-xs text-muted-foreground', n === 0 && 'pb-4')}>
         {n === 0 ? 'No rows' : `${number(n)} ${n === 1 ? 'row' : 'rows'}`}
         {result.hasMore ? ', the first 1,000: more match, so narrow it with WHERE or LIMIT' : ''} in {number(result.ms)} ms.
       </p>

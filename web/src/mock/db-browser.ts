@@ -1,4 +1,4 @@
-import type { DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport } from '@devmagic-panel/shared';
+import type { CleanupInfo, DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport } from '@devmagic-panel/shared';
 import { DB_CELL_HEAD, isSystemDatabase, WP_AUTOLOAD_LIMIT } from '@devmagic-panel/shared';
 import { sites } from './fixtures';
 
@@ -421,4 +421,36 @@ export function mockRowChanges(database: string, table: string): RowChangeInfo[]
 export function mockDbSchema(database: string): DbSchema {
   const tables = tablesFor(database, siteOf(database)?.domain ?? 'local.acme.com');
   return { database, tables: Object.fromEntries([...tables].map(([name, t]) => [name, t.columns.map((c) => c.name)])) };
+}
+
+interface MockCleanup extends CleanupInfo {
+  database: string;
+  site?: string;
+}
+const cleanups: MockCleanup[] = [];
+
+/** A clean-up job of the mockup leaves its saved copy in the list, as the panel would once its job is done. */
+export function mockCleanupStarted(id: string, input: Record<string, unknown>): void {
+  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop' };
+  const kind = kinds[id];
+  if (!kind) return;
+  const site = input.domain ? `${String(input.domain)}${input.path ? String(input.path) : ''}` : undefined;
+  const database = site ? sites.find((s) => `${s.domain}${s.path ?? ''}` === site)?.db?.name ?? '' : String(input.database);
+  const prefix = Number(input.blog ?? 1) > 1 ? `wp_${String(input.blog)}_` : 'wp_';
+  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}` }[kind];
+  const tables = kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : [{ table: String(input.table), rows: 0 }];
+  const now = new Date();
+  cleanups.unshift({ id: `20261107-${String(103000 + cleanups.length).padStart(6, '0')}-mockcl`, title, kind, tables, bytes: 3_400_000, savedAt: now.toISOString(), purgeAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(), database, ...(site ? { site } : {}) });
+}
+
+export function mockCleanups(database: string, site?: string): CleanupInfo[] {
+  return cleanups.filter((c) => c.database === database && (site === undefined || c.site === site)).map(({ database: _d, site: _s, ...info }) => info);
+}
+
+export function mockUndoCleanup(id: string, input: Record<string, unknown>): ActionRunResult | null {
+  if (id !== 'mysql.undoCleanup') return null;
+  const at = cleanups.findIndex((c) => c.id === input.cleanup);
+  if (at < 0) return { runId: 42, ok: false, exitCode: 1, output: 'That clean-up is not saved any more: copies go after 14 days, and after their Undo' };
+  const [c] = cleanups.splice(at, 1);
+  return { runId: 42, ok: true, exitCode: 0, output: `undid "${c?.title}": put back ${c?.tables.reduce((n, t) => n + t.rows, 0).toLocaleString('en-US')} rows` };
 }

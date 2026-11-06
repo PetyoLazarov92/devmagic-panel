@@ -1,7 +1,10 @@
 import type { DbCell, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable } from '@devmagic-panel/shared';
 import { DB_FILTER_LABELS, DB_FILTER_OPS, DB_PAGE_SIZES } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
+import { JobBox } from '@/components/job-box';
+import { settled, useJob } from '@/components/job-steps';
 import { DeleteRowsDialog, deleteRowsNow, type EditorMode, RowChangesCard, RowEditor, toastRowChange } from '@/components/row-editor';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
@@ -54,7 +57,12 @@ export function DatabaseBrowser({ database, location, onNavigate, header }: Prop
   if (location.table) {
     return <TableView database={database} table={location.table} show={location.show} overview={overview.data} onNavigate={onNavigate} />;
   }
-  return <TablesList database={database} overview={overview.data} loading={overview.loading} error={overview.error} reload={overview.reload} onNavigate={onNavigate} header={header} />;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+      <TablesList database={database} overview={overview.data} loading={overview.loading} error={overview.error} reload={overview.reload} onNavigate={onNavigate} header={header} />
+      {overview.data && overview.data.kind !== 'system' && overview.data.kind !== 'kept' && <CleanupsCard database={database} refresh={refreshOf(overview.data)} onUndone={overview.reload} />}
+    </div>
+  );
 }
 
 type TableFilter = 'all' | 'site' | 'other';
@@ -72,6 +80,20 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<TableFilter>('all');
   const [sort, setSort] = useState<TableSort>('name');
+  const [asking, setAsking] = useState<{ table: string; how: 'empty' | 'drop' } | null>(null);
+  const [refresh, setRefresh] = useState(0);
+  const runner = useJob();
+  const done = useRef<string | null>(null);
+  const { job } = runner;
+  // An emptied or deleted table changes the list, and the clean-ups to undo.
+  useEffect(() => {
+    if (!job || !settled(job) || done.current === job.id) return;
+    done.current = job.id;
+    reload();
+    setRefresh((n) => n + 1);
+    if (job.status === 'done') toast({ tone: 'success', title: `${job.title}: done` });
+  }, [job, reload]);
+  const busy = job !== null && !settled(job);
   const prefix = overview?.sites[0]?.prefix;
 
   const tables = useMemo(() => {
@@ -98,7 +120,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
         </CardTitle>
         <div className="flex items-center gap-1">
           {overview.phpMyAdmin && (
-            <ButtonLink size="sm" variant="ghost" href={pmaHref(overview.phpMyAdmin, database)} target="_blank" rel="noreferrer">
+            <ButtonLink size="sm" variant="outline" href={pmaHref(overview.phpMyAdmin, database)} target="_blank" rel="noreferrer">
               <ExternalLink />phpMyAdmin
             </ButtonLink>
           )}
@@ -108,6 +130,9 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
         </div>
       </CardHeader>
       {header}
+      {/* A job started from a row's menu shows at the top of the list. */}
+      {job && <div className="px-5 pt-4"><JobBox job={job} onRetry={() => void runner.retry()} /></div>}
+      {runner.error && <p role="alert" className="px-5 pt-4 text-sm text-danger">{runner.error}</p>}
       <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
         <label className="relative min-w-48 flex-1">
           <span className="sr-only">Find a table</span>
@@ -159,12 +184,36 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
                 { label: 'Browse rows', icon: <Rows3 />, onSelect: () => onNavigate({ table: t.name, show: 'rows' }) },
                 { label: 'Structure', icon: <KeyRound />, onSelect: () => onNavigate({ table: t.name, show: 'structure' }) },
                 ...(overview.phpMyAdmin ? [{ label: 'Open in phpMyAdmin', icon: <ExternalLink />, onSelect: () => void window.open(pmaHref(overview.phpMyAdmin as string, database, t.name), '_blank', 'noreferrer') }] : []),
+                ...(editableIn(overview, t.name)
+                  ? [
+                      { label: 'Empty...', icon: <Eraser />, danger: true, disabled: busy, onSelect: () => setAsking({ table: t.name, how: 'empty' as const }) },
+                      { label: 'Delete...', icon: <Trash2 />, danger: true, disabled: busy, onSelect: () => setAsking({ table: t.name, how: 'drop' as const }) },
+                    ]
+                  : []),
               ]}
             />
           </li>
         ))}
         {tables.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">{overview.tables.length ? 'No table matches.' : 'This database has no tables.'}</li>}
       </ul>
+      {asking && (
+        <ConfirmCleanup
+          title={asking.how === 'drop' ? `Delete table ${asking.table}?` : `Empty ${asking.table}?`}
+          description={
+            asking.how === 'drop'
+              ? 'The table goes, its rows and its structure. It is saved whole first (14 days), so Undo makes it again while no table of that name is there.'
+              : 'Every row goes; the table stays. They are saved first (14 days), so Undo puts them back.'
+          }
+          action={asking.how === 'drop' ? 'Delete the table' : 'Empty the table'}
+          typed={asking.table}
+          onClose={() => setAsking(null)}
+          onConfirm={(confirm) => {
+            const { table, how } = asking;
+            setAsking(null);
+            void runner.follow(api.startJob(how === 'drop' ? 'mysql.dropTable' : 'mysql.emptyTable', { database, table, confirm }));
+          }}
+        />
+      )}
     </Card>
   );
 }
@@ -174,6 +223,9 @@ function tableMeta(t: DbTable): string {
   if (t.freeBytes > 10 * 1024 ** 2) parts.push(`${bytes(t.freeBytes)} free`);
   return parts.join(' · ');
 }
+
+/** The list of clean-ups reads again whenever the tables were read again. */
+const refreshOf = (o: DbOverview) => Date.parse(o.checkedAt);
 
 /** Rows of a table change here unless its database is MySQL's own or kept for a site, or the table is a view. */
 function editableIn(overview: DbOverview | undefined, table: string): boolean {
@@ -188,7 +240,7 @@ function TableView({ database, table, show, overview, onNavigate }: { database: 
       <div className="flex flex-wrap items-center gap-2">
         {/* The name keeps a line of its own on a phone rather than breaking mid-word. */}
         <div className="flex min-w-0 flex-1 basis-60 items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={() => onNavigate({ table: null, show: 'rows' })}>
+          <Button size="sm" variant="outline" onClick={() => onNavigate({ table: null, show: 'rows' })}>
             <ArrowLeft />All tables
           </Button>
           <h3 className="min-w-0 truncate font-mono text-sm font-semibold" title={table}>{table}</h3>
@@ -196,7 +248,7 @@ function TableView({ database, table, show, overview, onNavigate }: { database: 
         <div className="flex items-center gap-1">
           <Segmented label="Show" value={show} onChange={(next) => onNavigate({ table, show: next })} options={[['rows', 'Rows'], ['structure', 'Structure']]} />
           {overview?.phpMyAdmin && (
-            <ButtonLink size="sm" variant="ghost" href={pmaHref(overview.phpMyAdmin, database, table)} target="_blank" rel="noreferrer">
+            <ButtonLink size="sm" variant="outline" href={pmaHref(overview.phpMyAdmin, database, table)} target="_blank" rel="noreferrer">
               <ExternalLink />phpMyAdmin
             </ButtonLink>
           )}
@@ -314,7 +366,7 @@ function RowsView({ database, table, editable }: { database: string; table: stri
             {drafts.length ? 'Add a filter' : 'Filter'}
           </Button>
           {drafts.length > 0 && <Button size="sm" type="submit" disabled={!draftsChanged}>Apply</Button>}
-          {(drafts.length > 0 || filters.length > 0) && <Button size="sm" variant="ghost" onClick={clear}>Clear</Button>}
+          {(drafts.length > 0 || filters.length > 0) && <Button size="sm" variant="outline" onClick={clear}>Clear</Button>}
           {canChange && <Button size="sm" variant="outline" onClick={() => setEditor({ mode: 'add', row: null })}><Plus />Add a row</Button>}
           {canChange && picked.length > 0 && (
             <Button size="sm" variant="outline" className="text-danger" onClick={() => setDeleting(picked)}><Trash2 />Delete {picked.length === 1 ? 'the row' : `${picked.length} rows`}</Button>
@@ -482,7 +534,7 @@ function RowDialog({ row, page, database, table, onClose, onEdit, onDuplicate, o
         </div>
       )}
       <div className="mt-4 flex flex-wrap justify-end gap-2">
-        {row?.key && onDelete && <Button variant="ghost" className="mr-auto text-danger" onClick={() => onDelete(row)}><Trash2 />Delete</Button>}
+        {row?.key && onDelete && <Button variant="outline" className="mr-auto text-danger" onClick={() => onDelete(row)}><Trash2 />Delete</Button>}
         <Button variant="outline" onClick={onClose}>Close</Button>
         {row?.key && onDuplicate && <Button variant="outline" onClick={() => onDuplicate(row)}><Copy />Duplicate</Button>}
         {row?.key && onEdit && <Button onClick={() => onEdit(row)}><Pencil />Edit</Button>}
@@ -532,7 +584,7 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
   return (
     <Button
       size="sm"
-      variant="ghost"
+      variant="outline"
       onClick={() => void navigator.clipboard?.writeText(text).then(() => toast({ tone: 'success', title: 'Copied' }))}
     >
       <Copy />{label}

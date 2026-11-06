@@ -25,16 +25,16 @@ export interface SqlEditorProps {
 
 // Colours come from the theme's tokens, so the editor follows light and dark like the rest of the panel.
 const theme = EditorView.theme({
+  // The editor fills the box the runner gives it; the box draws the border and the focus ring, which nothing then clips.
   '&': {
+    height: '100%',
     backgroundColor: 'var(--card)',
     color: 'var(--foreground)',
-    border: '1px solid var(--input)',
-    borderRadius: 'calc(var(--radius) - 2px)',
     fontSize: '13px',
   },
-  '&.cm-focused': { outline: 'none', borderColor: 'var(--ring)', boxShadow: '0 0 0 3px color-mix(in oklch, var(--ring) 25%, transparent)' },
-  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.6', maxHeight: '22rem', overflow: 'auto' },
-  '.cm-content': { padding: '8px 0', minHeight: '9rem', caretColor: 'var(--foreground)' },
+  '&.cm-focused': { outline: 'none' },
+  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.6', overflow: 'auto' },
+  '.cm-content': { padding: '8px 0', caretColor: 'var(--foreground)' },
   '.cm-line': { padding: '0 12px' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--foreground)' },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, ::selection': {
@@ -116,5 +116,5 @@ export default function SqlEditor({ value, onChange, onRun, schema, label, place
     if (editor && editor.state.doc.toString() !== value) editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value } });
   }, [value]);
 
-  return <div ref={host} />;
+  return <div ref={host} className="h-full" />;
 }
