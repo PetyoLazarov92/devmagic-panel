@@ -29,12 +29,14 @@ export interface ChatDeps {
   coreStatus: () => Promise<CoreStatusMap | null>;
   /** This machine's conventions.md, or its default. */
   conventions: () => string;
+  /** A site's database as names, sizes and counts only (mysql-wordpress.ts), never a value from a row. */
+  databaseSummary?: (domain: string, path?: string) => Promise<unknown>;
 }
 
 const SYSTEM = `You are the assistant inside devmagic-panel, a control panel for the local WordPress sites on this developer's Ubuntu machine.
-Look before you answer: use the read tools (sites, findings, environment, logs, repo docs, conventions, git, services, cores, recent runs). Base answers on what they return.
+Look before you answer: use the read tools (sites, findings, environment, logs, repo docs, conventions, git, services, cores, recent runs, a site's database overview). Base answers on what they return.
 To change anything, call the matching action tool. That only shows the user a card with a Run button; nothing runs until they click it. Never say a change was made. Propose one card per change, with a one-line reason in "why".
-You cannot run shell commands, read other files or see database contents, and some actions (removing sites, restoring or importing databases, creating sites, removing cores) are only on their own pages; say so when asked.
+You cannot run shell commands, read other files or see database contents (the database overview has table and option names, sizes and counts, never a value), and some actions (removing sites, restoring or importing databases, creating sites, removing cores) are only on their own pages; say so when asked.
 Answer briefly in plain sentences, without em dashes. Never repeat anything that looks like a password, key or token.`;
 
 const MAX_RESULT = 12_000;
@@ -152,6 +154,24 @@ export function readTools(deps: ChatDeps, looked: string[]) {
         return out(coresReport(deps.config, deps.wpcoreConf, await deps.coreStatus()));
       },
     }),
+    ...(deps.databaseSummary
+      ? [
+          betaZodTool({
+            name: 'database_overview',
+            description:
+              "A WordPress site's database in names, sizes and counts: its biggest tables and engines, autoloaded options (total and the biggest by name), transients, revisions, drafts, trash, spam, orphaned meta and the postmeta keys that take the most room. Never a value from a row.",
+            inputSchema: site.extend({ path: mountPath.optional().describe('For a site under a path of the domain, like /learn') }),
+            run: async ({ domain, path }) => {
+              note(`database_overview ${domain}${path ?? ''}`);
+              try {
+                return out(await (deps.databaseSummary as NonNullable<ChatDeps['databaseSummary']>)(domain, path));
+              } catch (error) {
+                return (error as Error).message;
+              }
+            },
+          }),
+        ]
+      : []),
     betaZodTool({
       name: 'read_conventions',
       description: 'This machine\'s conventions.md: how local sites are named and set up here.',

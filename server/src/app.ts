@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, DbStructure, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { isActionId, localConstants, localName, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, DbStructure, WpDbReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import { isActionId, localConstants, localName, mountPath, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
 import { cronReport } from './cron.js';
@@ -24,6 +24,7 @@ import { apacheErrorLog, apacheReport } from './apache.js';
 import { nginxErrorLog, nginxReport, nginxSetUp } from './nginx.js';
 import { nginxPhpVersion } from './sites/server-switch.js';
 import { type BrowseContext, dbCell, dbOverview, dbRows, dbStructure } from './mysql-browse.js';
+import { databaseSummary, wordpressReport } from './mysql-wordpress.js';
 import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
 import { BrowseError } from './mysql-sql.js';
 import { Jobs } from './jobs.js';
@@ -366,6 +367,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       browsing(reply, () => dbRows(browse(), request.params.database, request.params.table, request.body)));
     api.post<TableParams>('/api/mysql/databases/:database/tables/:table/cell', async (request, reply): Promise<DbCellValue | undefined> =>
       browsing(reply, () => dbCell(browse(), request.params.database, request.params.table, request.body)));
+    // A WordPress site's database as WordPress sees it: autoload, transients, clean-up counts, users. ?blog= picks a site of a network.
+    api.get<{ Params: { domain: string }; Querystring: { path?: string; blog?: string } }>('/api/sites/:domain/db/wordpress', async (request, reply): Promise<WpDbReport | undefined> =>
+      browsing(reply, async () => {
+        const { domain } = request.params;
+        const { path, blog } = request.query;
+        if (!localName.safeParse(domain).success || (path !== undefined && !mountPath.safeParse(path).success)) throw new BrowseError(`no site called ${domain}${path ?? ''}`, 404);
+        if (blog !== undefined && !/^\d{1,9}$/.test(blog)) throw new BrowseError('A site of the network by its number, like 2');
+        return wordpressReport(browse(), domain, path, blog === undefined ? 1 : Number(blog));
+      }));
     api.get('/api/apache', async (): Promise<ApacheReport> => apacheReport(deps.config, deps.exec, deps.dmpRoot));
     api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));
     api.get('/api/nginx', async (): Promise<NginxReport> => nginxReport(deps.config, deps.exec, deps.dmpRoot));
@@ -562,6 +572,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           environment: () => checkEnvironment({ config: deps.config, exec: deps.exec, secrets: deps.secrets(), paths: deps.hostPaths, dmpRoot: deps.dmpRoot, gitlabHosts }),
           coreStatus: deps.coreStatus ?? (async () => null),
           conventions,
+          databaseSummary: (domain, path) => databaseSummary(browse(), domain, path),
         },
         wizard: {
           exec: deps.exec,

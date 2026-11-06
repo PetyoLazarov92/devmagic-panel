@@ -160,3 +160,53 @@ export interface DbCellValue {
 
 /** The longest a cell is on a page: the rest opens on its own. */
 export const DB_CELL_HEAD = 300;
+
+/** WordPress keeps an option in memory on every page when autoload is one of these (6.6 added on, auto and auto-on). */
+export const WP_AUTOLOAD_VALUES = ['yes', 'on', 'auto-on', 'auto'] as const;
+/** Site Health warns above this many bytes of autoloaded options. */
+export const WP_AUTOLOAD_LIMIT = 800_000;
+
+/** A site of a network, by the table prefix its tables use. */
+export interface WpDbBlog {
+  id: number;
+  domain: string;
+  path: string;
+  prefix: string;
+  /** Archived, spam or deleted in wp_blogs. */
+  inactive?: boolean;
+}
+
+export interface WpDbUser {
+  id: string;
+  login: string;
+  email: string;
+  registered: string;
+  /** The roles on the site the report is about. */
+  roles: string[];
+}
+
+/**
+ * What a WordPress database holds beyond its tables, for one site (on a
+ * network, one of its sites). Each section is read on its own; one MySQL
+ * stopped for taking too long is null, with why in errors.
+ */
+export interface WpDbReport {
+  database: string;
+  /** The table prefix from wp-config.php. */
+  prefix: string;
+  /** The site of the network the report is about, 1 for a single site. */
+  blog: number;
+  /** The prefix that site's tables use: wp_ for the first, wp_2_ for the second. */
+  blogPrefix: string;
+  network?: WpDbBlog[];
+  /** Core tables this site lacks. */
+  missingTables: string[];
+  autoload: { count: number; bytes: number; limitBytes: number; top: Array<{ name: string; bytes: number }> } | null;
+  transients: { count: number; bytes: number; expired: number; site?: { count: number; bytes: number; expired: number } } | null;
+  content: { revisions: number; autoDrafts: number; trashedPosts: number; spamComments: number; trashedComments: number } | null;
+  orphans: { postmeta: number; commentmeta: number; termmeta: number; termRelationships: number; usermeta?: number } | null;
+  metaKeys: Array<{ key: string; count: number; bytes: number }> | null;
+  users: { count: number; list: WpDbUser[] } | null;
+  errors: Partial<Record<'autoload' | 'transients' | 'content' | 'orphans' | 'metaKeys' | 'users', string>>;
+  checkedAt: string;
+}

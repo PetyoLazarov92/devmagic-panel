@@ -15,6 +15,9 @@ alwaysApply: false
 - The assistant's own settings (enabled, model, key) are plain routes, never
   registry actions, so it cannot change them.
 - Every tool result goes through `redact()` and is capped in size.
+- The database overview tool (`databaseSummary` in
+  `server/src/mysql-wordpress.ts`) gives table and option names, sizes and
+  counts only: never a value from a row, a user, an email or an option value.
 - Never send to the model: database contents, `wp-config.php` secrets (DB
   password, salts, keys), `secrets.json`, private keys, full log files. Log
   excerpts are short and redacted.

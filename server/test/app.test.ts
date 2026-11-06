@@ -338,6 +338,9 @@ describe('services tabs', () => {
     expect(none.statusCode).toBe(503);
     expect(none.json()).toEqual({ error: expect.stringMatching(/no MySQL admin account/) });
     expect((await app.inject({ method: 'POST', url: rows, headers: { host: HOST, origin: ORIGIN, cookie }, payload: { pageSize: 7 } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/api/sites/local.shop.com/db/wordpress?blog=two', headers: { host: HOST, cookie } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/api/sites/example.com/db/wordpress', headers: { host: HOST, cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/api/sites/local.shop.com/db/wordpress', headers: { host: HOST } })).statusCode).toBe(401);
     await app.close();
   });
 });

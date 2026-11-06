@@ -12,6 +12,7 @@ import { DMP_ROOT, loadConfig, userPaths } from './config.js';
 import { coreStatusSource } from './core-status.js';
 import { checkEnvironment, defaultHostPaths } from './environment.js';
 import { runCommand } from './exec.js';
+import { databaseSummary } from './mysql-wordpress.js';
 import { readSecrets } from './secrets.js';
 import { discoverSites } from './sites/discover.js';
 import { RunStore } from './store.js';
@@ -82,6 +83,7 @@ export async function runMcpStdio(version: string): Promise<void> {
     environment: () => checkEnvironment({ config, exec: runCommand, secrets: readSecrets(paths.secretsFile), paths: hostPaths, dmpRoot: process.env.DEVMAGIC_PANEL_DMP_ROOT ?? DMP_ROOT }),
     coreStatus,
     conventions: () => readConventions(join(paths.configDir, 'conventions.md'), config, hostPaths.wpcoreConf).text,
+    databaseSummary: (domain, path) => databaseSummary({ config, exec: runCommand, mysql: readSecrets(paths.secretsFile)?.mysql, kept: () => store.keptDatabases() }, domain, path),
   };
   const server = createMcpServer(deps, store, `https://${config.PANEL_DOMAIN}`, version);
   await server.connect(new StdioServerTransport());

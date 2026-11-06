@@ -4,6 +4,7 @@ import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCirc
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { settled, StepList, useJob } from '@/components/job-steps';
+import { WordpressDbView } from '@/components/wordpress-db';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,13 +29,15 @@ const JOB_ACTIONS = {
   clean: 'db.cleanCopy', cleanCurrent: 'db.cleanCurrent', export: 'db.exportClean', restoreKept: 'db.restoreKept',
 } as const;
 
-type DbView = 'tables' | 'tools';
+type DbView = 'tables' | 'wordpress' | 'tools';
 
-/** The Database tab's address: its view, and in Tables the table and what of it shows. */
-export function databaseHref(site: Pick<Site, 'domain' | 'path'>, view: DbView, location: DbLocation = { table: null, show: 'rows' }): string {
+/** The Database tab's address: its view, in Tables the table and what of it shows, in WordPress the site of a network. */
+export function databaseHref(site: Pick<Site, 'domain' | 'path'>, view: DbView, location: DbLocation = { table: null, show: 'rows' }, blog = 1): string {
   const q = new URLSearchParams({ tab: 'database' });
-  if (view === 'tools') q.set('view', 'tools');
-  else if (location.table) {
+  if (view !== 'tables') {
+    q.set('view', view);
+    if (view === 'wordpress' && blog !== 1) q.set('blog', String(blog));
+  } else if (location.table) {
     q.set('table', location.table);
     if (location.show === 'structure') q.set('show', 'structure');
   }
@@ -47,18 +50,25 @@ export function databaseHref(site: Pick<Site, 'domain' | 'path'>, view: DbView, 
  * reload keep the place.
  */
 export function DatabaseTab({ site }: { site: Site }) {
-  const view: DbView = useQueryParam('view') === 'tools' ? 'tools' : 'tables';
+  const wordpress = site.core.kind !== 'none';
+  const requested = useQueryParam('view');
+  const view: DbView = requested === 'tools' ? 'tools' : requested === 'wordpress' && wordpress ? 'wordpress' : 'tables';
   const table = useQueryParam('table');
   const show = useQueryParam('show') === 'structure' ? 'structure' : 'rows';
+  const blogParam = Number(useQueryParam('blog'));
+  const blog = Number.isInteger(blogParam) && blogParam > 1 ? blogParam : 1;
   if (!site.db) {
     return <p className="rounded-xl border bg-card px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p>;
   }
-  const go = (next: DbView, location?: DbLocation) => navigate(databaseHref(site, next, location), { scroll: false });
+  const go = (next: DbView, location?: DbLocation, nextBlog = 1) => navigate(databaseHref(site, next, location, nextBlog), { scroll: false });
+  const views: Array<[DbView, string]> = [['tables', 'Tables'], ...(wordpress ? [['wordpress', 'WordPress'] as [DbView, string]] : []), ['tools', 'Backups and tools']];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <Segmented label="Database" value={view} onChange={(v) => go(v)} options={[['tables', 'Tables'], ['tools', 'Backups and tools']]} className="justify-self-start" />
+      <Segmented label="Database" value={view} onChange={(v) => go(v)} options={views} className="justify-self-start" />
       {view === 'tools' ? (
         <DatabaseTools site={site} />
+      ) : view === 'wordpress' ? (
+        <WordpressDbView site={site} blog={blog} onBlog={(b) => go('wordpress', undefined, b)} onTable={(t) => go('tables', { table: t, show: 'rows' })} />
       ) : (
         <DatabaseBrowser key={site.db.name} database={site.db.name} location={{ table, show }} onNavigate={(location) => go('tables', location)} />
       )}

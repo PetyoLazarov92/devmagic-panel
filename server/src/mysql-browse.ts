@@ -60,7 +60,7 @@ async function flavor(ctx: BrowseContext): Promise<'mysql' | 'mariadb'> {
  * lines they printed. raw: lines as MySQL wrote them, for JSON_ARRAY output,
  * which escapes its own control characters.
  */
-async function read(ctx: BrowseContext, sql: string, { limitMs = READ_LIMIT_MS, maxBytes = 8 * 1024 * 1024, raw = true } = {}): Promise<string[]> {
+export async function read(ctx: BrowseContext, sql: string, { limitMs = READ_LIMIT_MS, maxBytes = 8 * 1024 * 1024, raw = true } = {}): Promise<string[]> {
   const mysql = account(ctx);
   const limit = (await flavor(ctx)) === 'mariadb' ? `SET SESSION max_statement_time = ${limitMs / 1000};` : `SET SESSION max_execution_time = ${limitMs};`;
   const input = `SET SESSION TRANSACTION READ ONLY;\n${limit}\n${sql}`;
@@ -79,7 +79,7 @@ async function read(ctx: BrowseContext, sql: string, { limitMs = READ_LIMIT_MS, 
   return r.stdout.split('\n').filter((line) => line !== '');
 }
 
-function checkDatabase(database: string): string {
+export function checkDatabase(database: string): string {
   if (!mysqlDatabaseName.safeParse(database).success) throw new BrowseError('A database name like acme_com');
   return database;
 }
@@ -89,7 +89,7 @@ function checkTable(table: string): string {
   return table;
 }
 
-const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
+export const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 const str = (v: unknown) => (v === null || v === undefined ? undefined : String(v));
 /** MySQL's DATETIME in JSON, 2026-11-06 10:00:00.000000, as ISO; local time, as the server keeps it. */
 function isoTime(v: unknown): string | undefined {
@@ -98,7 +98,7 @@ function isoTime(v: unknown): string | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
-function parseJson(line: string): unknown[] {
+export function parseJson(line: string): unknown[] {
   try {
     const v = JSON.parse(line) as unknown;
     if (Array.isArray(v)) return v;

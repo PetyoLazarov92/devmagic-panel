@@ -66,6 +66,22 @@ describe('read tools', () => {
   });
 });
 
+describe('the database overview tool', () => {
+  it('is there only when the panel can read databases, and reads one site by domain and path', async () => {
+    expect(readTools(deps(), []).some((t) => t.name === 'database_overview')).toBe(false);
+    const asked: Array<[string, string | undefined]> = [];
+    const looked: string[] = [];
+    const tools = readTools({ ...deps(), databaseSummary: async (domain, path) => (asked.push([domain, path]), { database: 'shop_com', autoload: { kb: 891 }, note: 'token=abc123def' }) }, looked);
+    const tool = byName(tools, 'database_overview');
+    const text = await tool.run(tool.parse({ domain: 'local.shop.com', path: '/learn' }));
+    expect(asked).toEqual([['local.shop.com', '/learn']]);
+    expect(text).toContain('"kb": 891');
+    expect(text).not.toContain('abc123def');
+    expect(looked).toEqual(['database_overview local.shop.com/learn']);
+    expect(() => tool.parse({ domain: 'example.com' })).toThrow();
+  });
+});
+
 describe('chat', () => {
   it('lets Claude read and propose, runs nothing, and returns the reply with its cards', async () => {
     const d = deps();

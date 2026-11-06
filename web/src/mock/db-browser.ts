@@ -1,5 +1,5 @@
-import type { DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind } from '@devmagic-panel/shared';
-import { DB_CELL_HEAD, isSystemDatabase } from '@devmagic-panel/shared';
+import type { DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport } from '@devmagic-panel/shared';
+import { DB_CELL_HEAD, isSystemDatabase, WP_AUTOLOAD_LIMIT } from '@devmagic-panel/shared';
 import { sites } from './fixtures';
 
 /** The mockup's database browser: WordPress tables with made-up rows, filtered, sorted and paged in the browser. */
@@ -257,4 +257,63 @@ export function mockDbCell(database: string, table: string, column: string, key:
   if (!row || i < 0) throw new Error('That row is not there any more: it changed or went since the page was read');
   const value = row[i] ?? null;
   return { value: value === null ? null : t.columns[i]?.binary ? { head: value, length: value.length / 2, binary: true } : value, cut: false };
+}
+
+/** A site's database as WordPress sees it, in the mockup: one site over Site Health's autoload limit, a network with three sites. */
+export function mockWordpressDb(domain: string, path: string | undefined, blog = 1): WpDbReport {
+  const site = sites.find((s) => s.domain === domain && s.path === path);
+  if (!site?.db) throw new Error(`${domain}${path ?? ''} has no database on this computer's MySQL server`);
+  const heavy = site.db.sizeBytes > 1_000_000_000;
+  const network = site.network
+    ? [
+        { id: 1, domain, path: '/', prefix: 'wp_' },
+        { id: 2, domain, path: '/outlet/', prefix: 'wp_2_' },
+        { id: 3, domain, path: '/old/', prefix: 'wp_3_', inactive: true },
+      ]
+    : undefined;
+  if (blog !== 1 && !network?.some((b) => b.id === blog)) throw new Error(`This network has no site ${blog}`);
+  const blogPrefix = blog === 1 ? 'wp_' : `wp_${blog}_`;
+  const scale = blog === 1 ? 1 : 0.3;
+  const n = (v: number) => Math.round(v * scale);
+  return {
+    database: site.db.name,
+    prefix: 'wp_',
+    blog,
+    blogPrefix,
+    ...(network ? { network } : {}),
+    missingTables: heavy ? [] : [`${blogPrefix}termmeta`],
+    autoload: {
+      count: n(heavy ? 1_240 : 412),
+      bytes: n(heavy ? 1_930_000 : 212_000),
+      limitBytes: WP_AUTOLOAD_LIMIT,
+      top: [
+        { name: 'acme_slider_cache', bytes: n(heavy ? 880_000 : 61_000) },
+        { name: 'rewrite_rules', bytes: n(94_000) },
+        { name: 'acme_builder_css', bytes: n(heavy ? 310_000 : 22_000) },
+        { name: 'cron', bytes: n(18_400) },
+        { name: 'wp_user_roles', bytes: 6_100 },
+        { name: 'widget_block', bytes: 4_200 },
+        { name: 'active_plugins', bytes: 2_900 },
+      ].sort((a, b) => b.bytes - a.bytes),
+    },
+    transients: { count: n(heavy ? 3_120 : 64), bytes: n(heavy ? 41_000_000 : 380_000), expired: n(heavy ? 2_870 : 9), site: { count: 12, bytes: 210_000, expired: 4 } },
+    content: { revisions: n(heavy ? 18_400 : 620), autoDrafts: n(14), trashedPosts: n(37), spamComments: n(heavy ? 9_800 : 0), trashedComments: n(12) },
+    orphans: { postmeta: n(heavy ? 4_210 : 0), commentmeta: n(heavy ? 1_300 : 0), termmeta: 0, termRelationships: n(26), ...(blog === 1 ? { usermeta: 3 } : {}) },
+    metaKeys: [
+      { key: '_acme_builder_data', count: n(2_400), bytes: n(heavy ? 640_000_000 : 18_000_000) },
+      { key: '_wp_attachment_metadata', count: n(9_800), bytes: n(42_000_000) },
+      { key: '_edit_lock', count: n(3_100), bytes: n(68_000) },
+      { key: '_thumbnail_id', count: n(2_900), bytes: n(14_000) },
+    ],
+    users: {
+      count: 3,
+      list: [
+        { id: '1', login: 'alex', email: 'alex.morgan@acme.com', registered: '2024-03-02 10:15:00', roles: ['administrator'] },
+        { id: '2', login: 'sam', email: 'sam.lee@acme.com', registered: '2025-07-19 16:40:00', roles: blog === 1 ? ['editor'] : [] },
+        { id: '3', login: 'shopkeeper', email: 'shop@acme.com', registered: '2026-01-05 08:00:00', roles: ['shop_manager', 'customer'] },
+      ],
+    },
+    errors: {},
+    checkedAt: new Date().toISOString(),
+  };
 }

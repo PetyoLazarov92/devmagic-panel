@@ -3,7 +3,7 @@ import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { mockDbCell, mockDbOverview, mockDbRows, mockDbStructure } from './db-browser';
+import { mockDbCell, mockDbOverview, mockDbRows, mockDbStructure, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
@@ -1124,6 +1124,10 @@ export const mockApi: Api = {
   dbRows: async (database, table, query) => {
     await wait(250);
     return mockDbRows(database, table, query);
+  },
+  wordpressDb: async (domain, path, blog) => {
+    await wait(350);
+    return mockWordpressDb(domain, path, blog);
   },
   dbCell: async (database, table, query) => {
     await wait(150);

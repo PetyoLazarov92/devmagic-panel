@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.10.0 (2026-11-07)
+* **Sites:** a WordPress site's Database tab has a WordPress view: autoloaded options against Site Health's 800 KB limit with the biggest by name, transients (and the expired ones still stored), what a clean-up would find (revisions, auto-drafts, trash, spam, meta and terms left behind by something deleted), the postmeta keys that take the most room, and the users with their roles. On a network you pick the site, and its own tables are read. It only reads; a section MySQL stops for taking too long says so and the rest still shows
+* **Assistant:** a database overview tool for the chat and MCP gives Claude a site's database in names, sizes and counts (the biggest tables and options by name, transients, clean-up counts, the biggest postmeta keys), never a value from a row, a user or an email
+
 ### v1.9.0 (2026-11-06)
 * **Sites:** the Database tab opens on Tables: every table with its engine, rows, size and free space, a filter for this site's prefix and other prefixes, and each table's rows a page at a time (25 to 250), sorted by any column, with filters (is, contains, starts with, more or less than, NULL). A row opens with all its values; long ones load in full on request, and PHP serialized values and JSON show as a tree. Structure shows the columns, indexes, CREATE TABLE and what deserves a look (no primary key, MyISAM, an old character set, free space). Snapshots, import, search and replace and the other tools moved to Backups and tools on the same tab
 * **Services:** each database on the MySQL tab opens its tables: a site's in the site's Database tab, any other (MySQL's own included) under the MySQL tab
