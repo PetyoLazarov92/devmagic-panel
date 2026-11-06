@@ -90,11 +90,14 @@ describe('site routes', () => {
 
   it('say what an organization install needs, keep its settings per step, and start no read without Claude Code', async () => {
     const send = (method: 'PUT' | 'POST', url: string, payload: Record<string, unknown>) => app.inject({ method, url, headers: { host: HOST, origin: ORIGIN, cookie }, payload });
-    expect((await get('/api/org/status')).json()).toMatchObject({ claude: { found: false }, gh: { installed: false }, rclone: { installed: false }, settings: { selected: [] } });
-    const settings = { selected: ['acme'], read: { model: 'haiku', effort: 'high', budgetUsd: 0.2 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } };
+    expect((await get('/api/org/status')).json()).toMatchObject({ claude: { found: false }, gh: { installed: false }, glab: { installed: false, hosts: [{ host: 'gitlab.com', installed: false }] }, rclone: { installed: false }, settings: { selected: [] } });
+    const settings = { selected: ['acme', 'gitlab.com/acme/web'], gitlabHosts: ['git.acme.test'], read: { model: 'haiku', effort: 'high', budgetUsd: 0.2 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } };
     expect((await send('PUT', '/api/org/settings', settings)).json()).toEqual(settings);
     expect((await send('PUT', '/api/org/settings', { selected: ['-bad'] })).statusCode).toBe(400);
     expect((await get('/api/org/status')).json().settings).toEqual(settings);
+    // Links to your own GitLab hosts come out as GitLab's in the browser too.
+    expect((await get('/api/git-hosts')).json()).toEqual({ gitlab: ['git.acme.test'] });
+    expect((await get('/api/org/status')).json().glab.hosts.map((h: { host: string }) => h.host)).toEqual(['gitlab.com', 'git.acme.test']);
     // Reading a repo is a job started through its action; without Claude Code it does not start.
     const input = { draftId: '11111111-2222-4333-8444-555555555555', url: 'git@github.com:acme/site.git', branch: 'main', fullName: 'acme/site', settings: settings.read };
     const read = await send('POST', '/api/actions/org.readRepo', input);

@@ -1,19 +1,20 @@
-import type { InstallDraft, OrgRepo, OrgRepoList, OrgScanMode, RepoKind, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
-import { classifyRepo, repoKey } from '@devmagic-panel/shared';
+import type { InstallDraft, Namespace, OrgRepo, OrgRepoList, OrgScanMode, RepoKind, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
+import { classifyRepo, parseNamespaceRef, repoKey } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
+import { HostRefused, type HostRepo, hostFor, type RepoHost } from '../repo-hosts/index.js';
 import type { RunStore } from '../store.js';
-import { type GhRepo, GhRefused, ghLogin, ghRepoPage, ghTopNames, REPO_PAGE_SIZE } from './github-cli.js';
+
+/** Both hosts' largest page: GitHub's and GitLab's REST APIs give 100. */
+const REPO_PAGE_SIZE = 100;
 
 /** Opening the page checks for new pushes when the last check is older than this. */
 export const CHECK_EVERY_MS = 3_600_000;
 /** And lists every repo, to drop deleted and renamed ones, when the last full list is older than this. */
 export const LIST_EVERY_MS = 7 * 24 * 3_600_000;
-/** A check reads back this far before the last one, for clocks that differ a little. */
-const CHECK_OVERLAP_MS = 10 * 60_000;
 /** No organization has more pages than this; a guard against a loop that never ends. */
 const MAX_PAGES = 100;
 
-/** A repo as stored: what GitHub listed, its kind, and the push its kind was read at. */
+/** A repo as stored: what its host listed, its kind, and the push its kind was read at. */
 type StoredRepo = Omit<OrgRepo, 'local'> & { kindPushedAt?: string };
 
 /** What this machine has of each repo: installed sites, archived copies, an unfinished install. */
@@ -57,7 +58,7 @@ export function localOf(sshUrl: string, local: LocalState): OrgRepo['local'] | u
 }
 
 /**
- * The repos of an organization with what each holds, kept in the panel's
+ * The repos of an organization (GitHub) or group (GitLab) with what each holds, kept in the panel's
  * database so they show at once and survive restarts. A check reads the
  * repos pushed since the last one (newest push first, so usually one page);
  * a full list, once a week or when you ask, reads them all and drops the
@@ -67,13 +68,15 @@ export function localOf(sshUrl: string, local: LocalState): OrgRepo['local'] | u
 export class OrgScanner {
   /** One scan per organization at a time; the next waits and then sees what it saved. */
   private readonly running = new Map<string, Promise<unknown>>();
-  private login: string | null | undefined;
+  /** The signed-in account on each host, read once. */
+  private readonly logins = new Map<string, string | null>();
 
   constructor(
     private readonly exec: Executor,
     private readonly store: RunStore,
     private readonly now = () => Date.now(),
     private readonly sleep?: (ms: number) => Promise<void>,
+    private readonly hostOf: (ns: Namespace) => RepoHost = (ns) => hostFor(exec, ns, sleep),
   ) {}
 
   async repos(org: string, local: LocalState, mode: OrgScanMode = 'none'): Promise<OrgRepoList> {
@@ -85,7 +88,7 @@ export class OrgScanner {
       try {
         await run;
       } catch (error) {
-        if (!(error instanceof GhRefused)) throw error;
+        if (!(error instanceof HostRefused)) throw error;
         problem = error.message;
       } finally {
         if (this.running.get(key) === run) this.running.delete(key);
@@ -113,30 +116,34 @@ export class OrgScanner {
   private async scan(org: string, mode: Exclude<OrgScanMode, 'none'>): Promise<void> {
     const what = this.due(org, mode);
     if (!what) return;
+    const ns = parseNamespaceRef(org);
+    if (!ns) throw new HostRefused(`${org} is not an organization or group`);
+    const host = this.hostOf(ns);
     const started = this.now();
-    const since = what === 'check' ? Date.parse(this.store.orgScan(org)?.checkedAt ?? '') - CHECK_OVERLAP_MS : NaN;
-    this.login ??= await ghLogin(this.exec);
-    const owner = this.login && this.login.toLowerCase() === org.toLowerCase() ? { self: true as const } : { org };
-    const listed: GhRepo[] = [];
+    const since = what === 'check' ? Date.parse(this.store.orgScan(org)?.checkedAt ?? '') - host.checkOverlapMs : NaN;
+    if (!this.logins.has(host.host)) this.logins.set(host.host, await host.login());
+    const login = this.logins.get(host.host);
+    const self = Boolean(login && login.toLowerCase() === ns.path.toLowerCase());
+    const listed: HostRepo[] = [];
     for (let page = 1; page <= MAX_PAGES; page++) {
-      const repos = await ghRepoPage(this.exec, owner, page, this.sleep);
+      const repos = await host.repoPage(ns, self, page);
       listed.push(...repos);
       if (repos.length < REPO_PAGE_SIZE) break;
-      // Newest push first: once a page ends before the last check, the rest is older still.
+      // Newest first: once a page ends before the last check, the rest is older still.
       const oldest = Date.parse(repos.at(-1)?.pushedAt ?? '');
       if (what === 'check' && !(oldest >= since)) break;
     }
-    const stored = new Map((this.store.orgRepos(org) as StoredRepo[]).map((r) => [r.name, r]));
-    const repos = await pooled(listed, 8, (r) => this.withKind(org, r, stored.get(r.name)));
-    this.store.saveOrgScan(org, repos, what === 'full', new Date(started).toISOString());
+    const stored = new Map((this.store.orgRepos(org) as StoredRepo[]).map((r) => [r.fullName.toLowerCase(), r]));
+    const repos = await pooled(listed, 8, (r) => this.withKind(host, org, r, stored.get(r.path.toLowerCase())));
+    this.store.saveOrgScan(org, repos, what === 'full', new Date(started).toISOString(), (r) => (ns.provider === 'github' ? r.name : r.fullName.toLowerCase()));
   }
 
   /** A listed repo with its kind: the stored one while no push came since, else read from its top-level names. */
-  private async withKind(org: string, r: GhRepo, before: StoredRepo | undefined): Promise<StoredRepo> {
+  private async withKind(host: RepoHost, org: string, r: HostRepo, before: StoredRepo | undefined): Promise<StoredRepo> {
     const base = {
       org,
       name: r.name,
-      fullName: `${org}/${r.name}`,
+      fullName: r.path,
       ...(r.description ? { description: r.description } : {}),
       sshUrl: r.sshUrl,
       url: r.url,
@@ -146,8 +153,8 @@ export class OrgScanner {
     };
     if (r.archived) return { ...base, kind: 'other' };
     if (before?.kindPushedAt !== undefined && before.kindPushedAt === (r.pushedAt ?? '')) return { ...base, kind: before.kind, kindPushedAt: before.kindPushedAt };
-    const names = await ghTopNames(this.exec, `${org}/${r.name}`);
-    // GitHub did not answer: keep what was known and look again next time.
+    const names = r.empty ? [] : await host.topNames(r.path);
+    // The host did not answer: keep what was known and look again next time.
     if (!names) return { ...base, kind: before?.kind ?? ('other' as RepoKind) };
     return { ...base, kind: classifyRepo(names), kindPushedAt: r.pushedAt ?? '' };
   }

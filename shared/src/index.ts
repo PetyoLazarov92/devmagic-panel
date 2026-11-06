@@ -2,6 +2,7 @@ export * from './actions.js';
 export * from './environment.js';
 export * from './sites.js';
 export * from './git.js';
+export * from './repo-host.js';
 export * from './project.js';
 export * from './network.js';
 export * from './addresses.js';

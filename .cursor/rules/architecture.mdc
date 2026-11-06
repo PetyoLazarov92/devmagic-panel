@@ -22,7 +22,8 @@ browser ─https─> Apache (local.devmagic, local CA cert) ─proxy─> Fastify
 | `server/src/exec.ts` | `Executor` (no shell) and `runRoot()` for `sudo -n dmp-root` |
 | `server/src/config.ts` | `config.env` parser (same rules as `scripts/lib/config.sh`), user paths |
 | `server/src/cli.ts` | `setup`, `set-password` and `mcp`, run by install.sh and MCP clients |
-| `server/src/org/` | Installing from an organization: Claude Code runs (`claude-code.ts`), the GitHub CLI (`github-cli.ts`), repo scans (`scan.ts`), reading a repo and its links (`read.ts`), dump downloads (`dumps.ts`), routes |
+| `server/src/org/` | Installing from an organization or group: Claude Code runs (`claude-code.ts`), repo scans (`scan.ts`), reading a repo and its links (`read.ts`), dump downloads (`dumps.ts`), routes |
+| `server/src/repo-hosts/` | Where site repos are listed from, each through its own CLI and sign-in: GitHub (`github.ts`, gh) and GitLab (`gitlab.ts`, `glab api --hostname`), behind one `RepoHost`; open pull and merge requests; the GitLab hosts in use. Namespace refs (`acme`, `gitlab.com/acme/web`) are in `shared/src/repo-host.ts` |
 | `server/src/drafts.ts` | Install drafts: the wizard's answers for 24 hours after the last change, kept while their install runs |
 | `server/src/sites/archive.ts` | Archiving the current site before a reinstall or a restore over it, with an Undo that puts it back |
 | `server/src/release-source.ts` | The ways to the releases, tried in order: public HTTPS, the GitHub CLI, git on the `pkg/vX.Y.Z` package tags; no token |

@@ -8,7 +8,7 @@ import { Drafts } from '../src/drafts.js';
 import { Jobs, type JobView } from '../src/jobs.js';
 import { ClaudeCodeError, claudeStatus, DENIED_TOOLS, findClaude, runClaude } from '../src/org/claude-code.js';
 import { DumpRefused, planUseDownloaded, recentDownloads, uploadIdOf } from '../src/org/dumps.js';
-import { ghOrgs, ghRepoPage, ghStatus } from '../src/org/github-cli.js';
+import { ghOrgs, ghRepoPage, ghStatus } from '../src/repo-hosts/github.js';
 import { checkAccess, docPaths, readRepo } from '../src/org/read.js';
 import { CHECK_EVERY_MS, LIST_EVERY_MS, localOf, OrgScanner } from '../src/org/scan.js';
 import { readUpload } from '../src/sites/uploads.js';
@@ -273,6 +273,74 @@ describe('an organization scan', () => {
     await Promise.all([scanner.repos('acme', none, 'auto'), scanner.repos('acme', none, 'auto')]);
     expect(gh.pages()).toEqual([1]);
   });
+
+  /** gitlab.com as the fake answers it: a group's projects with its subgroups', newest activity first, and their trees. */
+  function gitlab(projects: Array<Record<string, unknown>>, trees: Record<string, string[] | null> = {}) {
+    const fake = fakeExec({
+      'glab api --hostname gitlab.com user': { stdout: JSON.stringify({ username: 'alex' }) },
+      glab: (call) => {
+        const path = call.args[3] as string;
+        const tree = /^projects\/(.+)\/repository\/tree/.exec(path);
+        if (tree) {
+          const found = trees[decodeURIComponent(tree[1] as string)];
+          return found === null ? { code: 1, stderr: 'HTTP 502 Bad Gateway' } : found === undefined ? { code: 1, stderr: '404 Tree Not Found' } : { stdout: JSON.stringify(found.map((name) => ({ name }))) };
+        }
+        const page = Number(/page=(\d+)$/.exec(path)?.[1] ?? '1');
+        return { stdout: JSON.stringify(projects.slice((page - 1) * 100, page * 100)) };
+      },
+    });
+    return fake;
+  }
+  const project = (path: string, extra: Record<string, unknown> = {}) => ({
+    name: path.split('/').at(-1), path_with_namespace: path, description: null, archived: false, last_activity_at: '2026-10-02T00:00:00Z', default_branch: 'main',
+    ssh_url_to_repo: `git@gitlab.com:${path}.git`, web_url: `https://gitlab.com/${path}`, ...extra,
+  });
+
+  it('lists a GitLab group with its subgroups, keeps two projects of one name apart, and matches sites by their remote', async () => {
+    const fake = gitlab(
+      [project('acme/web/site'), project('acme/apps/site', { last_activity_at: '2026-10-01T00:00:00Z' }), project('acme/empty', { empty_repo: true, default_branch: null, last_activity_at: null })],
+      { 'acme/web/site': ['wp-content', 'index.php'], 'acme/apps/site': ['style.css', 'functions.php'] },
+    );
+    const local = { ...none, sites: [site({ git: { remote: 'https://gitlab.com/acme/web/site.git', branch: 'main', upstream: null, dirty: 0, ahead: 0, behind: 0, lastCommit: { hash: 'abc1234', subject: 'Start', author: 'Alex Morgan', date: '2026-10-01T00:00:00Z' } } })] };
+    const store = new RunStore(':memory:');
+    const { repos } = await new OrgScanner(fake.exec, store).repos('gitlab.com/acme', local, 'auto');
+    expect(repos.map((r) => [r.fullName, r.kind])).toEqual([['acme/web/site', 'site'], ['acme/apps/site', 'theme'], ['acme/empty', 'other']]);
+    expect(repos[0]).toMatchObject({ org: 'gitlab.com/acme', name: 'site', sshUrl: 'git@gitlab.com:acme/web/site.git', local: { installed: [{ domain: 'local.acme.com', how: 'hand' }] } });
+    expect(store.orgRepos('gitlab.com/acme')).toHaveLength(3);
+    const listing = fake.calls.find((c) => (c.args[3] as string).startsWith('groups/'));
+    expect(listing?.args).toEqual(['api', '--hostname', 'gitlab.com', 'groups/acme/projects?include_subgroups=true&with_shared=false&min_access_level=20&order_by=last_activity_at&sort=desc&per_page=100&page=1']);
+    // An empty project is not looked into.
+    expect(fake.calls.filter((c) => (c.args[3] as string).includes('/repository/tree')).map((c) => c.args[3])).toEqual([
+      'projects/acme%2Fweb%2Fsite/repository/tree?per_page=100',
+      'projects/acme%2Fapps%2Fsite/repository/tree?per_page=100',
+    ]);
+  });
+
+  it("reads your own GitLab account's projects as a user, and keeps the stored list with the problem when glab cannot", async () => {
+    const mine = gitlab([]);
+    await new OrgScanner(mine.exec, new RunStore(':memory:')).repos('gitlab.com/alex', none, 'auto');
+    expect(mine.calls.map((c) => c.args[3])).toEqual(['user', 'users/alex/projects?order_by=last_activity_at&sort=desc&per_page=100&page=1']);
+    const store = new RunStore(':memory:');
+    let now = Date.parse('2026-10-26T09:00:00Z');
+    await new OrgScanner(gitlab([project('acme/web/site')], { 'acme/web/site': ['wp-admin'] }).exec, store, () => now).repos('gitlab.com/acme', none, 'auto');
+    now += 2 * 3_600_000;
+    const down = fakeExec({ 'glab api --hostname gitlab.com user': { stdout: JSON.stringify({ username: 'alex' }) }, glab: { code: 1, stderr: '403 Forbidden' } });
+    const r = await new OrgScanner(down.exec, store, () => now).repos('gitlab.com/acme', none, 'check');
+    expect(r.repos.map((x) => x.fullName)).toEqual(['acme/web/site']);
+    expect(r.problem).toBe('the GitLab CLI cannot list the projects of acme on gitlab.com: 403 Forbidden');
+  });
+
+  it('checks GitLab further back than GitHub, as its activity time moves about once an hour', async () => {
+    const store = new RunStore(':memory:');
+    let now = Date.parse('2026-10-26T09:00:00Z');
+    const many = Array.from({ length: 100 }, (_, i) => project(`acme/p${i}`, { last_activity_at: new Date(now - 30 * 60_000 - i * 1000).toISOString() }));
+    await new OrgScanner(gitlab(many).exec, store, () => now).repos('gitlab.com/acme', none, 'auto');
+    now += 2 * 3_600_000;
+    // The page ends 30 minutes before the last check: within GitLab's 70 minute overlap, so the next page is read too.
+    const again = gitlab(many);
+    await new OrgScanner(again.exec, store, () => now).repos('gitlab.com/acme', none, 'check');
+    expect(again.calls.filter((c) => (c.args[3] as string).startsWith('groups/')).map((c) => /page=(\d+)$/.exec(c.args[3] as string)?.[1])).toEqual(['1', '2']);
+  });
 });
 
 describe('reading a repo', () => {
@@ -523,16 +591,25 @@ describe('Claude Code steps as jobs', () => {
 
 describe('organization settings', () => {
   it('start from the recommended model and effort for each step', () => {
-    expect(orgSettingsInput.parse({ selected: [] })).toEqual({ selected: [], ...DEFAULT_CLAUDE_STEPS });
+    expect(orgSettingsInput.parse({ selected: [] })).toEqual({ selected: [], gitlabHosts: [], ...DEFAULT_CLAUDE_STEPS });
     expect(DEFAULT_CLAUDE_STEPS).toEqual({ read: { model: 'sonnet', effort: 'medium', budgetUsd: 0.5 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } });
   });
 
   it('carry a model and cap saved before effort came over to both steps', () => {
     expect(orgSettingsInput.parse({ selected: ['acme'], model: 'opus', budgetUsd: 1 })).toEqual({
       selected: ['acme'],
+      gitlabHosts: [],
       read: { model: 'opus', effort: 'medium', budgetUsd: 1 },
       access: { model: 'opus', effort: 'low', budgetUsd: 1 },
     });
     expect(orgSettingsInput.safeParse({ selected: [], read: { model: 'gpt', effort: 'low', budgetUsd: 1 } }).success).toBe(false);
+  });
+
+  it('take GitLab groups with their host and your own GitLab hosts, and refuse anything else', () => {
+    const parsed = orgSettingsInput.parse({ selected: ['acme', 'gitlab.com/acme/web', 'git.acme.test/acme'], gitlabHosts: [' Git.Acme.Test '] });
+    expect(parsed.selected).toEqual(['acme', 'gitlab.com/acme/web', 'git.acme.test/acme']);
+    expect(parsed.gitlabHosts).toEqual(['git.acme.test']);
+    for (const selected of [['gitlab.com/../x'], ['acme/web'], ['gitlab.com/acme/site.git'], ['-acme']]) expect(orgSettingsInput.safeParse({ selected }).success).toBe(false);
+    for (const host of ['https://git.acme.test', 'localhost', 'github.com', 'git.acme.test/x']) expect(orgSettingsInput.safeParse({ selected: [], gitlabHosts: [host] }).success).toBe(false);
   });
 });

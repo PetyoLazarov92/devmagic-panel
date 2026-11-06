@@ -72,7 +72,10 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    the browser, and the assistant's settings are never registry actions.
    Updates need no token: the panel reads its releases through public HTTPS,
    the GitHub CLI or git (`server/src/release-source.ts`), and gh and git keep
-   their own sign-in, which the panel never reads.
+   their own sign-in, which the panel never reads. Site repos are listed the
+   same way (`server/src/repo-hosts/`): GitHub through gh, GitLab (gitlab.com
+   and your own hosts) through `glab api --hostname` only; the panel never
+   reads glab's config, keyring or token either, and never sets one.
    When no MySQL account you have signs in, `setup` can make the panel's own,
    `devmagic_panel@localhost`, with `sudo mysql` on the terminal (sudo asks
    for your password; never through the sudoers rule) and a generated

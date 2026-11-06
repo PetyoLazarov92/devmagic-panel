@@ -7,7 +7,9 @@ import type { SystemConfig } from './config.js';
 import type { ExecResult, Executor } from './exec.js';
 import { claudeStatus } from './org/claude-code.js';
 import { rcloneRemote } from './org/dumps.js';
-import { ghStatus } from './org/github-cli.js';
+import { ghStatus } from './repo-hosts/github.js';
+import { glabOverview } from './repo-hosts/index.js';
+import { glabTooOld, MIN_GLAB } from './repo-hosts/gitlab.js';
 import { runRoot } from './exec.js';
 import { installedCores, readWpcoreConfig } from './wpcore.js';
 import type { Secrets } from './secrets.js';
@@ -42,6 +44,8 @@ export interface CheckContext {
   dmpRoot: string;
   /** The panel's own installation, checked when given: its checkout and running version. */
   self?: { repo: string; version: string };
+  /** The GitLab hosts in use (settings, selected groups, the sites' remotes); none shows nothing about GitLab. */
+  gitlabHosts?: () => Promise<string[]>;
 }
 
 export const NSS_NICKNAME = 'devmagic-panel Local CA';
@@ -331,7 +335,13 @@ function hostsChecks(ctx: CheckContext): Check[] {
 
 /** What installing a site from an organization needs; all optional, since the rest of the panel works without. */
 async function organizationChecks(ctx: CheckContext): Promise<Check[]> {
-  const [claude, gh, rclone] = await Promise.all([claudeStatus(ctx.exec, ctx.paths.home, ctx.paths.searchPath ?? process.env.PATH ?? ''), ghStatus(ctx.exec), rcloneRemote(ctx.exec)]);
+  const gitlabHosts = (await ctx.gitlabHosts?.().catch(() => [])) ?? [];
+  const [claude, gh, glab, rclone] = await Promise.all([
+    claudeStatus(ctx.exec, ctx.paths.home, ctx.paths.searchPath ?? process.env.PATH ?? ''),
+    ghStatus(ctx.exec),
+    gitlabHosts.length ? glabOverview(ctx.exec, gitlabHosts) : null,
+    rcloneRemote(ctx.exec),
+  ]);
   const where = `Claude Code ${claude.version ?? ''} at ${claude.path ?? ''}`;
   return [
     !claude.found
@@ -344,19 +354,38 @@ async function organizationChecks(ctx: CheckContext): Promise<Check[]> {
     gh.signedIn
       ? ok('access.githubCli', 'GitHub CLI', `signed in as ${gh.user}; it lists your organizations and their repos`, { optional: true })
       : warn('access.githubCli', 'GitHub CLI', `${gh.problem ?? 'not set up'}: it lists the repos of your organizations`, { optional: true }),
+    ...(glab ? gitlabCliChecks(glab) : []),
     rclone.remote
       ? ok('tools.rclone', 'rclone', `downloads database dumps from Google Drive through the ${rclone.remote} remote`, { optional: true })
       : warn('tools.rclone', 'rclone', rclone.installed ? 'no Google Drive remote: run rclone config once, or download dumps in the browser' : 'not installed: dumps from Google Drive are downloaded in the browser instead', { optional: true }),
   ];
 }
 
-async function accessChecks(ctx: CheckContext): Promise<Check[]> {
-  const sudo = await ctx.exec('sudo', ['-n', '-l', ctx.dmpRoot]);
-  const ssh = await ctx.exec(
-    'ssh',
-    ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'StrictHostKeyChecking=accept-new', 'git@github.com'],
-    { timeoutMs: 10_000 },
+/** The GitLab CLI, one line per GitLab host in use; optional, as cloning only needs SSH. */
+function gitlabCliChecks(glab: NonNullable<Awaited<ReturnType<typeof glabOverview>>>): Check[] {
+  const min = MIN_GLAB.join('.');
+  if (!glab.installed) {
+    return [warn('access.gitlabCli', 'GitLab CLI', `not installed: it lists the projects of your GitLab groups. Install glab ${min} or newer (sudo apt install glab where your release has it), then sign in with glab auth login`, { optional: true })];
+  }
+  const version = glab.version ? `glab ${glab.version}` : 'glab';
+  if (glab.version && glabTooOld(glab.version)) {
+    return [warn('access.gitlabCli', 'GitLab CLI', `${version} is older than ${min}, the oldest the panel works with: update it`, { optional: true })];
+  }
+  return glab.hosts.map((h) =>
+    h.signedIn
+      ? ok(`access.gitlabCli.${h.host}`, `GitLab CLI on ${h.host}`, `${version}, signed in as ${h.user}; it lists your groups and their projects`, { optional: true })
+      : warn(`access.gitlabCli.${h.host}`, `GitLab CLI on ${h.host}`, `${version}, ${h.problem ?? 'not signed in'}: it lists the projects of your groups`, { optional: true }),
   );
+}
+
+/** `ssh -T git@<host>`: no shell, never a prompt, a new host key taken once. */
+function sshHello(ctx: CheckContext, host: string) {
+  return ctx.exec('ssh', ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'StrictHostKeyChecking=accept-new', `git@${host}`], { timeoutMs: 10_000 });
+}
+
+async function accessChecks(ctx: CheckContext): Promise<Check[]> {
+  const gitlabHosts = (await ctx.gitlabHosts?.().catch(() => [])) ?? [];
+  const [sudo, ssh, ...gitlab] = await Promise.all([ctx.exec('sudo', ['-n', '-l', ctx.dmpRoot]), sshHello(ctx, 'github.com'), ...gitlabHosts.map((h) => sshHello(ctx, h))]);
   const sshText = `${ssh.stdout}\n${ssh.stderr}`;
   return [
     sudo.code === 0
@@ -365,6 +394,14 @@ async function accessChecks(ctx: CheckContext): Promise<Check[]> {
     /successfully authenticated/i.test(sshText)
       ? ok('access.github', 'GitHub over SSH', firstLine(sshText.replace(/^\s+/, '')))
       : warn('access.github', 'GitHub over SSH', 'cannot authenticate, cloning private repos will fail'),
+    // GitLab answers "Welcome to GitLab, @alex!"; a warn at most, since only the sites from that host need it.
+    ...gitlabHosts.map((host, i) => {
+      const r = gitlab[i];
+      const text = r ? `${r.stdout}\n${r.stderr}` : '';
+      return /welcome to gitlab/i.test(text)
+        ? ok(`access.gitlab.${host}`, `${host} over SSH`, firstLine(text.replace(/^\s+/, '')), { optional: true })
+        : warn(`access.gitlab.${host}`, `${host} over SSH`, `cannot authenticate: add your SSH key to ${host}, or cloning its private repos will fail`, { optional: true });
+    }),
   ];
 }
 

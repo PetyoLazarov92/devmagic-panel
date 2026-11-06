@@ -337,7 +337,7 @@ function siteMenuItems(site: Site) {
   ];
 }
 
-/** The branch name, linking to the branch on GitHub (or GitLab, Bitbucket) when the remote is known. */
+/** The branch name, linking to the branch on its host (GitHub, GitLab, Bitbucket, Gitea) when the remote is known. */
 function BranchLink({ git }: { git: SiteGit }) {
   const url = git.remote ? branchWebUrl(git.remote, git.branch) : null;
   if (!url) return <span className="truncate font-mono text-[13px]">{git.branch}</span>;
@@ -346,7 +346,7 @@ function BranchLink({ git }: { git: SiteGit }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Open ${git.branch} on ${repoWeb(git.remote ?? '')?.provider ?? 'the git host'}`}
+      title={`Open ${git.branch} on ${repoWeb(git.remote ?? '')?.name ?? 'the git host'}`}
       className="relative z-10 inline-flex min-w-0 items-center gap-1 rounded font-mono text-[13px] underline-offset-2 hover:underline"
     >
       <span className="truncate">{git.branch}</span>
@@ -372,8 +372,8 @@ function gitMenuItems(site: Site) {
   if (!web || !branch) return [];
   const open = (url: string) => () => void window.open(url, '_blank', 'noopener');
   return [
-    { label: `Open branch on ${web.provider}`, icon: <GitBranch />, onSelect: open(branch) },
-    { label: `Open repository on ${web.provider}`, icon: <FolderGit2 />, onSelect: open(web.repoUrl) },
+    { label: `Open branch on ${web.name}`, icon: <GitBranch />, onSelect: open(branch) },
+    { label: `Open repository on ${web.name}`, icon: <FolderGit2 />, onSelect: open(web.repoUrl) },
   ];
 }
 

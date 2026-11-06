@@ -456,13 +456,14 @@ export class RunStore {
    * Saves what a scan found. A full list replaces the organization's repos, so
    * deleted, renamed and transferred ones go; a check only adds and updates.
    */
-  saveOrgScan(org: string, repos: Array<{ name: string }>, full: boolean, at: string): void {
+  /** keyOf names a repo within its namespace: its name on GitHub, its full path in a GitLab group, where subgroups can repeat a name. */
+  saveOrgScan<R extends { name: string }>(org: string, repos: R[], full: boolean, at: string, keyOf: (r: R) => string = (r) => r.name): void {
     const key = org.toLowerCase();
     this.db.exec('BEGIN');
     try {
       if (full) this.db.prepare('DELETE FROM org_repos WHERE org = ?').run(key);
       const put = this.db.prepare('INSERT INTO org_repos (org, name, record) VALUES (?, ?, ?) ON CONFLICT(org, name) DO UPDATE SET record = excluded.record');
-      for (const r of repos) put.run(key, r.name, JSON.stringify(r));
+      for (const r of repos) put.run(key, keyOf(r), JSON.stringify(r));
       this.db
         .prepare(`INSERT INTO org_scans (org, checked_at, listed_at) VALUES (?, ?, ?) ON CONFLICT(org) DO UPDATE SET checked_at = excluded.checked_at${full ? ', listed_at = excluded.listed_at' : ''}`)
         .run(key, at, at);

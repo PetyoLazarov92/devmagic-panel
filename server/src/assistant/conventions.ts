@@ -43,7 +43,7 @@ How sites are set up on this machine. The assistant reads this before it fills i
 
 ## Repos
 
-- Clone over SSH (\`git@github.com:team/repo.git\`).
+- Clone over SSH (\`git@github.com:team/repo.git\`, \`git@gitlab.com:group/sub/repo.git\`).
 - A repo's own README and CLAUDE.md win over this file.
 `;
 }

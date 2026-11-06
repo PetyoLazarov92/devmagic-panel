@@ -1,5 +1,5 @@
 import type { AccessReport, AccessResult, ClaudeEffort, ClaudeUsage, ClaudeModel, ClaudeRun, ClaudeStep, OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, Prefill, ReadResult, RepoFacts, Site, UploadResult } from '@devmagic-panel/shared';
-import { accessKey, CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE_STEPS, prefillFromFacts, readKey, REPO_KIND_LABELS, gitUrl, repoWeb } from '@devmagic-panel/shared';
+import { accessKey, CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE_STEPS, gitlabHost, namespaceLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, REPO_KIND_LABELS, gitUrl, repoWeb } from '@devmagic-panel/shared';
 import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, ExternalLink, FileArchive, LoaderCircle, RefreshCw, Search, Sparkles, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BranchPicker } from '@/components/branch-picker';
@@ -8,7 +8,7 @@ import { DumpFactsCard } from '@/components/dump-facts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Select } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { Input, Textarea } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
 import { api } from '@/lib/api';
 import { failureOf, resumeStep, runSource, unskipAccess, usageHover, usageText } from '@/lib/claude-steps';
@@ -88,8 +88,10 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
   const [pasted, setPasted] = useState('');
   const selected = status?.settings.selected ?? [];
   const current = org.name || selected[0] || '';
-  const signedIn = status?.gh.signedIn ?? false;
-  // The stored list shows at once, without the GitHub CLI; then, signed in, what is due is read behind it.
+  // Signed in to the CLI of the namespace shown (gh or glab on its host), and to any of them for picking.
+  const signedIn = status ? cliSignedIn(status, current) : false;
+  const anySignedIn = status ? status.gh.signedIn || status.glab.hosts.some((h) => h.signedIn) : false;
+  // The stored list shows at once, without the CLI; then, signed in, what is due is read behind it.
   const [list, setList] = useState<OrgRepoList | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [scanning, setScanning] = useState<OrgScanMode | null>(null);
@@ -127,31 +129,43 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
   }
   function pickPasted() {
     const url = pasted.trim();
-    const m = /[:/]([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/.exec(url);
-    if (!gitUrl.safeParse(url).success || !m) return;
-    pick({ org: m[1] as string, name: m[2] as string, fullName: `${m[1]}/${m[2]}`, sshUrl: url, url: '', archived: false, kind: 'site' });
+    const repo = pastedRepo(url);
+    if (repo) pick(repo);
   }
 
-  if (!status) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Checking Claude Code and the GitHub CLI...</p>;
+  if (!status) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Checking Claude Code, the GitHub CLI and the GitLab CLI...</p>;
+  const shownNs = parseNamespaceRef(current);
   return (
     <WithClaudeCard card={<ClaudeCard status={status} org={org} setState={setState} next={nextClaudeStep(org)} />}>
     <div className="grid max-w-4xl gap-4">
-      {!signedIn && (
+      {!anySignedIn ? (
         <Notice tone="warning">
-          The GitHub CLI {stored ? 'checks for new repos' : "lists your organizations' repos"}: {status.gh.problem ?? 'it is not set up'}. Install it with <code className="font-mono">sudo apt install gh</code>, sign in with{' '}
-          <code className="font-mono">gh auth login</code>, then come back. {stored ? 'The list below is from the last check and still installs, as cloning uses git.' : 'Or paste a repo URL below.'}
+          The GitHub CLI lists your organizations' repos and the GitLab CLI your groups' projects: {status.gh.problem ?? 'gh is not set up'}; {status.glab.hosts[0]?.problem ?? 'glab is not set up'}. Install the one for your host (
+          <code className="font-mono">sudo apt install gh</code> or <code className="font-mono">sudo apt install glab</code>), sign in with <code className="font-mono">gh auth login</code> or{' '}
+          <code className="font-mono">glab auth login</code>, then come back. {stored ? 'The list below is from the last check and still installs, as cloning uses git.' : 'Or paste a repo URL below.'}
         </Notice>
+      ) : (
+        current && !signedIn && shownNs && (
+          <Notice tone="warning">
+            {shownNs.provider === 'github' ? (
+              <>The GitHub CLI checks for new repos of {shownNs.path}: {status.gh.problem ?? 'it is not set up'}. Sign in with <code className="font-mono">gh auth login</code>.</>
+            ) : (
+              <>The GitLab CLI checks for new projects on {shownNs.host}: {status.glab.hosts.find((h) => h.host === shownNs.host)?.problem ?? 'it is not set up'}. Sign in with <code className="font-mono">glab auth login{shownNs.host === 'gitlab.com' ? '' : ` --hostname ${shownNs.host}`}</code>.</>
+            )}{' '}
+            The list below is from the last check and still installs, as cloning uses git.
+          </Notice>
+        )
       )}
-      {(signedIn || selected.length > 0) && (
+      {(anySignedIn || selected.length > 0) && (
         <>
           <div className="flex flex-wrap items-end gap-3">
-            <Field htmlFor="org" label="Organization">
+            <Field htmlFor="org" label="Organization or group">
               <Select id="org" value={current} onChange={(e) => setState((s) => switchOrg(s, e.target.value))} wrapClassName="min-w-56">
-                {selected.length === 0 && <option value="">Pick organizations first</option>}
-                {selected.map((o) => <option key={o} value={o}>{o}</option>)}
+                {selected.length === 0 && <option value="">Pick organizations or groups first</option>}
+                {selected.map((o) => <option key={o} value={o}>{namespaceLabel(o)}</option>)}
               </Select>
             </Field>
-            {signedIn && <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Done' : 'Organizations to scan'}</Button>}
+            {anySignedIn && <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Done' : 'Organizations and groups to scan'}</Button>}
             <span className="flex-1" />
             {signedIn && (
               <div className="flex items-center gap-1">
@@ -166,13 +180,13 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
               </div>
             )}
           </div>
-          {signedIn && (editing || selected.length === 0) && <OrgPicker status={status} />}
+          {anySignedIn && (editing || selected.length === 0) && <OrgPicker status={status} />}
           {current && (
             <>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Filter the repos of ${current}`} aria-label="Filter repos" className="pl-9" />
+                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Filter the repos of ${shownNs?.path ?? current}`} aria-label="Filter repos" className="pl-9" />
                 </div>
                 <Checkbox id="sites-only" checked={sitesOnly} onChange={setSitesOnly} label="WordPress sites only" />
               </div>
@@ -180,16 +194,16 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
               {list?.problem && (
                 <p role="alert" className="flex items-start gap-2 text-sm text-warning">
                   <CircleAlert className="mt-0.5 size-4 shrink-0" />
-                  <span>Could not read GitHub: {list.problem}.{stored && list.checkedAt ? ` Showing the list from ${ago(list.checkedAt)}.` : ''}</span>
+                  <span>Could not read {shownNs?.host === 'github.com' ? 'GitHub' : (shownNs?.host ?? 'the host')}: {list.problem}.{stored && list.checkedAt ? ` Showing the list from ${ago(list.checkedAt)}.` : ''}</span>
                 </p>
               )}
               {scanning && !stored ? (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the repos of {current}; the first scan looks into each one, later ones only into new pushes...</p>
+                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the repos of {shownNs?.path ?? current}; the first scan looks into each one, later ones only into new pushes...</p>
               ) : (
                 (scanning || list?.checkedAt) && (
                   <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
                     {scanning && <LoaderCircle className="size-3.5 animate-spin" />}
-                    {scanning === 'full' ? 'Reading every repo of ' + current + '...' : scanning ? 'Checking for new repos...' : `${list?.repos.length ?? 0} repos, checked for new ones ${ago(list?.checkedAt as string)}`}
+                    {scanning === 'full' ? 'Reading every repo of ' + (shownNs?.path ?? current) + '...' : scanning ? 'Checking for new repos...' : `${list?.repos.length ?? 0} repos, checked for new ones ${ago(list?.checkedAt as string)}`}
                     {!scanning && list?.listedAt && `, all listed ${ago(list.listedAt)}`}
                   </p>
                 )
@@ -205,7 +219,7 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
                       className={cn('grid w-full gap-1 rounded-lg border bg-card py-3 pr-11 pl-4 text-left text-sm transition-colors hover:border-primary/50', org.repo?.fullName === r.fullName && 'border-primary ring-3 ring-primary/15')}
                     >
                       <span className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[13px] font-medium">{r.name}</span>
+                        <span className="font-mono text-[13px] font-medium">{shownNs && r.fullName.toLowerCase().startsWith(`${shownNs.path.toLowerCase()}/`) ? r.fullName.slice(shownNs.path.length + 1) : r.name}</span>
                         <Badge>{REPO_KIND_LABELS[r.kind]}</Badge>
                         {r.local?.installed?.map((i) => <Badge key={`${i.domain}${i.path ?? ''}`} tone="warning">installed as {i.domain}{i.path ?? ''}</Badge>)}
                         {r.local?.archived && <Badge>{r.local.archived.count === 1 ? '1 archived copy' : `${r.local.archived.count} archived copies`}</Badge>}
@@ -227,8 +241,8 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
       <details className="rounded-lg border bg-card px-4 py-3 text-sm" open={!signedIn && !stored}>
         <summary className="cursor-pointer font-medium">Paste a repo URL instead</summary>
         <div className="mt-3 flex gap-2">
-          <Input value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="git@github.com:acme/site.git" className="font-mono text-[13px]" spellCheck={false} aria-label="Repo URL" />
-          <Button variant="outline" disabled={!gitUrl.safeParse(pasted.trim()).success} onClick={pickPasted}>Use it</Button>
+          <Input value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="git@gitlab.com:acme/web/site.git" className="font-mono text-[13px]" spellCheck={false} aria-label="Repo URL" />
+          <Button variant="outline" disabled={!pastedRepo(pasted.trim())} onClick={pickPasted}>Use it</Button>
         </div>
       </details>
       {org.repo && (
@@ -242,16 +256,42 @@ export function OrgStep({ state, setState, status, blank }: { state: WizardState
 /** The Claude Code step still ahead for this repo: none once it was read and its links checked or skipped. */
 const nextClaudeStep = (org: OrgState): ClaudeStep | null => (org.read.status !== 'done' ? 'read' : org.access.status === 'done' || org.access.status === 'skipped' ? null : 'access');
 
-/** Opens a repo of the list on GitHub in a new tab, beside its row's button. */
+/** Signed in to the CLI that lists this namespace: gh for a GitHub organization, glab on the group's host. */
+function cliSignedIn(status: OrgStatus, ref: string): boolean {
+  const ns = parseNamespaceRef(ref);
+  if (!ns) return false;
+  return ns.provider === 'github' ? status.gh.signedIn : Boolean(status.glab.hosts.find((h) => h.host === ns.host)?.signedIn);
+}
+
+/**
+ * A pasted URL as a repo of the list: its whole path on the host, so a
+ * project in a GitLab subgroup (acme/web/site) keeps its groups. Null for
+ * anything that is not a git URL.
+ */
+function pastedRepo(url: string): OrgRepo | null {
+  const web = gitUrl.safeParse(url).success ? repoWeb(url) : null;
+  if (!web) return null;
+  const parsed = new URL(web.repoUrl);
+  const path = parsed.pathname.slice(1);
+  const slash = path.lastIndexOf('/');
+  const group = path.slice(0, slash);
+  // The organization or group, when it is one the panel can list; other hosts install without one.
+  const ref = web.provider === 'GitHub' ? group : web.provider === 'GitLab' ? `${parsed.hostname}/${group}` : '';
+  const org = parseNamespaceRef(ref) ? ref : '';
+  return { org, name: path.slice(slash + 1), fullName: path, sshUrl: url, url: web.repoUrl, archived: false, kind: 'site' };
+}
+
+/** Opens a repo of the list on its host in a new tab, beside its row's button. */
 function RepoLink({ url, name }: { url: string | undefined; name: string }) {
   if (!url) return null;
+  const where = repoWeb(url)?.name ?? 'its host';
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Open ${name} on GitHub`}
-      aria-label={`Open ${name} on GitHub`}
+      title={`Open ${name} on ${where}`}
+      aria-label={`Open ${name} on ${where}`}
       className="absolute top-2.5 right-2.5 grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       <ExternalLink className="size-3.5" />
@@ -275,7 +315,7 @@ function OrgBranch({ url, defaultBranch, branch, setState }: { url: string; defa
       (found) => {
         if (!current) return;
         setRead({ url, branches: found.branches ?? [], ...(found.defaultBranch ? { defaultBranch: found.defaultBranch } : {}) });
-        // A pasted URL has no default branch from GitHub: take the remote's.
+        // A pasted URL has no default branch from its host: take the remote's.
         if (found.defaultBranch) update.current((s) => (s.repoUrl === url && !s.branch ? { ...s, branch: found.defaultBranch as string } : s));
       },
       (err: Error) => current && setRead({ url, error: err.message }),
@@ -306,30 +346,66 @@ function OrgBranch({ url, defaultBranch, branch, setState }: { url: string; defa
   );
 }
 
-/** Which of your organizations the panel scans; saved in the panel's settings. */
+/**
+ * Which of your organizations and groups the panel scans, from every CLI that
+ * is signed in, and your own GitLab hosts; saved in the panel's settings.
+ */
 function OrgPicker({ status }: { status: OrgStatus }) {
   const orgs = useAsync(() => api.orgOrgs(), []);
   const [settings, setSettings] = useState(status.settings);
   const [saving, setSaving] = useState(false);
+  const [hostsText, setHostsText] = useState(status.settings.gitlabHosts.join('\n'));
+  const [hostsError, setHostsError] = useState<string | null>(null);
   async function save(next: typeof settings) {
     setSettings(next);
     setSaving(true);
     try {
-      Object.assign(status.settings, await api.saveOrgSettings(next));
+      const saved = await api.saveOrgSettings(next);
+      Object.assign(status.settings, saved);
+      registerGitlabHosts(saved.gitlabHosts);
     } finally {
       setSaving(false);
     }
   }
   const selected = settings.selected;
-  const toggle = (name: string, on: boolean) => save({ ...settings, selected: on ? [...selected, name] : selected.filter((n) => n !== name) });
+  const toggle = (ref: string, on: boolean) => save({ ...settings, selected: on ? [...selected, ref] : selected.filter((n) => n !== ref) });
+  async function saveHosts() {
+    const hosts = hostsText.split(/[\s,]+/).map((h) => h.trim().toLowerCase()).filter(Boolean);
+    const bad = hosts.find((h) => !gitlabHost.safeParse(h).success);
+    if (bad) return setHostsError(`${bad} is not a hostname like gitlab.acme.test`);
+    setHostsError(null);
+    await save({ ...settings, gitlabHosts: [...new Set(hosts)].filter((h) => h !== 'gitlab.com') });
+    orgs.reload();
+  }
+  // One block per host, GitHub first, then gitlab.com and yours.
+  const byHost = new Map<string, Array<{ ref: string; label: string }>>();
+  for (const n of orgs.data?.namespaces ?? []) byHost.set(n.host, [...(byHost.get(n.host) ?? []), { ref: n.ref, label: n.provider === 'github' ? n.ref : parseNamespaceRef(n.ref)?.path ?? n.ref }]);
   return (
-    <div className="rounded-lg border bg-card px-4 py-3 text-sm">
-      <p className="font-medium">Organizations to scan {saving && <LoaderCircle className="inline size-3.5 animate-spin" />}</p>
-      <p className="text-muted-foreground">The ones you belong to on GitHub, and your own account.</p>
-      {orgs.error && <p role="alert" className="mt-2 text-danger">{orgs.error}</p>}
-      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
-        {(orgs.data ?? []).map((o) => <Checkbox key={o} id={`org-${o}`} checked={selected.includes(o)} onChange={(v) => void toggle(o, v)} label={o} />)}
+    <div className="grid gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
+      <div>
+        <p className="font-medium">Organizations and groups to scan {saving && <LoaderCircle className="inline size-3.5 animate-spin" />}</p>
+        <p className="text-muted-foreground">The GitHub organizations and GitLab groups you belong to, and your own accounts. A GitLab group is scanned with its subgroups.</p>
       </div>
+      {orgs.error && <p role="alert" className="text-danger">{orgs.error}</p>}
+      {orgs.data?.problems.map((p) => <p key={p} role="alert" className="text-warning">{p}</p>)}
+      {[...byHost].map(([host, list]) => (
+        <div key={host}>
+          <p className="text-xs font-medium text-muted-foreground">{host === 'github.com' ? 'GitHub' : host}</p>
+          <div className="mt-1 flex flex-wrap gap-x-5 gap-y-2">
+            {list.map((o) => <Checkbox key={o.ref} id={`org-${o.ref}`} checked={selected.includes(o.ref)} onChange={(v) => void toggle(o.ref, v)} label={o.label} />)}
+          </div>
+        </div>
+      ))}
+      <Field
+        htmlFor="gitlab-hosts"
+        label="Your own GitLab hosts"
+        hint={hostsError ? <span className="text-danger">{hostsError}</span> : <>One per line, like gitlab.acme.test; gitlab.com is always listed. Sign in to each once with <code className="font-mono whitespace-nowrap">glab auth login --hostname gitlab.acme.test</code>.</>}
+      >
+        <div className="flex max-w-md items-start gap-2">
+          <Textarea id="gitlab-hosts" value={hostsText} onChange={(e) => setHostsText(e.target.value)} rows={2} spellCheck={false} placeholder="gitlab.acme.test" className="min-h-16 flex-1 font-mono text-[13px]" />
+          <Button variant="outline" size="sm" disabled={saving || hostsText.trim() === settings.gitlabHosts.join('\n')} onClick={() => void saveHosts()}>Save hosts</Button>
+        </div>
+      </Field>
     </div>
   );
 }

@@ -83,11 +83,14 @@ export interface GitDetails {
 }
 
 /**
- * An open pull request on GitHub, read through the GitHub CLI, for the branch
- * it comes from. Pull requests from forks are left out: their branch names
- * say nothing about this repo's branches.
+ * An open pull request on GitHub (through the GitHub CLI) or merge request on
+ * GitLab (through the GitLab CLI), for the branch it comes from. Ones from
+ * forks are left out: their branch names say nothing about this repo's
+ * branches.
  */
 export interface GitPullRequest {
+  /** pull: #12 on GitHub; merge: !12 on GitLab. */
+  kind: 'pull' | 'merge';
   number: number;
   title: string;
   url: string;
@@ -259,7 +262,7 @@ export interface Site {
 export const INSTALL_HOWS = ['organization', 'repo', 'wordpress', 'empty', 'restore', 'panel', 'hand'] as const;
 export type InstallHow = (typeof INSTALL_HOWS)[number];
 export const INSTALL_HOW_LABELS: Record<InstallHow, string> = {
-  organization: 'From an organization',
+  organization: 'From an organization or group',
   repo: 'From a repo',
   wordpress: 'Fresh WordPress',
   empty: 'Empty site',

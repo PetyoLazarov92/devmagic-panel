@@ -30,6 +30,42 @@ describe('checkEnvironment', () => {
     expect(byId(report, 'access.github')?.status).toBe('ok');
   });
 
+  it('shows nothing about GitLab when it is not in use', async () => {
+    const tree = healthyTree();
+    const fake = fakeExec(healthyResponses());
+    const report = await checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => [] });
+    expect(report.checks.filter((c) => /gitlab/i.test(c.id))).toEqual([]);
+    expect(fake.calls.some((c) => c.file === 'glab' || (c.file === 'ssh' && c.args.includes('git@gitlab.com')))).toBe(false);
+  });
+
+  it('checks the GitLab CLI and SSH on each GitLab host in use, as optional warnings at most', async () => {
+    const tree = healthyTree();
+    const fake = fakeExec({
+      ...healthyResponses(),
+      'glab --version': { stdout: 'glab version 1.36.0 (2024-01-10)\n' },
+      'glab api --hostname gitlab.com user': { stdout: JSON.stringify({ username: 'alex' }) },
+      'glab api --hostname git.acme.test user': { code: 1, stderr: '401 Unauthorized' },
+      'ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new git@gitlab.com': { stdout: 'Welcome to GitLab, @alex!\n' },
+      'ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new git@git.acme.test': { code: 255, stderr: 'git@git.acme.test: Permission denied (publickey).\n' },
+    });
+    const report = await checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => ['gitlab.com', 'git.acme.test'] });
+    expect(byId(report, 'access.gitlabCli.gitlab.com')).toMatchObject({ status: 'ok', optional: true, detail: 'glab 1.36.0, signed in as alex; it lists your groups and their projects' });
+    expect(byId(report, 'access.gitlabCli.git.acme.test')).toMatchObject({ status: 'warn', optional: true });
+    expect(byId(report, 'access.gitlabCli.git.acme.test')?.detail).toContain('glab auth login --hostname git.acme.test');
+    expect(byId(report, 'access.gitlab.gitlab.com')).toMatchObject({ status: 'ok', optional: true });
+    expect(byId(report, 'access.gitlab.git.acme.test')).toMatchObject({ status: 'warn', optional: true, detail: 'cannot authenticate: add your SSH key to git.acme.test, or cloning its private repos will fail' });
+    expect(byId(report, 'access.github')?.status).toBe('ok');
+  });
+
+  it('says when glab is missing or older than 1.36, the oldest the panel works with', async () => {
+    const tree = healthyTree();
+    const missing = await checkEnvironment({ config: tree.config, exec: fakeExec(healthyResponses()).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => ['gitlab.com'] });
+    expect(byId(missing, 'access.gitlabCli')).toMatchObject({ status: 'warn', optional: true });
+    expect(byId(missing, 'access.gitlabCli')?.detail).toContain('not installed');
+    const old = await checkEnvironment({ config: tree.config, exec: fakeExec({ ...healthyResponses(), 'glab --version': { stdout: 'glab version 1.22.0\n' } }).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => ['gitlab.com'] });
+    expect(byId(old, 'access.gitlabCli')?.detail).toBe('glab 1.22.0 is older than 1.36, the oldest the panel works with: update it');
+  });
+
   it('passes the MySQL password through the environment, never the arguments', async () => {
     const tree = healthyTree();
     const { exec, calls } = fakeExec(healthyResponses());

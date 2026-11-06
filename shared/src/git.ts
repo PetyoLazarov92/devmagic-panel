@@ -1,20 +1,58 @@
 /**
  * Web links for a site's git remote: the repository, the current branch and a
- * commit. Works for GitHub, GitLab and Bitbucket remotes in SSH or HTTPS form.
+ * commit. Works for GitHub, GitLab (gitlab.com and your own), Bitbucket and
+ * Gitea or Forgejo (Codeberg and your own) remotes in SSH or HTTPS form; any
+ * other host gets GitHub-style links, which most hosts accept.
  */
+export type WebProvider = 'GitHub' | 'GitLab' | 'Bitbucket' | 'Gitea' | 'Git';
+
 export interface RepoWeb {
-  provider: 'GitHub' | 'GitLab' | 'Bitbucket' | 'Git';
+  provider: WebProvider;
+  /** What to call the host in the UI: "GitHub", "Codeberg", or the host itself for your own server. */
+  name: string;
   repoUrl: string;
+}
+
+/**
+ * Hosts that run GitLab but do not say so in their name (gitlab.acme.test
+ * does, git.acme.test does not). The panel registers the GitLab hosts from
+ * its organization settings once they are read, on the server and in the
+ * browser, so every link helper below knows them without passing them around.
+ */
+const knownGitlabHosts = new Set<string>();
+
+export function registerGitlabHosts(hosts: readonly string[]): void {
+  knownGitlabHosts.clear();
+  for (const host of hosts) knownGitlabHosts.add(host.toLowerCase());
+}
+
+const PUBLIC_NAMES: Record<string, string> = {
+  'github.com': 'GitHub',
+  'gitlab.com': 'GitLab',
+  'bitbucket.org': 'Bitbucket',
+  'codeberg.org': 'Codeberg',
+};
+
+/** The kind of a git host by its name, and the registered GitLab hosts. */
+export function providerOfHost(host: string): WebProvider {
+  const h = host.toLowerCase();
+  if (h === 'github.com') return 'GitHub';
+  if (h === 'bitbucket.org') return 'Bitbucket';
+  if (knownGitlabHosts.has(h) || /(^|[.-])gitlab([.-]|$)/.test(h)) return 'GitLab';
+  if (h === 'codeberg.org' || /(^|[.-])(gitea|forgejo)([.-]|$)/.test(h)) return 'Gitea';
+  return 'Git';
 }
 
 /** git@github.com:AcmeCo/northwind.git, ssh://..., https://... to https://github.com/AcmeCo/northwind */
 export function repoWeb(remote: string): RepoWeb | null {
   const trimmed = remote.trim();
   let host: string;
+  let webHost: string;
   let path: string;
   const scp = /^[\w.-]+@([\w.-]+):(.+)$/.exec(trimmed);
   if (scp?.[1] && scp[2] && !trimmed.includes('://')) {
     host = scp[1];
+    webHost = host;
     path = scp[2];
   } else {
     let url: URL;
@@ -25,12 +63,14 @@ export function repoWeb(remote: string): RepoWeb | null {
     }
     if (!['ssh:', 'https:', 'http:', 'git:'].includes(url.protocol)) return null;
     host = url.hostname;
+    // An HTTPS port is the web's port too (gitlab.acme.test:8443); an SSH port is not.
+    webHost = url.protocol === 'https:' || url.protocol === 'http:' ? url.host : url.hostname;
     path = url.pathname;
   }
   path = path.replace(/^\/+/, '').replace(/\.git$/, '').replace(/\/+$/, '');
   if (!host || !/^[\w.-]+(\/[\w.-]+)+$/.test(path)) return null;
-  const provider = host === 'github.com' ? 'GitHub' : host.includes('gitlab') ? 'GitLab' : host === 'bitbucket.org' ? 'Bitbucket' : 'Git';
-  return { provider, repoUrl: `https://${host}/${path}` };
+  const provider = providerOfHost(host);
+  return { provider, name: PUBLIC_NAMES[host.toLowerCase()] ?? host.toLowerCase(), repoUrl: `https://${webHost.toLowerCase()}/${path}` };
 }
 
 const segments = (ref: string) => ref.split('/').map(encodeURIComponent).join('/');
@@ -40,6 +80,7 @@ export function branchWebUrl(remote: string, branch: string): string | null {
   if (!web) return null;
   if (web.provider === 'GitLab') return `${web.repoUrl}/-/tree/${segments(branch)}`;
   if (web.provider === 'Bitbucket') return `${web.repoUrl}/src/${segments(branch)}`;
+  if (web.provider === 'Gitea') return `${web.repoUrl}/src/branch/${segments(branch)}`;
   return `${web.repoUrl}/tree/${segments(branch)}`;
 }
 
@@ -53,8 +94,9 @@ export function commitWebUrl(remote: string, hash: string): string | null {
 
 /**
  * A commit subject split into text and links: "#30" becomes the pull request
- * on GitHub and Bitbucket and the issue on GitLab, where "!30" is the merge
- * request. Other hosts get no links.
+ * on GitHub and Bitbucket, the issue on GitLab, where "!30" is the merge
+ * request, and the issue or pull request on Gitea (it sends one to the other).
+ * Other hosts get no links.
  */
 export function subjectLinks(remote: string | undefined, subject: string): Array<{ text: string; href?: string }> {
   const web = remote ? repoWeb(remote) : null;
@@ -69,6 +111,7 @@ export function subjectLinks(remote: string | undefined, subject: string): Array
       web.provider === 'GitLab' ? (sign === '!' ? `/-/merge_requests/${number}` : `/-/issues/${number}`)
       : sign === '!' ? null
       : web.provider === 'Bitbucket' ? `/pull-requests/${number}`
+      : web.provider === 'Gitea' ? `/issues/${number}`
       : `/pull/${number}`;
     if (!path) continue;
     const start = (m.index ?? 0) + (m[1] as string).length;

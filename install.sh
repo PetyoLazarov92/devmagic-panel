@@ -540,6 +540,12 @@ report_pkgs() {
   fi
 }
 
+# True when apt has a version of the package to install, from the sources it has.
+apt_has() { apt-cache policy "$1" 2>/dev/null | grep -Eq 'Candidate: [0-9]'; }
+
+# Where glab comes from on a release whose apt has none (Ubuntu 22.04, Debian 12).
+GLAB_INSTALL_URL="https://gitlab.com/gitlab-org/cli#installation"
+
 # Reports one command, and adds its package to the named array when missing.
 report_cmd() {
   # shellcheck disable=SC2178
@@ -613,6 +619,14 @@ check_dependencies() {
 
   printf '   For installs from an organization\n'
   report_cmd org "GitHub CLI" gh gh
+  # Only for GitLab groups, so never in the group question below: GitHub-only setups are not asked about it.
+  if command -v glab >/dev/null; then
+    report ok "GitLab CLI, for GitLab groups"
+  elif apt_has glab; then
+    report optional "GitLab CLI, for GitLab groups" "sudo apt install glab"
+  else
+    report optional "GitLab CLI, for GitLab groups" "$GLAB_INSTALL_URL"
+  fi
   report_cmd org "rclone, for dumps on Google Drive" rclone rclone
   if claude_found; then report ok "Claude Code"; else report missing "Claude Code" "its official installer"; fi
 
@@ -1263,6 +1277,7 @@ org_sign_in_hints() {
   (( WANT_ORG )) || return 0
   printf '   To install sites from an organization, sign in once to each tool:\n'
   printf '     gh auth login       (an account that can read the organization)\n'
+  printf '     glab auth login     (only for GitLab groups; add --hostname for your own GitLab)\n'
   printf '     rclone config       (a Google Drive remote, for dumps)\n'
   printf '     claude              (your claude.ai account, with Asana and Google connected)\n'
 }

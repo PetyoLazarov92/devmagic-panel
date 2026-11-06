@@ -1,10 +1,9 @@
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ActionInput, GitDetails, GitPullRequest } from '@devmagic-panel/shared';
-import { repoWeb } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
-import { ghOpenPulls } from '../org/github-cli.js';
+import { openPullsOf } from '../repo-hosts/index.js';
 import { findVhost } from './discover.js';
 import type { HandlerOutcome } from './site-actions.js';
 import { SiteNotFoundError } from './site-actions.js';
@@ -72,23 +71,15 @@ export async function readGitDetails(exec: Executor, dir: string): Promise<GitDe
   };
 }
 
-/** owner/name of a remote on GitHub, or null for any other host. */
-export function githubRepo(remote: string): string | null {
-  const web = repoWeb(remote);
-  if (web?.provider !== 'GitHub') return null;
-  const path = new URL(web.repoUrl).pathname.slice(1);
-  return /^\w[\w.-]*\/[\w.-]+$/.test(path) ? path : null;
-}
-
 /**
- * The open pull requests of the repo's origin on GitHub, through the GitHub
- * CLI and its own sign-in. None when origin is not on GitHub or gh is missing
- * or not signed in: the Git card then shows no pull requests, and no error.
+ * The open pull requests (GitHub) or merge requests (GitLab) of the repo's
+ * origin, through that host's CLI and its own sign-in. None for any other
+ * host or when the CLI is missing or signed out: the Git card then shows
+ * none, and no error.
  */
 export async function readPullRequests(exec: Executor, dir: string): Promise<GitPullRequest[]> {
   const remote = await git(exec, dir, ['remote', 'get-url', 'origin']);
-  const repo = remote.code === 0 ? githubRepo(remote.stdout) : null;
-  return repo ? ((await ghOpenPulls(exec, repo)) ?? []) : [];
+  return remote.code === 0 ? openPullsOf(exec, remote.stdout.trim()) : [];
 }
 
 export interface GitActionContext {

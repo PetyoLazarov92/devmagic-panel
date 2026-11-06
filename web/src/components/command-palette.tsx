@@ -30,7 +30,7 @@ function branchCommand(site: Site): Command[] {
     const web = git.remote ? repoWeb(git.remote) : null;
     const url = git.remote ? branchWebUrl(git.remote, git.branch) : null;
     if (!web || !url) return [];
-    return [{ id: `branch:${label}`, label: `${label} branch on ${web.provider}`, hint: git.branch, icon: <GitBranch />, group: 'Open', run: () => window.open(url, '_blank', 'noopener') }];
+    return [{ id: `branch:${label}`, label: `${label} branch on ${web.name}`, hint: git.branch, icon: <GitBranch />, group: 'Open', run: () => window.open(url, '_blank', 'noopener') }];
   });
 }
 

@@ -1,16 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { branchWebUrl, commitWebUrl, fuzzyMatch, repoWeb, sameRepo, subjectLinks } from '../src/git.js';
+import { branchWebUrl, commitWebUrl, fuzzyMatch, registerGitlabHosts, repoWeb, sameRepo, subjectLinks } from '../src/git.js';
 
 describe('repoWeb', () => {
   it.each([
-    ['git@github.com:AcmeCo/marketing-northwind.git', 'https://github.com/AcmeCo/marketing-northwind', 'GitHub'],
-    ['https://github.com/DailyMedia/dailypost.git', 'https://github.com/DailyMedia/dailypost', 'GitHub'],
-    ['ssh://git@github.com:22/AcmeCo/NewsNow.git', 'https://github.com/AcmeCo/NewsNow', 'GitHub'],
-    ['git@gitlab.com:group/sub/project.git', 'https://gitlab.com/group/sub/project', 'GitLab'],
-    ['https://bitbucket.org/team/site', 'https://bitbucket.org/team/site', 'Bitbucket'],
-    ['git@git.example.com:team/site.git', 'https://git.example.com/team/site', 'Git'],
-  ])('%s', (remote, repoUrl, provider) => {
-    expect(repoWeb(remote)).toEqual({ repoUrl, provider });
+    ['git@github.com:AcmeCo/marketing-northwind.git', 'https://github.com/AcmeCo/marketing-northwind', 'GitHub', 'GitHub'],
+    ['https://github.com/DailyMedia/dailypost.git', 'https://github.com/DailyMedia/dailypost', 'GitHub', 'GitHub'],
+    ['ssh://git@github.com:22/AcmeCo/NewsNow.git', 'https://github.com/AcmeCo/NewsNow', 'GitHub', 'GitHub'],
+    ['git@gitlab.com:group/sub/project.git', 'https://gitlab.com/group/sub/project', 'GitLab', 'GitLab'],
+    ['ssh://git@gitlab.acme.test:2222/acme/web/shop.git', 'https://gitlab.acme.test/acme/web/shop', 'GitLab', 'gitlab.acme.test'],
+    ['https://gitlab.acme.test:8443/acme/shop.git', 'https://gitlab.acme.test:8443/acme/shop', 'GitLab', 'gitlab.acme.test'],
+    ['https://bitbucket.org/team/site', 'https://bitbucket.org/team/site', 'Bitbucket', 'Bitbucket'],
+    ['git@codeberg.org:acme/site.git', 'https://codeberg.org/acme/site', 'Gitea', 'Codeberg'],
+    ['git@gitea.acme.test:acme/site.git', 'https://gitea.acme.test/acme/site', 'Gitea', 'gitea.acme.test'],
+    ['git@git.example.com:team/site.git', 'https://git.example.com/team/site', 'Git', 'git.example.com'],
+  ])('%s', (remote, repoUrl, provider, name) => {
+    expect(repoWeb(remote)).toEqual({ repoUrl, provider, name });
+  });
+
+  it('knows your own GitLab host once it is registered, whatever its name', () => {
+    expect(repoWeb('git@git.acme.test:acme/web/shop.git')?.provider).toBe('Git');
+    registerGitlabHosts(['Git.Acme.Test']);
+    try {
+      expect(repoWeb('git@git.acme.test:acme/web/shop.git')).toEqual({ provider: 'GitLab', name: 'git.acme.test', repoUrl: 'https://git.acme.test/acme/web/shop' });
+      expect(branchWebUrl('git@git.acme.test:acme/web/shop.git', 'main')).toBe('https://git.acme.test/acme/web/shop/-/tree/main');
+    } finally {
+      registerGitlabHosts([]);
+    }
+    expect(repoWeb('git@git.acme.test:acme/shop.git')?.provider).toBe('Git');
+  });
+
+  it('does not take a host that only contains gitlab inside a word', () => {
+    expect(repoWeb('git@notgitlabby.acme.test:a/b.git')?.provider).toBe('Git');
   });
 
   it.each(['', '/var/www/local.site.com', 'file:///srv/repo.git', 'javascript:alert(1)', 'git@github.com:'])('rejects %s', (remote) => {
@@ -29,6 +49,8 @@ describe('branchWebUrl', () => {
   it('uses each provider\'s path', () => {
     expect(branchWebUrl('git@gitlab.com:g/p.git', 'main')).toBe('https://gitlab.com/g/p/-/tree/main');
     expect(branchWebUrl('git@bitbucket.org:t/s.git', 'main')).toBe('https://bitbucket.org/t/s/src/main');
+    expect(branchWebUrl('git@codeberg.org:t/s.git', 'feature/x')).toBe('https://codeberg.org/t/s/src/branch/feature/x');
+    expect(commitWebUrl('git@codeberg.org:t/s.git', 'a41c9e2')).toBe('https://codeberg.org/t/s/commit/a41c9e2');
   });
 });
 
@@ -85,6 +107,10 @@ describe('subjectLinks', () => {
       { text: '!7', href: 'https://gitlab.com/team/shop/-/merge_requests/7' },
       { text: '#3', href: 'https://gitlab.com/team/shop/-/issues/3' },
     ]);
+    expect(subjectLinks('git@gitlab.com:acme/web/shop.git', 'See merge request acme/web/shop!7').filter((p) => p.href)).toEqual([
+      { text: '!7', href: 'https://gitlab.com/acme/web/shop/-/merge_requests/7' },
+    ]);
+    expect(subjectLinks('git@codeberg.org:acme/shop.git', 'Fix cart (#21)').filter((p) => p.href)).toEqual([{ text: '#21', href: 'https://codeberg.org/acme/shop/issues/21' }]);
   });
 
   it('leaves colors, anchors, other hosts and missing remotes alone', () => {

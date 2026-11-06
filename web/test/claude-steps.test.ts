@@ -31,7 +31,7 @@ describe('a Claude Code step coming back', () => {
 });
 
 describe('the organization card', () => {
-  const status = (claude: OrgStatus['claude']): OrgStatus => ({ claude, gh: { installed: true, signedIn: true }, rclone: { installed: false }, settings: DEFAULT_ORG_SETTINGS });
+  const status = (claude: OrgStatus['claude']): OrgStatus => ({ claude, gh: { installed: true, signedIn: true }, glab: { installed: false, hosts: [] }, rclone: { installed: false }, settings: DEFAULT_ORG_SETTINGS });
   it('opens with a claude.ai sign-in, notes another sign-in, and says what is missing otherwise', () => {
     expect(orgCardState({ status: null, checking: true })).toBe('checking');
     expect(orgCardState({ status: null, checking: false })).toBe('error');

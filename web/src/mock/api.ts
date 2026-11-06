@@ -147,7 +147,12 @@ function advance(job: JobView, list: 'steps' | 'undo', failAt?: string, outputs:
 
 // An organization in the mockup: its repos, what Claude reads from one, and the dumps its links point to.
 const MOCK_DUMP_UPLOAD = '00000000-0000-4000-8000-0000000000d1';
-let mockOrgSettings: OrgSettings = { selected: ['acme'], ...structuredClone(DEFAULT_CLAUDE_STEPS) };
+let mockOrgSettings: OrgSettings = { selected: ['acme', 'gitlab.com/acme-web'], gitlabHosts: ['git.acme.test'], ...structuredClone(DEFAULT_CLAUDE_STEPS) };
+// A GitLab group in the mockup, its projects in subgroups: two of one name, kept apart by their path.
+const mockGitlabRepos: OrgRepo[] = [
+  { org: 'gitlab.com/acme-web', name: 'site', fullName: 'acme-web/clients/site', description: 'Client site on WordPress', sshUrl: 'git@gitlab.com:acme-web/clients/site.git', url: 'https://gitlab.com/acme-web/clients/site', defaultBranch: 'main', pushedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), archived: false, kind: 'site' },
+  { org: 'gitlab.com/acme-web', name: 'site', fullName: 'acme-web/internal/site', description: 'The agency site', sshUrl: 'git@gitlab.com:acme-web/internal/site.git', url: 'https://gitlab.com/acme-web/internal/site', defaultBranch: 'master', pushedAt: new Date(Date.now() - 12 * 86_400_000).toISOString(), archived: false, kind: 'wp-content' },
+];
 const mockOrgRepos: OrgRepo[] = [
   { org: 'acme', name: 'storefront', fullName: 'acme/storefront', description: 'The Acme store, WooCommerce', sshUrl: 'git@github.com:acme/storefront.git', url: 'https://github.com/acme/storefront', defaultBranch: 'main', pushedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), archived: false, kind: 'site' },
   { org: 'acme', name: 'test-shop', fullName: 'acme/test-shop', description: 'Staging copy of the shop', sshUrl: 'git@github.com:acme/test-shop.git', url: 'https://github.com/acme/test-shop', defaultBranch: 'main', pushedAt: new Date(Date.now() - 5 * 86_400_000).toISOString(), archived: false, kind: 'site', local: { installed: [{ domain: 'local.acme.test', how: 'organization' }] } },
@@ -1207,8 +1212,12 @@ export const mockApi: Api = {
     const site = sites.find((s) => s.domain === domain && !s.path);
     const repo = mount ? (sites.find((s) => s.domain === domain && s.path === mount)?.git ?? site?.mounts?.find((m) => m.path === mount)?.git) : site?.git;
     const github = repo?.remote ? /github\.com[:/](.+?)(\.git)?$/.exec(repo.remote)?.[1] : undefined;
-    if (!repo || !github) return [];
-    const pull = (number: number, title: string, branch: string, draft = false) => ({ number, title, url: `https://github.com/${github}/pull/${number}`, branch, draft });
+    const gitlab = repo?.remote ? /gitlab\.com[:/](.+?)(\.git)?$/.exec(repo.remote)?.[1] : undefined;
+    if (!repo || (!github && !gitlab)) return [];
+    const pull = (number: number, title: string, branch: string, draft = false) =>
+      github
+        ? { kind: 'pull' as const, number, title, url: `https://github.com/${github}/pull/${number}`, branch, draft }
+        : { kind: 'merge' as const, number, title, url: `https://gitlab.com/${gitlab}/-/merge_requests/${number}`, branch, draft };
     // The checked-out branch has one once it is pushed and is not a main line.
     const own = repo.upstream !== null && !['master', 'develop'].includes(repo.branch);
     return [
@@ -1504,6 +1513,17 @@ export const mockApi: Api = {
       claude: { found, ...(found ? { path: '/home/acmeco/.local/bin/claude', version: '2.1.309' } : {}), signedIn, claudeAi: signedIn && as !== 'api' },
       // ?gh=signed-out in the address shows the stored list without the GitHub CLI.
       gh: new URLSearchParams(window.location.search).get('gh') === 'signed-out' ? { installed: true, signedIn: false, problem: 'not signed in: run gh auth login' } : { installed: true, signedIn: true, user: 'acmeco' },
+      // ?glab=missing or signed-out in the address shows the GitLab CLI's other states.
+      glab: ((as) =>
+        as === 'missing'
+          ? { installed: false, hosts: ['gitlab.com', ...mockOrgSettings.gitlabHosts].map((host) => ({ host, installed: false, signedIn: false, problem: 'the GitLab CLI (glab) is not installed' })) }
+          : {
+              installed: true,
+              version: '1.36.0',
+              hosts: ['gitlab.com', ...mockOrgSettings.gitlabHosts].map((host) =>
+                as === 'signed-out' || host !== 'gitlab.com' ? { host, installed: true, signedIn: false, problem: `not signed in to ${host}: run glab auth login --hostname ${host}` } : { host, installed: true, signedIn: true, user: 'acmeco' },
+              ),
+            })(new URLSearchParams(window.location.search).get('glab')),
       // ?rclone=1 in the address shows a Google Drive remote set up, with its Download button.
       rclone: new URLSearchParams(window.location.search).get('rclone') === '1' ? { installed: true, remote: 'gdrive' } : { installed: false },
       settings: mockOrgSettings,
@@ -1520,10 +1540,26 @@ export const mockApi: Api = {
   },
   orgOrgs: async () => {
     await wait(300);
-    return ['acme', 'acme-labs', 'acmeco'];
+    const ns = (ref: string, label: string, provider: 'github' | 'gitlab', host: string) => ({ ref, label, provider, host });
+    return {
+      namespaces: [
+        ns('acme', 'acme (GitHub)', 'github', 'github.com'),
+        ns('acme-labs', 'acme-labs (GitHub)', 'github', 'github.com'),
+        ns('acmeco', 'acmeco (GitHub)', 'github', 'github.com'),
+        ns('gitlab.com/acme-web', 'acme-web (gitlab.com)', 'gitlab', 'gitlab.com'),
+        ns('gitlab.com/partners/acme-team', 'partners/acme-team (gitlab.com)', 'gitlab', 'gitlab.com'),
+        ns('gitlab.com/acmeco', 'acmeco (gitlab.com)', 'gitlab', 'gitlab.com'),
+      ],
+      problems: [],
+    };
   },
+  gitHosts: async () => ({ gitlab: mockOrgSettings.gitlabHosts }),
   orgRepos: async (org, scan) => {
     // The stored list comes at once; a check finds one new repo, a full list takes longer. ?scan=fail shows GitHub timing out.
+    if (org === 'gitlab.com/acme-web') {
+      await wait(scan === 'none' ? 150 : 900);
+      return { repos: structuredClone(mockGitlabRepos), ...mockOrgScan };
+    }
     if (org !== 'acme') return { repos: [] };
     const due = scan === 'check' || scan === 'full' || (scan === 'auto' && Date.now() - Date.parse(mockOrgScan.checkedAt) > 3_600_000);
     await wait(scan === 'none' ? 150 : !due ? 200 : scan === 'full' ? 2500 : 1500);

@@ -15,9 +15,12 @@ function Highlight({ text, positions }: { text: string; positions: number[] }) {
   return <>{[...text].map((ch, i) => (set.has(i) ? <mark key={i} className="bg-transparent font-semibold text-primary">{ch}</mark> : ch))}</>;
 }
 
-/** A branch's open pull request, linked on GitHub in a new tab; with its title where there is room. Drafts are grey. */
+/** A branch's open pull request (GitHub, #12) or merge request (GitLab, !12), linked in a new tab; with its title where there is room. Drafts are grey. */
 export function PullBadge({ pull, withTitle = false }: { pull: PullRequest; withTitle?: boolean }) {
-  const label = `${pull.draft ? 'Draft pull request' : 'Pull request'} #${pull.number}: ${pull.title}`;
+  const merge = pull.kind === 'merge';
+  const ref = `${merge ? '!' : '#'}${pull.number}`;
+  const what = merge ? 'merge request' : 'pull request';
+  const label = `${pull.draft ? `Draft ${what}` : what[0]?.toUpperCase() + what.slice(1)} ${ref}: ${pull.title}`;
   const Icon = pull.draft ? GitPullRequestDraft : GitPullRequest;
   return (
     <a
@@ -25,7 +28,7 @@ export function PullBadge({ pull, withTitle = false }: { pull: PullRequest; with
       target="_blank"
       rel="noopener noreferrer"
       title={label}
-      aria-label={`${label}, opens on GitHub`}
+      aria-label={`${label}, opens on ${merge ? 'GitLab' : 'GitHub'}`}
       // Opens the pull request without picking the branch in the list around it.
       onClick={(e) => e.stopPropagation()}
       className={cn(
@@ -35,7 +38,7 @@ export function PullBadge({ pull, withTitle = false }: { pull: PullRequest; with
       )}
     >
       <Icon className="size-3 shrink-0" />
-      <span className="shrink-0">#{pull.number}</span>
+      <span className="shrink-0">{ref}</span>
       {withTitle && <span className="truncate">{pull.title}</span>}
       {/* In the branch list the draft icon and grey are the marker, to leave room for the name. */}
       {pull.draft && withTitle && <span className="shrink-0 font-normal">draft</span>}

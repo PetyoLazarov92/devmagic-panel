@@ -1,25 +1,27 @@
 import { z } from 'zod';
 import { type ClaudeRun, claudeRun, hostname } from './actions.js';
+import { gitlabHost, namespaceRef } from './repo-host.js';
 import { type InstallHow, type RepoLayout } from './sites.js';
 
 /**
- * Installing a site from a GitHub organization: the repos the GitHub CLI
- * lists, what Claude Code reads from a repo's docs and from the Asana tasks
+ * Installing a site from a GitHub organization or a GitLab group: the repos
+ * the GitHub CLI or the GitLab CLI lists, what Claude Code reads from a repo's docs and from the Asana tasks
  * and Google files they link, and how that becomes the new site wizard's
  * answers. The local setup always wins over the docs; what nothing answers
  * stays empty for you to fill in.
  */
 
-/** A GitHub organization or user name. */
-export const orgName = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/, 'Not a GitHub organization name');
+/** A GitHub organization or user (acme), or a GitLab group or user with its host (gitlab.com/acme/web). */
+export const orgName = namespaceRef;
 
 /** What a repo holds, from its top-level files. */
 export type RepoKind = 'site' | 'wp-content' | 'theme' | 'plugin' | 'other';
 
 export interface OrgRepo {
+  /** The namespace it was listed from (acme, gitlab.com/acme/web). */
   org: string;
   name: string;
-  /** owner/name */
+  /** Its path on its host: acme/shop, or acme/web/shop in a GitLab subgroup. */
   fullName: string;
   description?: string;
   sshUrl: string;
@@ -37,7 +39,7 @@ export interface OrgRepo {
 }
 
 /**
- * How much of an organization to read from GitHub: nothing (the stored list),
+ * How much of an organization or group to read from its host: nothing (the stored list),
  * what is due, the repos pushed since the last check, or every repo.
  */
 export const orgScanMode = z.enum(['none', 'auto', 'check', 'full']);
@@ -50,7 +52,7 @@ export interface OrgRepoList {
   checkedAt?: string;
   /** Last listed in full, which finds deleted, renamed and archived repos too. */
   listedAt?: string;
-  /** Why this scan could not read GitHub; the stored list is still there. */
+  /** Why this scan could not read the host; the stored list is still there. */
   problem?: string;
 }
 
@@ -68,14 +70,16 @@ export const DEFAULT_CLAUDE_STEPS: Record<ClaudeStep, ClaudeRun> = {
 };
 
 export interface OrgSettings {
-  /** The organizations to scan. */
+  /** The organizations and groups to scan, as namespace refs. */
   selected: string[];
+  /** Your own GitLab servers, listed beside gitlab.com. */
+  gitlabHosts: string[];
   /** The defaults for each Claude Code step; an install can change them for itself. */
   read: ClaudeRun;
   access: ClaudeRun;
 }
 
-export const DEFAULT_ORG_SETTINGS: OrgSettings = { selected: [], ...DEFAULT_CLAUDE_STEPS };
+export const DEFAULT_ORG_SETTINGS: OrgSettings = { selected: [], gitlabHosts: [], ...DEFAULT_CLAUDE_STEPS };
 
 /** Settings saved before effort came: one model and cap for both steps. */
 function fromOneModel(value: unknown): unknown {
@@ -87,23 +91,42 @@ function fromOneModel(value: unknown): unknown {
     ...(typeof v.model === 'string' ? { model: v.model } : {}),
     ...(typeof v.budgetUsd === 'number' ? { budgetUsd: v.budgetUsd } : {}),
   });
-  return { selected: v.selected, read: step('read'), access: step('access') };
+  return { ...v, read: step('read'), access: step('access') };
 }
 
 export const orgSettingsInput = z.preprocess(
   fromOneModel,
   z.object({
-    selected: z.array(orgName).max(20),
+    selected: z.array(orgName).max(40),
+    gitlabHosts: z.array(gitlabHost).max(10).default([]),
     read: claudeRun.default(DEFAULT_CLAUDE_STEPS.read),
     access: claudeRun.default(DEFAULT_CLAUDE_STEPS.access),
   }),
 );
 
+/** A CLI that lists repos, signed in with its own sign-in, which the panel never reads. */
+export interface CliStatus {
+  installed: boolean;
+  signedIn: boolean;
+  user?: string;
+  problem?: string;
+}
+
+/** An organization or group you can scan, as the CLIs list them. */
+export interface OrgNamespace {
+  ref: string;
+  label: string;
+  provider: 'github' | 'gitlab';
+  host: string;
+}
+
 /** What the organization start needs, and what is there. */
 export interface OrgStatus {
   /** Signed in at all, and with claude.ai: only that sign-in reaches the Asana and Google connectors. */
   claude: { found: boolean; path?: string; version?: string; signedIn: boolean; claudeAi: boolean };
-  gh: { installed: boolean; signedIn: boolean; user?: string; problem?: string };
+  gh: CliStatus;
+  /** The GitLab CLI on each GitLab host: gitlab.com first, then yours. */
+  glab: { installed: boolean; version?: string; hosts: Array<CliStatus & { host: string }> };
   rclone: { installed: boolean; remote?: string };
   settings: OrgSettings;
 }

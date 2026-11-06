@@ -1,9 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { registerGitlabHosts } from '@devmagic-panel/shared';
 import { ActionInputError, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs } from '../src/jobs.js';
-import { gitFolder, githubRepo, parseBranches, parseChanges, readGitDetails, readPullRequests } from '../src/sites/git.js';
+import { gitFolder, parseBranches, parseChanges, readGitDetails, readPullRequests } from '../src/sites/git.js';
 import { RunStore } from '../src/store.js';
 import { DMP, fakeExec, wpSiteTree } from './helpers.js';
 
@@ -75,13 +76,6 @@ describe('open pull requests', () => {
     { number: 43, title: 'From a fork', url: 'https://github.com/acme/site/pull/43', headRefName: 'master', isDraft: false, isCrossRepository: true },
   ]);
 
-  it('reads owner/name only from GitHub remotes', () => {
-    expect(githubRepo('git@github.com:acme/site.git\n')).toBe('acme/site');
-    expect(githubRepo('https://github.com/acme/site')).toBe('acme/site');
-    expect(githubRepo('git@gitlab.com:acme/site.git')).toBeNull();
-    expect(githubRepo('https://github.com/acme/team/site')).toBeNull();
-  });
-
   it('lists the open pull requests from the repo\'s own branches through gh, never a shell', async () => {
     const s = setup();
     const fake = fakeExec({
@@ -89,8 +83,8 @@ describe('open pull requests', () => {
       'gh pr list': { stdout: pulls },
     });
     expect(await readPullRequests(fake.exec, s.docroot)).toEqual([
-      { number: 41, title: 'Cart drawer', url: 'https://github.com/acme/site/pull/41', branch: 'feature/cart', draft: false },
-      { number: 42, title: 'Search paging', url: 'https://github.com/acme/site/pull/42', branch: 'bugfix/search', draft: true },
+      { kind: 'pull', number: 41, title: 'Cart drawer', url: 'https://github.com/acme/site/pull/41', branch: 'feature/cart', draft: false },
+      { kind: 'pull', number: 42, title: 'Search paging', url: 'https://github.com/acme/site/pull/42', branch: 'bugfix/search', draft: true },
     ]);
     const gh = fake.calls.find((c) => c.file === 'gh');
     expect(gh?.args).toEqual(['pr', 'list', '--repo=acme/site', '--state=open', '--limit=200', '--json=number,title,url,headRefName,isDraft,isCrossRepository']);
@@ -105,14 +99,54 @@ describe('open pull requests', () => {
     expect(await readPullRequests(signedOut.exec, s.docroot)).toEqual([]);
   });
 
-  it('skips gh when origin is not on GitHub or there is no origin', async () => {
+  it('skips gh when origin is not on GitHub, and every CLI when there is no origin or the host is unknown', async () => {
     const s = setup();
-    const gitlab = fakeExec({ [`git -C ${s.docroot} remote get-url origin`]: { stdout: 'git@gitlab.com:acme/site.git\n' } });
-    expect(await readPullRequests(gitlab.exec, s.docroot)).toEqual([]);
-    expect(gitlab.calls.some((c) => c.file === 'gh')).toBe(false);
+    const other = fakeExec({ [`git -C ${s.docroot} remote get-url origin`]: { stdout: 'git@git.acme.test:acme/site.git\n' } });
+    expect(await readPullRequests(other.exec, s.docroot)).toEqual([]);
+    expect(other.calls.some((c) => c.file === 'gh' || c.file === 'glab')).toBe(false);
     const none = fakeExec({ [`git -C ${s.docroot} remote get-url origin`]: { code: 2, stderr: "error: No such remote 'origin'\n" } });
     expect(await readPullRequests(none.exec, s.docroot)).toEqual([]);
-    expect(none.calls.some((c) => c.file === 'gh')).toBe(false);
+    expect(none.calls.some((c) => c.file === 'gh' || c.file === 'glab')).toBe(false);
+  });
+
+  const merges = (host: string, path: string) =>
+    JSON.stringify([
+      { iid: 7, title: 'Cart drawer', web_url: `https://${host}/${path}/-/merge_requests/7`, source_branch: 'feature/cart', draft: false, source_project_id: 3, target_project_id: 3 },
+      { iid: 8, title: 'Old server', web_url: `https://${host}/${path}/-/merge_requests/8`, source_branch: 'bugfix/search', work_in_progress: true, source_project_id: 3, target_project_id: 3 },
+      { iid: 9, title: 'From a fork', web_url: `https://${host}/${path}/-/merge_requests/9`, source_branch: 'master', draft: false, source_project_id: 4, target_project_id: 3 },
+      { iid: 10, title: 'Elsewhere', web_url: `https://${host}/other/-/merge_requests/10`, source_branch: 'x', draft: false, source_project_id: 3, target_project_id: 3 },
+    ]);
+
+  it('lists GitLab merge requests in a subgroup through glab api, with --hostname and no prompts', async () => {
+    const s = setup();
+    const fake = fakeExec({
+      [`git -C ${s.docroot} remote get-url origin`]: { stdout: 'git@gitlab.com:acme/web/shop.git\n' },
+      glab: { stdout: merges('gitlab.com', 'acme/web/shop') },
+    });
+    expect(await readPullRequests(fake.exec, s.docroot)).toEqual([
+      { kind: 'merge', number: 7, title: 'Cart drawer', url: 'https://gitlab.com/acme/web/shop/-/merge_requests/7', branch: 'feature/cart', draft: false },
+      { kind: 'merge', number: 8, title: 'Old server', url: 'https://gitlab.com/acme/web/shop/-/merge_requests/8', branch: 'bugfix/search', draft: true },
+    ]);
+    const glab = fake.calls.find((c) => c.file === 'glab');
+    expect(glab?.args).toEqual(['api', '--hostname', 'gitlab.com', 'projects/acme%2Fweb%2Fshop/merge_requests?state=opened&per_page=100']);
+    expect(glab?.env).toMatchObject({ GLAB_NO_PROMPT: 'true', NO_PROMPT: 'true', GLAB_SEND_TELEMETRY: 'false' });
+    expect(fake.calls.some((c) => c.file === 'gh')).toBe(false);
+  });
+
+  it('asks your own GitLab host once it is registered, and shows none when glab is missing or signed out', async () => {
+    const s = setup();
+    const remote = { [`git -C ${s.docroot} remote get-url origin`]: { stdout: 'ssh://git@git.acme.test:2222/acme/shop.git\n' } };
+    registerGitlabHosts(['git.acme.test']);
+    try {
+      const fake = fakeExec({ ...remote, glab: { stdout: merges('git.acme.test', 'acme/shop') } });
+      expect((await readPullRequests(fake.exec, s.docroot)).map((p) => p.number)).toEqual([7, 8]);
+      expect(fake.calls.find((c) => c.file === 'glab')?.args.slice(0, 3)).toEqual(['api', '--hostname', 'git.acme.test']);
+      expect(await readPullRequests(fakeExec(remote).exec, s.docroot)).toEqual([]);
+      const signedOut = fakeExec({ ...remote, glab: { code: 1, stderr: 'GET https://git.acme.test/api/v4/...: 401 Unauthorized' } });
+      expect(await readPullRequests(signedOut.exec, s.docroot)).toEqual([]);
+    } finally {
+      registerGitlabHosts([]);
+    }
   });
 
   it('drops an answer that is not a pull request list, or links off GitHub', async () => {

@@ -1,5 +1,13 @@
 # Changelog
 
+### v1.2.0 (2026-11-06)
+* **Sites:** the new site wizard installs from GitLab groups next to GitHub organizations, on gitlab.com and on your own GitLab, listed through the GitLab CLI (`glab`, 1.36 or newer) with its own sign-in, which the panel never reads. A group is scanned with its subgroups, only projects you can clone are listed, and two projects of one name in different subgroups stay apart. Add your own GitLab hosts under Organizations and groups to scan
+* **Sites:** a pasted repo URL in a GitLab subgroup (`git@gitlab.com:acme/web/site.git`) keeps its whole path, and the manual repo start says it takes any git host
+* **Sites:** the Git card shows open GitLab merge requests (`!12`) beside their branches, as it does pull requests on GitHub
+* **Sites:** branch, commit and repository links know your own GitLab hosts, Gitea and Forgejo (Codeberg among them), and keep an HTTPS port; "Open on" names the host
+* **Panel:** the Environment page checks the GitLab CLI and SSH on each GitLab host you use, found from the settings, the groups you scan and your sites' remotes, as optional warnings at most; nothing about GitLab shows when you use none
+* **Installer:** reports the GitLab CLI as optional, with `sudo apt install glab` where apt has it and GitLab's install page elsewhere, and never installs it with the organization tools. The root scripts do not change: the Updates page installs this release as usual
+
 ### v1.1.4 (2026-11-06)
 * **Panel:** the Updates page no longer shows "Installed" for an install with your password once a later update or a switch replaced that release. Before, after updating from v1.1.2 to v1.1.3 from the panel, it still said "Installed v1.1.2, replacing v1.0.5". A failed install still shows until a later install puts another release in. An update installs this release from the panel as usual
 

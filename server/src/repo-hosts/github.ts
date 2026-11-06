@@ -1,6 +1,7 @@
-import type { GitPullRequest } from '@devmagic-panel/shared';
+import type { CliStatus, GitPullRequest } from '@devmagic-panel/shared';
 import { z } from 'zod';
 import type { Executor } from '../exec.js';
+import { HostRefused } from './types.js';
 
 /**
  * The GitHub CLI, with its own browser sign-in, for what git over SSH cannot
@@ -10,11 +11,12 @@ import type { Executor } from '../exec.js';
 const GH_ENV = { GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' };
 const gh = (exec: Executor, args: string[], timeoutMs = 60_000) => exec('gh', args, { timeoutMs, env: GH_ENV });
 
-export class GhRefused extends Error {}
+/** The GitHub CLI refused or did not answer; the stored list stays. */
+export class GhRefused extends HostRefused {}
 
 const firstLine = (text: string) => text.trim().split('\n')[0] ?? '';
 
-export async function ghStatus(exec: Executor): Promise<{ installed: boolean; signedIn: boolean; user?: string; problem?: string }> {
+export async function ghStatus(exec: Executor): Promise<CliStatus> {
   const user = await gh(exec, ['api', 'user', '--jq', '.login'], 20_000);
   if (user.code === 127) return { installed: false, signedIn: false, problem: 'the GitHub CLI (gh) is not installed' };
   if (user.code !== 0) return { installed: true, signedIn: false, problem: /auth login|not logged/i.test(user.stderr) ? 'not signed in: run gh auth login' : firstLine(user.stderr) || 'no answer' };
@@ -135,5 +137,5 @@ export async function ghOpenPulls(exec: Executor, repo: string): Promise<GitPull
   if (!list.success) return null;
   return list.data
     .filter((p) => !p.isCrossRepository)
-    .map((p) => ({ number: p.number, title: p.title, url: p.url, branch: p.headRefName, draft: p.isDraft }));
+    .map((p) => ({ kind: 'pull' as const, number: p.number, title: p.title, url: p.url, branch: p.headRefName, draft: p.isDraft }));
 }

@@ -474,7 +474,7 @@ function RepoSection({ domain, mount, label, folder, git, onChanged }: {
   onChanged: () => void;
 }) {
   const details = useAsync(() => api.gitDetails(domain, mount), [domain, mount, git.branch, git.lastCommit.hash, git.dirty]);
-  // Its own request: gh can take seconds, and the card does not wait for it. No pull requests on any failure.
+  // Its own request: gh or glab can take seconds, and the card does not wait for it. No pull or merge requests on any failure.
   const pulls = useAsync(() => api.gitPulls(domain, mount), [domain, mount]);
   const [branch, setBranch] = useState(git.branch);
   const [busy, setBusy] = useState<string | null>(null);
@@ -617,7 +617,7 @@ function GitLinks({ remote, branch }: { remote: string | undefined; branch: stri
     <div className="flex flex-wrap gap-2">
       <ButtonLink size="sm" variant="outline" href={branchUrl} target="_blank" rel="noopener noreferrer">
         <GitBranch />
-        Open branch on {web.provider}
+        Open branch on {web.name}
       </ButtonLink>
       <ButtonLink size="sm" variant="ghost" href={web.repoUrl} target="_blank" rel="noopener noreferrer">
         <FolderGit2 />

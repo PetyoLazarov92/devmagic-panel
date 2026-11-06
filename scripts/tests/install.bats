@@ -13,6 +13,9 @@ setup() {
   # No crontab: the uninstaller only reads it, and never this machine's.
   printf '#!/bin/sh\n[ "$1" = -l ] || { echo "CALLED crontab $*" >&2; exit 99; }\necho "no crontab for me" >&2\nexit 1\n' > "$STUBS/crontab"
   chmod +x "$STUBS/crontab"
+  # apt has no glab unless a test says so ($GLAB_CANDIDATE); never this machine's apt.
+  printf '#!/bin/sh\n[ -n "$GLAB_CANDIDATE" ] && [ "$2" = glab ] && printf "glab:\\n  Installed: (none)\\n  Candidate: %%s\\n" "$GLAB_CANDIDATE"\nexit 0\n' > "$STUBS/apt-cache"
+  chmod +x "$STUBS/apt-cache"
   # Lingering is off, so the installer would only offer it.
   printf '#!/bin/sh\necho no\n' > "$STUBS/loginctl"
   chmod +x "$STUBS/loginctl"
@@ -434,6 +437,22 @@ fresh_machine() {
   [[ "$output" == *"Installing Claude Code"*"https://claude.ai/install.sh"* ]]
   [[ "$output" == *"Installing Mailpit"*"cli.js install-mailpit"* ]]
   [[ "$output" == *"gh auth login"*"rclone config"*"claude "* ]]
+}
+
+@test "the GitLab CLI is reported as optional, from apt where it has one, and never installed with the organization tools" {
+  fresh_machine ubuntu
+  run bash -c "yes | '$INSTALL' --dry-run"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"optional GitLab CLI, for GitLab groups (https://gitlab.com/gitlab-org/cli#installation)"* ]]
+  [[ "$(grep 'apt-get install' <<< "$output")" != *glab* ]]
+  [[ "$output" == *"glab auth login     (only for GitLab groups"* ]]
+  GLAB_CANDIDATE="1.36.0-1ubuntu0.3" run bash -c "yes | '$INSTALL' --dry-run"
+  [[ "$output" == *"optional GitLab CLI, for GitLab groups (sudo apt install glab)"* ]]
+  [[ "$(grep 'apt-get install' <<< "$output")" != *glab* ]]
+  printf '#!/bin/sh\necho "glab version 1.36.0"\n' > "$STUBS/glab"
+  chmod +x "$STUBS/glab"
+  run "$INSTALL" --dry-run --yes
+  [[ "$output" == *"ok       GitLab CLI, for GitLab groups"* ]]
 }
 
 @test "the panel's own Node, once installed, keeps running the panel" {

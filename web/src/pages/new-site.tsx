@@ -87,7 +87,7 @@ export interface WizardState {
   under: { domain: string; path: string } | null;
   /** The primary domain is installed already: archive that site first and install again. */
   replaceExisting: boolean;
-  /** Installing from a GitHub organization: the repo, what Claude Code read and the dump; null for the other starts. */
+  /** Installing from a GitHub organization or GitLab group: the repo, what Claude Code read and the dump; null for the other starts. */
   org: OrgState | null;
   /** A hash of each step's answers when you continued from it, so the step list can open the steps you reached (lib/steps). */
   passed: Partial<Record<Step, string>>;
@@ -279,7 +279,8 @@ export function toInput(state: WizardState): CreateSiteInput {
     domain: locals[0] ?? '',
     ...(under ? { path: under.path } : {}),
     replaceExisting: !under && state.replaceExisting,
-    ...(state.org?.repo && isRepo ? { organization: state.org.repo.org } : {}),
+    // The organization or group it came from; a pasted URL on another host has none.
+    ...(state.org?.repo?.org && isRepo ? { organization: state.org.repo.org } : {}),
     aliases: locals.slice(1),
     ...(isRepo ? { repo: { url: state.repoUrl.trim(), branch: state.branch.trim(), layout: state.layout } } : {}),
     ...(isRepo && state.upload ? { uploadId: state.upload.id } : {}),
@@ -1014,8 +1015,8 @@ function OrgCard({ status, checking, error, onRecheck, checked, onPick, buttonRe
           icon={<FolderGit2 />}
           active={on}
           badge={<Badge tone="primary"><Sparkles className="size-3" />Claude</Badge>}
-          title="From an organization"
-          text="Pick a GitHub organization's repo. Claude reads its docs and links and fills in the rest."
+          title="From an organization or group"
+          text="Pick a repo from a GitHub organization or a GitLab group. Claude reads its docs and links and fills in the rest."
           muted={!usable}
         />
       </button>
@@ -1122,7 +1123,7 @@ function SourceStep({ state, setState, sites, cores, assistantOn }: {
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] xl:gap-12">
       <div className="grid gap-5">
         <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
-          <Field label="Git repository" htmlFor="repo" hint={urlInvalid ? <span className="text-danger">Use an SSH or HTTPS URL, like git@github.com:team/repo.git</span> : <>SSH or HTTPS. Cloned as you, so your SSH key works for private repos.{web && <> <WebLink href={web.repoUrl}>Open on {web.provider === 'Git' ? 'the web' : web.provider}</WebLink></>}</>}>
+          <Field label="Git repository" htmlFor="repo" hint={urlInvalid ? <span className="text-danger">Use an SSH or HTTPS URL, like git@github.com:team/repo.git or git@gitlab.com:group/sub/repo.git</span> : <>SSH or HTTPS, from GitHub, GitLab or any git host. Cloned as you, so your SSH key works for private repos.{web && <> <WebLink href={web.repoUrl}>Open on {web.name}</WebLink></>}</>}>
             <Input id="repo" value={state.repoUrl} onChange={(e) => set('repoUrl', e.target.value)} placeholder="git@github.com:AcmeCo/northwind.git" className="font-mono text-[13px]" spellCheck={false} aria-invalid={urlInvalid || undefined} />
           </Field>
           <Field label="Branch" htmlFor="branch" hint={(state.branches && state.branch === state.defaultBranch) || branchUrl ? <>{state.branches && state.branch === state.defaultBranch ? 'The default branch' : ''}{branchUrl && <> <WebLink href={branchUrl}>Open</WebLink></>}</> : undefined}>

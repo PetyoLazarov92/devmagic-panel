@@ -45,7 +45,16 @@ describe('site.create input', () => {
     expect(parse({ ...base, source: 'repo', repo: { url, branch: 'master', layout: 'site-root' } }).success).toBe(false);
   });
 
-  it.each(['git@github.com:AcmeCo/marketing-northwind.git', 'https://github.com/DailyMedia/dailypost.git', 'ssh://git@github.com:22/AcmeCo/NewsNow.git'])('accepts %s', (url) => {
+  it.each([
+    'git@github.com:AcmeCo/marketing-northwind.git',
+    'https://github.com/DailyMedia/dailypost.git',
+    'ssh://git@github.com:22/AcmeCo/NewsNow.git',
+    'git@gitlab.com:acme/web/shops/site.git',
+    'ssh://git@git.acme.test:2222/acme/web/site.git',
+    'https://gitlab.acme.test:8443/acme/site.git',
+    'git@bitbucket.org:acme/site.git',
+    'git@codeberg.org:acme/site.git',
+  ])('accepts %s', (url) => {
     expect(parse({ ...base, source: 'repo', repo: { url, branch: 'feature/translation-export', layout: 'site-root' } }).success).toBe(true);
   });
 

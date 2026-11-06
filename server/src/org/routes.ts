@@ -1,14 +1,15 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { InstallDraft, OrgRepoList, OrgSettings, OrgStatus, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
-import { DEFAULT_ORG_SETTINGS, orgName, orgScanMode, orgSettingsInput } from '@devmagic-panel/shared';
+import type { InstallDraft, OrgNamespace, OrgRepoList, OrgSettings, OrgStatus, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
+import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Executor } from '../exec.js';
 import type { RunStore } from '../store.js';
 import { RepoRefused } from '../sites/repo.js';
 import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } from './claude-code.js';
 import { recentDownloads, rcloneRemote } from './dumps.js';
-import { GhRefused, ghOrgs, ghStatus } from './github-cli.js';
+import { ghStatus } from '../repo-hosts/github.js';
+import { glabOverview, HostRefused, listNamespaces } from '../repo-hosts/index.js';
 import { OrgScanner } from './scan.js';
 
 /** The organization settings in ~/.config/devmagic-panel/organizations.json; nothing secret. */
@@ -24,6 +25,7 @@ export function readOrgSettings(file: string): OrgSettings {
 export function writeOrgSettings(file: string, settings: OrgSettings): void {
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
   writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+  registerGitlabHosts(settings.gitlabHosts);
 }
 
 export interface OrgRouteDeps {
@@ -50,22 +52,28 @@ export interface OrgRouteDeps {
  */
 export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): void {
   const scanner = new OrgScanner(deps.exec, deps.store);
+  // Links to your own GitLab hosts come out right from the start, not only once this page is opened.
+  registerGitlabHosts(readOrgSettings(deps.settingsFile).gitlabHosts);
   const claude = () => {
     const bin = findClaude(deps.home, deps.searchPath);
     if (!bin) throw new ClaudeCodeError('Claude Code is not installed or not found: install it and sign in with claude auth login, then check again');
     return bin;
   };
-  const refused = (error: unknown) => error instanceof ClaudeCodeError || error instanceof GhRefused || error instanceof RepoRefused;
+  const refused = (error: unknown) => error instanceof ClaudeCodeError || error instanceof HostRefused || error instanceof RepoRefused;
 
   api.get('/api/org/status', async (): Promise<OrgStatus> => {
-    const [claude, gh, rclone] = await Promise.all([claudeStatus(deps.exec, deps.home, deps.searchPath), ghStatus(deps.exec), rcloneRemote(deps.exec)]);
-    return {
-      claude,
-      gh,
-      rclone,
-      settings: readOrgSettings(deps.settingsFile),
-    };
+    const settings = readOrgSettings(deps.settingsFile);
+    const [claude, gh, glab, rclone] = await Promise.all([
+      claudeStatus(deps.exec, deps.home, deps.searchPath),
+      ghStatus(deps.exec),
+      glabOverview(deps.exec, gitlabHostsWith(settings.gitlabHosts)),
+      rcloneRemote(deps.exec),
+    ]);
+    return { claude, gh, glab, rclone, settings };
   });
+
+  // The GitLab hosts that are not called gitlab-something, so the browser links them as GitLab too.
+  api.get('/api/git-hosts', async (): Promise<{ gitlab: string[] }> => ({ gitlab: readOrgSettings(deps.settingsFile).gitlabHosts }));
 
   api.put<{ Body: unknown }>('/api/org/settings', async (request, reply): Promise<OrgSettings | undefined> => {
     const parsed = orgSettingsInput.safeParse(request.body);
@@ -98,20 +106,18 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
     }
   });
 
-  api.get('/api/org/orgs', async (_request, reply): Promise<string[] | undefined> => {
-    try {
-      return await ghOrgs(deps.exec);
-    } catch (error) {
-      if (refused(error)) return reply.code(409).send({ error: (error as Error).message });
-      throw error;
-    }
+  // Organizations and groups from each signed-in CLI; a host that fails says why, the rest still list.
+  api.get('/api/org/orgs', async (_request, reply): Promise<{ namespaces: OrgNamespace[]; problems: string[] } | undefined> => {
+    const found = await listNamespaces(deps.exec, readOrgSettings(deps.settingsFile).gitlabHosts);
+    if (found.namespaces.length === 0 && found.problems.length > 0) return reply.code(409).send({ error: found.problems.join('; ') });
+    return found;
   });
 
   // The stored list at once with scan=none (no gh needed), or after reading what is due, the new pushes or every repo.
-  // When GitHub cannot be read the stored list still comes back, with the problem.
+  // When the host cannot be read the stored list still comes back, with the problem.
   api.get<{ Querystring: { org?: string; scan?: string } }>('/api/org/repos', async (request, reply): Promise<OrgRepoList | undefined> => {
     const org = orgName.safeParse(request.query.org);
-    if (!org.success) return reply.code(400).send({ error: 'Name an organization' });
+    if (!org.success) return reply.code(400).send({ error: 'Name an organization or group' });
     const mode = orgScanMode.safeParse(request.query.scan ?? 'none');
     if (!mode.success) return reply.code(400).send({ error: 'scan is none, auto, check or full' });
     const local = { sites: await deps.sites(), installs: deps.installs(), trash: await deps.trash().catch(() => []), drafts: deps.drafts() };

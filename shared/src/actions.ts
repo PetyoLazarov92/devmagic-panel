@@ -4,6 +4,7 @@ import { mysqlAccount, mysqlBackupName, mysqlDatabaseName } from './mysql.js';
 import { NETWORK_PATH } from './network.js';
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
 import { cronSchedule } from './cron.js';
+import { namespaceRef } from './repo-host.js';
 
 /**
  * The action registry: every change the panel can make, defined once.
@@ -50,7 +51,7 @@ export const gitUrl = z
   .max(500)
   .regex(
     /^(git@[\w.-]+:[\w./-]+|ssh:\/\/[\w.@-]+(:\d+)?\/[\w./-]+|https:\/\/[\w.-]+(:\d+)?\/[\w./-]+)$/,
-    'A git URL like git@github.com:team/repo.git or https://github.com/team/repo.git',
+    'A git URL like git@github.com:team/repo.git, git@gitlab.com:group/sub/repo.git or https://git.acme.test/team/repo.git',
   );
 
 /** A build of the install: composer install, or a package manager's install and one of its scripts, in a folder of the repo. */
@@ -64,8 +65,12 @@ export const buildStep = z.object({
   script: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9:._-]{0,59}$/, 'A script name from package.json').optional(),
 });
 
-/** A GitHub repo by owner and name, like acme/shop. */
-export const repoFullName = z.string().regex(/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/, 'A repo like acme/shop');
+/** A repo by its path on its host: acme/shop, or acme/web/shop in a GitLab subgroup. */
+export const repoFullName = z
+  .string()
+  .max(300)
+  .regex(/^[A-Za-z0-9_.-]{1,100}(?:\/[A-Za-z0-9_.-]{1,100}){1,21}$/, 'A repo like acme/shop or acme/web/shop')
+  .refine((p) => !p.split('/').some((s) => s === '.' || s === '..'), 'A repo like acme/shop or acme/web/shop');
 
 export const CLAUDE_MODELS = ['haiku', 'sonnet', 'opus'] as const;
 export const CLAUDE_EFFORTS = ['low', 'medium', 'high'] as const;
@@ -1163,8 +1168,8 @@ export const actions = {
         replaceExisting: z.boolean().default(false),
         /** The install draft this comes from: it is kept while the install runs and goes, with its files, once it is done. */
         draftId: z.string().uuid().optional(),
-        /** The GitHub organization the repo was picked from, for how the site was installed. */
-        organization: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/).optional(),
+        /** The GitHub organization or GitLab group the repo was picked from, for how the site was installed. */
+        organization: namespaceRef.optional(),
         /** For a network in the dump: its layout here, and the sites whose address changes are moved after the replace. */
         network: networkChoice.optional(),
       })

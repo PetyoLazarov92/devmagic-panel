@@ -1,5 +1,5 @@
 import type { CheckStatus, Site, SiteInstall, SiteIssue } from '@devmagic-panel/shared';
-import { INSTALL_HOW_LABELS, repoWeb } from '@devmagic-panel/shared';
+import { INSTALL_HOW_LABELS, namespaceLabel, repoWeb } from '@devmagic-panel/shared';
 import { CircleAlert, CircleX, LoaderCircle, Network, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -94,7 +94,7 @@ export function installLabel(install: SiteInstall | undefined): string {
     INSTALL_HOW_LABELS[install.how],
     install.how === 'restore' && install.archivedAt ? `copy from ${shortDate(install.archivedAt)}` : null,
     install.at ? shortDate(install.at) : null,
-    install.org && !repo ? install.org : null,
+    install.org && !repo ? namespaceLabel(install.org) : null,
     repo,
   ]
     .filter(Boolean)

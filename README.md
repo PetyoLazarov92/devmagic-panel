@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.1.4-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.2.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -150,6 +150,7 @@ rest first and installs what is missing after asking:
 | Recommended | Composer, Imagick, Mailpit, PHP-FPM where mod_php runs | asked, yes by default |
 | Optional | Xdebug, phpMyAdmin | asked, no by default |
 | For installs from an organization | GitHub CLI, rclone, Claude Code | one question, no by default; you sign in to each |
+| For GitLab groups | GitLab CLI (`glab` 1.36 or newer) | reported only: `sudo apt install glab` where apt has it (Ubuntu 24.04 and later, Debian 13), GitLab's install page elsewhere |
 
 Without Node.js, the installer offers the official Node.js 22 build from
 nodejs.org, checked against its checksums, for the panel only. The Environment
@@ -243,7 +244,8 @@ change, switch branches or rebuild freely.
    - **Optional**, asked with no as the default: Xdebug and phpMyAdmin.
    - **For installs from an organization**, one question, no by default: the
      GitHub CLI, rclone and Claude Code. Signing in to them stays yours; the
-     installer prints how.
+     installer prints how. The GitLab CLI, needed only for GitLab groups, is
+     reported with where to get it and never installed in that group.
    - It warns about PHP older than 8.1 and an nginx that may hold ports 80
      and 443. `--yes` and `--skip-optional` skip all but the required parts.
 2. Writes `/etc/devmagic-panel/config.env` with the detected paths.
@@ -403,22 +405,31 @@ When the installer put Node.js in place for the panel, use
 
 ## 🏢 Install from an organization
 
-Optional. The new site wizard's first start, **From an organization**, opens
+Optional. The new site wizard's first start, **From an organization or
+group**, opens
 once Claude Code is installed and signed in (`claude auth login`); until then
 the card says what is missing. Sign in with your claude.ai account, with
 Asana, Google Drive and Google Docs connected there, and the card gets an
 animated border: that sign-in is what reaches the linked tasks and files.
 
-1. **Organization**: the GitHub CLI (`gh auth login`, its own browser sign-in)
-   lists the organizations you belong to; tick the ones to scan. Their repos
+1. **Organization or group**: the GitHub CLI (`gh auth login`, its own browser
+   sign-in) lists the GitHub organizations you belong to, and the GitLab CLI
+   (`glab auth login`, `--hostname gitlab.acme.test` for your own GitLab) the
+   GitLab groups you can clone from, on gitlab.com and on the hosts you add
+   under Your own GitLab hosts; tick the ones to scan. A GitLab group is
+   scanned with its subgroups, so only the top group you belong to is offered,
+   and a project shows with its path in the group (`clients/site`). The panel
+   only runs `gh` and `glab`; it never reads their tokens. Their repos
    show what each holds (WordPress site, theme, plugin) and whether this
    machine has it installed, archived or as an unfinished install. The list
    is kept in the panel's database and shows at once; opening the page checks
    for new pushes when the last check is over an hour old (usually one page
    of GitHub's REST API), and once a week, or with Rescan all, every repo is
    listed again so deleted and renamed ones go. A repo is looked into again
-   only after a push. Without the GitHub CLI the last list still shows and
-   installs, as cloning uses git, or you paste a repo URL.
+   only after a push (on GitLab, after any activity; checks read 70 minutes
+   back, as GitLab moves that time about once an hour). Without the CLI the
+   last list still shows and installs, as cloning uses git, or you paste a
+   repo URL from any git host.
 2. **Read the repo**: Claude Code reads only the repo's docs and build files
    (README, `docs/`, `composer.json`, local dev configs; never `wp-config.php`
    or `.env`), copied into a folder of their own, and fills a fixed form,
@@ -611,7 +622,8 @@ the defaults without asking.
   stdin, and locks for an hour after 5 failures from anywhere. Passwords go to MySQL and WP-CLI
   through the environment or stdin, never the command line. Updates need no
   GitHub token: the GitHub CLI and git keep their own sign-in, and the panel
-  never reads it.
+  never reads it. The same goes for the GitLab CLI, which lists GitLab groups
+  and merge requests.
 - Updates are packages GitHub built from a version tag, checked against their
   `.sha256` before anything is unpacked, whichever way they arrive. The
   Node.js the installer may download is checked against nodejs.org's

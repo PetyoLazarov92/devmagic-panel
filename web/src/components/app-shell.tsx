@@ -9,6 +9,7 @@ import { JobsIndicator } from '@/components/jobs-indicator';
 import { UpdateIndicator, updateDot, useUpdateStatus } from '@/components/update-indicator';
 import { QueuedProposals } from '@/components/queued-proposals';
 import { api, isMockup } from '@/lib/api';
+import { loadGitHosts } from '@/lib/git-hosts';
 import { setAssistantOpen } from '@/lib/assistant';
 import { useDeveloper, useVersionTaps } from '@/lib/developer';
 import { useMailUnread } from '@/lib/mail-unread';
@@ -47,6 +48,7 @@ export function AppShell({ path, user, version, onLogout, children }: Props) {
   const assistant = useAsync(() => api.assistant(), []);
   // Signed in: the panel's preferences replace this browser's copy.
   useEffect(() => void loadPreferences(), []);
+  useEffect(() => void loadGitHosts(), []);
   const assistantOn = assistant.data?.enabled === true;
   const developer = useDeveloper();
   const tapVersion = useVersionTaps();

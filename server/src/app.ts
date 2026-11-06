@@ -33,7 +33,8 @@ import { registerSiteRoutes } from './sites/routes.js';
 import { sitesByVersion } from './php/pools.js';
 import { registerPhpRoutes } from './php/routes.js';
 import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
-import { registerOrgRoutes } from './org/routes.js';
+import { readOrgSettings, registerOrgRoutes } from './org/routes.js';
+import { gitlabHostsInUse } from './repo-hosts/index.js';
 import { listTrash } from './sites/trash.js';
 import type { RunStore } from './store.js';
 import { installedCores, readWpcoreConfig } from './wpcore.js';
@@ -262,6 +263,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Everything below needs a session.
   app.register(async (api) => {
+    const orgSettingsFile = join(deps.settingsFile ? dirname(deps.settingsFile) : join(deps.hostPaths.home, '.config', 'devmagic-panel'), 'organizations.json');
+    // Read at request time, once the site routes below exist.
+    const gitlabHosts = async () => gitlabHostsInUse(readOrgSettings(orgSettingsFile), await siteRoutes.sites());
     api.addHook('onRequest', async (request, reply) => {
       if (!authenticated(request)) return reply.code(401).send({ error: 'Log in first' });
     });
@@ -298,6 +302,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         secrets: deps.secrets(),
         paths: deps.hostPaths,
         dmpRoot: deps.dmpRoot,
+        gitlabHosts,
         ...(deps.production ? { self: { repo: deps.repo ?? REPO_DIR, version: deps.version } } : {}),
       }),
     );
@@ -491,7 +496,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       home: deps.hostPaths.home,
       searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '',
       workDir: join(deps.uploadsDir, '..', 'tmp'),
-      settingsFile: join(deps.settingsFile ? dirname(deps.settingsFile) : join(deps.hostPaths.home, '.config', 'devmagic-panel'), 'organizations.json'),
+      settingsFile: orgSettingsFile,
       sites: siteRoutes.sites,
       installs: () => deps.store.installs(),
       trash: async () => (await listTrash(deps.exec, deps.dmpRoot)).map((e) => {
@@ -516,7 +521,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           wpcoreConf: deps.hostPaths.wpcoreConf,
           sites: siteRoutes.sites,
           aura: siteRoutes.aura,
-          environment: () => checkEnvironment({ config: deps.config, exec: deps.exec, secrets: deps.secrets(), paths: deps.hostPaths, dmpRoot: deps.dmpRoot }),
+          environment: () => checkEnvironment({ config: deps.config, exec: deps.exec, secrets: deps.secrets(), paths: deps.hostPaths, dmpRoot: deps.dmpRoot, gitlabHosts }),
           coreStatus: deps.coreStatus ?? (async () => null),
           conventions,
         },
