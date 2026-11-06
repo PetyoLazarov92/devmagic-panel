@@ -5,6 +5,7 @@
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
 [![WordPress](https://img.shields.io/badge/WordPress-ready-21759b)](https://wordpress.org)
+[![Docs](https://img.shields.io/badge/docs-webtimeless.cloud-6d5dfc)](https://webtimeless.cloud/docs/devmagic-panel/)
 
 > 🚀 A modern, cPanel-like control panel for the WordPress sites on your own machine: open `https://local.devmagic`, log in, and manage certificates, Apache vhosts, `/etc/hosts`, WordPress cores and installs, in light or dark.
 
@@ -755,5 +756,6 @@ release notes, which the panel's Updates page shows as what is new.
 
 [![WordPress](https://img.shields.io/badge/WordPress-Ready-21759b)](https://wordpress.org)
 [![devmagic](https://img.shields.io/badge/devmagic-CLI-6d5dfc)](https://github.com/PetyoLazarov92/devmagic)
+[![webtimeless.cloud](https://img.shields.io/badge/webtimeless.cloud-docs%20and%20guides-6d5dfc)](https://webtimeless.cloud/)
 
 </div>
