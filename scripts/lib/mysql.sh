@@ -57,7 +57,7 @@ dmp_mysql_setting_line() {
 
 # mysql-config-write [name=value...]: the panel's file with exactly these
 # settings, in the list's order; none removes the file. MySQL reads it at its
-# next start.
+# next start. slow_query_log=1 also writes log_output = FILE,TABLE.
 dmp_mysql_config_write() {
   local dir pair line name entry n body="" tmp
   local -A lines=()
@@ -77,6 +77,8 @@ dmp_mysql_config_write() {
     n="${entry%% *}"
     [[ -n "${lines[$n]:-}" ]] && body+="${lines[$n]}"$'\n'
   done
+  # The slow log goes to its table too, where the panel reads it: a fixed value, never from the caller.
+  [[ "${lines[slow_query_log]:-}" != "slow_query_log = 1" ]] || body+="log_output = FILE,TABLE"$'\n'
   tmp="$(mktemp "$dir/.dmp-cnf.XXXXXX")"
   printf '# Managed by devmagic-panel (the MySQL page). Edits here are overwritten.\n[mysqld]\n%s' "$body" > "$tmp"
   chmod 0644 "$tmp"

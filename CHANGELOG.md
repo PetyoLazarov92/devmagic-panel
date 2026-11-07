@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.20.0 (2026-11-07)
+* **Command palette:** Ctrl+K runs quick actions as well as jumping: a site's clear cache, flush rewrite rules, snapshot, clear debug.log, terminal, fetch, pull and reissue the certificate (the open site's first), and reload Apache or nginx, restart a service and clear Mail, asking first where it matters. Mail, Archive, Jobs and Developer options are in it too
+* **Databases:** Slow queries, a new view of a site's Database tab and a card on Services, MySQL, lists the queries that cost the most time, with runs, time in all and each, rows read for rows sent, a missing index hint, one real run on request and Open in SQL to EXPLAIN. MySQL 8 counts every query with nothing to switch on; on MariaDB the slow log, which now goes to its table too, is grouped by query. Start counting again measures from now
+* **PHP:** Profiles on a site's PHP tab: turn on Xdebug's profiler for the site's PHP version (trigger only), open a page to profile it, and see its time by plugin and theme and its slowest functions with their callers, or download the file for KCachegrind or an IDE. Profiles go to the panel's own folder and are deleted after 3 days
+* This release changes the root scripts, so the Updates page asks for your sudo password to install it, as for any release that does
+
 ### v1.19.2 (2026-11-07)
 * **Databases:** the Tables list shows its first 21 tables, with Show 21 more and Show all under it; Find a table and the prefix filters still search every table, and say how many match
 * An update installs this release from the panel as usual

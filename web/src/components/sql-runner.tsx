@@ -82,7 +82,20 @@ const CELL_SHOWN = 200;
  * of what it changes and with the tables it names saved first for Undo. The
  * last 30 statements stay in this browser.
  */
-export function SqlRunner({ database, placeholder, canWrite = false }: { database: string; placeholder?: string; canWrite?: boolean }) {
+/** Opens the SQL view with this statement in the editor, like a slow query to EXPLAIN; kept in the browser's history only. */
+export const sqlSeedState = (sql: string) => ({ sqlSeed: sql });
+
+/** The statement the page was opened with, if any. */
+export function sqlSeed(): string | undefined {
+  try {
+    const seed = (window.history.state as { sqlSeed?: unknown } | null)?.sqlSeed;
+    return typeof seed === 'string' ? seed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function SqlRunner({ database, placeholder, canWrite = false, initialSql }: { database: string; placeholder?: string; canWrite?: boolean; initialSql?: string | undefined }) {
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const writing = canWrite && mode === 'write';
   const [checked, setChecked] = useState<WriteCheck | null>(null);
@@ -91,7 +104,7 @@ export function SqlRunner({ database, placeholder, canWrite = false }: { databas
   const runner = useJob();
   const done = useRef<string | null>(null);
   const { job } = runner;
-  const [sql, setSql] = useState('');
+  const [sql, setSql] = useState(initialSql ?? '');
   const [result, setResult] = useState<DbQueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsAccount, setNeedsAccount] = useState(false);

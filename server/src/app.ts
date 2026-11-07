@@ -1,8 +1,8 @@
-import { existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -27,6 +27,9 @@ import { type BrowseContext, type CleanupWhere, dbCell, dbOverview, dbRows, dbSc
 import { runQuery } from './mysql-query.js';
 import { cleanupViewWhere, listCleanups } from './mysql-cleanup.js';
 import { readSettings } from './mysql-settings.js';
+import { slowQueries } from './mysql-slow.js';
+import { listProfiles, ProfileError, profileFile, profileSummary } from './profiles.js';
+import { readSiteVhosts } from './sites/vhost.js';
 import { checkWrite, mysqlProcesses } from './mysql-write.js';
 import { exportDatabase } from './mysql-transfer.js';
 import { listRowChanges } from './mysql-rows.js';
@@ -430,6 +433,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         const { filename, stream } = await exportDatabase(browse(), request.params.database, tables);
         return reply.header('content-type', 'application/gzip').header('content-disposition', `attachment; filename="${filename}"`).send(stream);
       }));
+    // The queries that cost the most time, of one database (?database=acme_com) or every site's: MySQL's statement statistics, or the slow log table.
+    api.get<{ Querystring: { database?: string } }>('/api/mysql/slow-queries', async (request, reply): Promise<SlowQueryReport | undefined> =>
+      browsing(reply, () => slowQueries(browse(), request.query.database)));
     // What MySQL runs now, for the MySQL tab's Processes.
     api.get('/api/mysql/processes', async (_request, reply): Promise<MysqlProcess[] | undefined> => browsing(reply, () => mysqlProcesses(browse())));
     // Table and column names, for the SQL editor's suggestions.
@@ -462,6 +468,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         const report = await wordpressReads.read(id, (signal) => wordpressReport({ ...browse(), signal }, domain, path, site, Date.now, { sections: wanted, sizes: sizes === '1', history: (database, tables) => tableGrowth(deps.store, database, tables) }), gone.signal);
         keepReport(deps.store, domain, path, site, report, wanted);
         return report;
+      }));
+    // Xdebug's profiles: a site's (?domain=local.acme.com, &path=/learn for a site under a path) or all of them, newest first.
+    const profiling = async <T>(reply: FastifyReply, run: () => Promise<T> | T): Promise<T | undefined> => {
+      try {
+        return await run();
+      } catch (error) {
+        if (error instanceof ProfileError) return reply.code(error.status).send({ error: error.message });
+        throw error;
+      }
+    };
+    api.get<{ Querystring: { domain?: string; path?: string } }>('/api/profiles', async (request, reply): Promise<ProfileList | undefined> =>
+      profiling(reply, () => {
+        const { domain, path } = request.query;
+        if (domain === undefined) return listProfiles(deps.config, dirname(deps.uploadsDir));
+        if (!localName.safeParse(domain).success || (path !== undefined && !mountPath.safeParse(path).success)) throw new ProfileError(`no site called ${domain}${path ?? ''}`, 404);
+        const vhost = readSiteVhosts(deps.config).find((v) => v.names[0] === domain);
+        const hosts = vhost ? [...new Set(vhost.names)] : [domain];
+        return listProfiles(deps.config, dirname(deps.uploadsDir), hosts, path ? `/${path.slice(1).replace(/[^A-Za-z0-9-]/g, '_')}` : '');
+      }));
+    api.get<{ Params: { version: string; name: string } }>('/api/profiles/:version/:name', async (request, reply): Promise<ProfileSummary | undefined> =>
+      profiling(reply, () => profileSummary(deps.config, dirname(deps.uploadsDir), request.params.version, request.params.name)));
+    // The file as Xdebug wrote it, for KCachegrind, QCachegrind or an IDE.
+    api.get<{ Params: { version: string; name: string } }>('/api/profiles/:version/:name/download', async (request, reply) =>
+      profiling(reply, () => {
+        const file = profileFile(deps.config, request.params.version, request.params.name);
+        return reply.header('content-type', 'application/octet-stream').header('content-disposition', `attachment; filename="${request.params.name}"`).send(createReadStream(file));
       }));
     api.get('/api/apache', async (): Promise<ApacheReport> => apacheReport(deps.config, deps.exec, deps.dmpRoot));
     api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));

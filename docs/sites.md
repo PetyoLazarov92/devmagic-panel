@@ -62,8 +62,8 @@ off at install and the local helpers marked. Undo is in the toast.
 
 ### Database
 
-Tables, the WordPress view, the SQL runner, and backups and tools: see
-[Databases](databases.md).
+Tables, the WordPress view, slow queries, the SQL runner, and backups and
+tools: see [Databases](databases.md).
 
 ### Cron
 
@@ -82,6 +82,15 @@ WP-Cron from cron instead of page loads.
   before you switch: PHPCompatibilityWP, fetched once with Composer into the
   panel's data folder. It is a hint and never blocks the switch.
 - PHP info from the PHP that serves the site.
+- **Profiles**: Xdebug's profiler for the site. **Turn on profiling** adds the
+  `profile` mode to the PHP version the site runs (trigger only, so a page is
+  profiled only when it asks), and Xdebug then writes to the panel's folder,
+  `$STATE_DIR/profiles/<version>`, instead of Apache's private `/tmp`.
+  **Open and profile** opens a page of the site with `XDEBUG_PROFILE=1`; its
+  profile shows the time by plugin and theme (PHP's own functions count with
+  the code that calls them most) and the slowest functions with their calls and
+  callers. **Download** gives the file for KCachegrind or an IDE. Profiles are
+  deleted after 3 days.
 
 ### Domains and SSL
 

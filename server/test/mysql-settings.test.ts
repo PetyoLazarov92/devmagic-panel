@@ -94,6 +94,17 @@ describe("MySQL's settings", () => {
     expect(fake.calls.filter((c) => c.file === 'sudo').at(-1)?.args).toEqual(['-n', DMP, 'mysql-config-write', 'max_connections=300']);
   });
 
+  it('sends the slow log to its table too when it is switched on, where the slow queries list reads it', async () => {
+    const { ctx, fake } = setup();
+    const { steps } = await planSetSettings(ctx, { values: { slow_query_log: 1, long_query_time: 0.5 } });
+    const job: JobRuntime = { onUndo: () => undefined, progress: () => undefined };
+    for (const step of steps) await step.run(job);
+    expect(fake.calls.find((c) => c.args.at(-1)?.startsWith('SET GLOBAL'))?.args.at(-1)).toBe("SET GLOBAL slow_query_log = 1; SET GLOBAL long_query_time = 0.5; SET GLOBAL log_output = 'FILE,TABLE';");
+    const { steps: off } = await planSetSettings(ctx, { values: { slow_query_log: 0 } });
+    for (const step of off) await step.run(job);
+    expect(fake.calls.filter((c) => c.args.at(-1)?.startsWith('SET GLOBAL')).at(-1)?.args.at(-1)).toBe('SET GLOBAL slow_query_log = 0;');
+  });
+
   it("refuses a setting this server does not have, and the action's schema refuses values out of bounds", async () => {
     const { ctx } = setup();
     await expect(planSetSettings(ctx, { values: { innodb_log_file_size: GB } })).rejects.toThrow('This MySQL has no innodb_log_file_size');

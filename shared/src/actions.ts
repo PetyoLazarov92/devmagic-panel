@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { apacheModuleLock, apacheModuleName } from './apache.js';
 import { MYSQL_SETTING_NAMES, mysqlAccount, mysqlBackupName, mysqlDatabaseName, mysqlSettingError, type MysqlSettingName } from './mysql.js';
+import { PROFILE_NAME } from './profiles.js';
 import { mysqlIdentifier, WP_CONTENT_KINDS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS, WP_TABLE_FIXES } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
@@ -490,12 +491,18 @@ export const actions = {
   },
   'apache.reload': {
     title: 'Reload Apache',
+    palette: [{ scope: 'machine', label: 'Reload Apache', restarts: true }],
     description: 'Runs a configtest and reloads Apache when it passes.',
     changesSystem: true,
     input: z.object({}),
   },
   'service.restart': {
     title: 'Restart a service',
+    palette: [
+      { scope: 'machine', label: 'Restart Apache', input: { service: 'apache' }, restarts: true, confirm: 'Every site and the panel stop answering for a moment.' },
+      { scope: 'machine', label: 'Restart MySQL', input: { service: 'mysql' }, confirm: 'Every open connection drops and sites show a database error for a few seconds.' },
+      { scope: 'machine', label: 'Restart nginx', input: { service: 'nginx' }, confirm: 'Sites on nginx stop answering for a moment.' },
+    ],
     description: 'Restarts Apache or nginx (each only after its configtest passes) or MySQL/MariaDB.',
     changesSystem: true,
     input: z.object({ service: z.enum(['apache', 'mysql', 'nginx']) }),
@@ -530,6 +537,7 @@ export const actions = {
   },
   'nginx.reload': {
     title: 'Reload nginx',
+    palette: [{ scope: 'machine', label: 'Reload nginx', restarts: true }],
     description: 'Runs nginx -t and reloads nginx when it passes.',
     changesSystem: true,
     input: z.object({}),
@@ -645,6 +653,12 @@ export const actions = {
     changesSystem: true,
     input: z.object({ id: z.number().int().min(1).max(2 ** 53 - 1) }),
   },
+  'mysql.resetQueryStats': {
+    title: 'Count the queries again from now',
+    description: "Empties MySQL's statement statistics (performance_schema) and the slow log table, the ones the server keeps, so the slow queries list counts from now: take it before you load a page to measure. Changes no data.",
+    changesSystem: true,
+    input: z.object({}),
+  },
   'mysql.importDump': {
     title: 'Import a dump into a database',
     description:
@@ -678,6 +692,12 @@ export const actions = {
       modes: z.array(z.enum(XDEBUG_MODES)).min(1).max(XDEBUG_MODES.length).refine((m) => new Set(m).size === m.length, 'Each mode once').default(['debug']),
       startWithRequest: z.enum(XDEBUG_STARTS).default('trigger'),
     }),
+  },
+  'profile.delete': {
+    title: 'Delete Xdebug profiles',
+    description: "Deletes profiles Xdebug wrote to the panel's folder for a PHP version, with the panel's summaries of them. They also go by themselves after 3 days.",
+    changesSystem: true,
+    input: z.object({ profiles: z.array(z.object({ version: phpVersion, name: z.string().max(500).regex(PROFILE_NAME, 'A profile like cachegrind.out.1762500000_123456.local.acme.com_') })).min(1).max(500) }),
   },
   'php.setModule': {
     title: 'Turn a PHP module on or off',
@@ -802,6 +822,7 @@ export const actions = {
   },
   'cert.reissue': {
     title: 'Reissue certificate',
+    palette: [{ scope: 'domain', label: 'Reissue the certificate' }],
     description: 'Issues a new certificate from the local CA covering every name in the site\'s vhost, then reloads Apache.',
     changesSystem: true,
     input: z.object({ domain: localName }),
@@ -820,12 +841,14 @@ export const actions = {
   },
   'git.fetch': {
     title: 'Fetch from origin',
+    palette: [{ scope: 'git', label: 'Fetch' }],
     description: 'Fetches branches and commits from origin (pruning deleted branches) for the site, one of its mounted folders, or a repo in it (repo: wp-content, or a theme or plugin folder). Changes no files.',
     changesSystem: false,
     input: z.object(gitTarget),
   },
   'git.pull': {
     title: 'Pull',
+    palette: [{ scope: 'git', label: 'Pull' }],
     description: 'Pulls the current branch from its upstream, fast-forward only: never creates a merge commit and never overwrites local changes.',
     changesSystem: true,
     input: z.object(gitTarget),
@@ -889,6 +912,7 @@ export const actions = {
   },
   'db.snapshot': {
     title: 'Take a database snapshot',
+    palette: [{ scope: 'site', label: 'Take a database snapshot' }],
     description: 'Exports the site\'s database to a gzipped snapshot in the backup folder. Starts a job.',
     changesSystem: false,
     input: z.object({ domain: localName, path: sitePath, label: z.string().regex(/^[a-z0-9-]{1,40}$/, 'Lowercase letters, digits and dashes').optional() }),
@@ -1101,6 +1125,7 @@ export const actions = {
   },
   'mail.clear': {
     title: 'Delete caught mail',
+    palette: [{ scope: 'machine', label: 'Clear Mail', confirm: 'Deletes every message Mailpit caught. This cannot be undone.' }],
     description: 'Deletes the mail Mailpit caught from one site, or all of it when no domain is given.',
     changesSystem: true,
     input: z.object({ domain: localName.optional() }),
@@ -1176,6 +1201,7 @@ export const actions = {
   },
   'site.clearCache': {
     title: 'Clear caches',
+    palette: [{ scope: 'site', label: 'Clear cache' }],
     description: 'Flushes the object cache, deletes transients (network ones too on multisite) and reloads Apache to reset OPcache.',
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath }),
@@ -1189,12 +1215,14 @@ export const actions = {
   },
   'site.flushRewrites': {
     title: 'Flush rewrite rules',
+    palette: [{ scope: 'site', label: 'Flush rewrite rules' }],
     description: 'Regenerates WordPress rewrite rules in the database. Does not touch .htaccess.',
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath }),
   },
   'site.openTerminal': {
     title: 'Open in terminal',
+    palette: [{ scope: 'site', label: 'Open a terminal' }],
     description: "Opens a terminal window at the site's folder on this computer's desktop: the default terminal when the panel knows how to give it a folder, else the first known one installed. Changes nothing.",
     changesSystem: false,
     input: z.object({ domain: localName, path: sitePath }),
@@ -1266,6 +1294,7 @@ export const actions = {
   },
   'site.clearDebugLog': {
     title: 'Clear debug.log',
+    palette: [{ scope: 'site', label: 'Clear debug.log' }],
     description: 'Empties the site\'s debug.log.',
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath }),
@@ -1405,6 +1434,29 @@ export const actions = {
 
 export type ActionId = keyof typeof actions;
 export type ActionInput<Id extends ActionId> = z.infer<(typeof actions)[Id]['input']>;
+
+/**
+ * Where a command palette entry applies: every site (`site`), a site with a
+ * git repository at its root (`git`), a domain and not a site under a path
+ * (`domain`), or the machine (`machine`, with its input fixed in the entry).
+ */
+export type PaletteScope = 'site' | 'git' | 'domain' | 'machine';
+
+/** An action the command palette offers: the label, a fixed input, and the question for a risky one. */
+export interface PaletteEntry {
+  scope: PaletteScope;
+  label: string;
+  input?: Readonly<Record<string, unknown>>;
+  /** Asked in the palette before it runs. */
+  confirm?: string;
+  /** Restarts or reloads a web server, so the answer can be cut off. */
+  restarts?: boolean;
+}
+
+/** Every palette entry in the registry, in registry order. */
+export function paletteEntries(): { id: ActionId; entry: PaletteEntry }[] {
+  return (Object.keys(actions) as ActionId[]).flatMap((id) => ((actions[id] as { palette?: readonly PaletteEntry[] }).palette ?? []).map((entry) => ({ id, entry })));
+}
 
 export function isActionId(id: string): id is ActionId {
   return Object.hasOwn(actions, id);

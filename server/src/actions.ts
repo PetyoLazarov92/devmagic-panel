@@ -17,6 +17,8 @@ import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
 import { planSetSettings } from './mysql-settings.js';
 import { contentTitle, planContent, planDropTable, planEmptyTable, planOrphans, planTransients, setAutoload, undoCleanup } from './mysql-cleanup.js';
 import { deleteRows, insertRow, type RowsContext, undoRowChange, updateRow } from './mysql-rows.js';
+import { resetSlowQueries } from './mysql-slow.js';
+import { deleteProfiles } from './profiles.js';
 import { killQuery, planWrite } from './mysql-write.js';
 import { planImportDump } from './mysql-transfer.js';
 import { CoreRefused, planAddCore, removeCore } from './sites/cores.js';
@@ -344,6 +346,8 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     return startJob(ctx, steps, title, `database ${input.database}`);
   },
   'mysql.killQuery': async (ctx, input) => [await killQuery(rowsCtx(ctx), input)],
+  'mysql.resetQueryStats': async (ctx) => [await resetSlowQueries(rowsCtx(ctx))],
+  'profile.delete': async (ctx, input) => [deleteProfiles(ctx.config, dirname(ctx.uploadsDir), input.profiles)],
   'mysql.importDump': async (ctx, input) =>
     startJob(
       ctx,

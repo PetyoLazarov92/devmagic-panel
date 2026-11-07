@@ -502,6 +502,23 @@ php_tree() {
   grep -qx 'xdebug.mode=debug,develop,profile' "$T/php/8.3/apache2/conf.d/99-devmagic-panel-xdebug.ini"
 }
 
+@test "xdebug-enable sends profiles and traces to the panel's folder for the version, and only with those modes" {
+  php_tree
+  run dmp xdebug-enable debug trigger
+  [ "$status" -eq 0 ]
+  ini="$T/php/8.3/apache2/conf.d/99-devmagic-panel-xdebug.ini"
+  ! grep -q 'xdebug.output_dir' "$ini"
+  [ ! -e "$T/state/profiles" ]
+  run dmp xdebug-enable 8.3 debug,profile trigger
+  [ "$status" -eq 0 ]
+  grep -qx "xdebug.output_dir=$T/state/profiles/8.3" "$ini"
+  grep -qx 'xdebug.profiler_output_name=cachegrind.out.%u.%H%R' "$ini"
+  [ "$(stat -c %a "$T/state/profiles/8.3")" = 2770 ]
+  run dmp xdebug-enable trace yes
+  [ "$status" -eq 0 ]
+  grep -qx "xdebug.output_dir=$T/state/profiles/8.3" "$ini"
+}
+
 @test "xdebug-enable refuses modes and start values outside the allow-list" {
   php_tree
   for args in "debug,gcstats trigger" "debug,debug trigger" "debug, trigger" ",debug trigger" "debug always" "x;id trigger" "--help yes"; do
@@ -712,11 +729,25 @@ fpm_tree() {
   [ "$status" -eq 0 ]
   cnf="$T/mysql/mysql.conf.d/zz-devmagic-panel.cnf"
   [ "$(sed -n 2p "$cnf")" = '[mysqld]' ]
-  [ "$(sed -n '3,$p' "$cnf")" = "$(printf 'innodb_buffer_pool_size = 4294967296\nmax_connections = 300\nslow_query_log = 1\nlong_query_time = 0.5')" ]
+  [ "$(sed -n '3,$p' "$cnf")" = "$(printf 'innodb_buffer_pool_size = 4294967296\nmax_connections = 300\nslow_query_log = 1\nlong_query_time = 0.5\nlog_output = FILE,TABLE')" ]
   [ "$(stat -c %a "$cnf")" = 644 ]
   run dmp mysql-config-write
   [ "$status" -eq 0 ]
   [ ! -e "$cnf" ]
+}
+
+@test "mysql-config-write sends the slow log to its table only with the slow log on, and never takes log_output from the caller" {
+  mkdir -p "$T/mysql/mysql.conf.d"
+  cnf="$T/mysql/mysql.conf.d/zz-devmagic-panel.cnf"
+  run dmp mysql-config-write slow_query_log=0
+  [ "$status" -eq 0 ]
+  ! grep -q log_output "$cnf"
+  run dmp mysql-config-write log_output=NONE
+  [ "$status" -eq 2 ]
+  run dmp mysql-config-write slow_query_log=1
+  [ "$status" -eq 0 ]
+  [ "$(grep -c log_output "$cnf")" -eq 1 ]
+  grep -qx 'log_output = FILE,TABLE' "$cnf"
 }
 
 @test "mysql-config-write uses MariaDB's folder when there is one" {

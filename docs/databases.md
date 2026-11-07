@@ -119,6 +119,23 @@ removed. It checks the disk has room for its copy first. A job keeps running
 when you leave the page: open the view again and it is back in its card, and
 a toast says when one you are not looking at ends.
 
+## Slow queries
+
+The queries that cost the database the most time, the heaviest first: how many
+runs, the time in all and each, the slowest run, and rows read against rows
+sent, with **missing index?** where a query reads far more rows than it
+returns or ran without an index. A row opens the query whole, one real run of
+it with its values (shown on request: it can hold data, and it is never stored
+or sent to an AI), and **Open in SQL to EXPLAIN**.
+
+- On MySQL 8 the numbers come from MySQL's statement statistics
+  (`performance_schema`), which count every query and need nothing switched on.
+- On MariaDB, or where those are off, they come from the slow log: switching
+  it on in Services, MySQL also sends it to its table (`log_output =
+  FILE,TABLE`), where the panel reads it.
+- **Start counting again** empties both, so a page loaded after it shows only
+  its own queries. The panel's own reads are left out.
+
 ## SQL
 
 One statement at a time, in a code editor: MySQL's keywords coloured and
@@ -166,7 +183,8 @@ The runner never touches another database, accounts, rights, routines or files.
   site's database user.
 - **Settings**: the buffer pool, the biggest packet, the redo log,
   connections, temp tables in memory, how often InnoDB writes to disk and the
-  slow query log, with what each runs at now, what the panel keeps, what an
+  slow query log (on, it goes to its table too, for Slow queries), with what
+  each runs at now, what the panel keeps, what an
   import holds raised for its run, and a suggestion where the value is low
   (the buffer pool from your sites' InnoDB data). **Change** or a suggestion's
   **Use** starts a job: `SET GLOBAL` applies it at once, and `dmp-root
@@ -176,6 +194,8 @@ The runner never touches another database, accounts, rights, routines or files.
   one takes it out of the file. Undo puts the values from before back.
 - **Processes**: what MySQL runs now, the longest first, with **Stop** for a
   statement (never one of MySQL's own threads).
+- **Slow queries**: the same list as a site's, for every site's database at
+  once.
 - **Import a dump** into a new database, or into one no site uses, which is
   saved to the MySQL backups first and emptied. The dump's own
   `CREATE DATABASE`, `DROP DATABASE` and `USE` lines are left out, so it

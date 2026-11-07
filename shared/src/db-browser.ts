@@ -451,3 +451,44 @@ export interface MysqlProcess {
   /** The statement, cut at 300 characters. */
   info?: string;
 }
+
+/**
+ * One kind of query and what it cost, the same query with other values
+ * counted together: from MySQL's statement statistics (performance_schema,
+ * MySQL 8) or grouped by the panel from the slow log (MariaDB).
+ */
+export interface SlowQuery {
+  /** Stable for the same query shape: MySQL's digest, or a hash of the panel's grouping. */
+  id: string;
+  database?: string;
+  /** The query with its values as ?, cut at 2000 characters. */
+  text: string;
+  /** One real run of it, with its values, cut at 4000 characters. It can hold data: never stored or sent to an AI. */
+  sample?: string;
+  count: number;
+  totalMs: number;
+  avgMs: number;
+  maxMs: number;
+  rowsExamined: number;
+  rowsSent: number;
+  /** Runs that used no index, or no good one; MySQL's statistics only. */
+  noIndex?: number;
+  lastSeen?: string;
+}
+
+export interface SlowQueryReport {
+  /** Where the numbers come from: MySQL's statement statistics, the slow log table, or nowhere yet. */
+  source: 'statements' | 'slowLog' | 'none';
+  /** Since when they count: the oldest first seen, or the oldest slow log entry. */
+  since?: string;
+  slowLog: { on: boolean; toTable: boolean; aboveSeconds: number };
+  /** The heaviest first, by total time; at most 50. */
+  queries: SlowQuery[];
+  /** Why there is nothing to show, or what the numbers leave out. */
+  note?: string;
+}
+
+/** Reads far more rows than it returns: worth an EXPLAIN for a missing index. */
+export function readsTooMuch(q: Pick<SlowQuery, 'rowsExamined' | 'rowsSent' | 'count'>): boolean {
+  return q.rowsExamined / Math.max(q.count, 1) >= 1000 && q.rowsExamined >= 50 * Math.max(q.rowsSent, 1);
+}

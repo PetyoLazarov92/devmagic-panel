@@ -1,4 +1,4 @@
-import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -84,6 +84,11 @@ export interface Api {
   checkWrite: (database: string, sql: string) => Promise<WriteCheck>;
   /** What MySQL runs now. */
   mysqlProcesses: () => Promise<MysqlProcess[]>;
+  /** The queries that cost the most time, of one database or every site's. */
+  slowQueries: (database?: string) => Promise<SlowQueryReport>;
+  /** Xdebug's profiles of a site, or all of them. */
+  profiles: (domain?: string, path?: string) => Promise<ProfileList>;
+  profile: (version: string, name: string) => Promise<ProfileSummary>;
   /** The clean-ups saved for Undo on a database, or one site of it (local.shop.com/learn). */
   cleanups: (database: string, site?: string) => Promise<CleanupInfo[]>;
   /** Table and column names, for the SQL editor's suggestions. */
@@ -281,6 +286,9 @@ const realApi: Api = {
   dbCell: (database, table, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/cell`, query),
   checkWrite: (database, sql) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/check-write`, { sql }),
   mysqlProcesses: () => request('GET', '/api/mysql/processes'),
+  slowQueries: (database) => request('GET', `/api/mysql/slow-queries${database ? `?database=${encodeURIComponent(database)}` : ''}`),
+  profiles: (domain, path) => request('GET', `/api/profiles${domain ? `?domain=${encodeURIComponent(domain)}${path ? `&path=${encodeURIComponent(path)}` : ''}` : ''}`),
+  profile: (version, name) => request('GET', `/api/profiles/${encodeURIComponent(version)}/${encodeURIComponent(name)}`),
   cleanups: (database, site) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/cleanups${site ? `?site=${encodeURIComponent(site)}` : ''}`),
   dbSchema: (database) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/schema`),
   rowChanges: (database, table) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/row-changes?table=${encodeURIComponent(table)}`),
@@ -405,6 +413,9 @@ export const cleanCopyUrl = (domain: string, name: string, path?: string) =>
   `/api/sites/${encodeURIComponent(domain)}/clean-copies/${encodeURIComponent(name)}${atPath(path, '?')}`;
 
 /** Where the browser downloads a snapshot from. */
+/** An Xdebug profile as it was written, for KCachegrind or an IDE. */
+export const profileUrl = (version: string, name: string) => `/api/profiles/${encodeURIComponent(version)}/${encodeURIComponent(name)}/download`;
+
 export const snapshotUrl = (domain: string, name: string, path?: string) =>
   `/api/sites/${encodeURIComponent(domain)}/snapshots/${encodeURIComponent(name)}${atPath(path, '?')}`;
 

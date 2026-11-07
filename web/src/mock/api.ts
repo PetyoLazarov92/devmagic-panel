@@ -4,7 +4,8 @@ import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
+import { mockProfile, mockProfileFiles, mockProfiles } from './profiles';
+import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
@@ -930,6 +931,15 @@ export const mockApi: Api = {
     if (row) return row;
     const undone = mockUndoCleanup(id, input);
     if (undone) return undone;
+    if (id === 'profile.delete') {
+      const gone = new Set((input.profiles as Array<{ name: string }>).map((p) => p.name));
+      mockProfileFiles.splice(0, mockProfileFiles.length, ...mockProfileFiles.filter((p) => !gone.has(p.name)));
+      return { runId: 42, ok: true, exitCode: 0, output: `deleted ${gone.size} profile${gone.size === 1 ? '' : 's'}` };
+    }
+    if (id === 'mysql.resetQueryStats') {
+      slowQueriesReset.at = Date.now();
+      return { runId: 42, ok: true, exitCode: 0, output: "Emptied MySQL's statement statistics: the counts start again now" };
+    }
     if (id === 'mysql.killQuery') {
       killedProcesses.add(Number(input.id));
       return { runId: 42, ok: true, exitCode: 0, output: `stopped the statement ${String(input.id)} ran for northwinddb` };
@@ -1250,6 +1260,18 @@ export const mockApi: Api = {
   mysqlProcesses: async () => {
     await wait(200);
     return mockProcesses();
+  },
+  slowQueries: async (database) => {
+    await wait(300);
+    return mockSlowQueries(database);
+  },
+  profiles: async (domain) => {
+    await wait(200);
+    return mockProfiles(domain);
+  },
+  profile: async (version, name) => {
+    await wait(500);
+    return mockProfile(version, name);
   },
   cleanups: async (database, site) => {
     await wait(150);

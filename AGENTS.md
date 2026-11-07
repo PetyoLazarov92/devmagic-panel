@@ -85,6 +85,8 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    stdin (`--prompt`), never argv. Run history stores any input field called
    `password`, and a row's values and keys (`rowKey`, `rowKeys`, `rowValues`,
    `rowWas`) and SQL that writes (`sql`), as `(hidden)`. Never log them or send them to an AI.
+   A slow query's sample (`server/src/mysql-slow.ts`) holds real values: it
+   goes to the browser only, shown on request, never stored or sent to an AI.
    The panel password changes in the panel (the current one first) and resets
    on the login page with the computer password: `sudo -k -S -v` on stdin,
    offered only where sudo asks this account for a password, behind a global

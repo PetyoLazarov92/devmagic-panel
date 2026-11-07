@@ -100,9 +100,27 @@ dmp_php_apply() {
   fi
 }
 
+# The folder a version's profiles and traces go to, made when missing:
+# $STATE_DIR/profiles/<version>, the panel user's with the web server's group
+# (setgid, 2770), so PHP writes there and the panel reads and deletes; no
+# path from the caller.
+dmp_xdebug_output_dir() {
+  local version="$1" dir
+  dir="$STATE_DIR/profiles/$version"
+  # Root-owned in real use; the bats tests run as a normal user against a temp tree.
+  if [[ $EUID -eq 0 ]]; then
+    install -d -m 0755 -o root -g root "$STATE_DIR" "$STATE_DIR/profiles"
+    install -d -m 2770 -o "$PANEL_USER" -g "$WEB_GROUP" "$dir"
+  else
+    install -d -m 0755 "$STATE_DIR" "$STATE_DIR/profiles"
+    install -d -m 2770 "$dir"
+  fi
+  printf '%s' "$dir"
+}
+
 # xdebug-enable [version] <mode> <start>: Xdebug on for a version's web parts with the panel's settings.
 dmp_xdebug_enable() {
-  local version="" mode start dir ini tmp sapi
+  local version="" mode start dir ini tmp sapi out
   local -a sapis
   if (( $# == 3 )); then
     version="$1"
@@ -120,6 +138,11 @@ dmp_xdebug_enable() {
   mapfile -t sapis < <(dmp_php_web_sapis "$version")
   (( ${#sapis[@]} > 0 )) || dmp_die "PHP $version has no web part (mod_php or FPM) to debug"
 
+  # Profiles and traces go to a folder of the panel's that PHP can write (Apache's /tmp is its own, so the panel would not see them there).
+  out=""
+  if [[ ",$mode," == *",profile,"* || ",$mode," == *",trace,"* ]]; then
+    out="$(dmp_xdebug_output_dir "$version")"
+  fi
   for sapi in "${sapis[@]}"; do
     dir="$PHP_CONF_DIR/$version/$sapi/conf.d"
     install -d -m 0755 "$dir"
@@ -132,6 +155,13 @@ xdebug.start_with_request=$start
 xdebug.client_host=127.0.0.1
 xdebug.client_port=9003
 INI
+    if [[ -n "$out" ]]; then
+      cat >> "$tmp" <<INI
+xdebug.output_dir=$out
+xdebug.profiler_output_name=cachegrind.out.%u.%H%R
+xdebug.trace_output_name=trace.%u.%H%R
+INI
+    fi
     chmod 0644 "$tmp"
     mv -f "$tmp" "$ini"
     phpenmod -v "$version" -s "$sapi" xdebug || dmp_die "phpenmod xdebug for $sapi failed"

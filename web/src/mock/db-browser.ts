@@ -1,4 +1,4 @@
-import type { MysqlProcess, WriteCheck, CleanupInfo, DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport, WpDbSection } from '@devmagic-panel/shared';
+import type { MysqlProcess, SlowQuery, SlowQueryReport, WriteCheck, CleanupInfo, DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport, WpDbSection } from '@devmagic-panel/shared';
 import { DB_CELL_HEAD, isSystemDatabase, WP_AUTOLOAD_LIMIT, WP_DB_SECTIONS, WP_META_SIZE_ROWS } from '@devmagic-panel/shared';
 import { sites } from './fixtures';
 
@@ -599,4 +599,36 @@ export function mockProcesses(): MysqlProcess[] {
     { id: 5, user: 'event_scheduler', host: 'localhost', command: 'Daemon', seconds: 259_200, state: 'Waiting on empty queue' },
   ];
   return all.filter((p) => !killedProcesses.has(p.id));
+}
+
+export const slowQueriesReset = { at: 0 };
+
+/** MySQL 8's statement statistics for the mockup: a postmeta read with no index, a heavy options read, a quick one. */
+export function mockSlowQueries(database?: string): SlowQueryReport {
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  const all: SlowQuery[] = [
+    {
+      id: 'a1f0', database: 'northwinddb', count: 412, totalMs: 61_800, avgMs: 150, maxMs: 2_310, rowsExamined: 98_000_000, rowsSent: 4_120, noIndex: 412, lastSeen: ago(2),
+      text: 'SELECT `p` . `ID` , `m` . `meta_value` FROM `wp_posts` `p` JOIN `wp_postmeta` `m` ON `m` . `post_id` = `p` . `ID` WHERE `m` . `meta_value` LIKE ?',
+      sample: "SELECT p.ID, m.meta_value FROM wp_posts p JOIN wp_postmeta m ON m.post_id = p.ID WHERE m.meta_value LIKE '%acme-sale%'",
+    },
+    {
+      id: 'b7c2', database: 'northwinddb', count: 2_960, totalMs: 23_680, avgMs: 8, maxMs: 95, rowsExamined: 1_480_000, rowsSent: 1_480_000, noIndex: 0, lastSeen: ago(1),
+      text: 'SELECT `option_name` , `option_value` FROM `wp_options` WHERE `autoload` IN (...)',
+      sample: "SELECT option_name, option_value FROM wp_options WHERE autoload IN ('yes', 'on', 'auto-on', 'auto')",
+    },
+    {
+      id: 'c3d9', database: 'dailypostdb', count: 88, totalMs: 9_240, avgMs: 105, maxMs: 640, rowsExamined: 3_520_000, rowsSent: 880, noIndex: 88, lastSeen: ago(14),
+      text: 'SELECT SQL_CALC_FOUND_ROWS `wp_posts` . `ID` FROM `wp_posts` WHERE ? = ? AND `wp_posts` . `post_type` = ? ORDER BY `wp_posts` . `post_date` DESC LIMIT ?, ?',
+      sample: "SELECT SQL_CALC_FOUND_ROWS wp_posts.ID FROM wp_posts WHERE 1=1 AND wp_posts.post_type = 'post' ORDER BY wp_posts.post_date DESC LIMIT 0, 10",
+    },
+    {
+      id: 'd410', database: 'northwinddb', count: 5_100, totalMs: 1_530, avgMs: 0.3, maxMs: 12, rowsExamined: 5_100, rowsSent: 5_100, noIndex: 0, lastSeen: ago(1),
+      text: 'SELECT * FROM `wp_users` WHERE `ID` = ? LIMIT ?',
+      sample: 'SELECT * FROM wp_users WHERE ID = 1 LIMIT 1',
+    },
+  ];
+  const fresh = slowQueriesReset.at > 0;
+  const queries = fresh ? [] : all.filter((q) => !database || q.database === database);
+  return { source: 'statements', since: fresh ? new Date(slowQueriesReset.at).toISOString() : ago(60 * 26), slowLog: { on: false, toTable: false, aboveSeconds: 10 }, queries };
 }

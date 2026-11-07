@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actions, isActionId, isLocalName, mountFolder } from '../src/actions.js';
+import { actions, isActionId, isLocalName, mountFolder, paletteEntries } from '../src/actions.js';
 
 // Same cases as scripts/tests/dmp-root.bats, so the UI and dmp-root agree.
 describe('isLocalName', () => {
@@ -24,6 +24,31 @@ describe('actions registry', () => {
 
   it('defaults hosts.add aliases to an empty list', () => {
     expect(actions['hosts.add'].input.parse({ domain: 'local.a.com' })).toEqual({ domain: 'local.a.com', aliases: [] });
+  });
+});
+
+describe('command palette entries', () => {
+  const entries = paletteEntries();
+
+  it('offers site, domain and machine actions', () => {
+    expect(entries.map((e) => e.id)).toEqual(expect.arrayContaining(['site.clearCache', 'git.pull', 'cert.reissue', 'service.restart', 'mail.clear']));
+  });
+
+  it('builds an input each action takes', () => {
+    for (const { id, entry } of entries) {
+      const target = entry.scope === 'machine' ? {} : { domain: 'local.acme.com' };
+      expect(actions[id].input.safeParse({ ...target, ...entry.input }).success, `${id} ${entry.label}`).toBe(true);
+    }
+  });
+
+  it('gives each entry its own label', () => {
+    const labels = entries.map((e) => `${e.entry.scope}:${e.entry.label}`);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('asks before restarting MySQL or deleting mail', () => {
+    const asks = entries.filter((e) => e.entry.confirm).map((e) => e.entry.label);
+    expect(asks).toEqual(expect.arrayContaining(['Restart MySQL', 'Clear Mail']));
   });
 });
 

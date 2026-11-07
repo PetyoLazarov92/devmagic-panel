@@ -73,7 +73,8 @@ Usage: dmp-root <command> [args]
                                       Xdebug on for a version's web parts (mod_php, FPM),
                                       then Apache or FPM picks it up; without a version,
                                       the one Apache loads; mode: debug develop profile
-                                      trace coverage, a comma list; start: trigger or yes
+                                      trace coverage, a comma list; start: trigger or yes;
+                                      profile and trace write to STATE_DIR/profiles/<version>
   xdebug-disable [version]            Xdebug off for a version's web parts
   php-module [version] <name> <on|off>
                                       a module installed for a version on or off for

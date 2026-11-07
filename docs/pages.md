@@ -2,6 +2,17 @@
 
 [Docs](README.md) › Other pages
 
+## Command palette
+
+**Ctrl+K** (or **Cmd+K**) anywhere: type to jump to a site or a page, open a
+site, wp-admin, VS Code or its branch, and run a quick action. On a site's
+page its own actions come first: clear the cache, flush rewrite rules, take a
+database snapshot, clear `debug.log`, open a terminal, fetch or pull, reissue
+the certificate. Reload Apache or nginx, restart a service and clear Mail are
+there too; restarting MySQL, Apache or nginx and clearing Mail ask first. The
+outcome is a toast, with the job one click away. The actions it offers are
+the registry's (`palette` on an action in `shared/src/actions.ts`).
+
 ## Aura
 
 The health of your sites and this machine, every problem in one list, with

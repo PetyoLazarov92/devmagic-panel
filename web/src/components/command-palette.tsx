@@ -1,23 +1,28 @@
-import type { InstallDraft, Site } from '@devmagic-panel/shared';
+import type { ActionId, InstallDraft, Site } from '@devmagic-panel/shared';
 import { branchWebUrl, repoWeb } from '@devmagic-panel/shared';
-import { Activity, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, GitBranch, Globe, History, Layers, LogIn, Plus, Search, Server, Settings, Sparkles } from 'lucide-react';
+import { Activity, Archive, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { openInVSCode, siteUrl } from '@/components/site-bits';
+import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
 import { setAssistantOpen } from '@/lib/assistant';
 import { draftHref, draftProgress } from '@/lib/drafts';
-import { navigate } from '@/lib/router';
-import { openWpAdmin } from '@/lib/site-actions';
+import { currentSite, paletteRuns } from '@/lib/palette';
+import { navigate, usePath } from '@/lib/router';
+import { lastLine, openWpAdmin } from '@/lib/site-actions';
 import { siteHref, siteName } from '@/lib/site-ref';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 interface Command {
   id: string;
   label: string;
-  hint?: string;
+  hint?: string | undefined;
   icon: ReactNode;
   group: string;
+  /** Asked in the palette before `run`. */
+  confirm?: string | undefined;
   run: () => void;
 }
 
@@ -34,12 +39,45 @@ function branchCommand(site: Site): Command[] {
   });
 }
 
+/** Runs an action from the palette; the outcome is a toast, with the job one click away when it started one. */
+async function runFromPalette(id: ActionId, input: Record<string, unknown>, label: string, restarts: boolean): Promise<void> {
+  try {
+    const result = await api.runAction(id, input);
+    const jobId = result.data?.jobId;
+    if (!result.ok) toast({ tone: 'danger', title: `${label} failed`, detail: lastLine(result.output) });
+    else if (jobId) toast({ tone: 'info', title: `${label} started`, action: { label: 'Open job', run: () => navigate(`/jobs/${jobId}`) } });
+    else toast({ tone: 'success', title: `${label}: done` });
+  } catch (error) {
+    toast(
+      restarts && error instanceof TypeError
+        ? { tone: 'info', title: `${label}: likely done`, detail: 'The connection dropped during the restart; the page answers again in a moment.' }
+        : { tone: 'danger', title: `${label} failed`, detail: (error as Error).message },
+    );
+  }
+}
+
+/** The registry's palette entries as commands, under This site for the open site's. */
+function actionCommands(sites: Site[], here: { domain: string; path?: string } | null): Command[] {
+  return paletteRuns(sites, here).map((r) => ({
+    id: `run:${r.key}`,
+    label: r.label,
+    hint: r.here ? r.site : undefined,
+    icon: <Play />,
+    group: r.here ? 'This site' : 'Run',
+    confirm: r.entry.confirm,
+    run: () => void runFromPalette(r.id, r.input, r.title, Boolean(r.entry.restarts)),
+  }));
+}
+
 /** Ctrl+K / Cmd+K: jump to a site or page, or run a common action. */
 export function CommandPalette({ sites }: { sites: Site[] }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [drafts, setDrafts] = useState<InstallDraft[]>([]);
+  const [asking, setAsking] = useState<Command | null>(null);
+  const path = usePath();
+  const here = useMemo(() => currentSite(path), [path]);
 
   // Unfinished installs, read each time it opens: they change while you work.
   useEffect(() => {
@@ -74,6 +112,10 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
       { id: 'env', label: 'Environment', icon: <Activity />, group: 'Go to', run: () => navigate('/environment') },
       { id: 'env-settings', label: 'Settings', hint: 'AI assistant, Claude Code defaults', icon: <Settings />, group: 'Go to', run: () => navigate('/environment/settings') },
       { id: 'runs', label: 'Run history', icon: <History />, group: 'Go to', run: () => navigate('/runs') },
+      { id: 'jobs', label: 'Jobs', icon: <ListChecks />, group: 'Go to', run: () => navigate('/jobs') },
+      { id: 'mail', label: 'Mail', hint: 'what Mailpit caught', icon: <Mail />, group: 'Go to', run: () => navigate('/mail') },
+      { id: 'trash', label: 'Archive', hint: 'removed and replaced sites', icon: <Archive />, group: 'Go to', run: () => navigate('/trash') },
+      { id: 'developer', label: 'Developer options', icon: <Wrench />, group: 'Go to', run: () => navigate('/developer') },
       { id: 'update', label: 'Updates', hint: 'new releases, changelogs, switch back', icon: <CircleArrowUp />, group: 'Go to', run: () => navigate('/update') },
     ];
     const perSite = sites.flatMap((s): Command[] => {
@@ -86,21 +128,28 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
         ...branchCommand(s),
       ];
     });
-    return [...pages, ...perSite];
-  }, [sites, drafts]);
+    const run = actionCommands(sites, here);
+    return [...run.filter((c) => c.group === 'This site'), ...pages, ...perSite, ...run.filter((c) => c.group !== 'This site')];
+  }, [sites, drafts, here]);
 
   const q = query.trim().toLowerCase();
-  const shown = (q ? commands.filter((c) => `${c.label} ${c.hint ?? ''}`.toLowerCase().includes(q)) : commands.filter((c) => c.group !== 'Open')).slice(0, 12);
+  // With nothing typed: the open site's first few actions, then the pages; typing searches everything.
+  const shown = (q ? commands.filter((c) => `${c.label} ${c.hint ?? ''}`.toLowerCase().includes(q)) : [...commands.filter((c) => c.group === 'This site').slice(0, 4), ...commands.filter((c) => c.group !== 'Open' && c.group !== 'Run' && c.group !== 'This site')]).slice(0, 12);
 
   useEffect(() => setActive(0), [query]);
 
   function close() {
     setOpen(false);
     setQuery('');
+    setAsking(null);
   }
 
   function pick(c: Command | undefined) {
     if (!c) return;
+    if (c.confirm && asking !== c) {
+      setAsking(c);
+      return;
+    }
     close();
     c.run();
   }
@@ -108,52 +157,70 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
   let lastGroup = '';
   return (
     <Dialog open={open} onClose={close} title="Command palette" bare className="mt-[12vh] mb-auto w-[min(36rem,calc(100vw-2rem))]">
-      <div className="flex items-center gap-2 border-b px-4">
-        <Search className="size-4 text-muted-foreground" />
-        <input
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+      {asking ? (
+        <div
+          className="grid gap-3 p-5"
           onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, shown.length - 1)); }
-            if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-            if (e.key === 'Enter') { e.preventDefault(); pick(shown[active]); }
+            if (e.key === 'Enter') { e.preventDefault(); pick(asking); }
           }}
-          placeholder="Jump to a site or run an action"
-          aria-label="Search commands"
-          role="combobox"
-          aria-expanded="true"
-          aria-controls="palette-list"
-          aria-activedescendant={shown[active] ? `cmd-${shown[active].id}` : undefined}
-          className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-        <kbd className="rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">Esc</kbd>
-      </div>
-      <ul id="palette-list" role="listbox" className="max-h-80 overflow-auto p-1.5">
-        {shown.map((c, i) => {
-          const header = c.group !== lastGroup ? c.group : null;
-          lastGroup = c.group;
-          return (
-            <li key={c.id} role="presentation">
-              {header && <p className="px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{header}</p>}
-              <div
-                id={`cmd-${c.id}`}
-                role="option"
-                aria-selected={i === active}
-                onMouseMove={() => setActive(i)}
-                onClick={() => pick(c)}
-                className={cn('flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm [&_svg]:size-4 [&_svg]:text-muted-foreground', i === active && 'bg-muted')}
-              >
-                {c.icon}
-                <span className="flex-1 truncate">{c.label}</span>
-                {c.hint && <span className="truncate text-xs text-muted-foreground">{c.hint}</span>}
-                {i === active && <CornerDownLeft className="size-3.5" />}
-              </div>
-            </li>
-          );
-        })}
-        {shown.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted-foreground">Nothing matches.</li>}
-      </ul>
+        >
+          <p className="text-base font-semibold">{asking.label}?</p>
+          <p className="text-sm text-muted-foreground">{asking.confirm}</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setAsking(null)}>Cancel</Button>
+            <Button autoFocus onClick={() => pick(asking)}>{asking.label}</Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 border-b px-4">
+            <Search className="size-4 text-muted-foreground" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, shown.length - 1)); }
+                if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+                if (e.key === 'Enter') { e.preventDefault(); pick(shown[active]); }
+              }}
+              placeholder="Jump to a site or run an action"
+              aria-label="Search commands"
+              role="combobox"
+              aria-expanded="true"
+              aria-controls="palette-list"
+              aria-activedescendant={shown[active] ? `cmd-${shown[active].id}` : undefined}
+              className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+            <kbd className="rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">Esc</kbd>
+          </div>
+          <ul id="palette-list" role="listbox" className="max-h-80 overflow-auto p-1.5">
+            {shown.map((c, i) => {
+              const header = c.group !== lastGroup ? c.group : null;
+              lastGroup = c.group;
+              return (
+                <li key={c.id} role="presentation">
+                  {header && <p className="px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{header}</p>}
+                  <div
+                    id={`cmd-${c.id}`}
+                    role="option"
+                    aria-selected={i === active}
+                    onMouseMove={() => setActive(i)}
+                    onClick={() => pick(c)}
+                    className={cn('flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm [&_svg]:size-4 [&_svg]:text-muted-foreground', i === active && 'bg-muted')}
+                  >
+                    {c.icon}
+                    <span className="flex-1 truncate">{c.label}</span>
+                    {c.hint && <span className="truncate text-xs text-muted-foreground">{c.hint}</span>}
+                    {i === active && <CornerDownLeft className="size-3.5" />}
+                  </div>
+                </li>
+              );
+            })}
+            {shown.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted-foreground">Nothing matches.</li>}
+          </ul>
+        </>
+      )}
     </Dialog>
   );
 }

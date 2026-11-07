@@ -149,6 +149,8 @@ export async function planSetSettings(ctx: SettingsContext, input: ActionInput<'
   const title = `Change MySQL's ${shown.length === 1 ? shown[0]?.toLowerCase() : `${shown.length} settings`}`;
   const setGlobal = async (values: Partial<Record<MysqlSettingName, number | null | undefined>>): Promise<ExecResult> => {
     const sets = (Object.entries(values) as Array<[MysqlSettingName, number | null | undefined]>).filter(([, v]) => typeof v === 'number').map(([n, v]) => `SET GLOBAL ${n} = ${Number(v)};`);
+    // The slow log goes to its table too, where the panel reads it (mysql-slow.ts); dmp-root keeps the same line with it.
+    if (values.slow_query_log === 1) sets.push("SET GLOBAL log_output = 'FILE,TABLE';");
     if (!sets.length) return { code: 0, stdout: 'Nothing to apply now: MySQL\'s own value applies from its next start\n', stderr: '' };
     const r = await query(ctx, sets.join(' '));
     return r.code === 0 ? { ...r, stdout: `Applied now: ${sets.map((s) => s.slice('SET GLOBAL '.length, -1)).join(', ')}\n` } : r;
