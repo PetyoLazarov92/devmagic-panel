@@ -7,8 +7,18 @@
 
 export const PROFILE_KEEP_DAYS = 3;
 
-/** A profile file's name as Xdebug writes it for the panel: cachegrind.out.<time>.<host><request>, maybe gzipped. */
-export const PROFILE_NAME = /^cachegrind\.out\.(\d{1,12})_(\d{1,6})\.([a-z0-9.-]{0,253})(_[^/\0]{0,400}?)?(\.gz)?$/;
+/**
+ * A profile file's name as Xdebug writes it for the panel:
+ * cachegrind.out.<time>.<host><request>, maybe gzipped. The time is
+ * seconds and microseconds (a dot between them since Xdebug 3.x, once an
+ * underscore); the host and the request run together, with / . ? & and the
+ * like turned into _ (local_acme_com_shop__p=2), so only the known sites'
+ * hosts tell where one ends.
+ */
+export const PROFILE_NAME = /^cachegrind\.out\.(\d{1,12})[._](\d{1,6})\.([^/\0]{0,700}?)(\.gz)?$/;
+
+/** A host or a request as Xdebug puts it in a file name: these characters become _. */
+export const xdebugNamePart = (text: string) => text.replace(/[/\\.?&+: [\]]/g, '_');
 
 export interface ProfileInfo {
   /** The PHP version whose folder it is in. */
@@ -16,6 +26,7 @@ export interface ProfileInfo {
   name: string;
   /** When the request ran. */
   at: string;
+  /** The site's host it was for, or the start of the name when no known host matches. */
   host: string;
   /** The request as Xdebug names it: the address with / . ? & turned into _, so only roughly the URL. */
   request: string;

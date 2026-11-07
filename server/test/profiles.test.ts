@@ -95,6 +95,11 @@ describe('profile names and groups', () => {
   it("reads the time, host and request from Xdebug's name", () => {
     expect(parseProfileName('8.3', `${NAME}.gz`)).toEqual({ version: '8.3', name: `${NAME}.gz`, at: '2026-11-07T10:00:00.250Z', host: 'local.acme.com', request: '/shop_XDEBUG_PROFILE=1' });
     expect(parseProfileName('8.3', 'cachegrind.out.12345')).toBeNull();
+    // Xdebug 3.5: a dot in the time, and the host's dots as _ run into the request.
+    const known = ['local.acme.com', 'local.acme.com.au', 'www.local.acme.com'];
+    expect(parseProfileName('8.4', 'cachegrind.out.1794045600.250000.local_acme_com__XDEBUG_PROFILE=1.gz', known)).toMatchObject({ at: '2026-11-07T10:00:00.250Z', host: 'local.acme.com', request: '/_XDEBUG_PROFILE=1' });
+    expect(parseProfileName('8.4', 'cachegrind.out.1794045600.250000.local_acme_com_au_shop__XDEBUG_PROFILE=1.gz', known)).toMatchObject({ host: 'local.acme.com.au', request: '/shop__XDEBUG_PROFILE=1' });
+    expect(parseProfileName('8.4', 'cachegrind.out.1794045600.250000.local_acme_com_wp-admin_admin-ajax_php.gz', known)).toMatchObject({ host: 'local.acme.com', request: '/wp-admin_admin-ajax_php' });
     expect(parseProfileName('8.3', 'notes.txt')).toBeNull();
   });
 
@@ -119,13 +124,32 @@ describe('the profiles of a site', () => {
     writeFileSync(old, CACHEGRIND);
     utimesSync(old, new Date('2026-11-01T00:00:00Z'), new Date('2026-11-01T00:00:00Z'));
     writeFileSync(join(dir, 'unrelated.txt'), 'x');
+    const oldStats = join(dir, 'gcstats.1793500000.1.local_acme_com_');
+    writeFileSync(oldStats, 'x');
+    utimesSync(oldStats, new Date('2026-11-01T00:00:00Z'), new Date('2026-11-01T00:00:00Z'));
+    writeFileSync(join(dir, 'trace.1794045000.1.local_acme_com_.xt'), 'x');
     const now = new Date('2026-11-07T12:00:00Z').getTime();
     const acme = listProfiles(config, data, ['local.acme.com', 'www.local.acme.com'], '', now);
     expect(acme.versions).toEqual(['8.3']);
     expect(acme.profiles.map((p) => p.request)).toEqual(['/learn_wp-admin_', '/shop_XDEBUG_PROFILE=1']);
     expect(existsSync(old)).toBe(false);
+    expect(existsSync(oldStats)).toBe(false);
+    expect(existsSync(join(dir, 'trace.1794045000.1.local_acme_com_.xt'))).toBe(true);
+    expect(existsSync(join(dir, 'unrelated.txt'))).toBe(true);
     expect(listProfiles(config, data, ['local.acme.com'], '/learn', now).profiles.map((p) => p.request)).toEqual(['/learn_wp-admin_']);
     expect(listProfiles(config, data, [], '', now).profiles).toHaveLength(3);
+  });
+
+  it("lists Xdebug 3.5's names under their site, never a longer host's", () => {
+    const { dir, data, config } = setup();
+    writeFileSync(join(dir, 'cachegrind.out.1794045600.250000.local_acme_com__XDEBUG_PROFILE=1.gz'), gzipSync(CACHEGRIND));
+    writeFileSync(join(dir, 'cachegrind.out.1794045700.1.local_acme_com_learn_wp-admin_.gz'), gzipSync(CACHEGRIND));
+    writeFileSync(join(dir, 'cachegrind.out.1794045800.1.local_acme_com_au__XDEBUG_PROFILE=1.gz'), gzipSync(CACHEGRIND));
+    const now = new Date('2026-11-07T12:00:00Z').getTime();
+    const known = ['local.acme.com', 'local.acme.com.au'];
+    expect(listProfiles(config, data, ['local.acme.com'], '', now, known).profiles.map((p) => p.request)).toEqual(['/learn_wp-admin_', '/_XDEBUG_PROFILE=1']);
+    expect(listProfiles(config, data, ['local.acme.com'], '/learn', now, known).profiles).toHaveLength(1);
+    expect(listProfiles(config, data, ['local.acme.com.au'], '', now, known).profiles.map((p) => p.host)).toEqual(['local.acme.com.au']);
   });
 
   it('reads a gzipped profile once and keeps its summary for the list', async () => {

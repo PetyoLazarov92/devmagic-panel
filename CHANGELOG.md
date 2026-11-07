@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.23.1 (2026-11-07)
+* **Sites:** the Performance tab lists the profiles Xdebug 3.5 writes: it names them with a dot in the time and the site's dots as _, which the panel did not read, so a profiled page never showed. Each is matched to its site by the longest known host, and the list shows the page without the trigger
+* **Services:** Xdebug's gcstats mode can be switched on with the others; its files go to the panel's profiles folder, and with traces they are deleted after 3 days
+* This release changes the root scripts, so the Updates page asks for your sudo password to install it, as for any release that does
+
 ### v1.23.0 (2026-11-07)
 * **Databases:** slow queries, a database's tables and a site's scheduled events show their first 21, with Show more, Show all and Show fewer under the list
 * **Databases:** Explain in SQL on a slow query opens the SQL view with its plan already shown, and the editor loads while you read the list, so it never opens on a plain box

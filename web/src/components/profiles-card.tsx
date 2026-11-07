@@ -154,11 +154,17 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
   );
 }
 
+/** The request as people read it: without the trigger Open and profile adds, and / for the home page. */
+export function shownRequest(request: string): string {
+  const bare = request.replace(/_*XDEBUG_PROFILE(=[^_]*)?$/, '').replace(/_+$/, '');
+  return bare === '' || bare === '/' ? '/' : bare;
+}
+
 function ProfileRow({ profile: p, open, onToggle, onDelete, busy }: { profile: ProfileInfo; open: boolean; onToggle: () => void; onDelete: () => void; busy: boolean }) {
   return (
     <div className="grid">
       <button type="button" className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-left" aria-expanded={open} onClick={onToggle}>
-        <code className="min-w-0 flex-1 truncate font-mono text-[12.5px]">{p.request || '/'}</code>
+        <code className="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={p.request || '/'}>{shownRequest(p.request)}</code>
         {p.totalMs !== undefined && <Badge tone={p.totalMs >= 1000 ? 'warning' : 'neutral'}>{ms(p.totalMs)}</Badge>}
         <span className="text-xs text-muted-foreground">{timeAgo(p.at)}, {bytes(p.bytes)}</span>
         <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />

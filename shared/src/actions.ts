@@ -238,7 +238,7 @@ export const repoPreset = z.object({
 });
 
 /** Xdebug settings the panel offers; dmp-root holds the same lists. */
-export const XDEBUG_MODES = ['debug', 'develop', 'profile', 'trace', 'coverage'] as const;
+export const XDEBUG_MODES = ['debug', 'develop', 'profile', 'trace', 'gcstats', 'coverage'] as const;
 /** A WordPress login as the panel accepts one: letters, digits, space and _ . @ + -, up to 60. */
 export const wpLogin = z.string().regex(/^[\w.@+ -]{1,60}$/, 'A WordPress login');
 /**

@@ -481,11 +481,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     api.get<{ Querystring: { domain?: string; path?: string } }>('/api/profiles', async (request, reply): Promise<ProfileList | undefined> =>
       profiling(reply, () => {
         const { domain, path } = request.query;
-        if (domain === undefined) return listProfiles(deps.config, dirname(deps.uploadsDir));
+        // Every site's hosts: a profile's name runs its host and request together, so the longest known host decides.
+        const known = [...new Set(readSiteVhosts(deps.config).flatMap((v) => v.names))];
+        if (domain === undefined) return listProfiles(deps.config, dirname(deps.uploadsDir), [], '', Date.now(), known);
         if (!localName.safeParse(domain).success || (path !== undefined && !mountPath.safeParse(path).success)) throw new ProfileError(`no site called ${domain}${path ?? ''}`, 404);
         const vhost = readSiteVhosts(deps.config).find((v) => v.names[0] === domain);
         const hosts = vhost ? [...new Set(vhost.names)] : [domain];
-        return listProfiles(deps.config, dirname(deps.uploadsDir), hosts, path ? `/${path.slice(1).replace(/[^A-Za-z0-9-]/g, '_')}` : '');
+        return listProfiles(deps.config, dirname(deps.uploadsDir), hosts, path ? `/${path.slice(1).replace(/[^A-Za-z0-9-]/g, '_')}` : '', Date.now(), [...new Set([...known, ...hosts])]);
       }));
     api.get<{ Params: { version: string; name: string } }>('/api/profiles/:version/:name', async (request, reply): Promise<ProfileSummary | undefined> =>
       profiling(reply, () => profileSummary(deps.config, dirname(deps.uploadsDir), request.params.version, request.params.name)));

@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { createGunzip } from 'node:zlib';
 import type { ProfileFunction, ProfileInfo, ProfileList, ProfileSummary } from '@devmagic-panel/shared';
-import { PHP_VERSION_PATTERN, PROFILE_KEEP_DAYS, PROFILE_NAME, profileGroup } from '@devmagic-panel/shared';
+import { PHP_VERSION_PATTERN, PROFILE_KEEP_DAYS, PROFILE_NAME, profileGroup, xdebugNamePart } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { ExecResult } from './exec.js';
 
@@ -40,13 +40,34 @@ function versions(config: SystemConfig): string[] {
   return readdirSync(dir).filter((v) => PHP_VERSION_PATTERN.test(v) && statSync(join(dir, v)).isDirectory()).sort();
 }
 
-/** A profile's facts from its name, or null for a file that is not one of the panel's. */
-export function parseProfileName(version: string, name: string): Omit<ProfileInfo, 'bytes'> | null {
+/**
+ * The host and the request in what follows a profile's time: the longest
+ * known host the name starts with, as Xdebug writes it (dots as _) or as it
+ * is; with none known, up to the first _ that starts the request.
+ */
+function splitHost(rest: string, known: readonly string[]): { host: string; request: string } {
+  let best: { host: string; length: number } | null = null;
+  for (const host of known) {
+    for (const form of [xdebugNamePart(host), host]) {
+      if ((rest === form || rest.startsWith(`${form}_`)) && (!best || form.length > best.length)) best = { host, length: form.length };
+    }
+  }
+  if (best) return { host: best.host, request: rest.slice(best.length) };
+  // A host with its dots, as some Xdebug versions write it: it ends at the first _.
+  const dotted = /^([a-z0-9-]+(?:\.[a-z0-9-]+)+)(_.*)?$/.exec(rest);
+  if (dotted) return { host: dotted[1] as string, request: dotted[2] ?? '' };
+  const cut = rest.indexOf('__') >= 0 ? rest.indexOf('__') : rest.length;
+  return { host: rest.slice(0, cut), request: rest.slice(cut) };
+}
+
+/** A profile's facts from its name, or null for a file that is not one of the panel's; known are the hosts of every site, to tell the host from the request. */
+export function parseProfileName(version: string, name: string, known: readonly string[] = []): Omit<ProfileInfo, 'bytes'> | null {
   const m = PROFILE_NAME.exec(name);
   if (!m) return null;
   const at = new Date(Number(m[1]) * 1000 + Math.floor(Number(m[2]) / 1000));
   if (Number.isNaN(at.getTime())) return null;
-  return { version, name, at: at.toISOString(), host: m[3] ?? '', request: (m[4] ?? '').replace(/^_/, '/') };
+  const { host, request } = splitHost(m[3] ?? '', known);
+  return { version, name, at: at.toISOString(), host, request: request.replace(/^_/, '/') };
 }
 
 /** The file of a profile, checked: a version and a name that Xdebug wrote, in the panel's folder. */
@@ -72,14 +93,21 @@ function cachedSummary(dataDir: string, version: string, name: string): ProfileS
  * when none), newest first. Profiles older than PROFILE_KEEP_DAYS go first,
  * with their summaries.
  */
-export function listProfiles(config: SystemConfig, dataDir: string, hosts: string[] = [], pathPrefix = '', now = Date.now()): ProfileList {
+export function listProfiles(config: SystemConfig, dataDir: string, hosts: string[] = [], pathPrefix = '', now = Date.now(), known: readonly string[] = hosts): ProfileList {
   const found = versions(config);
   const profiles: ProfileInfo[] = [];
   for (const version of found) {
     const dir = join(profilesDir(config), version);
     for (const name of readdirSync(dir)) {
-      const info = parseProfileName(version, name);
-      if (!info) continue;
+      const info = parseProfileName(version, name, known);
+      if (!info) {
+        // Traces and GC stats Xdebug writes next to the profiles go after the same days.
+        if (/^(trace|gcstats)\./.test(name)) {
+          const other = join(dir, name);
+          if (now - statSync(other).mtimeMs > KEEP_MS) rmSync(other, { force: true });
+        }
+        continue;
+      }
       const file = join(dir, name);
       const stat = statSync(file);
       if (now - stat.mtimeMs > KEEP_MS) {

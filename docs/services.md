@@ -27,9 +27,11 @@ other:
   **Remove** for one nothing uses.
 - **Packages**: module packages from apt per version.
 - **Parts and modules**: the parts installed (mod_php, PHP-FPM, command line),
-  its modules, and Xdebug (any mix of modes) switched per version. With
-  `profile` or `trace`, Xdebug writes to `$STATE_DIR/profiles/<version>`,
-  where a site's PHP tab lists its profiles.
+  its modules, and Xdebug (any mix of debug, develop, profile, trace,
+  gcstats and coverage) switched per version. With `profile`, `trace` or
+  `gcstats`, Xdebug writes to `$STATE_DIR/profiles/<version>`, where a
+  site's Performance tab lists its profiles; traces and GC stats are deleted
+  after the same 3 days.
 - **Sites**: every site's code checked against the version, with a table of
   what each has.
 - **Settings**: the panel's own settings per version for the web and the

@@ -517,11 +517,16 @@ php_tree() {
   run dmp xdebug-enable trace yes
   [ "$status" -eq 0 ]
   grep -qx "xdebug.output_dir=$T/state/profiles/8.3" "$ini"
+  run dmp xdebug-enable debug,gcstats trigger
+  [ "$status" -eq 0 ]
+  grep -qx 'xdebug.mode=debug,gcstats' "$ini"
+  grep -qx "xdebug.output_dir=$T/state/profiles/8.3" "$ini"
+  grep -qx 'xdebug.gc_stats_output_name=gcstats.%u.%H%R' "$ini"
 }
 
 @test "xdebug-enable refuses modes and start values outside the allow-list" {
   php_tree
-  for args in "debug,gcstats trigger" "debug,debug trigger" "debug, trigger" ",debug trigger" "debug always" "x;id trigger" "--help yes"; do
+  for args in "debug,heap trigger" "debug,debug trigger" "debug, trigger" ",debug trigger" "debug always" "x;id trigger" "--help yes"; do
     # shellcheck disable=SC2086
     run dmp xdebug-enable $args
     [ "$status" -eq 2 ]

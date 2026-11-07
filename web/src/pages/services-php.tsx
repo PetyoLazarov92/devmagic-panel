@@ -47,6 +47,7 @@ const MODE_HINT: Record<Mode, string> = {
   develop: 'Better error pages and var_dump',
   profile: 'Cachegrind files for profiling',
   trace: 'A trace file of every call',
+  gcstats: "Garbage collection runs, to the panel's profiles folder",
   coverage: 'Code coverage for tests',
 };
 

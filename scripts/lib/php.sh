@@ -5,7 +5,7 @@
 # with the settings it manages. A command without a version works on the one
 # Apache's mod_php loads, as before versions were picked.
 
-DMP_XDEBUG_MODES=(debug develop profile trace coverage)
+DMP_XDEBUG_MODES=(debug develop profile trace gcstats coverage)
 DMP_XDEBUG_STARTS=(trigger yes)
 DMP_XDEBUG_INI_NAME="99-devmagic-panel-xdebug.ini"
 # Modules WordPress cannot run without: never switched off. Same list as PHP_REQUIRED_MODULES in shared/src/actions.ts.
@@ -138,9 +138,9 @@ dmp_xdebug_enable() {
   mapfile -t sapis < <(dmp_php_web_sapis "$version")
   (( ${#sapis[@]} > 0 )) || dmp_die "PHP $version has no web part (mod_php or FPM) to debug"
 
-  # Profiles and traces go to a folder of the panel's that PHP can write (Apache's /tmp is its own, so the panel would not see them there).
+  # Profiles, traces and GC stats go to a folder of the panel's that PHP can write (Apache's /tmp is its own, so the panel would not see them there).
   out=""
-  if [[ ",$mode," == *",profile,"* || ",$mode," == *",trace,"* ]]; then
+  if [[ ",$mode," == *",profile,"* || ",$mode," == *",trace,"* || ",$mode," == *",gcstats,"* ]]; then
     out="$(dmp_xdebug_output_dir "$version")"
   fi
   for sapi in "${sapis[@]}"; do
@@ -160,6 +160,7 @@ INI
 xdebug.output_dir=$out
 xdebug.profiler_output_name=cachegrind.out.%u.%H%R
 xdebug.trace_output_name=trace.%u.%H%R
+xdebug.gc_stats_output_name=gcstats.%u.%H%R
 INI
     fi
     chmod 0644 "$tmp"
