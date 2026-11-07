@@ -146,3 +146,45 @@ export function fixSerializedLengths(text: string): string | null {
   const fixed = text.replace(/s:\d+:"([\s\S]*?)";(?=[}]|[sibdaO]:|N;|$)/g, (_, inner: string) => `s:${encoder.encode(inner).length}:"${inner}";`);
   return parsePhpSerialized(fixed) ? fixed : null;
 }
+
+export interface PropertyName {
+  name: string;
+  visibility: 'public' | 'protected' | 'private';
+  /** The class a private property belongs to, which can be a parent of the object's. */
+  owner?: string;
+}
+
+/**
+ * An object property's name as PHP serializes it: `\0*\0name` is protected and
+ * `\0Class\0name` private to Class; anything else is public.
+ */
+export function propertyName(key: string): PropertyName {
+  const m = /^\0([^\0]+)\0([\s\S]*)$/.exec(key);
+  if (!m) return { name: key, visibility: 'public' };
+  const [, scope = '', name = ''] = m;
+  return scope === '*' ? { name, visibility: 'protected' } : { name, visibility: 'private', owner: scope };
+}
+
+// Control characters other than tab and line breaks, which a page draws as nothing or a box.
+const CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
+
+export interface TextRun {
+  text: string;
+  /** A control character: text is the character itself, label its name the way PHP writes it (`\0`, `\x1F`). */
+  label?: string;
+}
+
+/** Text cut into plain runs and single control characters, each named for showing. */
+export function controlRuns(text: string): TextRun[] {
+  const out: TextRun[] = [];
+  let last = 0;
+  for (const m of text.matchAll(CONTROL)) {
+    const at = m.index ?? 0;
+    if (at > last) out.push({ text: text.slice(last, at) });
+    const code = m[0].charCodeAt(0);
+    out.push({ text: m[0], label: code === 0 ? '\\0' : `\\x${code.toString(16).toUpperCase().padStart(2, '0')}` });
+    last = at + 1;
+  }
+  if (last < text.length) out.push({ text: text.slice(last) });
+  return out;
+}

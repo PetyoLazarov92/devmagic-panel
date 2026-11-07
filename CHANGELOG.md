@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.16.1 (2026-11-07)
+* **Databases:** a PHP serialized object's protected and private properties show by name with a protected or private tag, instead of the NUL bytes PHP keeps around them drawn as boxes, and the Text view writes those bytes and other control characters as `\0` and `\x1F`. Copy gives the real bytes, and so does text you select by hand: a browser drops NUL bytes from a selection, which broke the lengths of a pasted serialized value
+* An update installs this release from the panel as usual
+
 ### v1.16.0 (2026-11-07)
 * **Updates:** a release that changes the root scripts installs in one step: type your sudo password and click Install, and one job downloads it, checks it, unpacks it and runs its installer, with the progress on the Updates page. If the download fails, the job lets go of the password. Only download is still there for a terminal install
 * **Updates:** a release downloaded from the panel shows as downloaded on the Updates page at once, after going back or a reload, without Check again, and a job from the Updates page has Back to Updates

@@ -1,7 +1,7 @@
 import type { DbCell, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable } from '@devmagic-panel/shared';
 import { DB_FILTER_LABELS, DB_FILTER_OPS, DB_PAGE_SIZES } from '@devmagic-panel/shared';
 import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, Download, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
-import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ClipboardEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
@@ -16,7 +16,7 @@ import { Menu } from '@/components/ui/menu';
 import { Segmented } from '@/components/ui/segmented';
 import { api, dbExportUrl, isMockup } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
-import { parseJsonValue, parsePhpSerialized, type PhpValue } from '@/lib/php-serialized';
+import { controlRuns, parseJsonValue, parsePhpSerialized, propertyName, type PhpValue } from '@/lib/php-serialized';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
@@ -703,13 +703,58 @@ export function ValueView({ cell }: { cell: DbCell }) {
           {php ? <PhpTree value={php} /> : <JsonTree value={json} />}
         </div>
       ) : (
-        <pre className="max-h-96 overflow-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-[13px] break-all whitespace-pre-wrap">
-          {binary ? `0x${text}` : text === '' ? <span className="font-sans text-muted-foreground italic">empty</span> : text}
+        <pre onCopy={copyRealBytes} className="max-h-96 overflow-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-[13px] break-all whitespace-pre-wrap">
+          {binary ? `0x${text}` : text === '' ? <span className="font-sans text-muted-foreground italic">empty</span> : <Visible text={text} />}
           {cut && <span className="text-muted-foreground">…</span>}
         </pre>
       )}
     </div>
   );
+}
+
+/**
+ * Text with its control characters drawn as PHP writes them, `\0` and the
+ * like, instead of a box or nothing. The label is CSS and the real character
+ * stays in the page under it, for copyRealBytes to find.
+ */
+function Visible({ text }: { text: string }) {
+  const runs = controlRuns(text);
+  if (runs.every((r) => r.label === undefined)) return <>{text}</>;
+  return (
+    <>
+      {runs.map((r, i) =>
+        r.label !== undefined ? (
+          <span
+            key={i}
+            data-label={r.label}
+            title={r.label === '\\0' ? 'A NUL byte' : 'A control character'}
+            className="mx-px rounded-sm bg-foreground/10 px-0.5 text-muted-foreground before:content-[attr(data-label)]"
+          >
+            <span className="inline-block w-0 overflow-hidden">{r.text}</span>
+          </span>
+        ) : (
+          r.text
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * Text selected by hand copies its real bytes, as the Copy button does. A
+ * browser drops NUL bytes from a selection, which breaks the lengths of a PHP
+ * serialized value, so a selection with control characters is copied from
+ * the page's own text instead; any other selection is left to the browser.
+ */
+function copyRealBytes(e: ClipboardEvent<HTMLElement>) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+  const range = selection.getRangeAt(0);
+  if (!e.currentTarget.contains(range.commonAncestorContainer)) return;
+  const text = range.cloneContents().textContent ?? '';
+  if (controlRuns(text).every((r) => r.label === undefined)) return;
+  e.clipboardData.setData('text/plain', text);
+  e.preventDefault();
 }
 
 function scalar(v: PhpValue): ReactNode {
@@ -722,7 +767,7 @@ function scalar(v: PhpValue): ReactNode {
     case 'float':
       return <span className="text-primary">{v.value}</span>;
     case 'string':
-      return <span className="break-all">&quot;{v.value}&quot;</span>;
+      return <span className="break-all">&quot;<Visible text={v.value} />&quot;</span>;
     default:
       return null;
   }
@@ -736,11 +781,23 @@ function PhpTree({ value }: { value: PhpValue }) {
       <ul className="ml-4 border-l pl-3">
         {value.entries.map(([k, v], i) => (
           <li key={i}>
-            <span className="text-muted-foreground">{k.type === 'string' ? k.value : k.type === 'int' ? k.value : '?'}: </span>
+            <span className="text-muted-foreground">{value.type === 'object' && k.type === 'string' ? <Property name={k.value} className={value.className} /> : k.type === 'string' ? <Visible text={k.value} /> : k.type === 'int' ? k.value : '?'}: </span>
             <PhpTree value={v} />
           </li>
         ))}
       </ul>
+    </>
+  );
+}
+
+/** A property by its name, with protected or private marked (PHP keeps those with NUL bytes around them). */
+function Property({ name, className }: { name: string; className: string }) {
+  const p = propertyName(name);
+  const tag = p.visibility === 'protected' ? 'protected' : p.visibility === 'private' ? (p.owner === className ? 'private' : `private to ${p.owner}`) : null;
+  return (
+    <>
+      {tag && <span className="mr-1.5 rounded-sm border px-1 font-sans text-[11px]">{tag}</span>}
+      <Visible text={p.name} />
     </>
   );
 }

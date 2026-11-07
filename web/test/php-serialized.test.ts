@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fixSerializedLengths, parseJsonValue, parsePhpSerialized } from '../src/lib/php-serialized';
+import { controlRuns, fixSerializedLengths, parseJsonValue, parsePhpSerialized, propertyName } from '../src/lib/php-serialized';
 
 describe('PHP serialized values', () => {
   it('reads nested arrays with every scalar type', () => {
@@ -54,5 +54,34 @@ describe('fixing serialized lengths after an edit', () => {
 
   it('gives up on what still does not read', () => {
     expect(fixSerializedLengths('a:2:{s:4:"home";}')).toBeNull();
+  });
+});
+
+describe('protected and private properties', () => {
+  // As PHP writes them: protected as \0*\0name, private as \0Class\0name.
+  const text = 'O:18:"Acme_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:25:"\0Acme_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}';
+
+  it('reads the object, with the NUL bytes counted in the lengths', () => {
+    const v = parsePhpSerialized(text);
+    expect(v?.type).toBe('object');
+    expect(v?.type === 'object' && v.entries.map(([k]) => (k.type === 'string' ? propertyName(k.value) : null))).toEqual([
+      { name: 'recurs', visibility: 'protected' },
+      { name: 'start', visibility: 'private', owner: 'Acme_Task_Schedule' },
+      { name: 'name', visibility: 'public' },
+    ]);
+  });
+
+  it('names control characters the way PHP writes them, keeps the character itself, and leaves tabs and line breaks', () => {
+    expect(controlRuns('\0*\0recurs')).toEqual([
+      { text: '\0', label: '\\0' },
+      { text: '*' },
+      { text: '\0', label: '\\0' },
+      { text: 'recurs' },
+    ]);
+    expect(controlRuns('a\x1Fb')).toEqual([{ text: 'a' }, { text: '\x1F', label: '\\x1F' }, { text: 'b' }]);
+    expect(controlRuns('one\ttwo\nthree')).toEqual([{ text: 'one\ttwo\nthree' }]);
+    expect(controlRuns('')).toEqual([]);
+    // Put back together, the runs are the text, byte for byte.
+    expect(controlRuns('\0*\0recurs').map((r) => r.text).join('')).toBe('\0*\0recurs');
   });
 });
