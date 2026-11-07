@@ -1257,7 +1257,7 @@ function RemoveDialog({ site, open, onClose }: { site: Site; open: boolean; onCl
   useEffect(() => {
     if (!job || job.status === 'done' || job.status === 'failed') {
       if (job?.status === 'done') {
-        toast({ tone: 'success', title: `${site.domain} moved to the Archive`, detail: `Restore it there within ${days} days.` });
+        toast({ tone: 'success', title: `${site.domain} removed`, detail: `It is kept in Removed sites for ${days} days, to restore.`, action: { label: 'Show', run: () => navigate('/sites?show=removed') } });
         navigate('/sites');
       }
       return;
@@ -1305,7 +1305,7 @@ function RemoveDialog({ site, open, onClose }: { site: Site; open: boolean; onCl
         onClose();
       }}
       title={`Remove ${site.domain}?`}
-      description={`Everything below is archived first and kept in the Archive for ${days} days, where you can restore it. Then it is removed:`}
+      description={`Everything below is archived first and kept in Removed sites, on the Sites page, for ${days} days, where you can restore it. Then it is removed:`}
     >
       {!job ? (
         <>
@@ -1350,7 +1350,7 @@ function RemoveDialog({ site, open, onClose }: { site: Site; open: boolean; onCl
         {!job && (
           <Button variant="danger" disabled={typed !== site.domain} onClick={() => void remove()}>
             <Trash2 />
-            Move to the Archive
+            Archive and remove
           </Button>
         )}
         {job?.status === 'failed' && (

@@ -14,9 +14,8 @@ import { Link, navigate } from '@/lib/router';
 import { lastLine, runWithToast } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useReloadWhileBusy } from '@/lib/jobs';
-import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
-import { CheckAgain, EmptyState, Notice, PageHeader } from '@/components/page';
+import { CheckAgain, EmptyState, Notice } from '@/components/page';
 import { CardSkeleton, Reading } from '@/components/skeletons';
 
 const daysLeft = (e: TrashEntry) => Math.max(0, Math.ceil((new Date(e.purgeAt).getTime() - Date.now()) / 86_400_000));
@@ -27,42 +26,51 @@ const REASONS: Record<ArchiveReason, { label: string; tone: 'neutral' | 'warning
   restore: { label: 'replaced by a restore', tone: 'warning' },
 };
 
+/** Whether an archived copy matches what is typed in the Sites page's filter. */
+export const removedMatches = (e: Pick<TrashEntry, 'domain'>, query: string) => !query.trim() || e.domain.toLowerCase().includes(query.trim().toLowerCase());
+
 /**
  * Archived copies of sites from the last two weeks, by site and newest first:
  * removed sites, and sites a reinstall or a restore replaced. Each holds the
  * folder, vhost, certificate and database, so it can be put back; when the
  * site exists again, it goes to the archive first. Copies go for good when
- * purged.
+ * purged. The Sites page's Removed filter (/sites?show=removed), once the
+ * Archive page.
  */
-export function TrashPage() {
-  const { data: entries, error, loading, reload } = useAsync(() => api.trash(), []);
+export function RemovedSites({ entries, error, loading, reload, query }: { entries: TrashEntry[] | null; error: string | null; loading: boolean; reload: () => void; query: string }) {
   const [deleting, setDeleting] = useState<TrashEntry | null>(null);
   useReloadWhileBusy(Boolean(entries?.some((e) => e.busy)), reload);
   // One card per site, sites by their newest copy.
   const groups = useMemo(() => {
     const by = new Map<string, TrashEntry[]>();
-    for (const e of entries ?? []) by.set(e.domain, [...(by.get(e.domain) ?? []), e]);
+    for (const e of (entries ?? []).filter((x) => removedMatches(x, query))) by.set(e.domain, [...(by.get(e.domain) ?? []), e]);
     return [...by.values()].map((list) => list.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt))).sort((a, b) => (b[0]?.deletedAt ?? '').localeCompare(a[0]?.deletedAt ?? ''));
-  }, [entries]);
+  }, [entries, query]);
 
   return (
-    <div className="pt-4">
-      <PageHeader title="Archive" intro="Removed sites, and sites a reinstall or a restore replaced, are kept here for 14 days with their folder, vhost, certificate and database, then deleted for good." actions={<CheckAgain onClick={reload} loading={loading} />} />
+    <div className="mt-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="flex-1 text-sm text-muted-foreground">Removed sites, and sites a reinstall or a restore replaced, are kept for 14 days with their folder, vhost, certificate and database, then deleted for good.</p>
+        <CheckAgain size="sm" onClick={reload} loading={loading} />
+      </div>
 
-      {error && <Notice className="mt-6">{error}</Notice>}
+      {error && <Notice className="mt-4">{error}</Notice>}
       {!entries && loading && (
-        <div className="mt-6 grid gap-3" aria-busy="true">
-          <Reading>Reading the archive...</Reading>
+        <div className="mt-4 grid gap-3" aria-busy="true">
+          <Reading>Reading the removed sites...</Reading>
           <CardSkeleton lines={3} />
           <CardSkeleton lines={2} />
         </div>
       )}
       {entries && entries.length === 0 && (
-        <EmptyState className="mt-6" icon={Archive} title="Nothing archived">
+        <EmptyState className="mt-4" icon={Archive} title="No removed sites">
           A site you remove, reinstall or restore over shows up here for 14 days, ready to put back.
         </EmptyState>
       )}
-      <div className="mt-6 grid gap-4">
+      {entries && entries.length > 0 && groups.length === 0 && (
+        <p className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center text-sm text-muted-foreground">No removed site matches {query.trim()}.</p>
+      )}
+      <div className="mt-4 grid gap-4">
         {groups.map((list) => (
           <Card key={list[0]?.domain}>
             <CardHeader>

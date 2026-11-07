@@ -160,7 +160,7 @@ export async function planTrashRestore(ctx: TrashContext, { id }: Pick<ActionInp
   }
   steps.push({
     id: 'cleanup',
-    label: 'Remove the copy from the Archive',
+    label: 'Remove the copy from Removed sites',
     run: async () => {
       // The site is back by now; an entry already gone takes nothing from it.
       const r = await runRoot(ctx.exec, ctx.dmpRoot, ['trash-delete', id]);

@@ -114,7 +114,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
       { id: 'activity', label: 'Activity', hint: 'jobs since the panel started', icon: <ListChecks />, group: 'Go to', run: () => navigate('/activity') },
       { id: 'runs', label: 'Run history', hint: 'every action with its output', icon: <History />, group: 'Go to', run: () => navigate('/activity/runs') },
       { id: 'mail', label: 'Mail', hint: 'what Mailpit caught', icon: <Mail />, group: 'Go to', run: () => navigate('/mail') },
-      { id: 'trash', label: 'Archive', hint: 'removed and replaced sites', icon: <Archive />, group: 'Go to', run: () => navigate('/trash') },
+      { id: 'removed', label: 'Removed sites', hint: 'kept 14 days, to restore', icon: <Archive />, group: 'Go to', run: () => navigate('/sites?show=removed') },
       { id: 'developer', label: 'Developer options', icon: <Wrench />, group: 'Go to', run: () => navigate('/developer') },
       { id: 'update', label: 'Updates', hint: 'new releases, changelogs, switch back', icon: <CircleArrowUp />, group: 'Go to', run: () => navigate('/update') },
     ];

@@ -9,6 +9,7 @@ const MOVED: Record<string, string> = {
   '/environment/settings': '/settings',
   '/jobs': '/activity',
   '/runs': '/activity/runs',
+  '/trash': '/sites?show=removed',
 };
 
 export function movedTo(path: string, search = ''): string | null {

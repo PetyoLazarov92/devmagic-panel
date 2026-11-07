@@ -1425,7 +1425,7 @@ function ReinstallNote({ site, state, set }: { site: Site; state: WizardState; s
       <p className="text-muted-foreground">
         {installLabel(site.install)}.{' '}
         {site.removable
-          ? 'Installing again archives it first, with its folder, vhost, certificate and database. Restore it from the Archive for 14 days, or with Undo on the install.'
+          ? 'Installing again archives it first, with its folder, vhost, certificate and database. Restore it from Removed sites on the Sites page for 14 days, or with Undo on the install.'
           : 'The panel cannot archive it first: its folder or vhost is not in the usual place. Remove it by hand, or pick another domain.'}
       </p>
       {site.removable && (

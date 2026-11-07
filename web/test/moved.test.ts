@@ -7,6 +7,7 @@ describe('movedTo', () => {
     expect(movedTo('/environment/settings')).toBe('/settings');
     expect(movedTo('/jobs')).toBe('/activity');
     expect(movedTo('/environment')).toBe('/aura/machine');
+    expect(movedTo('/trash')).toBe('/sites?show=removed');
   });
 
   it('keeps the query, like the page of the run history', () => {

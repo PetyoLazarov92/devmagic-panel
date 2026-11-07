@@ -26,7 +26,6 @@ import { phpSectionOf, ServicesPage } from '@/pages/services';
 import { SettingsPage } from '@/pages/settings';
 import { SiteDetailPage } from '@/pages/site-detail';
 import { SitesPage } from '@/pages/sites';
-import { TrashPage } from '@/pages/trash';
 import { UpdatePage } from '@/pages/update';
 
 type Session = SessionInfo & { setupRequired: boolean };
@@ -63,7 +62,6 @@ function Routes({ path }: { path: string }) {
   if (path === '/developer') return <DeveloperPage />;
   if (path === '/update') return <UpdatePage />;
   if (path === '/mail') return <MailPage />;
-  if (path === '/trash') return <TrashPage />;
   const job = match('/jobs/:id', path);
   if (job?.id) return <JobPage key={job.id} id={job.id} />;
   return <SitesPage />;
@@ -129,7 +127,7 @@ export function App() {
       navigate(moved, { replace: true });
       return;
     }
-    const known = path === '/settings' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/aura/machine' || path === '/mail' || path === '/trash' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
+    const known = path === '/settings' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/aura/machine' || path === '/mail' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
     // The password reset has its own address, but only while signed out (the effect below sends a signed-in browser on).
     if (!known && path !== RESET_PATH) navigate('/sites');
   }, [path]);

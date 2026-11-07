@@ -1,6 +1,6 @@
 import type { InstallHow, Preferences, Site, SiteGit } from '@devmagic-panel/shared';
 import { branchWebUrl, INSTALL_HOW_LABELS, INSTALL_HOWS, repoWeb, siteRepoLabel, SITES_SORT_LABELS, SITES_SORTS } from '@devmagic-panel/shared';
-import { ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LayoutGrid, List, LoaderCircle, LogIn, PackageOpen, Plus, Search } from 'lucide-react';
+import { Archive, ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LayoutGrid, List, LoaderCircle, LogIn, PackageOpen, Plus, Search } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { SitesSkeleton } from '@/components/skeletons';
 import { BriefingCard } from '@/components/briefing-card';
@@ -13,7 +13,7 @@ import { Menu } from '@/components/ui/menu';
 import { UnfinishedInstalls } from '@/components/unfinished-installs';
 import { api } from '@/lib/api';
 import { bytes } from '@/lib/format';
-import { Link, navigate } from '@/lib/router';
+import { Link, navigate, useQueryParam } from '@/lib/router';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import { openWpAdmin, runWithToast } from '@/lib/site-actions';
 import { useReloadWhileBusy } from '@/lib/jobs';
@@ -21,8 +21,9 @@ import { useAsync } from '@/lib/use-async';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { cn } from '@/lib/utils';
 import { Notice, PageHeader } from '@/components/page';
+import { RemovedSites, removedMatches } from '@/pages/removed-sites';
 
-type Filter = 'all' | 'attention';
+type Filter = 'all' | 'attention' | 'removed';
 
 /** The sites in the order picked: by when they came here (unknown last), else by name. */
 function sortSites(list: Site[], sort: Preferences['sitesSort']): Site[] {
@@ -44,7 +45,16 @@ export function SitesPage() {
   const unfinished = drafts.data?.length ?? 0;
   useReloadWhileBusy(Boolean(sites?.some((s) => s.installing || s.busy)), reload);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
+  // Removed sites are a filter of their own, in the address so the menu, the palette and old Archive links open it.
+  const [liveFilter, setLiveFilter] = useState<'all' | 'attention'>('all');
+  const filter: Filter = useQueryParam('show') === 'removed' ? 'removed' : liveFilter;
+  const setFilter = (f: Filter) => {
+    if (f !== 'removed') setLiveFilter(f);
+    navigate(f === 'removed' ? '/sites?show=removed' : '/sites', { replace: true, scroll: false });
+  };
+  const trash = useAsync(() => api.trash().catch(() => null), []);
+  const removed = trash.data ?? null;
+  const removedMatching = (removed ?? []).filter((e) => removedMatches(e, query));
   const [how, setHow] = useState<InstallHow | 'any'>('any');
   const [php, setPhp] = useState<string>('any');
   const { sitesView: view, sitesSort: sort } = usePreferences();
@@ -53,7 +63,7 @@ export function SitesPage() {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matching = (sites ?? [])
-      .filter((s) => filter === 'all' || s.health !== 'ok')
+      .filter((s) => filter !== 'attention' || s.health !== 'ok')
       .filter((s) => how === 'any' || (s.install?.how ?? 'hand') === how)
       .filter((s) => php === 'any' || s.php?.version === php)
       .filter((s) => !q || [siteName(s), s.title ?? '', ...s.aliases, s.git?.branch ?? ''].some((v) => v.toLowerCase().includes(q)));
@@ -113,7 +123,7 @@ export function SitesPage() {
           />
         </div>
         <div role="radiogroup" aria-label="Show" className="inline-flex self-start rounded-lg border bg-muted p-0.5 text-sm">
-          {(['all', 'attention'] as const).map((f) => (
+          {(['all', 'attention', ...(removed?.length || filter === 'removed' ? (['removed'] as const) : [])] as const).map((f) => (
             <button
               key={f}
               type="button"
@@ -125,23 +135,23 @@ export function SitesPage() {
                 filter === f && 'bg-card text-foreground shadow-xs ring-1 ring-border',
               )}
             >
-              {f === 'all' ? 'All' : 'Needs attention'}
+              {f === 'all' ? 'All' : f === 'attention' ? 'Needs attention' : `Removed${removed?.length ? ` ${removed.length}` : ''}`}
             </button>
           ))}
         </div>
-        {hows.length > 1 && (
+        {filter !== 'removed' && hows.length > 1 && (
           <Select value={how} onChange={(e) => setHow(e.target.value as InstallHow | 'any')} aria-label="How installed" className="h-9" wrapClassName="self-start sm:self-auto">
             <option value="any">Installed any way</option>
             {hows.map((h) => <option key={h} value={h}>{INSTALL_HOW_LABELS[h]}</option>)}
           </Select>
         )}
-        {phps.length > 1 && (
+        {filter !== 'removed' && phps.length > 1 && (
           <Select value={php} onChange={(e) => setPhp(e.target.value)} aria-label="PHP version" className="h-9" wrapClassName="self-start sm:self-auto">
             <option value="any">Any PHP</option>
             {phps.map((v) => <option key={v} value={v}>PHP {v}</option>)}
           </Select>
         )}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className={cn('flex items-center gap-2 self-start sm:self-auto', filter === 'removed' && 'hidden')}>
           <Select value={sort} onChange={(e) => savePreferences({ sitesSort: e.target.value as Preferences['sitesSort'] })} aria-label="Sort sites" className="h-9">
             {SITES_SORTS.map((s) => <option key={s} value={s}>{SITES_SORT_LABELS[s]}</option>)}
           </Select>
@@ -167,23 +177,37 @@ export function SitesPage() {
         </div>
       </div>
 
-      {error && <Notice className="mt-6">{error}</Notice>}
+      {filter === 'removed' && <RemovedSites entries={removed} error={trash.error} loading={trash.loading} reload={() => { trash.reload(); reload(); }} query={query} />}
 
-      {loading && !sites && <SitesSkeleton view={view} className="mt-5" />}
-      {sites && shown.length === 0 && (
+      {filter !== 'removed' && error && <Notice className="mt-6">{error}</Notice>}
+
+      {filter !== 'removed' && loading && !sites && <SitesSkeleton view={view} className="mt-5" />}
+      {filter !== 'removed' && sites && shown.length === 0 && (
         <div className="mt-5 rounded-xl border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
           No sites match. <button type="button" className="font-medium text-foreground hover:underline" onClick={() => { setQuery(''); setFilter('all'); setHow('any'); setPhp('any'); }}>Clear the filter</button>
         </div>
       )}
-      {shown.length > 0 && view === 'grid' && (
+      {filter !== 'removed' && shown.length > 0 && view === 'grid' && (
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           {shown.map((site) => <SiteCard key={siteName(site)} site={site} />)}
         </div>
       )}
-      {shown.length > 0 && view === 'list' && (
+      {filter !== 'removed' && shown.length > 0 && view === 'list' && (
         <ul className="mt-5 divide-y rounded-xl border bg-card shadow-xs">
           {shown.map((site) => <SiteRow key={siteName(site)} site={site} />)}
         </ul>
+      )}
+      {/* Removed sites never mix with live ones: one quiet line after the list says they are there. */}
+      {filter !== 'removed' && sites && removedMatching.length > 0 && (
+        <p className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Archive className="size-4" />
+          {query.trim()
+            ? `${removedMatching.length === 1 ? '1 removed site matches' : `${removedMatching.length} removed sites match`}.`
+            : `${removedMatching.length === 1 ? '1 removed site is' : `${removedMatching.length} removed sites are`} kept for 14 days.`}
+          <button type="button" className="font-medium text-primary hover:underline" onClick={() => setFilter('removed')}>
+            {removedMatching.length === 1 ? 'Show it' : 'Show them'}
+          </button>
+        </p>
       )}
     </div>
   );
