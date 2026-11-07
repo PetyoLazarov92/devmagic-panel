@@ -1,0 +1,29 @@
+{
+  "name": "v1.17.0",
+  "version": "1.17.0",
+  "commit": "857c9be4829932b267463797ac0abb246d3ab87b",
+  "built": "2026-11-07T07:32:04Z",
+  "installer": "7b3e640ef98770b8d2812ebca4a6e025094a1332ba630ccf7850da61897bdc8f",
+  "scripts": {
+    "bin/dmp-restore": "3e0496642e6323f05fa1a9b0f69a3650c207ad0cfa72a5bfb1c66ad8f7db17a2",
+    "bin/dmp-root": "43fbabefc1163011109bf2b5d5bf7aa5bc6e1cfcfdb549e84de421aac2d50978",
+    "bin/wpcore": "49ec6268f000994b23cfa7439df0d5c22087dea4f03fb47acefacc2215e09dca",
+    "lib/apache.sh": "ea9a4272423ae40245921017dd2ede2f462b0c11b802598b3a41013942ac8b50",
+    "lib/backup.sh": "bcd1c21c0118000bed607814c27e282542f6199105d6f0fa721c232cbc7ec9df",
+    "lib/ca.sh": "ee637c19fe3dd5117837dd62895d5ab1f21e0e0492dfa6a20bb1f3452b7dca6a",
+    "lib/cert.sh": "1b48f30c20f18cba58d660aed53ddeffd68129c4c054bec88d69e2e8d33fc901",
+    "lib/config.sh": "c77d18812f6b67125f9f9bb8e8281c2de26921dab9e90aa16b0fa73f8a150f73",
+    "lib/fpm.sh": "faf183072319aa47ab586e55173b79a388e76878528cdeeeb8ccf719bcb1c212",
+    "lib/hosts.sh": "bc4c2db6eaf79bdcf6ee524035e2291a60cd2103f7f825563f2bb585bbdbc365",
+    "lib/log.sh": "18643a316b62cb1ebd0466015ecca210de9c15fce04ab3eb04aa6fa41e7bc9aa",
+    "lib/nginx.sh": "f3e3142281538b37549e5e8f51c2b8c5cbe3bacdb1f794e85cc6aae928d019fb",
+    "lib/php-apt.sh": "0a16f3b81b91e5890c31f31e6cd8edb4f4b18e4737cfa5bc9e3f836facc8b46d",
+    "lib/php.sh": "efe5737aa08bdc995c745e7be02caf3ed80e1c260279d0ec8f54b4a29380e551",
+    "lib/site.sh": "f5d5671ee2b53770b88ed1f22290bd187550c01ea0848b3d3cd26734999523b3",
+    "lib/trash.sh": "291334a580fe16c5f622b9851c306515d4fe50956af86fda2c6bc85790a454ff",
+    "lib/validate.sh": "ae430a4bad1170689586d3de0fa6be5e704c6970a1539788576e2e651613dd18",
+    "lib/vhost.sh": "14d7fc945a8b1d342429760efbfb6061fb313d8654c0e4eeefc46dca10140eae",
+    "php/info.php": "039344f99e17ad3183eceb18d42c69997ab1ff378373502be22858981ada3f2c",
+    "php/starting.html": "aa65829dfd15a33ad4aa30e0c78930c3db40193c4526424c36ecb5ca607381c4"
+  }
+}
