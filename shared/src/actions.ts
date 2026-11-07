@@ -1041,7 +1041,7 @@ export const actions = {
   'panel.installRelease': {
     title: 'Install a release with your sudo password',
     description:
-      "Runs an installed release's install.sh --from-panel in the background, for a release that changes the root scripts (or to switch to one that has other root scripts). The sudo password goes to install.sh's stdin only, is never saved, and run history shows it as (hidden). install.sh keeps the root scripts, config.env and sudoers rule, swaps the new root scripts in whole, restarts the panel and checks it answers with the new version; a failure puts everything back. Starts a job; the panel restarts on success.",
+      "Runs a release's install.sh --from-panel in the background, for a release that changes the root scripts (or to switch to one that has other root scripts). The newest release, when it is not downloaded yet, is downloaded, checked and unpacked first in the same job; if that fails the job lets go of the password. The sudo password goes to install.sh's stdin only, is never saved, and run history shows it as (hidden). install.sh keeps the root scripts, config.env and sudoers rule, swaps the new root scripts in whole, restarts the panel and checks it answers with the new version; a failure puts everything back. Starts a job; the panel restarts on success.",
     changesSystem: true,
     input: z.object({ release: releaseName, password: z.string().max(1024) }),
   },

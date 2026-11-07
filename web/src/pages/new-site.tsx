@@ -13,7 +13,7 @@ import { installLabel } from '@/components/site-bits';
 import { AccessStep, linksOf, newOrgState, type OrgState, OrgStep, ReadStep } from './new-site-org';
 import { NetworkSection } from './new-site-network';
 import { Input, Textarea } from '@/components/ui/input';
-import { PasswordInput } from '@/components/ui/password-input';
+import { SecretInput } from '@/components/ui/secret-input';
 import { Switch } from '@/components/ui/switch';
 import { ReleaseListLink } from '@/components/release-link';
 import { api, type DraftInput, isMockup } from '@/lib/api';
@@ -1744,8 +1744,8 @@ function AdminSection({ state, set, input, defaults }: { state: WizardState; set
       <Field label="Email" htmlFor="email">
         <Input id="email" type="email" value={state.adminEmail ?? defaults.email} onChange={(e) => set('adminEmail', e.target.value)} autoComplete="off" spellCheck={false} />
       </Field>
-      <Field label="Password" htmlFor="admin-password" hint="For this local copy only: logins work from this computer alone.">
-        <PasswordInput id="admin-password" value={state.adminPassword ?? defaults.password} onChange={(e) => set('adminPassword', e.target.value)} autoComplete="new-password" />
+      <Field label="Password" htmlFor="admin-secret" hint="For this local copy only: logins work from this computer alone.">
+        <SecretInput id="admin-secret" value={state.adminPassword ?? defaults.password} onChange={(e) => set('adminPassword', e.target.value)} />
       </Field>
     </div>
   );

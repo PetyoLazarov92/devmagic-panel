@@ -32,6 +32,11 @@ domains.
 - Passwords go to MySQL and WP-CLI through the environment or stdin, never the
   command line.
 - Run history keeps passwords, row values and SQL that writes as `(hidden)`.
+- The browser and password managers are not offered the sudo password, the
+  computer password for a reset, the API key or the passwords for sites and
+  databases: those fields are text drawn as dots, with each manager's ignore
+  marker. Only the panel's own login is a password field, for a manager to
+  save and fill.
 
 ## Databases
 

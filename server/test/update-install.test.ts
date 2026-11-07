@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { type ActionContext, runAction } from '../src/actions.js';
 import { Jobs, type JobRuntime, type JobView } from '../src/jobs.js';
 import { RunStore } from '../src/store.js';
-import { type InstallContext, installStillNews, planInstallRelease, readInstallStatus, settleInstall, statusFile } from '../src/update-install.js';
+import { forgetOnFailure, type HeldPassword, type InstallContext, installStillNews, planInstallRelease, readInstallStatus, settleInstall, statusFile } from '../src/update-install.js';
 import { installedReleases, type UpdateContext } from '../src/update.js';
 import { type FakeCall, fakeExec, tempTree } from './helpers.js';
 
@@ -69,6 +69,26 @@ describe('panel.installRelease', () => {
     expect(s.handed).toHaveLength(1);
   });
 
+  it('forgets a password the job holds once a step before the install fails, or throws', async () => {
+    const s = setup();
+    const held: HeldPassword = { value: PASSWORD };
+    const download = forgetOnFailure(held, { id: 'download', label: 'Download', run: async () => ({ code: 1, stdout: '', stderr: 'no network' }) });
+    const [start] = planInstallRelease(s.ctx, release, held, 7);
+    expect(await download.run(job)).toMatchObject({ code: 1 });
+    expect(held.value).toBeUndefined();
+    expect(await start?.run(job)).toMatchObject({ code: 1, stderr: expect.stringContaining('the password was used once and is gone') });
+    expect(s.handed).toEqual([]);
+
+    const again: HeldPassword = { value: PASSWORD };
+    const thrown = forgetOnFailure(again, { id: 'unpack', label: 'Unpack', run: async () => { throw new Error('disk full'); } });
+    await expect(thrown.run(job)).rejects.toThrow('disk full');
+    expect(again.value).toBeUndefined();
+
+    const kept: HeldPassword = { value: PASSWORD };
+    await forgetOnFailure(kept, { id: 'verify', label: 'Verify', run: async () => ({ code: 0, stdout: 'ok', stderr: '' }) }).run(job);
+    expect(kept.value).toBe(PASSWORD);
+  });
+
   it('stops the unit when the installer never reads its password, and forgets the run', async () => {
     const s = setup();
     s.ctx.handOver = async () => {
@@ -120,7 +140,7 @@ describe('panel.installRelease', () => {
     const recorded = JSON.stringify(store.page(1, 5));
     expect(recorded).toContain('(hidden)');
     expect(recorded).not.toContain(PASSWORD);
-    expect(await runAction(ctx, 'panel.installRelease', { release: 'v1.2.3', password: PASSWORD })).toMatchObject({ ok: false, output: expect.stringContaining('v1.2.3 is not installed') });
+    expect(await runAction(ctx, 'panel.installRelease', { release: 'v1.2.3', password: PASSWORD })).toMatchObject({ ok: false, output: expect.stringContaining('v1.2.3 is not installed and is not the newest release') });
     expect(await runAction(ctx, 'panel.installRelease', { release: 'v0.24.0', password: PASSWORD })).toMatchObject({ ok: false, output: expect.stringContaining("v0.24.0's install.sh cannot install from the panel (that came in v0.25.0)") });
     expect(installedReleases(update).map((r) => [r.name, r.fromPanel ?? false]).sort()).toEqual([['v0.24.0', false], ['v9.9.9', true]]);
   });

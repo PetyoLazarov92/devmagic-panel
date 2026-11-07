@@ -496,6 +496,14 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'service', label: 'Start Mailpit as a user service' },
     ],
     'panel.installRelease': [
+      ...(new URLSearchParams(window.location.search).get('terminal') === 'new'
+        ? [
+            { id: 'download', label: `Download ${String(input.release)}` },
+            { id: 'verify', label: 'Check the checksum' },
+            { id: 'unpack', label: `Unpack ${String(input.release)} next to the installed releases` },
+            { id: 'installer', label: `Check that ${String(input.release)}'s installer can run from the panel` },
+          ]
+        : []),
       { id: 'start', label: `Start ${String(input.release)}'s installer in the background with your sudo password` },
       { id: 'install', label: `Install ${String(input.release)}: root scripts, system steps, then the restart` },
     ],
@@ -747,7 +755,8 @@ function mockUpdateVariant(): Partial<UpdateStatus> {
     variant.reason = 'v0.8.0 changes the root scripts (dmp-root, php.sh), which only its install.sh may put in place, with your sudo password.';
     // Spread over mockUpdate, so it must be there to clear it.
     variant.installerChanged = undefined as never;
-    variant.releases = [{ name: 'v0.8.0', version: '0.8.0', current: false, installedAt: new Date().toISOString(), built: '2026-10-31T10:00:00Z', mode: 'terminal', command: variant.command, fromPanel: true }, ...mockUpdate.releases];
+    // ?terminal=new: not downloaded yet, so Install downloads it first in the same job.
+    variant.releases = query.get('terminal') === 'new' ? mockUpdate.releases : [{ name: 'v0.8.0', version: '0.8.0', current: false, installedAt: new Date().toISOString(), built: '2026-10-31T10:00:00Z', mode: 'terminal', command: variant.command, fromPanel: true }, ...mockUpdate.releases];
   }
   const install = query.get('install');
   if (install === 'done' || install === 'failed' || install === 'interrupted') {

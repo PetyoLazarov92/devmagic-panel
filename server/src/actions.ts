@@ -48,8 +48,8 @@ import type { RunStore } from './store.js';
 import { clearMail, type Downloader, mailpitFetch, type MailpitFetch, planInstallMailpit } from './mailpit.js';
 import { writeAutostart } from './autostart.js';
 import { planTrashRestore, TrashRefused } from './sites/trash.js';
-import { checkUpdate, installedReleases, panelCli, planSwitch, planUpdate, type UpdateContext } from './update.js';
-import { installRunning, planInstallRelease } from './update-install.js';
+import { checkUpdate, installedReleases, installerCheck, panelCli, planSwitch, planUpdate, type UpdateContext } from './update.js';
+import { forgetOnFailure, type HeldPassword, installRunning, planInstallRelease } from './update-install.js';
 import { changeCrontab, type CronChange, type CronCommand, cronCommand, type CronContext, cronLockDir, CronRefused, findTask, newTaskId, type PanelTask, parseCrontab, readCrontab, taskArgs, tasksOf, undoCrontab } from './cron.js';
 import { runCronTask, taskRefusal } from './cron-run.js';
 import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } from './sites/wp-cron.js';
@@ -509,12 +509,21 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'panel.installRelease': async (ctx, input) => {
     if (!ctx.update) throw new ActionInputError('updates are not set up in this panel');
     const release = installedReleases(ctx.update).find((r) => r.name === input.release);
-    if (!release) throw new ActionInputError(`${input.release} is not installed: download it on the Updates page first`);
     const dir = join(ctx.update.dataDir, 'releases', input.release);
-    if (!release.fromPanel) throw new ActionInputError(`${input.release}'s install.sh cannot install from the panel (that came in v0.25.0): run ${join(dir, 'install.sh')} in a terminal`);
+    if (release && !release.fromPanel) throw new ActionInputError(`${input.release}'s install.sh cannot install from the panel (that came in v0.25.0): run ${join(dir, 'install.sh')} in a terminal`);
+    let download: JobStep[] = [];
+    if (!release) {
+      // Not here yet: the newest release, when it needs the password, downloads first in the same job.
+      const status = await checkUpdate(ctx.update);
+      if (!status.available || status.latest !== input.release) throw new ActionInputError(`${input.release} is not installed and is not the newest release (${status.latest ?? status.error ?? 'none found'})`);
+      if (status.mode !== 'terminal') throw new ActionInputError(status.mode === 'panel' ? `${input.release} needs no password: update to it from the Updates page` : (status.reason ?? status.error ?? `${input.release} cannot be installed from the panel`));
+      download = planUpdate(ctx.update, input.release, 'download');
+    }
     if (await installRunning({ exec: ctx.exec, dataDir: ctx.update.dataDir })) throw new ActionBusyError('An install from the Updates page is still running');
-    const steps = planInstallRelease({ exec: ctx.exec, dataDir: ctx.update.dataDir, store: ctx.store }, { name: input.release, dir }, input.password, ctx.runId as number);
-    return startJob(ctx, steps, `Install ${input.release} with your sudo password`, 'panel');
+    const held: HeldPassword = { value: input.password };
+    const before: JobStep[] = download.length ? [...download, installerCheck(input.release, dir)].map((step) => forgetOnFailure(held, step)) : [];
+    const steps = planInstallRelease({ exec: ctx.exec, dataDir: ctx.update.dataDir, store: ctx.store }, { name: input.release, dir }, held, ctx.runId as number);
+    return startJob(ctx, [...before, ...steps], `${download.length ? 'Download and install' : 'Install'} ${input.release} with your sudo password`, 'panel');
   },
   'panel.switchRelease': async (ctx, input) => {
     if (!ctx.update) throw new ActionInputError('updates are not set up in this panel');

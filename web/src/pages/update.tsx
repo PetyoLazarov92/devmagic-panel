@@ -1,6 +1,6 @@
 import type { ChangelogSection, InstalledRelease, UpdateStatus, UpdateWay } from '@devmagic-panel/shared';
 import { UPDATE_WAY_LABELS, UPDATE_WAYS } from '@devmagic-panel/shared';
-import { Check, ChevronRight, CircleArrowUp, Copy, Download, History, Info, LoaderCircle, RefreshCw, X } from 'lucide-react';
+import { Check, ChevronRight, CircleArrowUp, Copy, History, Info, LoaderCircle, RefreshCw, X } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -197,8 +197,9 @@ export function UpdatePage() {
         <div className="mt-6 grid gap-4">
           {installing && <InstallProgress key={installing.jobId} jobId={installing.jobId} release={installing.release} onAgain={() => {
             // The newest release has its form on the page; any other gets the dialog.
-            if (installing.release !== downloaded?.name) setAsking(installing.release);
+            if (installing.release !== status.latest) setAsking(installing.release);
             setInstalling(null);
+            setTick((n) => n + 1);
           }} />}
           {!installing && status.install && <LastInstall install={status.install} onAgain={setAsking} onRefresh={() => setTick((n) => n + 1)} />}
           {status.error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{status.error}</p>}
@@ -256,12 +257,19 @@ export function UpdatePage() {
                     </>
                   ) : (
                     <>
-                      <p>{status.latest} changes the root scripts, which only its installer may put in place, with your sudo password. First the panel downloads and checks it; then you install it here with the password, which the panel never saves.</p>
-                      <Button className="justify-self-start" variant="outline" disabled={starting} onClick={() => void start('panel.update', { version: status.latest as string })}>
-                        {starting ? <LoaderCircle className="animate-spin" /> : <Download />}
-                        Download {status.latest}
-                      </Button>
-                      <TerminalWay command={status.command} />
+                      <p>
+                        {status.latest} changes the root scripts, so it installs with your sudo password. The panel downloads {status.latest}{status.packageBytes ? ` (${bytes(status.packageBytes)})` : ''} and checks it, then its installer puts the root scripts in place, switches the panel to it and restarts it. If a step fails, it puts everything back.
+                      </p>
+                      {!installing && <InstallForm release={status.latest} verb={`Install ${status.latest}`} onStarted={started(status.latest)} />}
+                      {!installing && (
+                        <p className="text-xs text-muted-foreground">
+                          Rather use a terminal?{' '}
+                          <button type="button" className="underline underline-offset-2 hover:text-foreground disabled:opacity-50" disabled={starting} onClick={() => void start('panel.update', { version: status.latest as string })}>
+                            Only download {status.latest}
+                          </button>
+                          , then run its installer, which asks for the password itself.
+                        </p>
+                      )}
                     </>
                   )
                 )}

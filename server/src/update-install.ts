@@ -37,6 +37,32 @@ interface PendingInstall {
   release: string;
 }
 
+/** The sudo password while a job holds it: set to undefined once handed over, or once the job cannot use it any more. */
+export interface HeldPassword {
+  value: string | undefined;
+}
+
+/**
+ * A step before the install, like the download: when it fails, the job lets
+ * go of the password at once, so Retry finishes the download but asks for the
+ * install to start again with the password.
+ */
+export function forgetOnFailure(held: HeldPassword, step: JobStep): JobStep {
+  return {
+    ...step,
+    run: async (job) => {
+      try {
+        const out = await step.run(job);
+        if ((Array.isArray(out) ? out : [out]).some((r) => r.code !== 0)) held.value = undefined;
+        return out;
+      } catch (error) {
+        held.value = undefined;
+        throw error;
+      }
+    },
+  };
+}
+
 export const statusFile = (dataDir: string) => join(dataDir, 'update-status.json');
 const pendingFile = (dataDir: string) => join(dataDir, 'update-run.json');
 const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
@@ -160,18 +186,18 @@ const lastLogLine = (file: string) => {
  * its status until it ends. When the update succeeds the panel restarts in the
  * middle of the second step; the panel that comes up finishes the run.
  */
-export function planInstallRelease(ctx: InstallContext, release: { name: string; dir: string }, password: string, runId: number): JobStep[] {
+export function planInstallRelease(ctx: InstallContext, release: { name: string; dir: string }, password: string | HeldPassword, runId: number): JobStep[] {
   const now = ctx.now ?? (() => new Date());
   const unit = `devmagic-panel-install-${now().toISOString().replace(/\D/g, '').slice(0, 14)}`;
   const { delayMs = 1000, maxMs = 90 * 60_000 } = ctx.poll ?? {};
   // Held only until it is handed over: jobs stay in memory, and a retry must not reuse it.
-  let secret: string | undefined = password;
+  const held: HeldPassword = typeof password === 'string' ? { value: password } : password;
   return [
     {
       id: 'start',
       label: `Start ${release.name}'s installer in the background with your sudo password`,
       run: async () => {
-        if (secret === undefined) return failed('the password was used once and is gone: start the install again from the Updates page');
+        if (held.value === undefined) return failed('the password was used once and is gone: start the install again from the Updates page');
         rmSync(statusFile(ctx.dataDir), { force: true });
         const dir = mkdtempSync(join(ctx.runtimeDir ?? process.env.XDG_RUNTIME_DIR ?? tmpdir(), 'devmagic-panel-update-'));
         const fifo = join(dir, 'password');
@@ -189,8 +215,8 @@ export function planInstallRelease(ctx: InstallContext, release: { name: string;
             rmSync(pendingFile(ctx.dataDir), { force: true });
             return started;
           }
-          const text = `${secret}\n`;
-          secret = undefined;
+          const text = `${held.value}\n`;
+          held.value = undefined;
           try {
             await (ctx.handOver ?? handOverFifo)(fifo, text);
           } catch (error) {
@@ -200,7 +226,7 @@ export function planInstallRelease(ctx: InstallContext, release: { name: string;
           }
           return ok(`install.sh --from-panel runs as ${unit}`);
         } finally {
-          secret = undefined;
+          held.value = undefined;
           rmSync(dir, { recursive: true, force: true });
         }
       },

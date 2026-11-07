@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.16.0 (2026-11-07)
+* **Updates:** a release that changes the root scripts installs in one step: type your sudo password and click Install, and one job downloads it, checks it, unpacks it and runs its installer, with the progress on the Updates page. If the download fails, the job lets go of the password. Only download is still there for a terminal install
+* **Updates:** a release downloaded from the panel shows as downloaded on the Updates page at once, after going back or a reload, without Check again, and a job from the Updates page has Back to Updates
+* **Panel:** the browser and password managers (Chrome, Bitwarden, 1Password, LastPass, Dashlane) no longer offer to save the sudo password, the computer password for a reset, the Anthropic API key or the passwords of a new site and a WordPress user. Only the panel login is still offered, so a manager can fill it
+* An update installs this release from the panel as usual
+
 ### v1.15.2 (2026-11-07)
 * **Databases:** a click outside no longer closes Change a row, Add a copy or Add a row, and once you have typed something Escape keeps it open too and says that Cancel discards it
 * **Panel:** no dialog closes any more when you select text in a field and let go of the mouse outside it

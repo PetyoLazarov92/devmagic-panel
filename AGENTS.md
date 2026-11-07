@@ -91,7 +91,7 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    lock (`GlobalLock`, 5 failures, an hour); both are plain routes, never
    registry actions, and answer a wrong password with 403, not 401.
    The sudo password for an update is never saved: the panel drops it once it
-   reaches install.sh, and install.sh keeps it in a shell variable only (never
+   reaches install.sh, or once the download before it fails, and install.sh keeps it in a shell variable only (never
    exported, a file or argv) until it ends, then runs `sudo -K`.
 8. **Localhost only.** The server binds `127.0.0.1`, refuses unknown `Host`
    headers (421) and cross-origin unsafe requests (403). Keep both checks.

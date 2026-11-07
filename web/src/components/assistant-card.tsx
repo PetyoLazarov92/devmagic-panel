@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Select } from '@/components/ui/field';
 import { Dialog } from '@/components/ui/dialog';
 import { Input, Textarea } from '@/components/ui/input';
+import { SecretInput } from '@/components/ui/secret-input';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -94,15 +95,15 @@ export function AssistantCard() {
             {SOURCE[current.keySource]}{current.keyHint ? ` (ends in ${current.keyHint})` : ''}. A saved key stays in ~/.config/devmagic-panel/secrets.json, readable only by you, and never comes back to the browser.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Input
-              type="password"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder={current.keySource === 'panel' ? 'Replace the saved key: sk-ant-api03-...' : 'sk-ant-api03-...'}
-              autoComplete="off"
-              aria-label="Anthropic API key"
-              className="min-w-56 flex-1 font-mono text-[13px]"
-            />
+            <div className="min-w-56 flex-1">
+              <SecretInput
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                placeholder={current.keySource === 'panel' ? 'Replace the saved key: sk-ant-api03-...' : 'sk-ant-api03-...'}
+                aria-label="Anthropic API key"
+                className="font-mono text-[13px]"
+              />
+            </div>
             <Button
               variant="outline"
               className="h-10"

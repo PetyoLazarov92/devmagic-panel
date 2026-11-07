@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { settled, StepList } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { SecretInput } from '@/components/ui/secret-input';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
@@ -20,7 +21,7 @@ export function InstallForm({ release, verb, onStarted, onCancel }: { release: s
   const [secret, setSecret] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const id = `install-password-${release}`;
+  const id = `install-secret-${release}`;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -40,17 +41,9 @@ export function InstallForm({ release, verb, onStarted, onCancel }: { release: s
     <form className="grid gap-3" onSubmit={(e) => void submit(e)} autoComplete="off">
       <div className="grid gap-1.5">
         <label htmlFor={id} className="text-sm font-medium">Your sudo password</label>
-        <input
-          id={id}
-          type="password"
-          autoComplete="off"
-          data-1p-ignore
-          data-lpignore="true"
-          value={secret}
-          onChange={(e) => setSecret(e.target.value)}
-          disabled={busy}
-          className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm sm:max-w-xs"
-        />
+        <div className="sm:max-w-xs">
+          <SecretInput id={id} value={secret} onChange={(e) => setSecret(e.target.value)} disabled={busy} />
+        </div>
         <p className="text-xs text-muted-foreground">
           The password you log in to this computer with. It goes to {release}&apos;s installer once, for this install, and the panel never saves it. Leave it empty if sudo asks you for none.
         </p>
@@ -106,7 +99,7 @@ export function InstallProgress({ jobId, release, onAgain }: { jobId: string; re
           <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />The panel is restarting on {release}; this page reloads once it answers and shows how the install ended.</p>
         ) : (
           <>
-            <p className="text-muted-foreground">install.sh keeps the root scripts, config.env and sudoers rule, puts the new root scripts in place, restarts the panel and checks it answers. If a step fails, it puts everything back. Other changes wait until it ends.</p>
+            <p className="text-muted-foreground">{job?.steps.some((s) => s.id === 'download') && `The panel downloads ${release} and checks it first. `}install.sh keeps the root scripts, config.env and sudoers rule, puts the new root scripts in place, restarts the panel and checks it answers. If a step fails, it puts everything back. Other changes wait until it ends.</p>
             {job && <StepList steps={job.steps} open={open} setOpen={setOpen} />}
           </>
         )}

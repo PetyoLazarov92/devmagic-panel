@@ -101,6 +101,9 @@ export function JobScreen({ jobId, wordpress }: { jobId: string; wordpress?: boo
         {INSTALL_STEP_JOBS.includes(job.kind ?? '') && /^[0-9a-f-]{36}$/.test(domain) && (
           <Button variant="outline" onClick={() => navigate(draftHref(domain))}>Back to the install<ArrowRight /></Button>
         )}
+        {job.kind?.startsWith('panel.') && !updated && job.status !== 'running' && job.status !== 'queued' && (
+          <Button variant="outline" onClick={() => navigate('/update')}>Back to Updates<ArrowRight /></Button>
+        )}
         {job.status === 'done' && install && (
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => window.open(`https://${domain}`, '_blank', 'noopener')}><ExternalLink />Open site</Button>

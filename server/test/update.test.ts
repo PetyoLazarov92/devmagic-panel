@@ -9,7 +9,9 @@ import { runCommand } from '../src/exec.js';
 import { Jobs, type JobView } from '../src/jobs.js';
 import { httpsSource, type ReleaseSource } from '../src/release-source.js';
 import { RunStore } from '../src/store.js';
-import { checkUpdate, compareVersions, installedReleases, notesItems, parseChangelog, planSwitch, planUpdate, type ReleaseInfo, type UpdateContext } from '../src/update.js';
+import { type ActionContext, runAction } from '../src/actions.js';
+import { checkUpdate, compareVersions, installedReleases, notesItems, parseChangelog, planSwitch, planUpdate, type ReleaseInfo, UpdateChecker, type UpdateContext } from '../src/update.js';
+import { tempTree } from './helpers.js';
 
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
 
@@ -69,7 +71,7 @@ function mixedExec() {
  * pointing at it, the root scripts it installed, and GitHub with v0.7.0,
  * which changes the root scripts or the installer when asked to.
  */
-function machine(opts: { newScripts?: boolean; newInstaller?: boolean; badSum?: boolean; isPublic?: boolean; assets?: boolean; sources?: ReleaseSource[] } = {}) {
+function machine(opts: { newScripts?: boolean; newInstaller?: boolean; badSum?: boolean; isPublic?: boolean; assets?: boolean; fromPanel?: boolean; sources?: ReleaseSource[] } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'dmp-update-'));
   const data = join(root, 'data');
   const prefix = join(root, 'lib');
@@ -90,6 +92,7 @@ function machine(opts: { newScripts?: boolean; newInstaller?: boolean; badSum?: 
   };
   const pkg = join(root, 'pkg');
   releaseFolder(join(pkg, 'devmagic-panel-v0.7.0'), next);
+  if (opts.fromPanel) writeFileSync(join(pkg, 'devmagic-panel-v0.7.0', 'install.sh'), '#!/bin/sh\ncase "$1" in\n  --from-panel) ;;\nesac\n');
   const tarballFile = join(root, 'devmagic-panel-v0.7.0.tar.gz');
   execFileSync('tar', ['-czf', tarballFile, '-C', pkg, 'devmagic-panel-v0.7.0']);
   const tarball = readFileSync(tarballFile);
@@ -240,6 +243,75 @@ describe('checkUpdate', () => {
   it('shows the one-time note about the deleted GitHub token', async () => {
     const m = machine();
     expect(await checkUpdate({ ...m.ctx, notice: () => 'revoke it' })).toMatchObject({ notice: 'revoke it' });
+  });
+});
+
+describe('UpdateChecker', () => {
+  it('keeps the check of the releases but reads the ones on this machine every time, so a finished download shows at once', async () => {
+    const m = machine({ newScripts: true });
+    const checker = new UpdateChecker(m.ctx);
+    expect((await checker.status()).releases.map((r) => r.name)).toEqual(['v0.6.0']);
+    const asked = m.github.calls.length;
+    releaseFolder(join(m.data, 'releases', 'v0.7.0'), m.next);
+    const again = await checker.status();
+    expect(again.releases.map((r) => r.name).sort()).toEqual(['v0.6.0', 'v0.7.0']);
+    expect(again).toMatchObject({ latest: 'v0.7.0', mode: 'terminal' });
+    // GitHub is asked again only on Check again.
+    expect(m.github.calls).toHaveLength(asked);
+    await checker.status(true);
+    expect(m.github.calls.length).toBeGreaterThan(asked);
+  });
+});
+
+describe('panel.installRelease for a release not downloaded yet', () => {
+  const PASSWORD = 'pa$$ word "x"';
+  function context(m: ReturnType<typeof machine>) {
+    const t = tempTree();
+    const store = new RunStore(':memory:');
+    const jobs = new Jobs(store);
+    const ctx = { config: t.config, exec: m.ctx.exec, store, dmpRoot: '/x/dmp-root', wpcoreBin: '/x/wpcore', wpcoreConf: '/x/wpcore.conf', home: t.root, jobs, uploadsDir: join(m.root, 'uploads'), secrets: null, update: m.ctx } as ActionContext;
+    return { ctx, jobs, store };
+  }
+  const jobId = (result: unknown) => (result as { data?: { jobId?: string } }).data?.jobId as string;
+
+  it('downloads, checks and unpacks the newest release, then starts its installer in the same job', async () => {
+    const m = machine({ newScripts: true, fromPanel: true });
+    const { ctx, jobs, store } = context(m);
+    const view = await settle(jobs, jobId(await runAction(ctx, 'panel.installRelease', { release: 'v0.7.0', password: PASSWORD })));
+    expect(view.title).toBe('Download and install v0.7.0 with your sudo password');
+    expect(view.steps.map((s) => s.id)).toEqual(['download', 'verify', 'unpack', 'installer', 'start', 'install']);
+    expect(view.steps.slice(0, 4).map((s) => s.status)).toEqual(['done', 'done', 'done', 'done']);
+    // The fake executor makes no FIFO, so the handover fails: the release is downloaded all the same.
+    expect(view.steps[4]).toMatchObject({ status: 'failed', output: expect.stringContaining('could not give the installer your password') });
+    expect(m.calls.some((c) => c.startsWith(`systemd-run --user --quiet --collect`) && c.endsWith(`${join(m.data, 'releases', 'v0.7.0', 'install.sh')} --from-panel`))).toBe(true);
+    expect(installedReleases(m.ctx).find((r) => r.name === 'v0.7.0')).toMatchObject({ fromPanel: true, mode: 'terminal' });
+    const recorded = JSON.stringify(store.page(1, 5));
+    expect(recorded).toContain('(hidden)');
+    expect(recorded).not.toContain(PASSWORD);
+    expect(JSON.stringify(m.calls)).not.toContain(PASSWORD);
+  });
+
+  it('lets go of the password when the download fails, and never starts the installer', async () => {
+    const m = machine({ newScripts: true, fromPanel: true, badSum: true });
+    const { ctx, jobs } = context(m);
+    const view = await settle(jobs, jobId(await runAction(ctx, 'panel.installRelease', { release: 'v0.7.0', password: PASSWORD })));
+    expect(view.steps.find((s) => s.id === 'verify')).toMatchObject({ status: 'failed', output: expect.stringContaining('checksum mismatch') });
+    expect(m.calls).toEqual([]);
+  });
+
+  it('stops with the terminal command when the release cannot install from the panel', async () => {
+    const m = machine({ newScripts: true });
+    const { ctx, jobs } = context(m);
+    const view = await settle(jobs, jobId(await runAction(ctx, 'panel.installRelease', { release: 'v0.7.0', password: PASSWORD })));
+    expect(view.steps.find((s) => s.id === 'installer')).toMatchObject({ status: 'failed', output: expect.stringContaining(`run ${join(m.data, 'releases', 'v0.7.0', 'install.sh')} in a terminal`) });
+    expect(m.calls).toEqual([]);
+  });
+
+  it('refuses a release that is not the newest, and one that needs no password', async () => {
+    const scripts = machine({ newScripts: true, fromPanel: true });
+    expect(await runAction(context(scripts).ctx, 'panel.installRelease', { release: 'v0.6.9', password: PASSWORD })).toMatchObject({ ok: false, output: expect.stringContaining('v0.6.9 is not installed and is not the newest release (v0.7.0)') });
+    const plain = machine();
+    expect(await runAction(context(plain).ctx, 'panel.installRelease', { release: 'v0.7.0', password: PASSWORD })).toMatchObject({ ok: false, output: expect.stringContaining('v0.7.0 needs no password') });
   });
 });
 

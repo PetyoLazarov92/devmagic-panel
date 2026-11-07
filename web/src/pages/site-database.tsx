@@ -13,7 +13,7 @@ import { ConfirmField } from '@/components/ui/confirm-field';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { PasswordInput } from '@/components/ui/password-input';
+import { SecretInput } from '@/components/ui/secret-input';
 import { Segmented } from '@/components/ui/segmented';
 import { api, cleanCopyUrl, isMockup, snapshotUrl } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
@@ -578,8 +578,8 @@ function KeepUserFields({ id, admins, multisite, value, onChange }: {
           <Input id={`${id}-login`} value={value.login} autoComplete="off" onChange={(e) => onChange({ ...value, login: e.target.value })} />
         </Field>
       )}
-      <Field label="Password" htmlFor={`${id}-password`} hint={value.keep ? `Replaces ${value.keep}'s password.` : undefined}>
-        <PasswordInput id={`${id}-password`} value={value.password} autoComplete="new-password" onChange={(e) => onChange({ ...value, password: e.target.value })} />
+      <Field label="Password" htmlFor={`${id}-secret`} hint={value.keep ? `Replaces ${value.keep}'s password.` : undefined}>
+        <SecretInput id={`${id}-secret`} value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} />
       </Field>
       {problem && <p className="text-xs text-danger sm:col-span-2">{problem}</p>}
     </div>

@@ -29,10 +29,13 @@ open, the ones before it closed.
   release changes `install.sh` too, the panel still updates itself and says to
   run `~/.local/share/devmagic-panel/current/install.sh` afterwards for the
   installer's part.
-- **It downloads the release, then installs it with your sudo password** when
-  the release changes the root scripts (`scripts/`: `dmp-root`, its libraries,
-  `wpcore`), which only its own `install.sh` may put in place.
-  - You type the password into a field on the Updates page. It goes once to
+- **It downloads the release and installs it with your sudo password, in one
+  step,** when the release changes the root scripts (`scripts/`: `dmp-root`,
+  its libraries, `wpcore`), which only its own `install.sh` may put in place.
+  - You type the password into a field on the Updates page and click
+    **Install**. One job downloads the release, checks its checksum, unpacks
+    it, then starts its installer, with the progress on the same page. If the
+    download fails, the job lets go of the password at once. It goes once to
     the release's `install.sh --from-panel`, on its stdin through a FIFO
     systemd opens for it, never on a command line or in a file, and the panel
     never saves it.
@@ -41,8 +44,9 @@ open, the ones before it closed.
     restarts the panel and checks it answers with the new version.
   - When a step fails, it puts everything back and the page says what
     happened; an install interrupted by a reboot can run again.
-  - The same command still works in a terminal:
-    `~/.local/share/devmagic-panel/releases/<version>/install.sh`.
+  - To use a terminal instead, **Only download** gets the release first; then
+    run `~/.local/share/devmagic-panel/releases/<version>/install.sh`, which
+    asks for the password itself.
   - Without your password nothing can replace root code: the passwordless sudo
     rule only covers `dmp-root` and `wpcore`, never their replacement.
 

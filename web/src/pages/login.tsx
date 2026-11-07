@@ -6,6 +6,7 @@ import { CopyCommand, NewPassword, newPasswordOk } from '@/components/panel-pass
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
+import { SecretInput } from '@/components/ui/secret-input';
 import { api, ApiError } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { navigate, usePath } from '@/lib/router';
@@ -168,7 +169,7 @@ function ResetPassword({ onDone, onBack }: { onDone: () => void; onBack: () => v
         <form className="mt-6 grid gap-4" onSubmit={(e) => void submit(e)} autoComplete="off">
           <div className="grid gap-1.5">
             <label htmlFor="reset-system" className="font-medium">Computer password</label>
-            <PasswordInput id="reset-system" autoComplete="off" data-1p-ignore data-lpignore="true" autoFocus value={system} onChange={(e) => setSystem(e.target.value)} disabled={busy || Boolean(locked)} />
+            <SecretInput id="reset-system" autoFocus value={system} onChange={(e) => setSystem(e.target.value)} disabled={busy || Boolean(locked)} />
             <p className="text-xs text-muted-foreground">The one you use with sudo. sudo checks it; the panel never keeps it.</p>
           </div>
           <NewPassword id="reset" value={next} repeat={repeat} onValue={setNext} onRepeat={setRepeat} disabled={busy || Boolean(locked)} />

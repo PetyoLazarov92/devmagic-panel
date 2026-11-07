@@ -52,3 +52,8 @@ globs: ["web/**"]
 - **Confirm dialogs**: the title asks the question, the description says
   what happens and what Undo does, Cancel on the left, the action named for
   what it does on the right.
+- **Secrets use `SecretInput`, never a password field.** A sudo password, an
+  API key, a site's or a database's password is text drawn as dots with every
+  password manager's ignore marker (`web/src/lib/secret-field.ts`), so the
+  browser never offers to save it. Only the panel login and the panel
+  password use `PasswordInput`; `web/test/secret-field.test.ts` keeps it so.

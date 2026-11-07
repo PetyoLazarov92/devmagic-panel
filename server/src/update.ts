@@ -150,7 +150,6 @@ export function releaseChanges(release: Pick<InstalledRelease, 'version' | 'curr
   return step.sections.length > 0 ? step : undefined;
 }
 
-/** The releases in the releases folder, newest install first. */
 /** An install.sh that knows --from-panel; older ones only install from a terminal. */
 export function installsFromPanel(dir: string): boolean {
   try {
@@ -160,6 +159,7 @@ export function installsFromPanel(dir: string): boolean {
   }
 }
 
+/** The releases in the releases folder, newest install first. */
 export function installedReleases(ctx: Pick<UpdateContext, 'dataDir' | 'dmpRoot'>): InstalledRelease[] {
   const dir = releasesDir(ctx);
   const current = currentRelease(ctx.dataDir);
@@ -286,7 +286,7 @@ export async function checkUpdate(ctx: UpdateContext, now = () => new Date()): P
     return {
       ...status,
       mode: 'terminal',
-      reason: `${tag} changes the root scripts (${short(scripts)}), which only its install.sh may put in place, with your sudo password. The panel never holds that password: it downloads and checks ${tag}, then you run its installer in a terminal.`,
+      reason: `${tag} changes the root scripts (${short(scripts)}), which only its install.sh may put in place, with your sudo password: the Updates page downloads and checks ${tag} and hands the password to its installer once, or you run the installer in a terminal.`,
       command: join(releasesDir(ctx), tag, 'install.sh'),
     };
   }
@@ -294,7 +294,11 @@ export async function checkUpdate(ctx: UpdateContext, now = () => new Date()): P
   return { ...status, mode: 'panel' };
 }
 
-/** Keeps the last check and checks again when asked or when it is older than the interval. */
+/**
+ * Keeps the last check of the releases and checks again when asked. The
+ * releases on this machine are read every time: a download finished since the
+ * check shows at once, without asking GitHub again.
+ */
 export class UpdateChecker {
   private last: UpdateStatus | null = null;
   private running: Promise<UpdateStatus> | null = null;
@@ -302,7 +306,7 @@ export class UpdateChecker {
   constructor(private readonly ctx: UpdateContext) {}
 
   async status(refresh = false): Promise<UpdateStatus> {
-    if (this.last && !refresh) return this.last;
+    if (this.last && !refresh) return { ...this.last, releases: installedReleases(this.ctx) };
     this.running ??= checkUpdate(this.ctx).finally(() => {
       this.running = null;
     });
@@ -369,10 +373,11 @@ function switchStep(ctx: UpdateContext, name: string): JobStep {
 
 /**
  * Installs a release: download, checksum, unpack next to the
- * others, then (mode panel) point current at it and restart, or (mode
- * terminal) leave the switch and the root scripts to its install.sh.
+ * others, then (mode panel) point current at it and restart, (mode
+ * terminal) leave the switch and the root scripts to its install.sh, or
+ * (mode download) stop there, for a job that runs its install.sh next.
  */
-export function planUpdate(ctx: UpdateContext, version: string, mode: 'panel' | 'terminal', now = () => new Date()): JobStep[] {
+export function planUpdate(ctx: UpdateContext, version: string, mode: 'panel' | 'terminal' | 'download', now = () => new Date()): JobStep[] {
   const { log, logged } = updateLog(ctx, now);
   const dir = releasesDir(ctx);
   const base = `devmagic-panel-${version}.tar.gz`;
@@ -461,7 +466,7 @@ export function planUpdate(ctx: UpdateContext, version: string, mode: 'panel' | 
       label: 'Restart the panel',
       run: () => scheduleRestart(ctx, `${version} is installed; the panel restarts in a few seconds`),
     });
-  } else {
+  } else if (mode === 'terminal') {
     steps.push({
       id: 'handover',
       label: `Finish ${version} in a terminal`,
@@ -469,6 +474,18 @@ export function planUpdate(ctx: UpdateContext, version: string, mode: 'panel' | 
     });
   }
   return steps.map(logged);
+}
+
+/** After a download for an install with the password: its install.sh must know --from-panel, or it goes in a terminal. */
+export function installerCheck(version: string, dir: string): JobStep {
+  return {
+    id: 'installer',
+    label: `Check that ${version}'s installer can run from the panel`,
+    run: async () =>
+      installsFromPanel(dir)
+        ? ok(`${version}'s install.sh installs from the panel`)
+        : failed(`${version}'s install.sh cannot install from the panel; it is downloaded, so run ${join(dir, 'install.sh')} in a terminal`),
+  };
 }
 
 /** Switches the panel to a release that is already installed, like the one before an update, and restarts it. */
