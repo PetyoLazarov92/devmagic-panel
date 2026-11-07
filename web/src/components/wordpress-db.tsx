@@ -1,22 +1,29 @@
-import type { Site, WpDbReport } from '@devmagic-panel/shared';
-import { Gauge, Hourglass, KeyRound, RefreshCw, Sparkles, Trash2, Users } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import type { Site, WpDbBlog, WpDbReport, WpDbSection } from '@devmagic-panel/shared';
+import { WP_DB_SECTIONS, WP_DB_SLOW_SECTIONS } from '@devmagic-panel/shared';
+import { Gauge, Hourglass, KeyRound, type LucideIcon, RefreshCw, Sparkles, Trash2, Users } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
-import { JobBox } from '@/components/job-box';
+import { JobFooter } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
 import { toastRowChange } from '@/components/row-editor';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
+import { Bar, CardLinesSkeleton, CardSkeleton, Reading } from '@/components/skeletons';
 import { api } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
-import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 
 const number = (n: number) => n.toLocaleString('en-US');
+
+/** A site of a network in a few words: its path on the network's domain (its domain on another), its prefix, and whether it is archived or deleted. */
+function networkLabel(b: WpDbBlog, domain: string): string {
+  const where = b.domain === domain ? (b.id === 1 ? `${b.path} (main site)` : b.path) : `${b.domain}${b.path}`;
+  return `${where} · ${b.prefix}${b.inactive ? ' · archived or deleted' : ''}`;
+}
 
 interface Props {
   site: Pick<Site, 'domain' | 'path'>;
@@ -28,6 +35,71 @@ interface Props {
 }
 
 type Slot = 'transients' | 'content' | 'orphans';
+type Errors = WpDbReport['errors'];
+
+const QUICK = WP_DB_SECTIONS.filter((s) => !WP_DB_SLOW_SECTIONS.includes(s));
+
+interface ReportState {
+  report: WpDbReport | null;
+  /** The parts asked for and not answered yet. */
+  reading: WpDbSection[];
+  /** Parts whose request failed, with why. */
+  failed: Errors;
+}
+const FRESH: ReportState = { report: null, reading: [...WP_DB_SECTIONS], failed: {} };
+
+/**
+ * The report read in parts, so the page shows in a moment on a big database:
+ * the quick parts in one request, and each part that reads whole tables
+ * (posts, every meta table) in its own, filling its card in when it answers.
+ * Read again keeps what is shown until the new answer replaces it.
+ */
+function useWordpressReport(domain: string, path: string | undefined, blog: number) {
+  const [state, setState] = useState<ReportState>(FRESH);
+  const run = useRef(0);
+
+  const ask = useCallback(
+    (sections: readonly WpDbSection[], sizes = false) => {
+      const id = run.current;
+      const done = (s: ReportState) => s.reading.filter((x) => !sections.includes(x));
+      setState((s) => ({ ...s, reading: [...new Set([...s.reading, ...sections])], failed: Object.fromEntries(Object.entries(s.failed).filter(([k]) => !sections.includes(k as WpDbSection))) }));
+      api.wordpressDb(domain, path, blog, { sections, sizes }).then(
+        (r) => {
+          if (id !== run.current) return;
+          setState((s) => {
+            const kept = Object.fromEntries(Object.entries(s.report?.errors ?? {}).filter(([k]) => !sections.includes(k as WpDbSection)));
+            return { ...s, report: { ...(s.report ?? {}), ...r, errors: { ...kept, ...r.errors } }, reading: done(s) };
+          });
+        },
+        (error: unknown) => {
+          if (id !== run.current) return;
+          const why = (error as Error).message;
+          setState((s) => ({ ...s, reading: done(s), failed: { ...s.failed, ...Object.fromEntries(sections.map((x) => [x, why])) } }));
+        },
+      );
+    },
+    [domain, path, blog],
+  );
+
+  const load = useCallback(() => {
+    run.current += 1;
+    ask(QUICK);
+    for (const section of WP_DB_SLOW_SECTIONS) ask([section]);
+  }, [ask]);
+
+  // Another site or site of the network starts empty; the same one keeps its cards while it reads again.
+  useEffect(() => {
+    setState(FRESH);
+    load();
+    return () => {
+      run.current += 1;
+    };
+  }, [load]);
+
+  const errors: Errors = { ...state.report?.errors, ...state.failed };
+  const reading = (section: WpDbSection) => state.reading.includes(section);
+  return { ...state, errors, reading, loading: state.reading.length > 0, reload: load, readSizes: () => ask(['metaKeys'], true) };
+}
 type Ask = { slot: Slot; action: 'db.cleanTransients' | 'db.cleanContent' | 'db.cleanOrphans'; input: Record<string, unknown>; title: string; description: string; button: string };
 
 /**
@@ -37,7 +109,7 @@ type Ask = { slot: Slot; action: 'db.cleanTransients' | 'db.cleanContent' | 'db.
  * keys that take the most room and the users with their roles.
  */
 export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
-  const report = useAsync(() => api.wordpressDb(site.domain, site.path, blog), [site.domain, site.path, blog]);
+  const report = useWordpressReport(site.domain, site.path, blog);
   const runner = useJob();
   const [slot, setSlot] = useState<Slot | null>(null);
   const [asking, setAsking] = useState<Ask | null>(null);
@@ -66,18 +138,19 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
     try {
       const r = await api.runAction('db.setAutoload', { ...target, option, autoload: 'off' });
       if (!r.ok) return toast({ tone: 'danger', title: 'Autoload not changed', detail: lastLine(r.output) });
-      toastRowChange(`${option} no longer loads on every page`, report.data?.database ?? '', `${report.data?.blogPrefix ?? 'wp_'}options`, r.data?.backup, () => report.reload());
+      toastRowChange(`${option} no longer loads on every page`, report.report?.database ?? '', `${report.report?.blogPrefix ?? 'wp_'}options`, r.data?.backup, () => report.reload());
       report.reload();
     } catch (error) {
       toast({ tone: 'danger', title: 'Autoload not changed', detail: (error as Error).message });
     }
   }
 
-  const jobFor = (s: Slot) => (slot === s && job ? <JobBox job={job} onRetry={() => void runner.retry()} /> : null);
-  const r = report.data;
-  if (report.loading && !r) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
-  if (report.error && !r) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
-  if (!r) return null;
+  // A job is the footer of the card that started it; the clean-up card has two kinds.
+  const footerFor = (...slots: Slot[]) => (slot && slots.includes(slot) ? <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} /> : null);
+  const r = report.report;
+  if (!r && report.loading) return <WordpressDbSkeleton />;
+  if (!r) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{Object.values(report.errors)[0] ?? 'The panel could not read this database'}</p>;
+  const view: View = { report: r, errors: report.errors, reading: report.reading };
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
@@ -85,10 +158,10 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
         {r.network && (
           <label className="grid w-full gap-1 text-sm sm:flex sm:w-auto sm:items-center sm:gap-2">
             <span className="shrink-0 text-muted-foreground">Site of the network</span>
-            <Select value={blog} onChange={(e) => onBlog(Number(e.target.value))} wrapClassName="w-full sm:w-80" className="h-9">
+            <Select value={blog} onChange={(e) => onBlog(Number(e.target.value))} wrapClassName="w-full sm:w-auto sm:min-w-64 sm:max-w-md" className="h-9">
               {r.network.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.domain}{b.path} ({b.prefix}){b.inactive ? ', archived or deleted' : ''}
+                <option key={b.id} value={b.id} title={`${b.domain}${b.path}, tables ${b.prefix}`}>
+                  {networkLabel(b, site.domain)}
                 </option>
               ))}
             </Select>
@@ -106,25 +179,68 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
           Tables WordPress makes that this database lacks: <span className="font-mono">{r.missingTables.join(', ')}</span>. Older WordPress versions had no termmeta table.
         </p>
       )}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="grid content-start gap-4">
-          <AutoloadCard report={r} onTable={onTable} onAutoloadOff={(o) => void autoloadOff(o)} />
-          <TransientsCard report={r} busy={busy} onDelete={(scope) => setAsking(transientsAsk(r, scope))} />
-          {jobFor('transients')}
-          <MetaKeysCard report={r} onTable={onTable} />
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+          <AutoloadCard view={view} onTable={onTable} onAutoloadOff={(o) => void autoloadOff(o)} />
+          <TransientsCard view={view} busy={busy} onDelete={(scope) => setAsking(transientsAsk(r, scope))} footer={footerFor('transients')} />
+          <MetaKeysCard view={view} onTable={onTable} onSizes={report.readSizes} />
         </div>
-        <div className="grid content-start gap-4">
-          <CleanupCard report={r} busy={busy} onClean={setAsking} />
-          {jobFor('content')}
-          {jobFor('orphans')}
-          {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
-          <CleanupsCard database={r.database} site={siteKey} refresh={refresh} onUndone={() => report.reload()} />
-          <UsersCard report={r} />
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+          <CleanupCard view={view} busy={busy} onClean={setAsking} footer={footerFor('content', 'orphans')} />
+          <UsersCard view={view} />
         </div>
       </div>
+      <CleanupsCard database={r.database} site={siteKey} refresh={refresh} onUndone={() => report.reload()} />
       {asking && (
         <ConfirmCleanup title={asking.title} description={asking.description} action={asking.button} onClose={() => setAsking(null)} onConfirm={() => start(asking)} />
       )}
+    </div>
+  );
+}
+
+/** What every card is given: the report so far, the errors by part, and which parts are still being read. */
+interface View {
+  report: WpDbReport;
+  errors: Errors;
+  reading: (section: WpDbSection) => boolean;
+}
+
+/** A card's header: its title, and its icon, turning while the card reads again. */
+function Header({ title, icon: Icon, reading }: { title: string; icon: LucideIcon; reading: boolean }) {
+  return (
+    <CardHeader>
+      <CardTitle>{title}</CardTitle>
+      {reading ? <RefreshCw className="size-4 animate-spin text-muted-foreground" aria-label="Reading" /> : <Icon className="size-4 text-muted-foreground" />}
+    </CardHeader>
+  );
+}
+
+/** The WordPress view's shape while its first part is read: the bar above the cards, then the cards in their two columns. */
+function WordpressDbSkeleton() {
+  return (
+    <div className="grid gap-4" aria-busy="true">
+      <div className="flex items-center gap-3">
+        <Reading>Reading what WordPress keeps in this database...</Reading>
+        <Bar className="ml-auto h-8 w-28 rounded-md" />
+      </div>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+          <CardSkeleton>
+            <div className="grid gap-2.5 px-5 py-4">
+              <Bar className="h-7 w-48" />
+              <Bar className="h-2 w-full rounded-full" />
+              <Bar className="h-3 w-40" />
+            </div>
+            <CardLinesSkeleton lines={5} className="pt-0" />
+          </CardSkeleton>
+          <CardSkeleton lines={3} />
+          <CardSkeleton lines={6} />
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+          <CardSkeleton lines={5} />
+          <CardSkeleton lines={4} values={false} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -148,6 +264,9 @@ function SectionError({ text }: { text: string | undefined }) {
   return text ? <p role="alert" className="mx-5 my-4 text-sm text-danger">{text}</p> : null;
 }
 
+/** True while a part has nothing to show yet: asked for, and no answer from this or an earlier read. */
+const waiting = (view: View, section: WpDbSection) => view.report[section] === undefined && !view.errors[section];
+
 function Facts({ rows }: { rows: Array<[ReactNode, ReactNode]> }) {
   return (
     <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 px-5 py-4 text-sm">
@@ -161,17 +280,16 @@ function Facts({ rows }: { rows: Array<[ReactNode, ReactNode]> }) {
   );
 }
 
-function AutoloadCard({ report, onTable, onAutoloadOff }: { report: WpDbReport; onTable: (t: string) => void; onAutoloadOff: (option: string) => void }) {
+function AutoloadCard({ view, onTable, onAutoloadOff }: { view: View; onTable: (t: string) => void; onAutoloadOff: (option: string) => void }) {
+  const { report, errors } = view;
   const a = report.autoload;
   const over = a ? a.bytes > a.limitBytes : false;
   const biggest = a?.top[0]?.bytes ?? 1;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Autoloaded options</CardTitle>
-        <Gauge className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <SectionError text={report.errors.autoload} />
+      <Header title="Autoloaded options" icon={Gauge} reading={view.reading('autoload')} />
+      <SectionError text={errors.autoload} />
+      {waiting(view, 'autoload') && <CardLinesSkeleton lines={5} />}
       {a && (
         <>
           <div className="grid gap-2 px-5 pt-4">
@@ -211,20 +329,19 @@ function AutoloadCard({ report, onTable, onAutoloadOff }: { report: WpDbReport; 
           </div>
         </>
       )}
-      {!a && !report.errors.autoload && <p className="px-5 py-4 text-sm text-muted-foreground">This site has no options table.</p>}
+      {a === null && !errors.autoload && <p className="px-5 py-4 text-sm text-muted-foreground">This site has no options table.</p>}
     </Card>
   );
 }
 
-function TransientsCard({ report, busy, onDelete }: { report: WpDbReport; busy: boolean; onDelete: (scope: 'expired' | 'all') => void }) {
+function TransientsCard({ view, busy, onDelete, footer }: { view: View; busy: boolean; onDelete: (scope: 'expired' | 'all') => void; footer: ReactNode }) {
+  const { report } = view;
   const t = report.transients;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Transients</CardTitle>
-        <Hourglass className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <SectionError text={report.errors.transients} />
+      <Header title="Transients" icon={Hourglass} reading={view.reading('transients')} />
+      <SectionError text={view.errors.transients} />
+      {waiting(view, 'transients') && <CardLinesSkeleton lines={3} />}
       {t && (
         <Facts
           rows={[
@@ -241,20 +358,20 @@ function TransientsCard({ report, busy, onDelete }: { report: WpDbReport; busy: 
           <Button size="sm" variant="outline" disabled={busy || t.count + (t.site?.count ?? 0) === 0} onClick={() => onDelete('all')}>Delete all...</Button>
         </div>
       )}
+      {footer}
     </Card>
   );
 }
 
-function CleanupCard({ report, busy, onClean }: { report: WpDbReport; busy: boolean; onClean: (ask: Ask) => void }) {
+function CleanupCard({ view, busy, onClean, footer }: { view: View; busy: boolean; onClean: (ask: Ask) => void; footer: ReactNode }) {
+  const { report, errors } = view;
   const c = report.content;
   const o = report.orphans;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>What a clean-up would find</CardTitle>
-        <Sparkles className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <SectionError text={report.errors.content} />
+      <Header title="What a clean-up would find" icon={Sparkles} reading={view.reading('content') || view.reading('orphans')} />
+      <SectionError text={errors.content} />
+      {waiting(view, 'content') && <CardLinesSkeleton lines={5} />}
       {c && (
         <TickList
           id="content"
@@ -272,7 +389,13 @@ function CleanupCard({ report, busy, onClean }: { report: WpDbReport; busy: bool
           }
         />
       )}
-      <SectionError text={report.errors.orphans} />
+      <SectionError text={errors.orphans} />
+      {waiting(view, 'orphans') && (
+        <div className="border-t">
+          <p className="px-5 pt-3 text-xs text-muted-foreground">Looking for meta and terms left behind by something deleted...</p>
+          <CardLinesSkeleton lines={4} />
+        </div>
+      )}
       {o && (
         <>
           <p className="border-t px-5 pt-3 text-xs font-medium text-muted-foreground">Left behind by something deleted</p>
@@ -292,6 +415,7 @@ function CleanupCard({ report, busy, onClean }: { report: WpDbReport; busy: bool
           />
         </>
       )}
+      {footer}
     </Card>
   );
 }
@@ -345,28 +469,45 @@ function TickList({ id, rows, busy, note, onDelete }: { id: string; rows: Array<
   );
 }
 
-function MetaKeysCard({ report, onTable }: { report: WpDbReport; onTable: (t: string) => void }) {
-  const keys = report.metaKeys;
+/**
+ * The custom fields (meta_key) that fill postmeta, to see what makes it big:
+ * a page builder's data, an old plugin's leftovers. By size on a table up to
+ * WP_META_SIZE_ROWS rows; on a bigger one by rows first, as a size needs every
+ * value read, with Count sizes to read them anyway.
+ */
+function MetaKeysCard({ view, onTable, onSizes }: { view: View; onTable: (t: string) => void; onSizes: () => void }) {
+  const { report } = view;
+  const m = report.metaKeys;
+  const reading = view.reading('metaKeys');
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Post meta by key</CardTitle>
-        <KeyRound className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <SectionError text={report.errors.metaKeys} />
-      {keys && keys.length > 0 && (
-        <ul className="divide-y">
-          {keys.map((k) => (
+      <Header title="Post meta by key" icon={KeyRound} reading={reading} />
+      <SectionError text={view.errors.metaKeys} />
+      {waiting(view, 'metaKeys') && <CardLinesSkeleton lines={6} />}
+      {m && (
+        <p className="px-5 pt-3 text-xs text-muted-foreground">
+          The custom fields with the most {m.sized ? 'bytes' : 'rows'} in {report.blogPrefix}postmeta{m.estimatedRows ? `, about ${number(m.estimatedRows)} rows in all` : ''}.
+          {!m.sized && ' A size needs every value read, which takes a while on a table this big.'}
+        </p>
+      )}
+      {m && m.keys.length > 0 && (
+        <ul className="mt-2 divide-y">
+          {m.keys.map((k) => (
             <li key={k.key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-5 py-2 text-[13px]">
               <span className="truncate font-mono" title={k.key}>{k.key || <span className="text-muted-foreground italic">empty key</span>}</span>
-              <span className="text-right text-xs text-muted-foreground tabular-nums">{bytes(k.bytes)} in {number(k.count)} rows</span>
+              <span className="text-right text-xs text-muted-foreground tabular-nums">{k.bytes === undefined ? `${number(k.count)} rows` : `${bytes(k.bytes)} in ${number(k.count)} rows`}</span>
             </li>
           ))}
         </ul>
       )}
-      {keys && keys.length === 0 && <p className="px-5 py-4 text-sm text-muted-foreground">No post meta.</p>}
-      {keys && (
-        <div className="px-5 py-3">
+      {m && m.keys.length === 0 && <p className="px-5 py-4 text-sm text-muted-foreground">No post meta.</p>}
+      {(m || view.errors.metaKeys) && (
+        <div className="flex flex-wrap gap-2 px-5 py-3">
+          {(!m?.sized || view.errors.metaKeys) && (
+            <Button size="sm" variant="outline" disabled={reading} onClick={onSizes} title="Reads every value for its size, with up to a minute">
+              {reading ? <RefreshCw className="animate-spin" /> : null}Count sizes
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => onTable(`${report.blogPrefix}postmeta`)}>Browse {report.blogPrefix}postmeta</Button>
         </div>
       )}
@@ -374,15 +515,14 @@ function MetaKeysCard({ report, onTable }: { report: WpDbReport; onTable: (t: st
   );
 }
 
-function UsersCard({ report }: { report: WpDbReport }) {
+function UsersCard({ view }: { view: View }) {
+  const { report } = view;
   const u = report.users;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Users</CardTitle>
-        <Users className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <SectionError text={report.errors.users} />
+      <Header title="Users" icon={Users} reading={view.reading('users')} />
+      <SectionError text={view.errors.users} />
+      {waiting(view, 'users') && <CardLinesSkeleton lines={4} />}
       {u && (
         <>
           <p className={cn('px-5 pt-3 text-xs text-muted-foreground', u.list.length === 0 && 'pb-4')}>

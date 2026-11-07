@@ -1,6 +1,6 @@
-import type { DbTable, WpDbBlog, WpDbReport, WpDbUser } from '@devmagic-panel/shared';
-import { WP_AUTOLOAD_LIMIT, WP_AUTOLOAD_VALUES } from '@devmagic-panel/shared';
-import { type BrowseContext, checkDatabase, dbOverview, num, parseJson, read } from './mysql-browse.js';
+import type { DbTable, WpDbBlog, WpDbMetaKeys, WpDbReport, WpDbSection, WpDbUser } from '@devmagic-panel/shared';
+import { WP_AUTOLOAD_LIMIT, WP_AUTOLOAD_VALUES, WP_DB_SECTIONS, WP_DB_SLOW_SECTIONS, WP_META_SIZE_ROWS } from '@devmagic-panel/shared';
+import { type BrowseContext, checkDatabase, dbOverview, num, parseJson, READ_LIMIT_MS, read } from './mysql-browse.js';
 import { siteDatabases } from './mysql-server.js';
 import { BrowseError, ident, textLiteral } from './mysql-sql.js';
 
@@ -11,7 +11,7 @@ import { BrowseError, ident, textLiteral } from './mysql-sql.js';
  * Table names come from the prefix in wp-config.php and are used only when
  * the database has them; every other word of the SQL is a constant here.
  */
-type Section = keyof WpDbReport['errors'];
+type Section = WpDbSection;
 
 /** The tables each site of WordPress has, and the ones a whole network shares. */
 const SITE_TABLES = ['options', 'posts', 'postmeta', 'comments', 'commentmeta', 'terms', 'term_taxonomy', 'term_relationships', 'termmeta'];
@@ -20,6 +20,8 @@ const SHARED_TABLES = ['users', 'usermeta'];
 const PREFIX = /^[A-Za-z0-9_]{1,40}$/;
 const AUTOLOADED = `autoload IN (${WP_AUTOLOAD_VALUES.map((v) => `'${v}'`).join(', ')})`;
 const MAX_USERS = 100;
+/** The parts that read whole tables get a minute; the rest the browser's usual 15 seconds. */
+const SLOW_LIMIT_MS = 60_000;
 
 /** The site's database and table prefix, as its wp-config.php says; only a database on this machine's MySQL. */
 function siteDatabase(ctx: BrowseContext, domain: string, path?: string): { database: string; prefix: string } {
@@ -73,7 +75,21 @@ export async function wordpressTables(ctx: BrowseContext, domain: string, path: 
   return { database, prefix, blog, blogPrefix, names, ...(network ? { network } : {}) };
 }
 
-export async function wordpressReport(ctx: BrowseContext, domain: string, path: string | undefined, blog = 1, now = Date.now): Promise<WpDbReport> {
+export interface WordpressReportOptions {
+  /** The parts to read; the others are left out of the answer. All of them when not given. */
+  sections?: readonly WpDbSection[];
+  /** Read the size of every postmeta value, however big the table. */
+  sizes?: boolean;
+}
+
+export async function wordpressReport(
+  ctx: BrowseContext,
+  domain: string,
+  path: string | undefined,
+  blog = 1,
+  now = Date.now,
+  { sections: wanted = WP_DB_SECTIONS, sizes = false }: WordpressReportOptions = {},
+): Promise<WpDbReport> {
   const { database, prefix, blogPrefix, names, network } = await wordpressTables(ctx, domain, path, blog);
   const db = ident(database);
 
@@ -122,6 +138,7 @@ export async function wordpressReport(ctx: BrowseContext, domain: string, path: 
         ctx,
         (posts ? `SELECT JSON_ARRAY('p', COALESCE(SUM(post_type = 'revision'), 0), COALESCE(SUM(post_status = 'auto-draft'), 0), COALESCE(SUM(post_status = 'trash'), 0)) FROM ${posts};\n` : '') +
           (comments ? `SELECT JSON_ARRAY('c', COALESCE(SUM(comment_approved = 'spam'), 0), COALESCE(SUM(comment_approved = 'trash'), 0)) FROM ${comments};\n` : ''),
+        { limitMs: SLOW_LIMIT_MS },
       );
       const [revisions, autoDrafts, trashedPosts] = tagged(lines, 'p')[0] ?? [];
       const [spam, trash] = tagged(lines, 'c')[0] ?? [];
@@ -142,15 +159,26 @@ export async function wordpressReport(ctx: BrowseContext, domain: string, path: 
           : '') +
         (blog === 1 ? orphan('um', usermeta, users, 'user_id', 'ID') : '');
       if (!sql) return null;
-      const lines = await read(ctx, sql);
+      const lines = await read(ctx, sql, { limitMs: SLOW_LIMIT_MS });
       const count = (tag: string) => num(tagged(lines, tag)[0]?.[0]);
       return { postmeta: count('pm'), commentmeta: count('cm'), termmeta: count('tm'), termRelationships: count('tr'), ...(blog === 1 && usermeta && users ? { usermeta: count('um') } : {}) };
     },
-    metaKeys: async () => {
+    metaKeys: async (): Promise<WpDbMetaKeys | null> => {
       const postmeta = table('postmeta');
       if (!postmeta) return null;
-      const lines = await read(ctx, `SELECT JSON_ARRAY(meta_key, COUNT(*), COALESCE(SUM(LENGTH(meta_value)), 0)) FROM ${postmeta} GROUP BY meta_key ORDER BY SUM(LENGTH(meta_value)) DESC LIMIT 20;\n`);
-      return lines.map(parseJson).map(([key, count, bytes]) => ({ key: key === null ? '' : String(key), count: num(count), bytes: num(bytes) }));
+      const estimate = await read(ctx, `SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${textLiteral(database)} AND TABLE_NAME = ${textLiteral(`${blogPrefix}postmeta`)};\n`, { raw: false });
+      const estimatedRows = num(estimate[0]);
+      // A size needs every value read, long ones from their own pages; a count only the rows. Big tables are counted first.
+      const sized = sizes || estimatedRows <= WP_META_SIZE_ROWS;
+      const lines = await read(
+        ctx,
+        sized
+          ? `SELECT JSON_ARRAY(meta_key, COUNT(*), COALESCE(SUM(LENGTH(meta_value)), 0)) FROM ${postmeta} GROUP BY meta_key ORDER BY SUM(LENGTH(meta_value)) DESC LIMIT 20;\n`
+          : `SELECT JSON_ARRAY(meta_key, COUNT(*)) FROM ${postmeta} GROUP BY meta_key ORDER BY COUNT(*) DESC LIMIT 20;\n`,
+        { limitMs: SLOW_LIMIT_MS },
+      );
+      const keys = lines.map(parseJson).map(([key, count, bytes]) => ({ key: key === null ? '' : String(key), count: num(count), ...(sized ? { bytes: num(bytes) } : {}) }));
+      return { estimatedRows, sized, keys };
     },
     users: async () => {
       if (!users) return null;
@@ -174,7 +202,7 @@ export async function wordpressReport(ctx: BrowseContext, domain: string, path: 
     },
   };
 
-  const keys = Object.keys(sections) as Section[];
+  const keys = WP_DB_SECTIONS.filter((k) => wanted.includes(k));
   const settled = await Promise.allSettled(keys.map((k) => sections[k]()));
   const errors: WpDbReport['errors'] = {};
   const results = Object.fromEntries(
@@ -182,7 +210,8 @@ export async function wordpressReport(ctx: BrowseContext, domain: string, path: 
       const r = settled[i] as PromiseSettledResult<unknown>;
       if (r.status === 'fulfilled') return [k, r.value];
       if (!(r.reason instanceof BrowseError)) throw r.reason;
-      errors[k] = r.reason.message;
+      // A part of this view has no filter to narrow it: say how long MySQL had instead.
+      errors[k] = r.reason.status === 504 ? `MySQL stopped the read after ${(WP_DB_SLOW_SECTIONS.includes(k) ? SLOW_LIMIT_MS : READ_LIMIT_MS) / 1000} seconds: the tables are too big to read in time` : r.reason.message;
       return [k, null];
     }),
   ) as Pick<WpDbReport, Section>;
@@ -222,7 +251,7 @@ export async function databaseSummary(ctx: BrowseContext, domain: string, path?:
     transients: wp.transients,
     content: wp.content,
     orphans: wp.orphans,
-    biggestPostmetaKeys: wp.metaKeys?.map((k) => ({ key: k.key, rows: k.count, mb: mb(k.bytes) })) ?? null,
+    biggestPostmetaKeys: wp.metaKeys?.keys.map((k) => ({ key: k.key, rows: k.count, ...(k.bytes === undefined ? {} : { mb: mb(k.bytes) }) })) ?? null,
     users: wp.users ? wp.users.count : null,
     ...(Object.keys(wp.errors).length ? { notRead: wp.errors } : {}),
   };

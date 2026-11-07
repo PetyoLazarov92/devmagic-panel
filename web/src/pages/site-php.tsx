@@ -17,6 +17,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { changedCount } from '@/pages/services-php';
 import { type CompatAsk, CompatCard, CompatHint, useSiteCompat } from '@/pages/site-compat';
+import { CardsSkeleton } from '@/components/skeletons';
 
 const errorBox = (text: string) => <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{text}</p>;
 const older = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }) < 0;
@@ -32,7 +33,7 @@ export function PhpTab({ site }: { site: Site }) {
   const php = useAsync(() => api.sitePhp(target.domain, target.path), [site.domain, site.path]);
   // Above the form, which starts over with what the job left: its steps and Undo stay in view.
   const runner = useJob();
-  if (php.loading && !php.data) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
+  if (php.loading && !php.data) return <CardsSkeleton reading="Reading the site's PHP version and settings..." cards={[3, 6]} columns={1} />;
   if (php.error) return errorBox(php.error);
   if (!php.data) return null;
   return <PhpForm key={JSON.stringify(php.data)} site={site} php={php.data} runner={runner} onChanged={php.reload} />;

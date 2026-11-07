@@ -1199,9 +1199,11 @@ export const mockApi: Api = {
     await wait(300);
     return mockDbQuery(database, query);
   },
-  wordpressDb: async (domain, path, blog) => {
-    await wait(350);
-    return mockWordpressDb(domain, path, blog);
+  wordpressDb: async (domain, path, blog, options = {}) => {
+    // The parts that read whole tables answer later, as on a big database.
+    const slow = { content: 900, orphans: 1600, metaKeys: options.sizes ? 3200 : 2100 } as Record<string, number>;
+    await wait(Math.max(350, ...(options.sections ?? []).map((s) => slow[s] ?? 0)));
+    return mockWordpressDb(domain, path, blog, options);
   },
   dbCell: async (database, table, query) => {
     await wait(150);

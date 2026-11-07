@@ -40,3 +40,18 @@ export function JobBox({ job, onRetry }: { job: JobView; onRetry: () => void }) 
   );
 }
 
+
+/**
+ * A job as the footer of the card whose button started it, under a line, the
+ * way every page shows one: never a box of its own between cards, so the cards
+ * around it stay where they are. With the error when the job did not start.
+ */
+export function JobFooter({ job, error, onRetry }: { job: JobView | null; error?: string | null; onRetry: () => void }) {
+  if (!job && !error) return null;
+  return (
+    <div className="grid gap-3 border-t px-5 py-4 text-sm">
+      {job && <JobBox job={job} onRetry={onRetry} />}
+      {error && <p role="alert" className="text-danger">{error}</p>}
+    </div>
+  );
+}

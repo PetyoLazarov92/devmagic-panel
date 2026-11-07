@@ -1,4 +1,4 @@
-import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, RowChangeInfo, WriteCheck, WpDbReport, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -91,7 +91,8 @@ export interface Api {
   /** One statement that reads, run as the read-only account. */
   dbQuery: (database: string, query: DbQuery) => Promise<DbQueryResult>;
   /** A WordPress site's database as WordPress sees it; blog picks a site of a network. */
-  wordpressDb: (domain: string, path?: string, blog?: number) => Promise<WpDbReport>;
+  /** The WordPress view of a site's database; sections picks the parts to read, sizes reads every postmeta value for its size. */
+  wordpressDb: (domain: string, path?: string, blog?: number, options?: { sections?: readonly WpDbSection[]; sizes?: boolean }) => Promise<WpDbReport>;
   /** The vhosts, modules and configtest for the Apache tab, and Apache's own error log. */
   apache: () => Promise<ApacheReport>;
   apacheLog: () => Promise<SiteLog>;
@@ -277,7 +278,15 @@ const realApi: Api = {
   dbSchema: (database) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/schema`),
   rowChanges: (database, table) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/row-changes?table=${encodeURIComponent(table)}`),
   dbQuery: (database, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/query`, query),
-  wordpressDb: (domain, path, blog) => request('GET', `/api/sites/${encodeURIComponent(domain)}/db/wordpress${atPath(path, '?')}${blog && blog !== 1 ? `${path ? '&' : '?'}blog=${blog}` : ''}`),
+  wordpressDb: (domain, path, blog, options = {}) => {
+    const query = new URLSearchParams();
+    if (path) query.set('path', path);
+    if (blog && blog !== 1) query.set('blog', String(blog));
+    if (options.sections) query.set('sections', options.sections.join(','));
+    if (options.sizes) query.set('sizes', '1');
+    const q = query.toString();
+    return request('GET', `/api/sites/${encodeURIComponent(domain)}/db/wordpress${q ? `?${q}` : ''}`);
+  },
   apache: () => request('GET', '/api/apache'),
   apacheLog: () => request('GET', '/api/apache/log'),
   nginx: () => request('GET', '/api/nginx'),

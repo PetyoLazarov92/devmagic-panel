@@ -21,6 +21,7 @@ import { savePreferences, usePreferences } from '@/lib/preferences';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { CardSkeleton, Reading, TableSkeleton } from '@/components/skeletons';
 
 export type DbShow = 'rows' | 'structure';
 
@@ -110,7 +111,14 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
     return sort === 'size' ? [...list].sort((a, b) => b.dataBytes + b.indexBytes - (a.dataBytes + a.indexBytes)) : list;
   }, [overview, query, filter, prefix, sort]);
 
-  if (loading && !overview) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
+  if (loading && !overview) {
+    return (
+      <div className="grid gap-4" aria-busy="true">
+        <Reading>Reading the tables...</Reading>
+        <TableSkeleton columns={4} rows={10} />
+      </div>
+    );
+  }
   if (error && !overview) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{error}</p>;
   if (!overview) return null;
   const others = prefix ? overview.tables.filter((t) => !t.name.startsWith(prefix)).length : 0;
@@ -471,7 +479,7 @@ function RowsView({ database, table, editable }: { database: string; table: stri
       </form>
       {rows.error && <p role="alert" className="mx-4 mt-3 rounded-lg border border-danger/30 bg-danger/8 px-4 py-2.5 text-sm text-danger">{rows.error}</p>}
       {data && <RowsGrid page={data} sort={sort} onSort={toggleSort} onOpen={setOpen} {...(canChange ? { selected, onSelect: setSelected } : {})} />}
-      {!data && rows.loading && <div className="m-4 h-48 animate-pulse rounded-lg bg-muted" />}
+      {!data && rows.loading && <TableSkeleton className="rounded-none border-0 shadow-none" columns={5} rows={8} />}
       {data && (
         <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2.5 text-xs text-muted-foreground">
           <span className="flex-1">{pageLine(data)}</span>
@@ -830,7 +838,17 @@ function JsonTree({ value }: { value: unknown }) {
 function StructureView({ database, table }: { database: string; table: string }) {
   const structure = useAsync(() => api.dbStructure(database, table), [database, table]);
   const s: DbStructure | undefined = structure.data;
-  if (structure.loading && !s) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
+  if (structure.loading && !s) {
+    return (
+      <div className="grid gap-4" aria-busy="true">
+        <Reading>Reading the table's structure...</Reading>
+        <CardSkeleton>
+          <TableSkeleton className="rounded-none border-0 shadow-none" columns={5} rows={6} />
+        </CardSkeleton>
+        <CardSkeleton lines={3} />
+      </div>
+    );
+  }
   if (structure.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{structure.error}</p>;
   if (!s) return null;
   return (

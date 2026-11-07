@@ -193,10 +193,28 @@ export interface WpDbUser {
   roles: string[];
 }
 
+/** The parts of the WordPress view, each read on its own. */
+export const WP_DB_SECTIONS = ['autoload', 'transients', 'users', 'content', 'orphans', 'metaKeys'] as const;
+export type WpDbSection = (typeof WP_DB_SECTIONS)[number];
+/** The parts that read whole tables (posts, every meta table): asked for one at a time, after the rest, with more time. */
+export const WP_DB_SLOW_SECTIONS: readonly WpDbSection[] = ['content', 'orphans', 'metaKeys'];
+/** Above this many rows in postmeta (MySQL's estimate) the keys are counted first, and their sizes only on request. */
+export const WP_META_SIZE_ROWS = 300_000;
+
+/** The postmeta keys with the most rows or bytes; bytes only when the sizes were read. */
+export interface WpDbMetaKeys {
+  /** MySQL's estimate of the rows in postmeta. */
+  estimatedRows: number;
+  /** True when every value was read for its size; the keys are then in order of size, else of rows. */
+  sized: boolean;
+  keys: Array<{ key: string; count: number; bytes?: number }>;
+}
+
 /**
  * What a WordPress database holds beyond its tables, for one site (on a
  * network, one of its sites). Each section is read on its own; one MySQL
- * stopped for taking too long is null, with why in errors.
+ * stopped for taking too long is null, with why in errors. A section left
+ * out of the request (undefined) was not read in this answer.
  */
 export interface WpDbReport {
   database: string;
@@ -209,13 +227,13 @@ export interface WpDbReport {
   network?: WpDbBlog[];
   /** Core tables this site lacks. */
   missingTables: string[];
-  autoload: { count: number; bytes: number; limitBytes: number; top: Array<{ name: string; bytes: number }> } | null;
-  transients: { count: number; bytes: number; expired: number; site?: { count: number; bytes: number; expired: number } } | null;
-  content: { revisions: number; autoDrafts: number; trashedPosts: number; spamComments: number; trashedComments: number } | null;
-  orphans: { postmeta: number; commentmeta: number; termmeta: number; termRelationships: number; usermeta?: number } | null;
-  metaKeys: Array<{ key: string; count: number; bytes: number }> | null;
-  users: { count: number; list: WpDbUser[] } | null;
-  errors: Partial<Record<'autoload' | 'transients' | 'content' | 'orphans' | 'metaKeys' | 'users', string>>;
+  autoload?: { count: number; bytes: number; limitBytes: number; top: Array<{ name: string; bytes: number }> } | null;
+  transients?: { count: number; bytes: number; expired: number; site?: { count: number; bytes: number; expired: number } } | null;
+  content?: { revisions: number; autoDrafts: number; trashedPosts: number; spamComments: number; trashedComments: number } | null;
+  orphans?: { postmeta: number; commentmeta: number; termmeta: number; termRelationships: number; usermeta?: number } | null;
+  metaKeys?: WpDbMetaKeys | null;
+  users?: { count: number; list: WpDbUser[] } | null;
+  errors: Partial<Record<WpDbSection, string>>;
   checkedAt: string;
 }
 

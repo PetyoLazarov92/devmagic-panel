@@ -19,16 +19,25 @@ globs: ["web/**"]
 - Destructive or risky actions ask inline before running, with the fix's
   `confirm` text.
 - Layouts work from 375 px wide: stack on small screens, no horizontal scroll.
+  A grid that holds cards gets `grid-cols-[minmax(0,1fr)]` (before
+  `lg:grid-cols-2`), so a long name in a card is cut with an ellipsis instead
+  of pushing the card past its column.
 - Keyboard first: visible focus, Enter submits, actions reachable by Tab.
 
 ## One pattern on every page
 
-- **A job shows where it was started**: under (or inside) the card whose
-  button started it, scrolled into view, with its steps, Retry when it failed
-  and the link to Undo once it settled (`JobBox` in
-  `web/src/components/job-box.tsx`). A job started from a row's menu in a
-  long list shows at the top of that list. The header's jobs indicator is the
-  view of every job; a page never adds a second place for the same job.
+- **A job shows where it was started**: as the footer of the card whose
+  button started it (`JobFooter`, or `JobBox` under a `border-t` line, in
+  `web/src/components/job-box.tsx`), scrolled into view, with its steps,
+  Retry when it failed and the link to Undo once it settled. Never a box or
+  card of its own between cards: the cards around it stay where they are. A
+  job started from a row's menu in a long list shows at the top of that list,
+  inside its card. The header's jobs indicator is the view of every job; a
+  page never adds a second place for the same job.
+- **Changes you can undo is the last card of its view**, full width, and only
+  there while something can be undone (`CleanupsCard`, `RowChangesCard`): at
+  the bottom it never pushes another card when it appears. The toast after a
+  change has its own Undo as well.
 - **A form with several fields saves through `SaveBar`**: it sticks to the
   bottom of the window while there are changes ("2 unsaved changes",
   Discard, and the one button that saves or applies, named for what it does:

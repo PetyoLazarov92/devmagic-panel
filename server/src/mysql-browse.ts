@@ -27,7 +27,7 @@ export interface BrowseContext {
 }
 
 /** How long one read may run on the server before MySQL stops it. */
-const READ_LIMIT_MS = 15_000;
+export const READ_LIMIT_MS = 15_000;
 /** Counting the rows a filter matches gets less: a page without its count is still a page. */
 const COUNT_LIMIT_MS = 5_000;
 /** Tables up to this many rows (MySQL's estimate) are counted exactly. */

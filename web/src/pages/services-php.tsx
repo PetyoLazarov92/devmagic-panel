@@ -24,6 +24,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { SitesCompatCard } from '@/pages/php-compat-sites';
+import { CardsSkeleton } from '@/components/skeletons';
 
 const SAPI_LABEL = { apache2: 'Apache (mod_php)', fpm: 'PHP-FPM', cli: 'Command line' } as const;
 
@@ -101,7 +102,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
     void machine.follow(api.startJob(id, input));
   };
 
-  if (!report && loading) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
+  if (!report && loading) return <CardsSkeleton reading="Asking PHP for its versions and modules..." cards={[4, 4, 5, 3]} />;
   if (error) return errorBox(error);
   if (!report) return null;
   if (report.versions.length === 0) return errorBox('No PHP is installed: install.sh puts PHP and the modules WordPress needs in place.');
@@ -122,7 +123,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <MachineCard
         report={report}
         picked={current.version}
@@ -138,7 +139,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
 
       <VersionStrip report={report} picked={current.version} shown={tilesGone} onPick={pick} />
 
-      <section className="grid gap-4" aria-labelledby="php-version-heading">
+      <section className="grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="php-version-heading">
         <VersionHeader
           report={report}
           version={current}
@@ -150,7 +151,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
           onMakeDefault={() => start('version', 'php.switchToFpm', { version: current.version })}
         />
         {jobAt === 'version' && jobBox && <Card><div className="px-5 py-4">{jobBox}</div></Card>}
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
           <div id={sectionId('settings')} className="scroll-mt-20 lg:col-span-2">
             <SettingsCard key={`settings-${current.version}-${refresh}-${moved}`} version={current} />
           </div>

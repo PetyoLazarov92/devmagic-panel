@@ -54,7 +54,10 @@ and tick rows on a page to delete them together.
 
 ## WordPress
 
-What WordPress keeps in its database, for each site of a network:
+What WordPress keeps in its database, for each site of a network. Autoload,
+transients and users show first; the clean-up counts and the postmeta keys
+read whole tables, so each fills its card in when it is read, with up to a
+minute.
 
 - **Autoloaded options** against Site Health's 800 KB limit, the biggest by
   name, and **Turn off** for a big one (written as the site's WordPress
@@ -65,7 +68,11 @@ What WordPress keeps in its database, for each site of a network:
   the trash, spam, and meta or terms left behind by something deleted, each
   with a tick, and **Delete the ticked**. A post goes with its meta, terms and
   comments, as WordPress deletes it; a link's terms stay.
-- The postmeta keys that take the most room, and the users with their roles.
+- **Post meta by key**: the custom fields (`meta_key`) that fill postmeta, to
+  see what makes it big (a page builder's data, an old plugin's leftovers).
+  Up to 300,000 rows they come by size; on a bigger table by rows first, as a
+  size needs every value read, and **Count sizes** reads the sizes anyway.
+- The users with their roles.
 
 Each clean-up is a job that saves what it removes first; see
 [Undo](#undo-and-saved-copies).

@@ -13,6 +13,7 @@ import { fixSerializedLengths, looksSerialized, lostPropertyMarks, needsExactEdi
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+import { FieldsSkeleton } from '@/components/skeletons';
 
 // Loaded only when a value with control characters is edited.
 const ValueEditor = lazy(() => import('@/components/value-editor'));
@@ -168,7 +169,7 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
   return (
     <Dialog open onClose={onClose} closeOnBackdrop={false} closeOnEscape={!changed} onKeptOpen={() => setKeptOpen(true)} title={title} description={mode === 'edit' ? 'Saved only while the row still holds what you see here. Undo in the toast, or under Changes you can undo, puts it back for 14 days.' : 'Columns you leave alone get their default. Undo deletes the row again.'} className="w-[min(52rem,calc(100vw-2rem))]">
       {loadError && <p role="alert" className="mt-3 text-sm text-danger">{loadError}</p>}
-      {!loadError && fields.length === 0 && <div className="mt-3 h-40 animate-pulse rounded-lg bg-muted" />}
+      {!loadError && fields.length === 0 && <FieldsSkeleton className="mt-3" fields={4} />}
       {fields.length > 0 && original && (
         <form
           className="mt-3 grid gap-3"

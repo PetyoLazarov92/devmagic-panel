@@ -22,6 +22,7 @@ import { siteHref, siteName } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { CardSkeleton, Reading, TableSkeleton } from '@/components/skeletons';
 
 const DB_KIND: Record<MysqlDatabaseKind, { label: string; tone: 'neutral' | 'primary' | 'success' | 'warning' }> = {
   site: { label: 'Site', tone: 'success' },
@@ -154,7 +155,15 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
   }
 
   const data: MysqlReport | undefined = report.data;
-  if (report.loading && !data) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
+  if (report.loading && !data) {
+    return (
+      <div className="grid gap-4" aria-busy="true">
+        <Reading>Reading MySQL's databases and users...</Reading>
+        <CardSkeleton lines={3} />
+        <TableSkeleton columns={5} rows={8} />
+      </div>
+    );
+  }
   if (report.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
   if (!data) return null;
   if (!data.server) {

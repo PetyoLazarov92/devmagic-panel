@@ -1,5 +1,18 @@
 # Changelog
 
+### v1.17.0 (2026-11-07)
+* **Databases:** the WordPress view shows in a moment on a big database: autoload, transients and users come first, and the clean-up counts and Post meta by key fill in their own cards as they are read, with a minute each instead of 15 seconds. Read again keeps the cards until the new counts arrive
+* **Databases:** Post meta by key lists the custom fields that fill postmeta. Above 300,000 rows it counts them by rows first, as a size needs every value read, and **Count sizes** reads the sizes with up to a minute
+* **Databases:** Turn off on a big autoloaded option works again. It said the site was busy with a job, because the action counted its own hold on the site as one
+* **Databases:** the network site picker names a site by its path and prefix on one line, like `/outlet/ · wp_2_`
+* **Panel:** pages and cards that load show the shape of what is coming, with what is being read, instead of a blank box: the WordPress and Tables views, a table's structure and rows, Services, the site's PHP, cron and compatibility tabs, Jobs, logs and the row editor
+* **Sites:** the WP-Cron tile on the Overview keeps its place while WP-CLI reads it, and the Debug tile while debug.log is read, so the tiles no longer move
+* **Panel:** a long choice in any dropdown is cut with an ellipsis when it is closed; the open list shows it in full
+* **Panel:** a job shows inside the card whose button started it, under a line, on every page: the WordPress view, the SQL runner and Backups and tools no longer put it in a box of its own between cards, so the cards around it stay where they are
+* **Databases:** Changes you can undo is the last card of the WordPress view at full width, as it already was under the tables, a table's rows and the SQL runner, and shows only while something can be undone
+* **Panel:** a card on a narrow window no longer grows past its column when it holds a long name, like a clean copy's file name on Backups and tools or the cards of Services, PHP on a phone
+* An update installs this release from the panel as usual
+
 ### v1.16.4 (2026-11-07)
 * **Databases:** the tables list remembers Sort by name or size, after opening a table and going back, after a reload and in every browser you sign in from, kept with the panel's other view choices
 * An update installs this release from the panel as usual

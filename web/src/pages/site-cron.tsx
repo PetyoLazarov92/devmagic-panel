@@ -19,6 +19,7 @@ import { siteName, siteTarget } from '@/lib/site-ref';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { runCronChange, TaskList, type UndoOf } from '@/pages/services-cron';
+import { CardsSkeleton } from '@/components/skeletons';
 
 type EventFilter = 'all' | 'site' | 'core';
 const FILTERS: Array<{ value: EventFilter; label: string; test: (e: WpCronEvent) => boolean }> = [
@@ -44,7 +45,7 @@ export function CronTab({ site, report, onReload }: { site: Site; report: { data
   const target = { ...siteTarget(site), ...(url ? { url } : {}) };
   const data = report.data;
 
-  if (report.loading && !data) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
+  if (report.loading && !data) return <CardsSkeleton reading="Reading the site's scheduled events with WP-CLI..." cards={[6]} columns={1} />;
   if (report.error && !data) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
   if (!data) return null;
 

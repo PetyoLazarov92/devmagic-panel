@@ -1,8 +1,9 @@
 import type { CleanCopyInfo, CleanPreview, KeptDatabaseInfo, Site, SnapshotInfo, UploadResult } from '@devmagic-panel/shared';
 import { CLEAN_FORM_TABLES, CLEAN_LOG_TABLES, CLEAN_WOO_TABLES, isLocalName } from '@devmagic-panel/shared';
 import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCircle, PackageCheck, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
+import { JobFooter } from '@/components/job-box';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { SqlRunner } from '@/components/sql-runner';
 import { WordpressDbView } from '@/components/wordpress-db';
@@ -116,46 +117,21 @@ function DatabaseTools({ site }: { site: Site }) {
     return <p className="rounded-xl border bg-card px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p>;
   }
 
-  const jobCard = (runner.job || runner.error) && (
-    <Card>
-      <CardHeader>
-        <CardTitle>{runner.job?.title ?? 'Job'}</CardTitle>
-        {busy && <LoaderCircle className="size-4 animate-spin text-primary" />}
-      </CardHeader>
-      <div className="grid gap-3 p-5">
-        {runner.job && <JobSteps job={runner.job} />}
-        {runner.job?.status === 'failed' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="flex-1 text-sm text-danger">{lastLine(runner.job.steps.find((s) => s.status === 'failed')?.output ?? '')}</p>
-            <Button variant="outline" onClick={() => void runner.retry()}><RotateCcw />Retry</Button>
-          </div>
-        )}
-        {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
-      </div>
-    </Card>
-  );
-  // A job shows under the card that started it.
-  const jobUnder = (card: JobCardSlot) => (JOB_CARD[kind ?? 'replace'] === card ? jobCard : null);
+  // A job is the footer of the card that started it.
+  const jobIn = (card: JobCardSlot) => (JOB_CARD[kind ?? 'replace'] === card ? <JobFooter job={runner.job} error={runner.error} onRetry={() => void runner.retry()} /> : null);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="grid content-start gap-4">
-        <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} />
-        {jobUnder('snapshots')}
-        <ImportCard site={site} busy={busy} start={start} />
-        {jobUnder('import')}
-        <PrepareCard site={site} busy={busy} start={start} />
-        {jobUnder('prepare')}
-        <CleanCurrentCard site={site} preview={preview.data} error={preview.error} busy={busy} start={start} />
-        {jobUnder('cleanCurrent')}
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+        <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} footer={jobIn('snapshots')} />
+        <ImportCard site={site} busy={busy} start={start} footer={jobIn('import')} />
+        <PrepareCard site={site} busy={busy} start={start} footer={jobIn('prepare')} />
+        <CleanCurrentCard site={site} preview={preview.data} error={preview.error} busy={busy} start={start} footer={jobIn('cleanCurrent')} />
       </div>
-      <div className="grid content-start gap-4">
-        <SearchReplaceCard site={site} busy={busy} start={start} preview={kind === 'preview' ? runner.job : null} />
-        {jobUnder('replace')}
-        <CleanCopiesCard site={site} copies={copies.data ?? []} loading={copies.loading} busy={busy} start={start} onDeleted={copies.reload} />
-        {jobUnder('copies')}
-        <KeptCard site={site} kept={kept.data ?? []} loading={kept.loading} busy={busy} start={start} onDeleted={kept.reload} />
-        {jobUnder('kept')}
+      <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+        <SearchReplaceCard site={site} busy={busy} start={start} preview={kind === 'preview' ? runner.job : null} footer={jobIn('replace')} />
+        <CleanCopiesCard site={site} copies={copies.data ?? []} loading={copies.loading} busy={busy} start={start} onDeleted={copies.reload} footer={jobIn('copies')} />
+        <KeptCard site={site} kept={kept.data ?? []} loading={kept.loading} busy={busy} start={start} onDeleted={kept.reload} footer={jobIn('kept')} />
       </div>
     </div>
   );
@@ -186,7 +162,7 @@ type Start = (kind: JobKind, input: Record<string, unknown>) => void;
 
 // ── snapshots ────────────────────────────────────────────────
 
-function SnapshotsCard({ site, snapshots, loading, busy, start, onDeleted }: {
+function SnapshotsCard({ footer, site, snapshots, loading, busy, start, onDeleted }: { footer: ReactNode; 
   site: Site;
   snapshots: SnapshotInfo[];
   loading: boolean;
@@ -209,7 +185,7 @@ function SnapshotsCard({ site, snapshots, loading, busy, start, onDeleted }: {
   return (
     <Card>
       <CardHeader><CardTitle>Snapshots</CardTitle><Camera className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
           Database {site.db?.name} · {bytes(site.db?.sizeBytes ?? 0)}. Snapshots are gzipped exports in ~/devmagic-panel-backups/snapshots/{site.path ? `${site.domain}@${site.path.slice(1).replaceAll('/', '@')}` : site.domain}. Restore and replace take one first; an import goes into a side database and is swapped in, so the tables from before come back with Undo until it ends.
         </p>
@@ -279,6 +255,7 @@ function SnapshotsCard({ site, snapshots, loading, busy, start, onDeleted }: {
           <Button variant="danger" onClick={() => deleting && void remove(deleting)}><Trash2 />Delete</Button>
         </div>
       </Dialog>
+      {footer}
     </Card>
   );
 }
@@ -325,7 +302,7 @@ function replacementCount(output: string | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
-function SearchReplaceCard({ site, busy, start, preview }: { site: Site; busy: boolean; start: Start; preview: ReturnType<typeof useJob>['job'] }) {
+function SearchReplaceCard({ footer, site, busy, start, preview }: { footer: ReactNode;  site: Site; busy: boolean; start: Start; preview: ReturnType<typeof useJob>['job'] }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [previewed, setPreviewed] = useState<{ from: string; to: string } | null>(null);
@@ -339,7 +316,7 @@ function SearchReplaceCard({ site, busy, start, preview }: { site: Site; busy: b
   return (
     <Card>
       <CardHeader><CardTitle>Search and replace</CardTitle><Replace className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
           Runs <code className="font-mono">wp search-replace</code> on every table of the site, serialized data included; guid columns are skipped. Preview first: it only counts.
         </p>
@@ -391,6 +368,7 @@ function SearchReplaceCard({ site, busy, start, preview }: { site: Site; busy: b
           start('replace', { from, to, dryRun: false });
         }}
       />
+      {footer}
     </Card>
   );
 }
@@ -470,7 +448,7 @@ function ReplacePairs({ dump }: { dump: DumpUpload }) {
   );
 }
 
-function ImportCard({ site, busy, start }: { site: Site; busy: boolean; start: Start }) {
+function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: Site; busy: boolean; start: Start }) {
   const dump = useDumpUpload(site);
   const { upload, replace } = dump;
   const [bare, setBare] = useState(false);
@@ -479,7 +457,7 @@ function ImportCard({ site, busy, start }: { site: Site; busy: boolean; start: S
   return (
     <Card>
       <CardHeader><CardTitle>Import a dump</CardTitle><FileArchive className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
           A .sql, .sql.gz or .zip dump replaces the tables it holds. It goes into a side database and is swapped in at once; production domains are then replaced with this site's.
         </p>
@@ -526,6 +504,7 @@ function ImportCard({ site, busy, start }: { site: Site; busy: boolean; start: S
           setBare(false);
         }}
       />
+      {footer}
     </Card>
   );
 }
@@ -605,7 +584,7 @@ function cleanupFindings(tables: readonly string[], prefix: string): string[] {
   return found;
 }
 
-function PrepareCard({ site, busy, start }: { site: Site; busy: boolean; start: Start }) {
+function PrepareCard({ footer, site, busy, start }: { footer: ReactNode;  site: Site; busy: boolean; start: Start }) {
   const dump = useDumpUpload(site);
   const { upload, replace } = dump;
   const [confirming, setConfirming] = useState(false);
@@ -623,7 +602,7 @@ function PrepareCard({ site, busy, start }: { site: Site; busy: boolean; start: 
   return (
     <Card>
       <CardHeader><CardTitle>Prepare from production</CardTitle><ShieldCheck className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
           Makes a production dump this site's database without private data. It is cleaned in a side database before anything reaches the site, then swapped in; your current tables are kept for 7 days. Mail plugins are turned off and one administrator stays, the author of every post. Needs the MySQL admin account.
         </p>
@@ -664,6 +643,7 @@ function PrepareCard({ site, busy, start }: { site: Site; busy: boolean; start: 
           dump.reset();
         }}
       />
+      {footer}
     </Card>
   );
 }
@@ -672,7 +652,7 @@ function PrepareCard({ site, busy, start }: { site: Site; busy: boolean; start: 
 /** Below this, what the copy leaves out is not worth a line. */
 const LEFT_OUT_SHOWN = 100 * 1024 ** 2;
 
-function CleanCurrentCard({ site, preview, error, busy, start }: { site: Site; preview: CleanPreview | null | undefined; error: string | null | undefined; busy: boolean; start: Start }) {
+function CleanCurrentCard({ footer, site, preview, error, busy, start }: { footer: ReactNode;  site: Site; preview: CleanPreview | null | undefined; error: string | null | undefined; busy: boolean; start: Start }) {
   const [confirming, setConfirming] = useState(false);
   const [user, setUser] = useState<KeepUser>(defaultKeepUser(undefined));
   const adminsKey = preview?.admins.join(',');
@@ -683,7 +663,7 @@ function CleanCurrentCard({ site, preview, error, busy, start }: { site: Site; p
   return (
     <Card>
       <CardHeader><CardTitle>Clean this database</CardTitle><Eraser className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
           Cleans the database the site has now, like a production database you imported, the way Prepare from production cleans a dump. It is copied beside the site and cleaned there while the site keeps working, then swapped in; your current tables are kept for 7 days. Mail plugins are turned off and one administrator stays, the author of every post. Addresses are not replaced.
         </p>
@@ -719,6 +699,7 @@ function CleanCurrentCard({ site, preview, error, busy, start }: { site: Site; p
           start('cleanCurrent', { user, confirm });
         }}
       />
+      {footer}
     </Card>
   );
 }
@@ -735,7 +716,7 @@ function LeftoverBadge({ copy }: { copy: CleanCopyInfo }) {
   return <Badge tone="warning">{found.total.toLocaleString('en-US')} email{found.total === 1 ? '' : 's'} left</Badge>;
 }
 
-function CleanCopiesCard({ site, copies, loading, busy, start, onDeleted }: {
+function CleanCopiesCard({ footer, site, copies, loading, busy, start, onDeleted }: { footer: ReactNode; 
   site: Site;
   copies: CleanCopyInfo[];
   loading: boolean;
@@ -756,7 +737,7 @@ function CleanCopiesCard({ site, copies, loading, busy, start, onDeleted }: {
   return (
     <Card>
       <CardHeader><CardTitle>Clean copies</CardTitle><PackageCheck className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
           A gzipped export of this site's database to share with the team, in ~/devmagic-panel-backups/clean/{folderKey(site)}. Check the site and set up its test modes first. The export counts the email addresses left in it, so anything private a cleanup missed shows.
         </p>
@@ -772,7 +753,7 @@ function CleanCopiesCard({ site, copies, loading, busy, start, onDeleted }: {
               const found = c.leftoverEmails;
               const expandable = Boolean(found && found.total > 0);
               return (
-                <li key={c.name} className="grid gap-2 px-3 py-2.5 text-sm">
+                <li key={c.name} className="grid grid-cols-[minmax(0,1fr)] gap-2 px-3 py-2.5 text-sm">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-2">
@@ -829,6 +810,7 @@ function CleanCopiesCard({ site, copies, loading, busy, start, onDeleted }: {
           <Button variant="danger" onClick={() => deleting && void remove(deleting)}><Trash2 />Delete</Button>
         </div>
       </Dialog>
+      {footer}
     </Card>
   );
 }
@@ -837,7 +819,7 @@ function CleanCopiesCard({ site, copies, loading, busy, start, onDeleted }: {
 
 const daysLeft = (k: KeptDatabaseInfo) => Math.max(0, Math.ceil((new Date(k.purgeAt).getTime() - Date.now()) / 86_400_000));
 
-function KeptCard({ site, kept, loading, busy, start, onDeleted }: {
+function KeptCard({ footer, site, kept, loading, busy, start, onDeleted }: { footer: ReactNode; 
   site: Site;
   kept: KeptDatabaseInfo[];
   loading: boolean;
@@ -858,7 +840,7 @@ function KeptCard({ site, kept, loading, busy, start, onDeleted }: {
   return (
     <Card>
       <CardHeader><CardTitle>Kept databases</CardTitle><Archive className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
           Your tables from before a Prepare from production or a clean. Put back swaps them in at once, and what it takes out is kept the same way. Each goes 7 days after it was made.
         </p>
@@ -906,6 +888,7 @@ function KeptCard({ site, kept, loading, busy, start, onDeleted }: {
           <Button variant="danger" onClick={() => deleting && void remove(deleting)}><Trash2 />Drop</Button>
         </div>
       </Dialog>
+      {footer}
     </Card>
   );
 }

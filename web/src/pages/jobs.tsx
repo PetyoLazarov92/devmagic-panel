@@ -5,6 +5,7 @@ import { timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { ListSkeleton } from '@/components/skeletons';
 
 /** Every job since the panel started: running and queued first, then the newest. */
 export function JobsPage() {
@@ -17,7 +18,7 @@ export function JobsPage() {
       </p>
       {error && <p role="alert" className="mt-6 text-sm text-danger">{error}</p>}
       {jobs && jobs.length === 0 && <p className="mt-6 text-sm text-muted-foreground">No jobs since the panel started.</p>}
-      {!jobs && loading && <div className="mt-6 h-40 animate-pulse rounded-xl border bg-card" />}
+      {!jobs && loading && <ListSkeleton className="mt-6" rows={5} />}
       {jobs && jobs.length > 0 && (
         <ul className="mt-6 divide-y overflow-hidden rounded-xl border bg-card">
           {jobs.map((j) => (

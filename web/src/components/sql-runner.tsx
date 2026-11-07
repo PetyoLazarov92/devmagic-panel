@@ -4,7 +4,7 @@ import { type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect, useRef, 
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { ValueView } from '@/components/db-browser';
 import { EditorBoundary } from '@/components/editor-boundary';
-import { JobBox } from '@/components/job-box';
+import { JobFooter } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
 import { Segmented } from '@/components/ui/segmented';
 import { Badge } from '@/components/ui/badge';
@@ -258,9 +258,8 @@ export function SqlRunner({ database, placeholder, canWrite = false }: { databas
             </div>
           )}
         </div>
+        <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} />
       </Card>
-      {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
-      {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
       {result && <ResultCard result={result} onOpen={setOpen} onCsv={download} />}
       {canWrite && <CleanupsCard database={database} refresh={refresh} onUndone={() => schema.reload()} />}
       {checked && (

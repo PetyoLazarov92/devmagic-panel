@@ -1,5 +1,5 @@
-import type { MysqlProcess, WriteCheck, CleanupInfo, DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport } from '@devmagic-panel/shared';
-import { DB_CELL_HEAD, isSystemDatabase, WP_AUTOLOAD_LIMIT } from '@devmagic-panel/shared';
+import type { MysqlProcess, WriteCheck, CleanupInfo, DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport, WpDbSection } from '@devmagic-panel/shared';
+import { DB_CELL_HEAD, isSystemDatabase, WP_AUTOLOAD_LIMIT, WP_DB_SECTIONS, WP_META_SIZE_ROWS } from '@devmagic-panel/shared';
 import { sites } from './fixtures';
 
 /** The mockup's database browser: WordPress tables with made-up rows, filtered, sorted and paged in the browser. */
@@ -275,7 +275,7 @@ export function mockDbCell(database: string, table: string, column: string, key:
 }
 
 /** A site's database as WordPress sees it, in the mockup: one site over Site Health's autoload limit, a network with three sites. */
-export function mockWordpressDb(domain: string, path: string | undefined, blog = 1): WpDbReport {
+export function mockWordpressDb(domain: string, path: string | undefined, blog = 1, { sections = WP_DB_SECTIONS, sizes = false }: { sections?: readonly WpDbSection[]; sizes?: boolean } = {}): WpDbReport {
   const site = sites.find((s) => s.domain === domain && s.path === path);
   if (!site?.db) throw new Error(`${domain}${path ?? ''} has no database on this computer's MySQL server`);
   const heavy = site.db.sizeBytes > 1_000_000_000;
@@ -290,7 +290,16 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
   const blogPrefix = blog === 1 ? 'wp_' : `wp_${blog}_`;
   const scale = blog === 1 ? 1 : 0.3;
   const n = (v: number) => Math.round(v * scale);
-  return {
+  // The big site's postmeta is over the limit for sizes: its keys come by rows until Count sizes.
+  const estimatedRows = n(heavy ? 2_480_000 : 48_000);
+  const sized = sizes || estimatedRows <= WP_META_SIZE_ROWS;
+  const metaKeys = [
+    { key: '_acme_builder_data', count: n(2_400), bytes: n(heavy ? 640_000_000 : 18_000_000) },
+    { key: '_wp_attachment_metadata', count: n(9_800), bytes: n(42_000_000) },
+    { key: '_edit_lock', count: n(3_100), bytes: n(68_000) },
+    { key: '_thumbnail_id', count: n(2_900), bytes: n(14_000) },
+  ];
+  const full: WpDbReport = {
     database: site.db.name,
     prefix: 'wp_',
     blog,
@@ -314,12 +323,7 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
     transients: { count: n(heavy ? 3_120 : 64), bytes: n(heavy ? 41_000_000 : 380_000), expired: n(heavy ? 2_870 : 9), site: { count: 12, bytes: 210_000, expired: 4 } },
     content: { revisions: n(heavy ? 18_400 : 620), autoDrafts: n(14), trashedPosts: n(37), spamComments: n(heavy ? 9_800 : 0), trashedComments: n(12) },
     orphans: { postmeta: n(heavy ? 4_210 : 0), commentmeta: n(heavy ? 1_300 : 0), termmeta: 0, termRelationships: n(26), ...(blog === 1 ? { usermeta: 3 } : {}) },
-    metaKeys: [
-      { key: '_acme_builder_data', count: n(2_400), bytes: n(heavy ? 640_000_000 : 18_000_000) },
-      { key: '_wp_attachment_metadata', count: n(9_800), bytes: n(42_000_000) },
-      { key: '_edit_lock', count: n(3_100), bytes: n(68_000) },
-      { key: '_thumbnail_id', count: n(2_900), bytes: n(14_000) },
-    ],
+    metaKeys: { estimatedRows, sized, keys: sized ? metaKeys : [...metaKeys].sort((a, b) => b.count - a.count).map(({ key, count }) => ({ key, count })) },
     users: {
       count: 3,
       list: [
@@ -331,6 +335,9 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
     errors: {},
     checkedAt: new Date().toISOString(),
   };
+  // Only the parts asked for, as the server answers.
+  for (const section of WP_DB_SECTIONS) if (!sections.includes(section)) delete full[section];
+  return full;
 }
 
 /** The mockup's SQL runner: SELECT * FROM a mock table (with LIMIT), SHOW TABLES and EXPLAIN; anything that changes is refused as the server would. */

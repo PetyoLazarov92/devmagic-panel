@@ -16,6 +16,7 @@ import { siteHref } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { ListSkeleton } from '@/components/skeletons';
 
 const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
 type Row = VersionCompat['sites'][number];
@@ -90,7 +91,7 @@ export function SitesCompatCard({ version }: { version: string }) {
           </div>
         )}
         {report.error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>}
-        {report.loading && !data && <div className="h-24 animate-pulse rounded-lg bg-muted" />}
+        {report.loading && !data && <ListSkeleton rows={3} />}
         {data && rows.length === 0 && <p className="text-xs text-muted-foreground">There is no WordPress site on this machine yet.</p>}
         {rows.length > 0 && (
           <>

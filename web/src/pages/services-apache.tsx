@@ -14,6 +14,7 @@ import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { runRestarting } from '@/lib/restarting';
+import { CardsSkeleton, LogSkeleton } from '@/components/skeletons';
 
 type VhostFilter = 'all' | 'enabled' | 'disabled' | 'managed';
 const FILTERS: Array<{ value: VhostFilter; label: string; test: (v: ApacheVhost) => boolean }> = [
@@ -43,7 +44,7 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
   useEffect(() => onLoading(report.loading), [report.loading, onLoading]);
 
   const data = report.data;
-  if (report.loading && !data) return <div className="h-64 animate-pulse rounded-xl border bg-card" />;
+  if (report.loading && !data) return <CardsSkeleton reading="Reading Apache's configuration and vhosts..." cards={[4, 4, 5, 3]} />;
   if (report.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
   if (!data) return null;
 
@@ -51,7 +52,7 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
   const test = data.configtest;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader><CardTitle>Configuration</CardTitle><Server className="size-4 text-muted-foreground" /></CardHeader>
         <div className="grid gap-3 p-5 text-sm">
@@ -135,7 +136,7 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
           <p className="font-mono text-xs break-all text-muted-foreground">{log.data?.file ?? data.errorLog}</p>
           {log.data && !log.data.exists && <p className="text-sm text-muted-foreground">The log file does not exist, or the panel cannot read it.</p>}
           {log.error && <p role="alert" className="text-sm text-danger">{log.error}</p>}
-          {log.loading && !log.data ? <div className="h-40 animate-pulse rounded-xl border bg-card" /> : <LogView lines={log.data?.lines ?? []} />}
+          {log.loading && !log.data ? <LogSkeleton /> : <LogView lines={log.data?.lines ?? []} />}
         </div>
       </Card>
     </div>

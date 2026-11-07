@@ -142,6 +142,15 @@
   }
 }
 
+/* Select draws the picked option over its box, so the box's own text is clear; the options in the list are not. */
+select.dmp-select option,
+select.dmp-select optgroup {
+  color: var(--foreground);
+}
+select.dmp-select option:disabled {
+  color: var(--muted-foreground);
+}
+
 /*
  * The open list of a dropdown (Select), in the panel's colours where the
  * browser lets a page style it (Chrome and Edge); elsewhere it stays the
@@ -155,6 +164,9 @@
   select.dmp-select {
     display: flex;
     align-items: center;
+    /* The picked option's own text stays on one line; Select draws it over the box with an ellipsis. */
+    white-space: nowrap;
+    overflow: hidden;
   }
   select.dmp-select::picker-icon {
     display: none;
@@ -169,6 +181,7 @@
     box-shadow: 0 12px 32px -12px oklch(0.2 0.02 270 / 0.3);
   }
   select.dmp-select option {
+    white-space: normal;
     padding: 6px 10px;
     border-radius: calc(var(--radius) - 4px);
     font-size: 0.875rem;

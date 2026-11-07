@@ -2,9 +2,11 @@ import { existsSync, mkdirSync, readdirSync, statSync, utimesSync, writeFileSync
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import type { JobRuntime, JobStep } from '../src/jobs.js';
+import { type ActionContext, runAction } from '../src/actions.js';
+import { type JobRuntime, type JobStep, Jobs } from '../src/jobs.js';
 import { cleanupsDir, listCleanups, planContent, planDropTable, planEmptyTable, planOrphans, planTransients, pruneCleanups, setAutoload, undoCleanup } from '../src/mysql-cleanup.js';
 import type { RowsContext } from '../src/mysql-rows.js';
+import { RunStore } from '../src/store.js';
 import { type FakeCall, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
 const mysql = { user: 'devmagic_panel', host: 'localhost', password: 'adminpw' };
@@ -206,5 +208,28 @@ describe('autoload', () => {
     await expect(setAutoload(ctx, { domain: 'local.shop.com', option: 'acme_cache', autoload: 'off' })).rejects.toThrow(/already loaded only when asked for/);
     const none = fakeDb(SINGLE, (sql) => (sql.includes('SELECT option_id, autoload') ? { stdout: '' } : undefined));
     await expect(setAutoload(ctxFor(none), { domain: 'local.shop.com', option: 'nope', autoload: 'on' })).rejects.toThrow(/no option called nope/);
+  });
+
+  it('runs as an action while the action holds the site, and waits for a job on it', async () => {
+    const fake = fakeDb(SINGLE, (sql) => {
+      if (sql.includes('SELECT option_id, autoload')) return { stdout: '7\ton\n' };
+      if (sql.includes("SELECT JSON_ARRAY('t'")) {
+        return { stdout: [['t', 'wp_options', 'BASE TABLE', 'InnoDB', 3, 1, 1, 0, 'utf8mb4_unicode_520_ci', null], ['c', 'option_id', 'bigint unsigned', 'bigint', 'NO', null, 'PRI', 'auto_increment', null, null, ''], ['c', 'autoload', 'varchar(20)', 'varchar', 'NO', 'yes', 'MUL', '', 'utf8mb4', 'utf8mb4_unicode_520_ci', ''], ['i', 'PRIMARY', 0, 1, 'option_id', 'BTREE', 3]].map((r) => JSON.stringify(r)).join('\n') };
+      }
+      if (sql.includes('FOR UPDATE')) return { stdout: JSON.stringify(['7', 'on']) };
+      return undefined;
+    });
+    const tree = wpSiteTree();
+    const store = new RunStore(':memory:');
+    const jobs = new Jobs(store);
+    const ctx: ActionContext = { config: tree.config, exec: fake.exec, store, dmpRoot: '/x', wpcoreBin: '/x', wpcoreConf: '/x', home: tree.root, jobs, uploadsDir: join(tree.root, 'uploads'), secrets: { panelPasswordHash: 'x', mysql } };
+    const result = await runAction(ctx, 'db.setAutoload', { domain: 'local.shop.com', option: 'acme_cache', autoload: 'off' });
+    expect(result).toMatchObject({ ok: true, output: 'acme_cache: autoload off (was on); Undo puts it back' });
+
+    let finish = () => {};
+    const job = jobs.start([{ id: 'a', label: 'A', run: () => new Promise((done) => { finish = () => done({ code: 0, stdout: '', stderr: '' }); }) }], { runId: store.start('db.cleanContent', {}), title: 'Clean up local.shop.com', target: 'local.shop.com' });
+    await expect(runAction(ctx, 'db.setAutoload', { domain: 'local.shop.com', option: 'acme_cache', autoload: 'off' })).rejects.toThrow(/local.shop.com is busy: Clean up local.shop.com/);
+    finish();
+    expect(job.id).toBeTruthy();
   });
 });

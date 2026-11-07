@@ -5,7 +5,7 @@ import {
   ShieldCheck, SkipForward, SquareTerminal, Trash2, Wrench, X,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { SitePageSkeleton } from '@/components/skeletons';
+import { Bar, ListSkeleton, LogSkeleton, SitePageSkeleton } from '@/components/skeletons';
 import { AnsiText } from '@/components/ansi-text';
 import { BranchPicker, PullBadge } from '@/components/branch-picker';
 import { JobScreen } from '@/components/job-screen';
@@ -29,7 +29,7 @@ import { bytes, shortDate, timeAgo } from '@/lib/format';
 import { Link, navigate, useQueryParam } from '@/lib/router';
 import { useReloadWhileBusy } from '@/lib/jobs';
 import { loadThroughRestart } from '@/lib/startup';
-import { useAsync } from '@/lib/use-async';
+import { type AsyncState, useAsync } from '@/lib/use-async';
 import { ConfigTab, SaltsConfirm, saltsSummary } from '@/pages/site-config';
 import { CronTab } from '@/pages/site-cron';
 import { DatabaseTab } from '@/pages/site-database';
@@ -188,7 +188,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
       />
 
       <div className="mt-5">
-        {tab === 'overview' && <Overview site={site} onChanged={reload} onOpen={setTab} cron={wpCron.data ?? null} logErrors={problems} />}
+        {tab === 'overview' && <Overview site={site} onChanged={reload} onOpen={setTab} cron={wpCron} logErrors={logs.loading && !logs.data ? undefined : problems} />}
         {tab === 'logs' && <LogsTab site={site} onChanged={reload} />}
         {tab === 'network' && <NetworkCard site={site} />}
         {tab === 'plugins' && <PluginsTab site={site} />}
@@ -289,12 +289,17 @@ function DebugSettings({ site, onChanged }: { site: Site; onChanged: () => void 
   );
 }
 
-/** One fact from another tab, and the way there. */
-function Tile({ label, value, detail, tone, onOpen }: { label: string; value: string; detail?: string; tone?: 'warning' | 'danger'; onOpen: () => void }) {
+/**
+ * One fact from another tab, and the way there. A fact read after the page
+ * (WP-Cron, the errors in debug.log) keeps its place while it loads, with a
+ * bar where its value or detail goes, so the tiles never move.
+ */
+function Tile({ label, value, detail, tone, loading, onOpen }: { label: string; value?: string; detail?: string; tone?: 'warning' | 'danger'; loading?: 'value' | 'detail'; onOpen: () => void }) {
   return (
     <button
       type="button"
       onClick={onOpen}
+      aria-busy={loading ? true : undefined}
       className={cn(
         'grid min-w-0 gap-0.5 rounded-xl border bg-card px-4 py-3 text-left transition-colors hover:bg-muted/60',
         tone === 'danger' && 'border-danger/30',
@@ -302,14 +307,18 @@ function Tile({ label, value, detail, tone, onOpen }: { label: string; value: st
       )}
     >
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="truncate text-sm font-medium">{value}</span>
-      {detail && <span className={cn('truncate text-xs', tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-muted-foreground')}>{detail}</span>}
+      {loading === 'value' ? <Bar className="my-0.5 h-4 w-20" /> : <span className="truncate text-sm font-medium">{value}</span>}
+      {loading ? (
+        <span className="flex h-4 items-center"><Bar className="h-2.5 w-24" /><span className="sr-only">Reading...</span></span>
+      ) : (
+        detail && <span className={cn('truncate text-xs', tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-muted-foreground')}>{detail}</span>
+      )}
     </button>
   );
 }
 
 /** The facts from the other tabs a site has, each opening its tab. */
-function SiteTiles({ site, cron, logErrors, onOpen }: { site: Site; cron: WpCronReport | null; logErrors: number; onOpen: (tab: Tab) => void }) {
+function SiteTiles({ site, cron, logErrors, onOpen }: { site: Site; cron: AsyncState<WpCronReport | null>; logErrors: number | undefined; onOpen: (tab: Tab) => void }) {
   const tabs = new Set(siteTabItems(site).map((t) => t.value));
   const uncovered = uncoveredNames(site);
   const names = site.aliases.length + 1;
@@ -318,8 +327,9 @@ function SiteTiles({ site, cron, logErrors, onOpen }: { site: Site; cron: WpCron
     key: 'logs',
     label: 'Debug',
     value: debugLabel(site),
-    detail: logErrors > 0 ? `${logErrors} error${logErrors === 1 ? '' : 's'} in debug.log` : site.debug.logBytes ? `debug.log ${bytes(site.debug.logBytes)}` : 'debug.log empty',
-    ...(logErrors > 0 ? { tone: 'danger' as const } : {}),
+    ...(logErrors === undefined ? { loading: 'detail' as const } : {}),
+    detail: logErrors ? `${logErrors} error${logErrors === 1 ? '' : 's'} in debug.log` : site.debug.logBytes ? `debug.log ${bytes(site.debug.logBytes)}` : 'debug.log empty',
+    ...(logErrors ? { tone: 'danger' as const } : {}),
     onOpen: () => onOpen('logs'),
   });
   if (tabs.has('network') && site.network) {
@@ -328,16 +338,21 @@ function SiteTiles({ site, cron, logErrors, onOpen }: { site: Site; cron: WpCron
   if (tabs.has('database') && site.db) {
     tiles.push({ key: 'database', label: 'Database', value: site.db.name, ...(site.db.tables > 0 ? { detail: `${bytes(site.db.sizeBytes)} · ${site.db.tables} tables` } : { detail: 'No tables yet' }), onOpen: () => onOpen('database') });
   }
-  if (tabs.has('cron') && cron) {
-    const running = cron.disabled ? (cron.task ? 'Runs from cron' : 'Not running: DISABLE_WP_CRON') : 'Runs on page loads';
+  // WP-Cron is read with WP-CLI after the page: its tile holds its place until then.
+  const c = cron.data;
+  if (tabs.has('cron') && c) {
+    const running = c.disabled ? (c.task ? 'Runs from cron' : 'Not running: DISABLE_WP_CRON') : 'Runs on page loads';
     tiles.push({
       key: 'cron',
       label: 'WP-Cron',
-      value: `${cron.events.length} event${cron.events.length === 1 ? '' : 's'}`,
-      detail: cron.overdue > 0 ? `${cron.overdue} late` : running,
-      ...(cron.overdue > 0 || (cron.disabled && !cron.task) ? { tone: 'warning' as const } : {}),
+      value: `${c.events.length} event${c.events.length === 1 ? '' : 's'}`,
+      detail: c.overdue > 0 ? `${c.overdue} late` : running,
+      ...(c.overdue > 0 || (c.disabled && !c.task) ? { tone: 'warning' as const } : {}),
       onOpen: () => onOpen('cron'),
     });
+  } else if (tabs.has('cron')) {
+    // The Cron tab is only there for WordPress, so no answer yet means it is still being read.
+    tiles.push({ key: 'cron', label: 'WP-Cron', onOpen: () => onOpen('cron'), ...(cron.error && !cron.loading ? { value: 'Not read', detail: 'WP-CLI could not list it', tone: 'warning' as const } : { loading: 'value' as const }) });
   }
   if (tabs.has('php') && site.php) {
     tiles.push({ key: 'php', label: 'PHP', value: site.php.version, detail: site.php.own ? 'Its own version' : 'The default version', onOpen: () => onOpen('php') });
@@ -363,7 +378,7 @@ function SiteTiles({ site, cron, logErrors, onOpen }: { site: Site; cron: WpCron
  * A site at a glance: the facts from its other tabs, then what you do most (git, quick actions, the core),
  * Local mode and uploads, and where its files are. Settings live in their tabs.
  */
-function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; onChanged: () => void; onOpen: (tab: Tab) => void; cron: WpCronReport | null; logErrors: number }) {
+function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; onChanged: () => void; onOpen: (tab: Tab) => void; cron: AsyncState<WpCronReport | null>; logErrors: number | undefined }) {
   const coreVersions = useAsync(() => (site.core.kind === 'wpcore' ? api.cores() : Promise.resolve([])), [site.core.kind]).data ?? [];
   const [core, setCore] = useState(site.core.version ?? '');
   const [busy, setBusy] = useState<string | null>(null);
@@ -852,7 +867,7 @@ function SuperAdminsDialog({ site, open, onClose }: { site: Site; open: boolean;
       description="A super admin manages every site of the network, but My Sites and plugins that look for the administrator role only see the sites where they have one. Make administrator adds that role where they have no role yet; roles they have stay, and Undo on the job takes them off the sites it added them to."
     >
       <div className="mt-4 grid gap-3">
-        {list.loading && !data && <div className="h-16 animate-pulse rounded-lg bg-muted" />}
+        {list.loading && !data && <ListSkeleton rows={2} />}
         {list.error && <p role="alert" className="text-sm text-danger">{list.error}</p>}
         {data && data.admins.length === 0 && <p className="text-sm text-muted-foreground">This network has no super admins WP-CLI can find.</p>}
         {data && data.admins.length > 0 && (
@@ -1115,7 +1130,7 @@ function LogsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
       {log.data && !log.data.exists && <p className="text-sm text-muted-foreground">The log file does not exist yet.</p>}
       {log.error && <p role="alert" className="text-sm text-danger">{log.error}</p>}
       {log.loading && !log.data ? (
-        <div className="h-40 animate-pulse rounded-xl border bg-card" />
+        <LogSkeleton />
       ) : (
         <LogView
           lines={log.data?.lines ?? []}

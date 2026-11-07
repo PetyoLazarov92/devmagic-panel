@@ -19,12 +19,14 @@ function fakeWp(tables: string[], override: (sql: string) => Partial<{ code: num
       const special = override(sql);
       if (special) return special;
       if (sql.includes('SELECT TABLE_NAME FROM information_schema.TABLES')) return { stdout: `${tables.join('\n')}\n` };
+      if (sql.includes('SELECT TABLE_ROWS FROM information_schema.TABLES')) return { stdout: '1200\n' };
       if (sql.includes('SELECT JSON_ARRAY(blog_id')) return { stdout: json([1, 'local.shop.com', '/', 0, 0, 0], [2, 'local.shop.com', '/outlet/', 0, 0, 0], [3, 'local.shop.com', '/old/', 1, 0, 0]) };
       if (sql.includes("JSON_ARRAY('a'")) return { stdout: json(['a', 412, 912_000], ['o', 'acme_big_cache', 400_000], ['o', 'rewrite_rules', 90_000]) };
       if (sql.includes("JSON_ARRAY('t'")) return { stdout: json(['t', 40, 52_000], ['tx', 7], ['s', 3, 900], ['sx', 1]) };
       if (sql.includes("JSON_ARRAY('p'")) return { stdout: json(['p', '1200', '3', '5'], ['c', '80', '2']) };
       if (sql.includes("JSON_ARRAY('pm'")) return { stdout: json(['pm', 31], ['cm', 0], ['tm', 2], ['tr', 4], ...(sql.includes("'um'") ? [['um', 6]] : [])) };
-      if (sql.includes('GROUP BY meta_key')) return { stdout: json(['_acme_gallery', 900, 4_000_000], [null, 3, 10]) };
+      if (sql.includes('GROUP BY meta_key') && sql.includes('LENGTH(meta_value)')) return { stdout: json(['_acme_gallery', 900, 4_000_000], [null, 3, 10]) };
+      if (sql.includes('GROUP BY meta_key')) return { stdout: json(['_edit_lock', 300_000], ['_acme_gallery', 900]) };
       if (sql.includes("JSON_ARRAY('n'")) return { stdout: json(['n', 2], ['u', 1, 'alex', 'alex.morgan@acme.com', '2024-03-02 10:15:00', 'a:1:{s:13:"administrator";b:1;}'], ['u', 2, 'sam', 'sam.lee@acme.com', '2025-07-19 16:40:00', null]) };
       return { code: 1, stderr: `unexpected: ${sql.slice(0, 200)}` };
     },
@@ -48,7 +50,7 @@ describe('the WordPress view of a database', () => {
       transients: { count: 40, bytes: 52_000, expired: 7, site: { count: 3, bytes: 900, expired: 1 } },
       content: { revisions: 1200, autoDrafts: 3, trashedPosts: 5, spamComments: 80, trashedComments: 2 },
       orphans: { postmeta: 31, commentmeta: 0, termmeta: 2, termRelationships: 4, usermeta: 6 },
-      metaKeys: [{ key: '_acme_gallery', count: 900, bytes: 4_000_000 }, { key: '', count: 3, bytes: 10 }],
+      metaKeys: { estimatedRows: 1200, sized: true, keys: [{ key: '_acme_gallery', count: 900, bytes: 4_000_000 }, { key: '', count: 3, bytes: 10 }] },
       users: { count: 2, list: [{ id: '1', login: 'alex', roles: ['administrator'] }, { id: '2', login: 'sam', roles: [] }] },
       errors: {},
       checkedAt: '2026-11-07T09:00:00.000Z',
@@ -92,8 +94,33 @@ describe('the WordPress view of a database', () => {
     const fake = fakeWp(SINGLE, (sql) => (sql.includes('GROUP BY meta_key') ? { code: 1, stderr: 'ERROR 3024 (HY000): maximum statement execution time exceeded' } : undefined));
     const r = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined);
     expect(r.metaKeys).toBeNull();
-    expect(r.errors).toEqual({ metaKeys: expect.stringMatching(/stopped the read after 15 seconds/) });
+    expect(r.errors).toEqual({ metaKeys: 'MySQL stopped the read after 60 seconds: the tables are too big to read in time' });
     expect(r.autoload?.count).toBe(412);
+  });
+
+  it('reads only the parts asked for, with a minute for the ones that read whole tables', async () => {
+    const fake = fakeWp(SINGLE);
+    const quick = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['autoload', 'transients', 'users'] });
+    expect(Object.keys(quick).filter((k) => ['autoload', 'transients', 'users', 'content', 'orphans', 'metaKeys'].includes(k))).toEqual(['autoload', 'transients', 'users']);
+    expect(inputs(fake)).not.toContain('GROUP BY meta_key');
+    expect(fake.calls.filter((c) => c.input?.includes('JSON_ARRAY')).every((c) => c.input?.includes('max_execution_time = 15000'))).toBe(true);
+
+    const slow = fakeWp(SINGLE);
+    const content = await wordpressReport(ctxFor(slow), 'local.shop.com', undefined, 1, Date.now, { sections: ['content'] });
+    expect(content.content?.revisions).toBe(1200);
+    expect(content).not.toHaveProperty('autoload');
+    expect(slow.calls.find((c) => c.input?.includes("JSON_ARRAY('p'"))?.input).toContain('max_execution_time = 60000');
+  });
+
+  it('counts the keys of a big postmeta by rows, and their sizes only when asked', async () => {
+    const big = (sql: string) => (sql.includes('SELECT TABLE_ROWS') ? { stdout: '2480000\n' } : undefined);
+    const fake = fakeWp(SINGLE, big);
+    const r = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['metaKeys'] });
+    expect(r.metaKeys).toEqual({ estimatedRows: 2_480_000, sized: false, keys: [{ key: '_edit_lock', count: 300_000 }, { key: '_acme_gallery', count: 900 }] });
+    expect(inputs(fake)).not.toContain('LENGTH(meta_value)');
+    expect(inputs(fake)).toContain("TABLE_NAME = _utf8mb4 X'" + Buffer.from('wp_postmeta').toString('hex') + "'");
+    const sized = await wordpressReport(ctxFor(fakeWp(SINGLE, big)), 'local.shop.com', undefined, 1, Date.now, { sections: ['metaKeys'], sizes: true });
+    expect(sized.metaKeys).toMatchObject({ estimatedRows: 2_480_000, sized: true, keys: [{ key: '_acme_gallery', bytes: 4_000_000 }, { key: '' }] });
   });
 
   it('refuses a site without a database on this machine', async () => {

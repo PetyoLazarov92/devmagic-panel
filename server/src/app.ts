@@ -2,8 +2,8 @@ import { existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
 import { cronReport } from './cron.js';
@@ -405,14 +405,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // The SQL runner: one statement that reads, as the read-only account. A POST: the SQL can hold data.
     api.post<{ Params: { database: string } }>('/api/mysql/databases/:database/query', async (request, reply): Promise<DbQueryResult | undefined> =>
       browsing(reply, () => runQuery(browse(), request.params.database, request.body)));
-    // A WordPress site's database as WordPress sees it: autoload, transients, clean-up counts, users. ?blog= picks a site of a network.
-    api.get<{ Params: { domain: string }; Querystring: { path?: string; blog?: string } }>('/api/sites/:domain/db/wordpress', async (request, reply): Promise<WpDbReport | undefined> =>
+    // A WordPress site's database as WordPress sees it: autoload, transients, clean-up counts, users. ?blog= picks a site of a network,
+    // ?sections=autoload,users the parts to read (the page asks for the slow ones one at a time), ?sizes=1 the size of every postmeta value.
+    api.get<{ Params: { domain: string }; Querystring: { path?: string; blog?: string; sections?: string; sizes?: string } }>('/api/sites/:domain/db/wordpress', async (request, reply): Promise<WpDbReport | undefined> =>
       browsing(reply, async () => {
         const { domain } = request.params;
-        const { path, blog } = request.query;
+        const { path, blog, sections, sizes } = request.query;
         if (!localName.safeParse(domain).success || (path !== undefined && !mountPath.safeParse(path).success)) throw new BrowseError(`no site called ${domain}${path ?? ''}`, 404);
         if (blog !== undefined && !/^\d{1,9}$/.test(blog)) throw new BrowseError('A site of the network by its number, like 2');
-        return wordpressReport(browse(), domain, path, blog === undefined ? 1 : Number(blog));
+        const parts = sections === undefined ? undefined : sections.split(',');
+        const unknown = parts?.find((p) => !(WP_DB_SECTIONS as readonly string[]).includes(p));
+        if (unknown !== undefined) throw new BrowseError(`No part of the WordPress view called ${unknown.slice(0, 40)}`);
+        return wordpressReport(browse(), domain, path, blog === undefined ? 1 : Number(blog), Date.now, { ...(parts ? { sections: parts as WpDbSection[] } : {}), sizes: sizes === '1' });
       }));
     api.get('/api/apache', async (): Promise<ApacheReport> => apacheReport(deps.config, deps.exec, deps.dmpRoot));
     api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));

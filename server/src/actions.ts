@@ -172,7 +172,8 @@ const rowsCtx = (ctx: ActionContext): RowsContext => ({
   exec: ctx.exec,
   mysql: ctx.secrets?.mysql,
   kept: () => ctx.store.keptDatabases(),
-  siteBusy: (site) => ctx.jobs.busyFor(site) !== undefined,
+  // Only a job makes a site busy here: the action asking holds the site's key itself while it runs (db.setAutoload).
+  siteBusy: (site) => ctx.jobs.busyFor(site)?.jobId !== undefined,
 });
 
 function rowOutcome({ change, ...result }: ExecResult & { change?: string }): HandlerOutcome {
