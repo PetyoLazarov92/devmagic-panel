@@ -37,7 +37,7 @@ export function briefingContext(report: AuraReport): string {
 }
 
 export function describeError(error: unknown): string {
-  if (error instanceof Anthropic.AuthenticationError) return 'Claude refused the API key. Check it under AI assistant on the Environment page.';
+  if (error instanceof Anthropic.AuthenticationError) return 'Claude refused the API key. Check it under AI assistant in Settings.';
   if (error instanceof Anthropic.RateLimitError) return 'Claude is rate limiting this key; the briefing tries again on the next visit.';
   if (error instanceof Anthropic.APIError) return `Claude answered ${error.status ?? 'with an error'}: ${error.message}`;
   return (error as Error).message || 'Claude could not be reached';

@@ -146,7 +146,7 @@ describe('nginx jobs and actions', () => {
   });
 });
 
-describe('nginx on the Services page and the Environment page', () => {
+describe('nginx on the Services page and in the machine checks', () => {
   it('shows nginx as installed but not set up, without a restart', async () => {
     const t = nginxTree();
     const { exec } = fakeExec({ 'systemctl is-active nginx': { stdout: 'inactive\n' }, 'systemctl cat nginx.service': { stdout: '[Unit]' }, 'nginx -v': { stderr: 'nginx version: nginx/1.24.0\n' } });

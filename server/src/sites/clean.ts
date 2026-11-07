@@ -463,7 +463,7 @@ export function planCleanCopy(ctx: CleanContext, { domain, path, uploadId, repla
     throw new DbRefused(`The dump uses the table prefix ${upload.facts.tablePrefix} but wp-config.php uses ${prefix}; WordPress would not see the imported tables`);
   }
   const target = isLocalDbHost(site.wp.dbHost) ? limitsTarget(ctx.exec, ctx.secrets?.mysql, ctx.store) : null;
-  if (!target) throw new DbRefused('A clean copy needs the MySQL admin account (Environment page) and the site\'s database on this machine');
+  if (!target) throw new DbRefused('A clean copy needs the MySQL admin account (Aura, Machine checks) and the site\'s database on this machine');
   const db = site.wp.dbName;
   if (!canKeep(db)) throw new DbRefused(`The database name ${db} is too long or unusual to keep its tables aside; use a plain import`);
   if (upload.facts.storedObjects !== false) {

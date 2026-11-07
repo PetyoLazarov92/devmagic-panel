@@ -40,7 +40,7 @@ const flavors = new WeakMap<Executor, 'mysql' | 'mariadb'>();
 const firstLine = (r: ExecResult) => (r.stderr || r.stdout).trim().split('\n')[0] || `exit ${r.code}`;
 
 function account(ctx: BrowseContext): MysqlAccount {
-  if (!ctx.mysql) throw new BrowseError('The panel has no MySQL admin account: add one on the Environment page', 503);
+  if (!ctx.mysql) throw new BrowseError('The panel has no MySQL admin account: add one under Aura, Machine checks', 503);
   return ctx.mysql;
 }
 

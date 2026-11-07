@@ -91,7 +91,7 @@ const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 
 function client(ctx: MysqlContext) {
   const mysql = ctx.mysql;
-  if (!mysql) throw new MysqlRefused('The panel has no MySQL admin account: add one on the Environment page');
+  if (!mysql) throw new MysqlRefused('The panel has no MySQL admin account: add one under Aura, Machine checks');
   const env = { MYSQL_PWD: mysql.password };
   const base = ['--user', mysql.user, '--host', mysql.host];
   return {
@@ -127,7 +127,7 @@ function grantMatcher(pattern: string): (name: string) => boolean {
 export async function mysqlReport(ctx: MysqlContext, now = Date.now): Promise<MysqlReport> {
   const checkedAt = new Date(now()).toISOString();
   const base = { checkedAt, backups: listMysqlBackups(ctx.backupsDir), backupsDir: ctx.backupsDir };
-  if (!ctx.mysql) return { ...base, server: null, databases: [], users: [], error: 'The panel has no MySQL admin account: add one on the Environment page' };
+  if (!ctx.mysql) return { ...base, server: null, databases: [], users: [], error: 'The panel has no MySQL admin account: add one under Aura, Machine checks' };
   const { query, mysql } = client(ctx);
   const fresh = await freshStatsSql(ctx.exec, mysql);
   const [info, sizes, users, grants, globals] = await Promise.all([

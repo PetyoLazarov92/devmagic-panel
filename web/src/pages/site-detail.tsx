@@ -768,7 +768,7 @@ function NetworkCard({ site }: { site: Site }) {
       </CardHeader>
       {network.sites.length === 0 && (
         <p className="px-5 py-4 text-sm text-muted-foreground">
-          wp-config.php marks this as a network. Listing its sites needs the MySQL admin account: set it up on the Environment page.
+          wp-config.php marks this as a network. Listing its sites needs the MySQL admin account: set it up under Aura, Machine checks.
         </p>
       )}
       {network.sites.length > 0 && (

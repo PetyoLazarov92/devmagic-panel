@@ -6,6 +6,7 @@ describe('movedTo', () => {
   it('sends an old address to the page that has it now', () => {
     expect(movedTo('/environment/settings')).toBe('/settings');
     expect(movedTo('/jobs')).toBe('/activity');
+    expect(movedTo('/environment')).toBe('/aura/machine');
   });
 
   it('keeps the query, like the page of the run history', () => {

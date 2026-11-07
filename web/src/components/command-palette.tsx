@@ -109,7 +109,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
       { id: 'aura', label: 'Aura', icon: <Sparkles />, group: 'Go to', run: () => navigate('/aura') },
       { id: 'cores', label: 'WP Cores', hint: 'WordPress releases', icon: <Layers />, group: 'Go to', run: () => navigate('/cores') },
       { id: 'services', label: 'Services', icon: <Server />, group: 'Go to', run: () => navigate('/services') },
-      { id: 'env', label: 'Environment', icon: <Activity />, group: 'Go to', run: () => navigate('/environment') },
+      { id: 'machine', label: 'Machine checks', hint: 'Aura: Apache, MySQL, PHP, tools', icon: <Activity />, group: 'Go to', run: () => navigate('/aura/machine') },
       { id: 'settings', label: 'Settings', hint: 'password, AI assistant, Claude Code defaults', icon: <Settings />, group: 'Go to', run: () => navigate('/settings') },
       { id: 'activity', label: 'Activity', hint: 'jobs since the panel started', icon: <ListChecks />, group: 'Go to', run: () => navigate('/activity') },
       { id: 'runs', label: 'Run history', hint: 'every action with its output', icon: <History />, group: 'Go to', run: () => navigate('/activity/runs') },

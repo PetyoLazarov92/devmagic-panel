@@ -106,7 +106,7 @@ export function registerAssistantRoutes(api: FastifyInstance, deps: AssistantDep
   // One chat turn. Read tools run; changes come back as proposal cards that run only when clicked.
   api.post<{ Body: unknown }>('/api/assistant/chat', async (request, reply): Promise<ChatReply | undefined> => {
     const { assistant } = readSettings(deps.settingsFile);
-    if (!assistant.enabled) return reply.code(409).send({ error: 'Turn on the AI assistant on the Environment page first' });
+    if (!assistant.enabled) return reply.code(409).send({ error: 'Turn on the AI assistant in Settings first' });
     const parsed = ChatInput.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'invalid chat' });
     try {
@@ -131,7 +131,7 @@ export function registerAssistantRoutes(api: FastifyInstance, deps: AssistantDep
   // Fills in the new site wizard from a description; the wizard shows it for review and installs nothing by itself.
   api.post<{ Body: unknown }>('/api/assistant/wizard', async (request, reply): Promise<WizardSuggestion | undefined> => {
     const { assistant } = readSettings(deps.settingsFile);
-    if (!assistant.enabled) return reply.code(409).send({ error: 'Turn on the AI assistant on the Environment page first' });
+    if (!assistant.enabled) return reply.code(409).send({ error: 'Turn on the AI assistant in Settings first' });
     const parsed = WizardBody.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'invalid request' });
     try {

@@ -188,7 +188,7 @@ function rowOutcome({ change, ...result }: ExecResult & { change?: string }): Ha
 /** Makes the SQL runner's read-only account with the admin account and saves it next to the admin account in secrets.json. */
 async function makeReadOnlyAccount(ctx: ActionContext): Promise<ExecResult> {
   const admin = ctx.secrets?.mysql;
-  if (!admin) throw new MysqlRefused('The panel has no MySQL admin account: add one on the Environment page');
+  if (!admin) throw new MysqlRefused('The panel has no MySQL admin account: add one under Aura, Machine checks');
   if (!ctx.secretsFile) throw new MysqlRefused('The panel cannot write its secrets file here');
   const made = await createReadOnlyAccount(ctx.exec, admin);
   if ('problem' in made) return { code: 1, stdout: '', stderr: made.problem };

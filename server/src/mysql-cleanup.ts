@@ -73,7 +73,7 @@ export interface SavedCleanup {
 export const cleanupsDir = (config: SystemConfig) => join(config.BACKUP_DIR, 'cleanups');
 
 function account(ctx: RowsContext): MysqlAccount {
-  if (!ctx.mysql) throw new MysqlRefused('The panel has no MySQL admin account: add one on the Environment page');
+  if (!ctx.mysql) throw new MysqlRefused('The panel has no MySQL admin account: add one under Aura, Machine checks');
   return ctx.mysql;
 }
 

@@ -1,12 +1,14 @@
 import type { CheckFix, AuraItem } from '@devmagic-panel/shared';
 import { CircleCheck, LoaderCircle, Sparkles, Wrench } from 'lucide-react';
 import { useState } from 'react';
+import { Tabs } from '@/components/ui/tabs';
 import { IssueRow } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
-import { Link } from '@/lib/router';
+import { Link, navigate } from '@/lib/router';
+import { MachineChecks } from '@/pages/machine-checks';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { siteHref } from '@/lib/site-ref';
@@ -25,7 +27,35 @@ function distinctFixes(items: AuraItem[]): CheckFix[] {
   return [...seen.values()];
 }
 
-export function AuraPage() {
+export type AuraTab = 'problems' | 'machine';
+
+/**
+ * Everything that needs fixing in one place: the problems of every site and
+ * this machine, and on its second tab every check of the machine, passing or
+ * not (once the Environment page).
+ */
+export function AuraPage({ tab = 'problems' }: { tab?: AuraTab }) {
+  return (
+    <div className="pt-4">
+      <PageHeader
+        title="Aura"
+        intro="The health of your sites and this machine: every problem in one list, with a one-click fix where the panel can make one, and every check of the machine."
+      />
+      <Tabs
+        className="mt-6"
+        value={tab}
+        onChange={(t) => navigate(t === 'machine' ? '/aura/machine' : '/aura')}
+        items={[
+          { value: 'problems', label: 'Problems' },
+          { value: 'machine', label: 'Machine checks' },
+        ]}
+      />
+      {tab === 'machine' ? <MachineChecks /> : <Problems />}
+    </div>
+  );
+}
+
+function Problems() {
   const { data: report, error, loading, reload } = useAsync(() => api.aura(), []);
   const [fixing, setFixing] = useState<{ done: number; total: number } | null>(null);
 
@@ -61,37 +91,28 @@ export function AuraPage() {
   }
 
   return (
-    <div className="pt-4">
-      <PageHeader
-        title="Aura"
-        intro="The health of your sites and this machine: every problem in one list, with a one-click fix where the panel can make one."
-        actions={
+    <div>
+      <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
+        {report && items.length === 0 ? (
+          <Badge tone="success">Nothing to fix</Badge>
+        ) : report ? (
           <>
-            {fixes.length > 1 && (
-              <Button onClick={() => void fixAll()} disabled={fixing !== null || loading}>
-                {fixing ? <LoaderCircle className="animate-spin" /> : <Wrench />}
-                {fixing ? `Fixing ${fixing.done + 1} of ${fixing.total}` : `Fix all ${fixes.length}`}
-              </Button>
-            )}
-            <CheckAgain onClick={reload} loading={loading} disabled={fixing !== null} />
+            {failing > 0 && <Badge tone="danger">{failing} failing</Badge>}
+            {items.length - failing > 0 && <Badge tone="warning">{items.length - failing === 1 ? '1 warning' : `${items.length - failing} warnings`}</Badge>}
+            <span className="text-xs text-muted-foreground">{fixes.length} with a one-click fix</span>
           </>
-        }
-      />
-
-      {report && (
-        <div className="mt-6 flex flex-wrap items-center gap-2 text-sm">
-          {items.length === 0 ? (
-            <Badge tone="success">Nothing to fix</Badge>
-          ) : (
-            <>
-              {failing > 0 && <Badge tone="danger">{failing} failing</Badge>}
-              {items.length - failing > 0 && <Badge tone="warning">{items.length - failing === 1 ? '1 warning' : `${items.length - failing} warnings`}</Badge>}
-              <span className="text-xs text-muted-foreground">{fixes.length} with a one-click fix</span>
-            </>
+        ) : null}
+        {report && <span className="text-xs text-muted-foreground">Checked {new Date(report.checkedAt).toLocaleTimeString()}</span>}
+        <div className="ml-auto flex flex-wrap gap-2">
+          {fixes.length > 1 && (
+            <Button size="sm" onClick={() => void fixAll()} disabled={fixing !== null || loading}>
+              {fixing ? <LoaderCircle className="animate-spin" /> : <Wrench />}
+              {fixing ? `Fixing ${fixing.done + 1} of ${fixing.total}` : `Fix all ${fixes.length}`}
+            </Button>
           )}
-          <span className="text-xs text-muted-foreground">Checked {new Date(report.checkedAt).toLocaleTimeString()}</span>
+          <CheckAgain size="sm" onClick={reload} loading={loading} disabled={fixing !== null} />
         </div>
-      )}
+      </div>
 
       {error && (
         <Notice className="mt-6">{error}</Notice>

@@ -164,7 +164,7 @@ describe('the read-only account', () => {
     expect(store.recent()[0]?.output ?? '').not.toContain(password);
   });
 
-  it('is offered on the Environment page when it is not made or does not sign in', async () => {
+  it('is offered in the machine checks when it is not made or does not sign in', async () => {
     const tree = tempTree();
     const base = healthyResponses();
     const run = (secrets: Secrets) => checkEnvironment({ config: tree.config, exec: fakeExec({ ...base, 'mysql --user': (c) => (c.env?.MYSQL_PWD === 'stale' ? { code: 1, stderr: "ERROR 1045 (28000): Access denied for user 'devmagic_panel_ro'@'localhost'" } : { stdout: '1\n' }) }).exec, secrets, paths: tree.hostPaths, dmpRoot: '/x' });

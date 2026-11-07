@@ -81,7 +81,7 @@ export async function cleanPreview(ctx: Pick<CleanContext, 'config' | 'exec' | '
   const multisite = site.wp.multisite;
   const empty = { tables: [], prefix, multisite, admins: [], sizeBytes: 0 };
   const target = isLocalDbHost(site.wp.dbHost) ? limitsTarget(ctx.exec, ctx.secrets?.mysql, ctx.store) : null;
-  if (!target) return { ...empty, blocked: "Needs the MySQL admin account (Environment page) and the site's database on this machine." };
+  if (!target) return { ...empty, blocked: "Needs the MySQL admin account (Aura, Machine checks) and the site's database on this machine." };
   const db = site.wp.dbName;
   if (!db) return { ...empty, blocked: 'wp-config.php has no DB_NAME.' };
   if (!canKeep(db)) return { ...empty, blocked: `The database name ${db} is too long or unusual to keep its tables aside.` };
@@ -142,7 +142,7 @@ async function copyToSide(target: LimitsTarget, db: string, prefix: string, stat
 export function planCleanCurrent(ctx: CleanContext, { domain, path, user }: ActionInput<'db.cleanCurrent'>): JobStep[] {
   const { site, wp } = wordpressSite(ctx, domain, path);
   const target = isLocalDbHost(site.wp.dbHost) ? limitsTarget(ctx.exec, ctx.secrets?.mysql, ctx.store) : null;
-  if (!target) throw new DbRefused("Cleaning the database needs the MySQL admin account (Environment page) and the site's database on this machine");
+  if (!target) throw new DbRefused("Cleaning the database needs the MySQL admin account (Aura, Machine checks) and the site's database on this machine");
   const db = site.wp.dbName as string;
   if (!canKeep(db)) throw new DbRefused(`The database name ${db} is too long or unusual to keep its tables aside`);
   const prefix = site.wp.tablePrefix ?? 'wp_';

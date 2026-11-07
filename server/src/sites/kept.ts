@@ -65,7 +65,7 @@ function keptFor(ctx: KeptContext, domain: string, path: string | undefined, nam
   const kept = ctx.store.keptDatabases(site.key).find((k) => k.name === name);
   if (!kept) throw new DbRefused(`${site.host} has no kept database called ${name}`);
   const target = isLocalDbHost(site.wp.dbHost) ? limitsTarget(ctx.exec, ctx.secrets?.mysql, ctx.store) : null;
-  if (!target) throw new DbRefused('A kept database needs the MySQL admin account (Environment page)');
+  if (!target) throw new DbRefused('A kept database needs the MySQL admin account (Aura, Machine checks)');
   if (site.wp.dbName !== kept.db) throw new DbRefused(`${name} holds tables of ${kept.db}, but wp-config.php now uses ${site.wp.dbName ?? 'no database'}`);
   return { kept, target, db: kept.db, docroot: site.docroot, host: site.host };
 }

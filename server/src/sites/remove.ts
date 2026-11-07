@@ -63,7 +63,7 @@ export function planRemove(ctx: RemoveContext, { domain }: Pick<ActionInput<'sit
     return existsSync(other) && parseWpConfig(readFileSync(other, 'utf8')).dbName === wp.dbName;
   });
   const dbName = wp?.dbName && SQL_NAME.test(wp.dbName) && !shared ? wp.dbName : null;
-  if (dbName && !mysql) throw new RemoveRefused('Set up the MySQL admin account first (Environment page): the database is exported and dropped with the site');
+  if (dbName && !mysql) throw new RemoveRefused('Set up the MySQL admin account first (Aura, Machine checks): the database is exported and dropped with the site');
   // Only the per-site user the panel made (the database name, cut to 32 characters) is dropped, and made again on restore.
   const dbUser = dbName && wp?.dbUser && wp.dbUser === dbName.slice(0, 32) && wp.dbUser !== mysql?.user && SQL_NAME.test(wp.dbUser) ? wp.dbUser : null;
 

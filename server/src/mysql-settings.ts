@@ -48,7 +48,7 @@ export function keptSettings(file: string | null): Partial<Record<MysqlSettingNa
 }
 
 function account(ctx: SettingsContext): MysqlAccount {
-  if (!ctx.mysql) throw new MysqlRefused('The panel has no MySQL admin account: set one up on the Environment page');
+  if (!ctx.mysql) throw new MysqlRefused('The panel has no MySQL admin account: set one up under Aura, Machine checks');
   return ctx.mysql;
 }
 

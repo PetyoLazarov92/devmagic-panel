@@ -5,6 +5,7 @@
  * did not move.
  */
 const MOVED: Record<string, string> = {
+  '/environment': '/aura/machine',
   '/environment/settings': '/settings',
   '/jobs': '/activity',
   '/runs': '/activity/runs',

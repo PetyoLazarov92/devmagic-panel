@@ -10,7 +10,7 @@ import { useAsync } from '@/lib/use-async';
 
 const SET_PASSWORD = 'node ~/.local/share/devmagic-panel/current/server/dist/cli.js set-password';
 
-/** The Environment page's Settings: when the panel password was set, changing it, and how to get back in without it. */
+/** On the Settings page: when the panel password was set, changing it, and how to get back in without it. */
 export function PanelPasswordCard() {
   const info = useAsync(() => api.passwordInfo(), []);
   const [open, setOpen] = useState(false);

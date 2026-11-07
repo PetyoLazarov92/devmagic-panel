@@ -32,7 +32,7 @@ const firstError = (r: ExecResult) => (r.stderr.trim().split('\n').find((l) => l
 const stamp = (d = new Date()) => d.toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
 
 function account(mysql: MysqlAccount | null | undefined): MysqlAccount {
-  if (!mysql) throw new MysqlRefused('The panel has no MySQL admin account: add one on the Environment page');
+  if (!mysql) throw new MysqlRefused('The panel has no MySQL admin account: add one under Aura, Machine checks');
   return mysql;
 }
 

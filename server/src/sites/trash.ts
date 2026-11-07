@@ -92,7 +92,7 @@ export async function planTrashRestore(ctx: TrashContext, { id }: Pick<ActionInp
   if (!entry) throw new TrashRefused(`no deleted site ${id}`);
   const mysql = ctx.secrets?.mysql;
   if (entry.dbName) {
-    if (!mysql) throw new TrashRefused('Set up the MySQL admin account first (Environment page): the database is restored with the site');
+    if (!mysql) throw new TrashRefused('Set up the MySQL admin account first (Aura, Machine checks): the database is restored with the site');
     const dbs = await ctx.exec('mysql', ['--batch', '--skip-column-names', '--user', mysql.user, '--host', mysql.host, '-e', 'SHOW DATABASES'], { env: { MYSQL_PWD: mysql.password } });
     if (dbs.code !== 0) throw new TrashRefused(`cannot reach MySQL: ${dbs.stderr.trim()}`);
     // The site it replaces drops its own database first, so that one may exist now.

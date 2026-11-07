@@ -86,7 +86,7 @@ export async function precheck(ctx: CreateContext, input: CreateInput): Promise<
       throw new CreateRefused(`${join(ctx.config.WEB_DIR, input.domain)} already exists`);
     }
   }
-  if (input.source !== 'empty' && !ctx.secrets?.mysql) throw new CreateRefused('Set up the MySQL admin account first (Environment page)');
+  if (input.source !== 'empty' && !ctx.secrets?.mysql) throw new CreateRefused('Set up the MySQL admin account first (Aura, Machine checks)');
   if (input.core?.mode === 'wpcore') {
     // A core the shared folder lacks is added first, as on the WordPress page; one with known security issues is added there, after confirming.
     const conf = readWpcoreConfig(ctx.wpcoreConf);

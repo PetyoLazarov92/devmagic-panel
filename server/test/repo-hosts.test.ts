@@ -105,7 +105,7 @@ describe('GitLab hosts in use', () => {
   const site = (remote: string | undefined, mounts: string[] = []) =>
     ({ domain: 'local.acme.com', ...(remote ? { git: { remote } } : {}), mounts: mounts.map((m) => ({ path: '/learn', git: { remote: m } })) }) as unknown as Site;
 
-  it('are none without GitLab anywhere, so the Environment page shows nothing about it', () => {
+  it('are none without GitLab anywhere, so the machine checks show nothing about it', () => {
     expect(gitlabHostsInUse({ selected: ['acme'], gitlabHosts: [] }, [site('git@github.com:acme/site.git'), site(undefined)])).toEqual([]);
   });
 

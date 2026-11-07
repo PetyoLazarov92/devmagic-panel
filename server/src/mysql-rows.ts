@@ -50,7 +50,7 @@ interface RowChange {
 export const rowChangesDir = (config: SystemConfig) => join(config.BACKUP_DIR, 'row-changes');
 
 function account(ctx: RowsContext): MysqlAccount {
-  if (!ctx.mysql) throw new MysqlRefused('The panel has no MySQL admin account: add one on the Environment page');
+  if (!ctx.mysql) throw new MysqlRefused('The panel has no MySQL admin account: add one under Aura, Machine checks');
   return ctx.mysql;
 }
 

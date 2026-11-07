@@ -65,7 +65,7 @@ export function hostOfRef(exec: Executor, ref: string, sleep?: (ms: number) => P
  * The GitLab hosts the panel uses, read from what is there (AGENTS rule 5):
  * the ones in the settings, the hosts of selected GitLab groups and the hosts
  * of the sites' own remotes, sites made by hand included. Empty when you use
- * no GitLab, so the Environment page shows nothing about it.
+ * no GitLab, so the machine checks show nothing about it.
  */
 export function gitlabHostsInUse(settings: Pick<OrgSettings, 'selected' | 'gitlabHosts'>, sites: Site[]): string[] {
   const found = new Set<string>(settings.gitlabHosts.map((h) => h.toLowerCase()));

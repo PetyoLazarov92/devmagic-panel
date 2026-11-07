@@ -201,7 +201,7 @@ async function main(): Promise<void> {
         console.log(`Made ${READ_ONLY_MYSQL_USER}@localhost, the read-only account the SQL runner uses.`);
       } else {
         readOnly = undefined;
-        console.log(`Could not make the read-only MySQL account (${made.problem}); the Environment page offers it again.`);
+        console.log(`Could not make the read-only MySQL account (${made.problem}); Aura's Machine checks offer it again.`);
       }
     }
     const { mysqlReadOnly: _ro, ...others } = rest;

@@ -172,7 +172,7 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
   if (!data.server) {
     return (
       <div className="grid gap-4">
-        <Notice tone="warning" action={<Link href="/environment" className="font-medium hover:underline">Environment</Link>}>
+        <Notice tone="warning" action={<Link href="/aura/machine" className="font-medium hover:underline">Machine checks</Link>}>
           {data.error ?? 'MySQL cannot be read.'}
         </Notice>
         {data.backups.length > 0 && <BackupsCard backups={data.backups} dir={data.backupsDir} onDeleted={report.reload} />}

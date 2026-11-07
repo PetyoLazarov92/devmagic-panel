@@ -168,7 +168,7 @@ export function LastInstall({ install, onAgain, onRefresh }: { install: NonNulla
     <p className="flex gap-2 rounded-lg border bg-card px-4 py-3 text-sm">
       <CircleCheck className="size-4 shrink-0 text-success" />
       <span>
-        Installed {install.release}{install.previous ? `, replacing ${install.previous}` : ''}, {timeAgo(install.finished)}. Anything it recommends but did not install shows on the <Link href="/environment" className="font-medium hover:underline">Environment</Link> page.
+        Installed {install.release}{install.previous ? `, replacing ${install.previous}` : ''}, {timeAgo(install.finished)}. Anything it recommends but did not install shows in Aura's <Link href="/aura/machine" className="font-medium hover:underline">Machine checks</Link>.
       </span>
     </p>
   );

@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { groupsOf, openAfterCheck } from '@/lib/environment';
 import { cn } from '@/lib/utils';
-import { CheckAgain, Notice, PageHeader } from '@/components/page';
+import { CheckAgain, Notice } from '@/components/page';
 import { CardsSkeleton } from '@/components/skeletons';
 
 const statusIcon = {
@@ -31,8 +31,11 @@ function summaryOf(checks: CheckResult[]): string {
   return [fail ? `${fail} failing` : '', warn ? (warn === 1 ? '1 warning' : `${warn} warnings`) : ''].filter(Boolean).join(', ');
 }
 
-/** The machine's checks, with groups that all pass closed; the panel's settings are on their own page (/settings). */
-export function EnvironmentPage() {
+/**
+ * The machine's checks, with groups that all pass closed: Aura's Machine
+ * checks tab (/aura/machine). The panel's settings are on their own page.
+ */
+export function MachineChecks() {
   const tab = 'checks' as const;
   const [report, setReport] = useState<EnvironmentReport | null>(null);
   const [open, setOpen] = useState<ReadonlySet<CheckGroup>>(new Set());
@@ -92,11 +95,8 @@ export function EnvironmentPage() {
   }
 
   return (
-    <div className="pt-4">
-      <PageHeader
-        title="Environment"
-        intro="What this machine needs for local WordPress sites, and one-click fixes where possible."
-      />
+    <div>
+      <p className="mt-5 text-sm text-muted-foreground">What this machine needs for local WordPress sites: the panel's install, Apache, nginx, certificates, MySQL, PHP and tools, with one-click fixes where possible.</p>
 
       {tab === 'checks' && (report || error) && (
         <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">

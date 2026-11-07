@@ -1044,7 +1044,7 @@ function OrgCard({ status, checking, error, onRecheck, checked, onPick, buttonRe
         <div role="dialog" aria-label="Set up Claude Code" className="absolute inset-x-2 top-full z-20 mt-2 grid gap-2.5 rounded-lg border bg-card p-3.5 text-xs text-muted-foreground shadow-lg">
           {state === 'missing' ? (
             <p>
-              Claude Code is not installed. Install it, then sign in with <code className="font-mono text-foreground">claude auth login</code>. <Link href="/environment" className="font-medium text-primary hover:underline">Environment</Link> has the steps.
+              Claude Code is not installed. Install it, then sign in with <code className="font-mono text-foreground">claude auth login</code>. Aura's <Link href="/aura/machine" className="font-medium text-primary hover:underline">Machine checks</Link> have the steps.
             </p>
           ) : (
             <>
