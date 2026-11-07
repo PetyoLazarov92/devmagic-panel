@@ -19,7 +19,6 @@ import { changedCount } from '@/pages/services-php';
 import { type CompatAsk, CompatCard, CompatHint, useSiteCompat } from '@/pages/site-compat';
 import { CardsSkeleton, ReadingBlock } from '@/components/skeletons';
 import { Notice } from '@/components/page';
-import { ProfilesCard } from '@/components/profiles-card';
 
 const errorBox = (text: string) => <Notice>{text}</Notice>;
 const older = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }) < 0;
@@ -171,8 +170,6 @@ function PhpForm({ site, php, runner, onChanged }: { site: Site; php: SitePhp; r
       )}
 
       <CompatCard site={site} current={runsNow} compat={compat} ask={ask} />
-
-      <ProfilesCard site={site} version={runsNow} xdebug={report.data?.versions.find((x) => x.version === runsNow)?.xdebug} onXdebug={report.reload} />
 
       <SiteInfo site={site} marked={new Set(Object.keys(php.values))} />
     </div>

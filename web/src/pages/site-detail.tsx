@@ -33,6 +33,7 @@ import { type AsyncState, useAsync } from '@/lib/use-async';
 import { ConfigTab, SaltsConfirm, saltsSummary } from '@/pages/site-config';
 import { CronTab } from '@/pages/site-cron';
 import { DatabaseTab } from '@/pages/site-database';
+import { PerformanceTab } from '@/pages/site-performance';
 import { PhpTab } from '@/pages/site-php';
 import { PluginsTab } from '@/pages/site-plugins';
 import { ServerCard } from '@/pages/site-server';
@@ -195,6 +196,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         {tab === 'php' && <PhpTab site={site} />}
         {tab === 'cron' && <CronTab site={site} report={wpCron} onReload={reloadCron} />}
         {tab === 'database' && <DatabaseTab site={site} />}
+        {tab === 'performance' && <PerformanceTab site={site} />}
         {tab === 'config' && <ConfigTab site={site} onChanged={reload} />}
         {tab === 'domains' && <DomainsTab site={site} onChanged={reload} />}
       </div>

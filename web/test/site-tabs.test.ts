@@ -25,8 +25,13 @@ const site = (extra: { [K in keyof Site]?: Site[K] | undefined } = {}): Site => 
 const values = (s: Site) => siteTabItems(s).map((t) => t.value);
 
 describe('siteTabItems', () => {
-  it('puts Logs after Overview, then WordPress and its data, then the server', () => {
-    expect(values(site())).toEqual(['overview', 'logs', 'plugins', 'database', 'cron', 'config', 'php', 'domains']);
+  it('puts Logs after Overview, then WordPress, its data and its speed, then the server', () => {
+    expect(values(site())).toEqual(['overview', 'logs', 'plugins', 'database', 'performance', 'cron', 'config', 'php', 'domains']);
+  });
+
+  it('gives Performance to a site with WordPress or a database, and not to an empty one', () => {
+    expect(values(site({ core: { kind: 'none' }, constants: undefined }))).toContain('performance');
+    expect(values(site({ db: undefined }))).toContain('performance');
   });
 
   it('starts each group after the first with a line', () => {
