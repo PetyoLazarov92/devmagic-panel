@@ -84,6 +84,7 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keptOpen, setKeptOpen] = useState(false);
 
   // The full values first: a long one shows only its start on the page.
   useEffect(() => {
@@ -155,9 +156,13 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
     onDone(mode === 'edit' ? 'Row changed' : 'Row added', result.change);
   }
 
+  // Anything typed would be lost: a copy differs from the row it came from,
+  // a new row from its empty fields.
+  const changed = original !== null && fields.some((f, i) => (mode === 'add' ? f.touched : valueOf(f) !== (original[i] ?? null)));
+
   const title = mode === 'edit' ? `Change a row of ${table}` : mode === 'duplicate' ? `Add a copy of a row to ${table}` : `Add a row to ${table}`;
   return (
-    <Dialog open onClose={onClose} title={title} description={mode === 'edit' ? 'Saved only while the row still holds what you see here. Undo in the toast, or under Changes you can undo, puts it back for 14 days.' : 'Columns you leave alone get their default. Undo deletes the row again.'} className="w-[min(52rem,calc(100vw-2rem))]">
+    <Dialog open onClose={onClose} closeOnBackdrop={false} closeOnEscape={!changed} onKeptOpen={() => setKeptOpen(true)} title={title} description={mode === 'edit' ? 'Saved only while the row still holds what you see here. Undo in the toast, or under Changes you can undo, puts it back for 14 days.' : 'Columns you leave alone get their default. Undo deletes the row again.'} className="w-[min(52rem,calc(100vw-2rem))]">
       {loadError && <p role="alert" className="mt-3 text-sm text-danger">{loadError}</p>}
       {!loadError && fields.length === 0 && <div className="mt-3 h-40 animate-pulse rounded-lg bg-muted" />}
       {fields.length > 0 && original && (
@@ -174,7 +179,8 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
             ))}
           </div>
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {keptOpen && changed && <p role="status" className="mr-auto text-sm text-muted-foreground">Not saved yet: Cancel discards what you typed.</p>}
             <Button variant="outline" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={saving}>{saving && <LoaderCircle className="animate-spin" />}{mode === 'edit' ? 'Save the row' : 'Add the row'}</Button>
           </div>

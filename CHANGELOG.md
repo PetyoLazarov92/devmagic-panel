@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.15.2 (2026-11-07)
+* **Databases:** a click outside no longer closes Change a row, Add a copy or Add a row, and once you have typed something Escape keeps it open too and says that Cancel discards it
+* **Panel:** no dialog closes any more when you select text in a field and let go of the mouse outside it
+
 ### v1.15.1 (2026-11-07)
 * **Docs:** the README is a short tour again, a line per feature and a sentence per page, and the detail lives in `docs/`: installation and uninstall, your existing setup, sites, new sites, databases, services, the other pages, the AI assistant, undo and backups, updates, safety and troubleshooting, each linked from the README
 

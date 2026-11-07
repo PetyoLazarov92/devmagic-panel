@@ -10,15 +10,23 @@ interface Props {
   className?: string;
   /** Hide the visual title (it stays for screen readers), e.g. for the command palette. */
   bare?: boolean;
+  /** False keeps it open on a click outside, for a form a misclick would lose. */
+  closeOnBackdrop?: boolean;
+  /** False keeps it open on Escape; onKeptOpen is told, to say how to close it. */
+  closeOnEscape?: boolean;
+  onKeptOpen?: () => void;
 }
 
 /**
  * Modal dialog on the native <dialog> element: focus trapping, Escape and the
- * backdrop come from the browser.
+ * backdrop come from the browser. A click closes it only when it starts and
+ * ends on the backdrop, so selecting text in a field and letting go outside
+ * keeps it open.
  */
-export function Dialog({ open, onClose, title, description, children, className, bare }: Props) {
+export function Dialog({ open, onClose, title, description, children, className, bare, closeOnBackdrop = true, closeOnEscape = true, onKeptOpen }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const pressedOnBackdrop = useRef(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -32,7 +40,21 @@ export function Dialog({ open, onClose, title, description, children, className,
       ref={ref}
       aria-labelledby={titleId}
       onClose={onClose}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      // Escape's keydown, not the cancel event: Chrome closes a dialog anyway
+      // on a second Escape when only its cancel event was stopped.
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || closeOnEscape) return;
+        e.preventDefault();
+        onKeptOpen?.();
+      }}
+      onMouseDown={(e) => {
+        pressedOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        const onBackdrop = pressedOnBackdrop.current && e.target === e.currentTarget;
+        pressedOnBackdrop.current = false;
+        if (onBackdrop && closeOnBackdrop) onClose();
+      }}
       className={cn(
         'm-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl border bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-black/40 backdrop:backdrop-blur-[2px]',
         className,
