@@ -1,4 +1,4 @@
-import { Activity, ArchiveRestore, CircleArrowUp, Globe, History, KeyRound, Layers, LogOut, Mail, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
+import { Activity, ArchiveRestore, CircleArrowUp, Globe, KeyRound, Layers, ListChecks, LogOut, Mail, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { ChangePasswordDialog } from '@/components/panel-password';
@@ -51,7 +51,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     group: 'System',
     items: [
       { label: 'Environment', href: '/environment', icon: Activity },
-      { label: 'Run history', href: '/runs', icon: History },
+      { label: 'Activity', href: '/activity', icon: ListChecks, hint: 'jobs + runs', also: ['/jobs', '/runs'] },
       { label: 'Archive', href: '/trash', icon: ArchiveRestore },
       { label: 'Updates', href: '/update', icon: CircleArrowUp },
       { label: 'Settings', href: '/settings', icon: Settings, hint: 'AI, password' },

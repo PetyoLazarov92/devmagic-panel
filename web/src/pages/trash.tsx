@@ -131,7 +131,7 @@ function TrashRow({ entry, onDelete, onRestored }: { entry: TrashEntry; onDelete
           </p>
         </div>
         {entry.busy && !job.job && (
-          <Link href={entry.busy.jobId ? `/jobs/${encodeURIComponent(entry.busy.jobId)}` : '/jobs'} className="text-xs font-medium text-warning hover:underline">
+          <Link href={entry.busy.jobId ? `/jobs/${encodeURIComponent(entry.busy.jobId)}` : '/activity'} className="text-xs font-medium text-warning hover:underline">
             Busy: {entry.busy.title}
           </Link>
         )}

@@ -127,7 +127,7 @@ export function JobsIndicator() {
               </li>
             ))}
           </ul>
-          <Link href="/jobs" className="mt-1 block rounded-md border-t px-2.5 pt-2 pb-1.5 text-xs font-medium text-primary hover:underline" onClick={() => setOpen(false)}>
+          <Link href="/activity" className="mt-1 block rounded-md border-t px-2.5 pt-2 pb-1.5 text-xs font-medium text-primary hover:underline" onClick={() => setOpen(false)}>
             All jobs
           </Link>
         </div>

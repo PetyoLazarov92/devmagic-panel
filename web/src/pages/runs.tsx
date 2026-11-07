@@ -29,7 +29,8 @@ export function RunStatus({ run }: { run: RunSummary }) {
   return run.ok ? <CircleCheck className="size-4 text-success" aria-label="Succeeded" /> : <CircleX className="size-4 text-danger" aria-label="Failed" />;
 }
 
-export function RunsPage() {
+/** Bare: inside Activity, without its own header. */
+export function RunsPage({ bare = false }: { bare?: boolean }) {
   const [page, setPage] = useState(pageFromUrl);
   const { data, error, loading } = useAsync(() => api.runs(page), [page]);
   const runs = data?.runs ?? [];
@@ -38,7 +39,7 @@ export function RunsPage() {
   function go(to: number) {
     setPage(to);
     try {
-      window.history.replaceState(null, '', to > 1 ? `/runs?page=${to}` : '/runs');
+      window.history.replaceState(null, '', to > 1 ? `/activity/runs?page=${to}` : '/activity/runs');
     } catch {
       // A sandboxed mockup cannot change its URL; the page still moves.
     }
@@ -46,16 +47,23 @@ export function RunsPage() {
   }
 
   return (
-    <div className="pt-4">
-      <PageHeader
-        title="Run history"
-        intro={
-          <>
-            Every action the panel ran, with its result and output. Open a run to read what it printed. Runs are kept {RUN_KEEP_DAYS} days, at most {RUN_KEEP_MAX.toLocaleString()};
-            clear them sooner from the Developer options.
-          </>
-        }
-      />
+    <div className={bare ? '' : 'pt-4'}>
+      {bare ? (
+        <p className="mt-5 text-sm text-muted-foreground">
+          Every action the panel ran, with its result and output. Open a run to read what it printed. Runs are kept {RUN_KEEP_DAYS} days, at most {RUN_KEEP_MAX.toLocaleString()};
+          clear them sooner from the Developer options.
+        </p>
+      ) : (
+        <PageHeader
+          title="Run history"
+          intro={
+            <>
+              Every action the panel ran, with its result and output. Open a run to read what it printed. Runs are kept {RUN_KEEP_DAYS} days, at most {RUN_KEEP_MAX.toLocaleString()};
+              clear them sooner from the Developer options.
+            </>
+          }
+        />
+      )}
       {error && <Notice className="mt-6">{error}</Notice>}
       {!data && loading && (
         <div className="mt-6 grid gap-3" aria-busy="true">

@@ -5,6 +5,14 @@ import { movedTo } from '../src/lib/moved.js';
 describe('movedTo', () => {
   it('sends an old address to the page that has it now', () => {
     expect(movedTo('/environment/settings')).toBe('/settings');
+    expect(movedTo('/jobs')).toBe('/activity');
+  });
+
+  it('keeps the query, like the page of the run history', () => {
+    expect(movedTo('/runs', '?page=3')).toBe('/activity/runs?page=3');
+    // A job's own page and a run's own page stay where they are.
+    expect(movedTo('/jobs/abc')).toBeNull();
+    expect(movedTo('/runs/42')).toBeNull();
   });
 
   it('leaves pages that did not move alone', () => {

@@ -8,15 +8,19 @@ import { cn } from '@/lib/utils';
 import { ListSkeleton } from '@/components/skeletons';
 import { EmptyState, Notice, PageHeader } from '@/components/page';
 
-/** Every job since the panel started: running and queued first, then the newest. */
-export function JobsPage() {
+/** Every job since the panel started: running and queued first, then the newest. Bare: inside Activity, without its own header. */
+export function JobsPage({ bare = false }: { bare?: boolean }) {
   const { data: jobs, error, loading } = useAsync(() => api.jobs(), []);
   return (
-    <div className="mx-auto w-full max-w-3xl pt-4">
-      <PageHeader
-        title="Jobs"
-        intro={<>Installs, imports, restores and other long actions since the panel last started. Older ones are in <Link href="/runs" className="text-primary hover:underline">Run history</Link>.</>}
-      />
+    <div className={bare ? 'w-full max-w-3xl' : 'mx-auto w-full max-w-3xl pt-4'}>
+      {bare ? (
+        <p className="mt-5 text-sm text-muted-foreground">Installs, imports, restores and other long actions since the panel last started. Older ones are in <Link href="/activity/runs" className="text-primary hover:underline">Run history</Link>.</p>
+      ) : (
+        <PageHeader
+          title="Jobs"
+          intro={<>Installs, imports, restores and other long actions since the panel last started. Older ones are in <Link href="/activity/runs" className="text-primary hover:underline">Run history</Link>.</>}
+        />
+      )}
       {error && <Notice className="mt-6">{error}</Notice>}
       {jobs && jobs.length === 0 && (
         <EmptyState className="mt-6" icon={Layers} title="No jobs since the panel started">

@@ -14,7 +14,7 @@ export function RunPage({ id }: { id: number }) {
   const { data: run, error, loading } = useAsync(() => api.run(id), [id]);
   return (
     <div className="grid gap-4 pt-4">
-      <Link href="/runs" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+      <Link href="/activity/runs" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" />
         Run history
       </Link>

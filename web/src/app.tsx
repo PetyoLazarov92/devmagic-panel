@@ -13,17 +13,16 @@ import { match, navigate, usePath } from '@/lib/router';
 import { isSessionLost, listenToOtherTabs, onSessionChange, sessionBack, sessionLost, startSessionWatch, tellOtherTabs } from '@/lib/session-watch';
 import { type PanelStart, retryOnWake, startPanel } from '@/lib/startup';
 import { useAsync } from '@/lib/use-async';
+import { ActivityPage } from '@/pages/activity';
 import { AuraPage } from '@/pages/aura';
 import { CoresPage } from '@/pages/cores';
 import { EnvironmentPage } from '@/pages/environment';
 import { DeveloperPage } from '@/pages/developer';
 import { JobPage } from '@/pages/job';
-import { JobsPage } from '@/pages/jobs';
 import { LoginPage, RESET_PATH } from '@/pages/login';
 import { MailPage } from '@/pages/mail';
 import { NewSitePage } from '@/pages/new-site';
 import { RunPage } from '@/pages/run';
-import { RunsPage } from '@/pages/runs';
 import { phpSectionOf, ServicesPage } from '@/pages/services';
 import { SettingsPage } from '@/pages/settings';
 import { SiteDetailPage } from '@/pages/site-detail';
@@ -58,10 +57,10 @@ function Routes({ path }: { path: string }) {
   if (path === '/services/cron') return <ServicesPage tab="cron" />;
   if (path === '/environment') return <EnvironmentPage />;
   if (path === '/settings') return <SettingsPage />;
-  if (path === '/runs') return <RunsPage />;
+  if (path === '/activity') return <ActivityPage tab="jobs" />;
+  if (path === '/activity/runs') return <ActivityPage tab="runs" />;
   const run = match('/runs/:id', path);
   if (run?.id && /^\d+$/.test(run.id)) return <RunPage key={run.id} id={Number(run.id)} />;
-  if (path === '/jobs') return <JobsPage />;
   if (path === '/developer') return <DeveloperPage />;
   if (path === '/update') return <UpdatePage />;
   if (path === '/mail') return <MailPage />;
@@ -131,7 +130,7 @@ export function App() {
       navigate(moved, { replace: true });
       return;
     }
-    const known = path === '/settings' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/environment' || path === '/runs' || path === '/mail' || path === '/trash' || path === '/jobs' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
+    const known = path === '/settings' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/environment' || path === '/mail' || path === '/trash' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
     // The password reset has its own address, but only while signed out (the effect below sends a signed-in browser on).
     if (!known && path !== RESET_PATH) navigate('/sites');
   }, [path]);

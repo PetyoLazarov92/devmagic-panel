@@ -66,7 +66,7 @@ export function JobScreen({ jobId, wordpress }: { jobId: string; wordpress?: boo
     return error ? (
       <Notice tone={error === 'unknown job' ? 'info' : 'danger'}>
         {error === 'unknown job' ? (
-          <>The panel no longer holds this job: it restarted since, or the job is older than the last 20. Its output is in <Link href="/runs" className="underline">Run history</Link>.</>
+          <>The panel no longer holds this job: it restarted since, or the job is older than the last 20. Its output is in <Link href="/activity/runs" className="underline">Run history</Link>.</>
         ) : (
           error
         )}

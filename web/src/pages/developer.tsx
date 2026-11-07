@@ -106,7 +106,7 @@ function Server({ report }: { report: DeveloperReport }) {
         <Row label="Process">PID {server.pid}, port {server.port}</Row>
         <Row label="Running for">{timeAgo(server.startedAt).replace(/ ago$/, '')}<span className="ml-2 text-xs text-muted-foreground">since {shortDate(server.startedAt)}</span></Row>
         <Row label="Memory">{bytes(server.memoryBytes)}</Row>
-        <Row label="Jobs">{server.runningJobs === 0 ? 'none running' : <Link href="/jobs" className="text-primary hover:underline">{server.runningJobs} running</Link>}</Row>
+        <Row label="Jobs">{server.runningJobs === 0 ? 'none running' : <Link href="/activity" className="text-primary hover:underline">{server.runningJobs} running</Link>}</Row>
         <Row label="Node binary"><span className="font-mono text-[13px] break-all">{server.nodePath}</span></Row>
       </dl>
       <ul className="divide-y text-sm">
