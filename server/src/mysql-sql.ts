@@ -156,8 +156,10 @@ export type RowsRequest = DbRowsRequest;
  * holds, to tell whether another page follows; and the count of rows that
  * match, as its own statement.
  */
-export function rowsSql(database: string, table: string, columns: readonly ColumnMeta[], primaryKey: readonly ColumnMeta[], request: RowsRequest): { rows: string; count: string } {
-  const where = whereSql(columns, request.filters, request.match);
+export function rowsSql(database: string, table: string, columns: readonly ColumnMeta[], primaryKey: readonly ColumnMeta[], request: RowsRequest, only?: string): { rows: string; count: string } {
+  const filtered = whereSql(columns, request.filters, request.match);
+  // only: a condition the panel built (a clean-up's), never text from the browser; the filters narrow it further.
+  const where = only ? ` WHERE (${only})${filtered ? ` AND (${filtered.slice(' WHERE '.length)})` : ''}` : filtered;
   const order: string[] = [];
   if (request.sort) order.push(`${ident(columnNamed(columns, request.sort.column).name)} ${request.sort.dir === 'desc' ? 'DESC' : 'ASC'}`);
   // The primary key keeps pages in a stable order when the sort has ties.

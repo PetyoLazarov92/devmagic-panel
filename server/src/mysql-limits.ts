@@ -47,6 +47,20 @@ export function bufferPoolFor(ram: number): number {
   return GB;
 }
 
+/**
+ * The buffer pool the sites' InnoDB data wants: room for the data with a
+ * quarter to spare, never more than half the memory or 64 GB, in steps of
+ * 128 MB. The Environment check and the MySQL page's suggestion both use it.
+ */
+export function bufferPoolTarget(dataBytes: number, ram: number): number {
+  const step = 128 * 1024 ** 2;
+  return Math.min(64 * GB, Math.max(step, Math.ceil(Math.min(dataBytes * 1.25, ram / 2) / step) * step));
+}
+
+/** The InnoDB data of every database but MySQL's own, for bufferPoolTarget. */
+export const INNODB_DATA_SQL =
+  "SELECT COALESCE(SUM(DATA_LENGTH + INDEX_LENGTH), 0) FROM information_schema.TABLES WHERE ENGINE = 'InnoDB' AND TABLE_SCHEMA NOT IN ('mysql', 'sys', 'performance_schema', 'information_schema')";
+
 const sizeLabel = (n: number) => (n >= GB ? `${Number((n / GB).toFixed(1))} GB` : `${Math.round(n / 1024 ** 2)} MB`);
 
 function query(target: LimitsTarget, sql: string): Promise<ExecResult> {
@@ -167,6 +181,16 @@ async function putBackNow(): Promise<void> {
   const was = raised;
   raised = [];
   await putBack(target, was).catch(() => undefined);
+}
+
+/** What an import holds raised right now, with the value from before, for the MySQL page to say so. */
+export function raisedNow(memo: LimitsMemo | undefined): Array<{ name: string; was: number; now: number }> {
+  try {
+    const list = JSON.parse(memo?.getMeta(MEMO_KEY) ?? '[]') as Raised[];
+    return Array.isArray(list) ? list.filter((r) => typeof r.name === 'string' && Number.isFinite(r.was) && Number.isFinite(r.now)) : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Puts back what a panel stopped in the middle of a job left raised; run when the panel starts. */

@@ -8,7 +8,7 @@
 set -euo pipefail
 
 DMP_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-for lib in log config validate apache php fpm php-apt ca cert vhost nginx hosts backup site trash; do
+for lib in log config validate apache php fpm php-apt ca cert vhost nginx hosts backup site trash mysql; do
   # shellcheck source=/dev/null
   source "$DMP_HOME/lib/$lib.sh"
 done
@@ -85,6 +85,9 @@ Usage: dmp-root <command> [args]
                                       allow-listed settings; none removes it
   php-ini-reset <version> <apache2|fpm|cli>
                                       the packaged php.ini again, the current one saved
+  mysql-config-write [name=value...]  the panel's zz-devmagic-panel.cnf in mysql.conf.d
+                                      (or mariadb.conf.d) with exactly these allow-listed
+                                      settings, whole numbers inside bounds; none removes it
   php-ini-put-back <version> <apache2|fpm|cli> <saved>
                                       the php.ini php-ini-reset saved
   php-pool-write <folder> <version> [key=value...]
@@ -235,6 +238,7 @@ main() {
     xdebug-disable) (( $# <= 1 )) || dmp_usage_error "xdebug-disable takes an optional version"; dmp_xdebug_disable "$@" ;;
     php-module) (( $# == 2 || $# == 3 )) || dmp_usage_error "php-module takes an optional version, a module and on or off"; dmp_php_module "$@" ;;
     php-ini) (( $# >= 2 && $# <= 40 )) || dmp_usage_error "php-ini takes a version, web or cli, and key=value settings"; dmp_php_ini "$@" ;;
+    mysql-config-write) (( $# <= 10 )) || dmp_usage_error "mysql-config-write takes up to 10 name=value settings"; dmp_mysql_config_write "$@" ;;
     php-ini-reset) (( $# == 2 )) || dmp_usage_error "php-ini-reset takes a version and apache2, fpm or cli"; dmp_php_ini_reset "$1" "$2" ;;
     php-pool-write) (( $# >= 2 && $# <= 40 )) || dmp_usage_error "php-pool-write takes a folder, a version and key=value settings"; dmp_php_pool_write "$@" ;;
     php-pool-remove) (( $# == 1 )) || dmp_usage_error "php-pool-remove takes a folder"; dmp_php_pool_remove "$1" ;;

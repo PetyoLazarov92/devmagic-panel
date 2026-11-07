@@ -14,6 +14,7 @@ import { findVhost } from './sites/discover.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
 import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
 import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
+import { planSetSettings } from './mysql-settings.js';
 import { contentTitle, planContent, planDropTable, planEmptyTable, planOrphans, planTransients, setAutoload, undoCleanup } from './mysql-cleanup.js';
 import { deleteRows, insertRow, type RowsContext, undoRowChange, updateRow } from './mysql-rows.js';
 import { killQuery, planWrite } from './mysql-write.js';
@@ -307,6 +308,10 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'mysql.analyze': (ctx, input) => analyzeDatabases(mysqlCtx(ctx), input),
   'mysql.optimize': async (ctx, input) =>
     startJob(ctx, await planOptimize(mysqlCtx(ctx), input, (s) => ctx.jobs.busyFor(`${s.domain}${s.path ?? ''}`) !== undefined), `Optimize ${input.database}`, input.database),
+  'mysql.setSettings': async (ctx, input) => {
+    const { title, steps } = await planSetSettings({ config: ctx.config, exec: ctx.exec, mysql: ctx.secrets?.mysql, dmpRoot: ctx.dmpRoot, memo: ctx.store }, input);
+    return startJob(ctx, steps, title, 'mysql settings');
+  },
   'mysql.dropDatabase': async (ctx, input) => startJob(ctx, await planDropDatabase(mysqlCtx(ctx), input), `Delete database ${input.database}`, input.database),
   'mysql.dropUsers': async (ctx, input) =>
     startJob(ctx, await planDropUsers(mysqlCtx(ctx), input), `Delete ${input.accounts.length === 1 ? `${input.accounts[0]?.user}@${input.accounts[0]?.host}` : `${input.accounts.length} MySQL users`}`, 'mysql users'),
@@ -319,7 +324,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'mysql.undoRowChange': async (ctx, input) => [await undoRowChange(rowsCtx(ctx), input)],
   // Clean-ups are jobs: save what they remove, then remove it; their Undo, and mysql.undoCleanup later, put it back.
   'db.cleanTransients': async (ctx, input) => startJob(ctx, await planTransients(rowsCtx(ctx), input), input.scope === 'expired' ? 'Delete expired transients' : 'Delete every transient', siteKeyOf(input), { stoppable: true }),
-  'db.cleanContent': async (ctx, input) => startJob(ctx, await planContent(rowsCtx(ctx), input), contentTitle(input.kinds), siteKeyOf(input), { stoppable: true }),
+  'db.cleanContent': async (ctx, input) => startJob(ctx, await planContent(rowsCtx(ctx), input), contentTitle(input.kinds, input.orphans), siteKeyOf(input), { stoppable: true }),
   'db.cleanOrphans': async (ctx, input) => startJob(ctx, await planOrphans(rowsCtx(ctx), input), 'Delete what was left behind', siteKeyOf(input), { stoppable: true }),
   'db.fixTable': async (ctx, input) => {
     const { title, steps } = await planFixTable(rowsCtx(ctx), input);

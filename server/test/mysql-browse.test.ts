@@ -251,6 +251,22 @@ describe('the database browser', () => {
     expect(page).toMatchObject({ total: null, totalExact: false, rows: [] });
   });
 
+  it("narrows to a clean-up's rows by the condition the server built, with the database picked, and refuses one without a resolver", async () => {
+    const fake = fakeMysql((sql) => optionsMeta(sql) ?? (sql.includes('COUNT(*)') ? { stdout: '2\n' } : { stdout: '' }));
+    const asked: string[] = [];
+    const cleanup = { domain: 'local.shop.com', kind: 'expiredTransients' as const };
+    const page = await dbRows(ctxFor(fake), 'shop_com', 'wp_options', { cleanup, filters: [{ column: 'autoload', op: 'eq', value: 'yes' }] }, async (database, table, view) => {
+      asked.push(`${database}.${table}:${view.kind}`);
+      return "option_name LIKE '\\_transient\\_timeout\\_%'";
+    });
+    expect(asked).toEqual(['shop_com.wp_options:expiredTransients']);
+    expect(page).toMatchObject({ total: 2, totalExact: true });
+    const rows = fake.calls.find((c) => c.input?.includes('SELECT JSON_ARRAY(LEFT('));
+    expect(rows?.input).toContain("WHERE (option_name LIKE '\\_transient\\_timeout\\_%') AND (`autoload` = CONVERT(_utf8mb4 X'796573'");
+    expect(rows?.args).toContain('--database=shop_com');
+    await expect(dbRows(ctxFor(fake), 'shop_com', 'wp_options', { cleanup })).rejects.toMatchObject({ status: 400, message: 'This table cannot show a clean-up' });
+  });
+
   it('refuses a request outside the schema', async () => {
     const fake = fakeMysql((sql) => optionsMeta(sql) ?? { stdout: '' });
     await expect(dbRows(ctxFor(fake), 'shop_com', 'wp_options', { pageSize: 1000 })).rejects.toMatchObject({ status: 400 });

@@ -238,15 +238,18 @@ describe("MySQL's memory for site data", () => {
     expect(byId(report, 'mysql.bufferPool')).toMatchObject({
       status: 'warn',
       optional: true,
-      detail: '128 MB for 6.0 GB of InnoDB data: big sites read from the disk on every page. Set innodb_buffer_pool_size = 7680M under [mysqld] in /etc/mysql/mysql.conf.d/mysqld.cnf, then sudo systemctl restart mysql',
+      detail: '128 MB for 6.0 GB of InnoDB data: big sites read from the disk on every page. Set the buffer pool to 7680M, on the MySQL page or here',
+      fixes: [{ action: 'mysql.setSettings', input: { values: { innodb_buffer_pool_size: 7680 * 1024 ** 2 } }, label: 'Set it to 7680M' }],
     });
+    expect(byId(report, 'mysql.bufferPool')?.fixes?.[0]?.confirm).toMatch(/^MySQL takes the new size at once, and keeps it for its next start/);
   });
 
-  it('never asks for more than half the memory, and names MariaDB\'s file', async () => {
+  it('never asks for more than half the memory, and says MariaDB on a MariaDB', async () => {
     const tree = healthyTree();
     const { exec } = fakeExec(pool(`10.11.6-MariaDB-0ubuntu0.24.04.1\t${128 * 1024 ** 2}\t${40 * 1024 ** 3}\n`));
     const report = await checkEnvironment({ config: tree.config, exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, totalMemory: () => 8 * 1024 ** 3 });
-    expect(byId(report, 'mysql.bufferPool')?.detail).toContain('innodb_buffer_pool_size = 4G under [mysqld] in /etc/mysql/mariadb.conf.d/50-server.cnf');
+    expect(byId(report, 'mysql.bufferPool')?.detail).toContain('Set the buffer pool to 4G');
+    expect(byId(report, 'mysql.bufferPool')?.fixes?.[0]).toMatchObject({ input: { values: { innodb_buffer_pool_size: 4 * 1024 ** 3 } }, confirm: expect.stringMatching(/^MariaDB takes/) });
   });
 
   it('is fine when the pool holds a good part of the data', async () => {

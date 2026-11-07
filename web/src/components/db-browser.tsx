@@ -1,4 +1,4 @@
-import type { DbCell, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable, Preferences } from '@devmagic-panel/shared';
+import type { DbCell, DbCleanupView, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable, Preferences } from '@devmagic-panel/shared';
 import { DB_FILTER_LABELS, DB_FILTER_OPS, DB_PAGE_SIZES } from '@devmagic-panel/shared';
 import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, Download, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
 import { type ClipboardEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -348,12 +348,49 @@ const needsValue = (op: DbFilterOp) => op !== 'isNull' && op !== 'notNull';
 
 const keyOf = (row: DbRow) => row.key?.join('\u0000') ?? '';
 
+/**
+ * What another view hands the rows of a table: filters to start with, or only
+ * the rows a clean-up would take, named by its kind with a label and a word
+ * about what deleting here leaves. It goes with the history entry, never the
+ * address, since a filter's value can be data.
+ */
+export interface RowsSeed {
+  table: string;
+  filters?: DbFilter[];
+  cleanup?: DbCleanupView;
+  label?: string;
+  note?: string;
+}
+
+export const rowsSeedState = (seed: RowsSeed) => ({ rowsSeed: seed });
+
+/** The seed the history entry holds for this table, if any. */
+function seedFor(table: string): RowsSeed | undefined {
+  try {
+    const seed = (window.history.state as { rowsSeed?: RowsSeed } | null)?.rowsSeed;
+    return seed?.table === table ? seed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The history entry forgets its seed once its filter is cleared, so Back and a reload show the table as it is. */
+function dropSeed(): void {
+  try {
+    window.history.replaceState(null, '');
+  } catch {
+    // Sandboxed frames may refuse it; the view has cleared it anyway.
+  }
+}
+
 function RowsView({ database, table, editable }: { database: string; table: string; editable: boolean }) {
+  const [seed] = useState(() => seedFor(table));
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof DB_PAGE_SIZES)[number]>(50);
   const [sort, setSort] = useState<Sort>(undefined);
-  const [filters, setFilters] = useState<DbFilter[]>([]);
-  const [drafts, setDrafts] = useState<DbFilter[]>([]);
+  const [filters, setFilters] = useState<DbFilter[]>(seed?.filters ?? []);
+  const [drafts, setDrafts] = useState<DbFilter[]>(seed?.filters ?? []);
+  const [cleanup, setCleanup] = useState<RowsSeed | null>(seed?.cleanup ? seed : null);
   const [match, setMatch] = useState<'all' | 'any'>('all');
   const [draftMatch, setDraftMatch] = useState<'all' | 'any'>('all');
   const [open, setOpen] = useState<DbRow | null>(null);
@@ -362,7 +399,7 @@ function RowsView({ database, table, editable }: { database: string; table: stri
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [changes, setChanges] = useState(0);
-  const query = useMemo(() => ({ page, pageSize, ...(sort ? { sort } : {}), filters, match }), [page, pageSize, sort, filters, match]);
+  const query = useMemo(() => ({ page, pageSize, ...(sort ? { sort } : {}), filters, match, ...(cleanup?.cleanup ? { cleanup: cleanup.cleanup } : {}) }), [page, pageSize, sort, filters, match, cleanup]);
   const rows = useAsync(() => api.dbRows(database, table, query), [database, table, query]);
   const data = rows.data;
   // The columns stay known while the next page loads, for the filter bar.
@@ -419,6 +456,13 @@ function RowsView({ database, table, editable }: { database: string; table: stri
     setDraftMatch('all');
     setMatch('all');
     setPage(1);
+    if (!cleanup) dropSeed();
+  }
+
+  function clearCleanup() {
+    setCleanup(null);
+    setPage(1);
+    dropSeed();
   }
 
   // A new filter starts on the first text column: most searches are for a name or a value.
@@ -430,6 +474,17 @@ function RowsView({ database, table, editable }: { database: string; table: stri
     <>
     <Card>
       <form onSubmit={apply} className="grid gap-2 border-b px-4 py-3">
+        {cleanup && (
+          <div className="grid gap-1">
+            <span className="flex w-fit max-w-full items-center gap-1 rounded-full border border-primary/40 bg-primary/10 py-0.5 pr-1 pl-3 text-xs font-medium text-primary">
+              <span className="truncate">Only: {cleanup.label ?? 'what the clean-up would take'}</span>
+              <button type="button" className="rounded-full p-0.5 hover:bg-primary/15" aria-label="Show every row" title="Show every row" onClick={clearCleanup}>
+                <X className="size-3.5" />
+              </button>
+            </span>
+            {cleanup.note && <p className="text-xs text-muted-foreground">{cleanup.note}</p>}
+          </div>
+        )}
         {drafts.map((f, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">
             <Select aria-label="Column" value={f.column} onChange={(e) => setDrafts((d) => d.map((x, j) => (j === i ? { ...x, column: e.target.value } : x)))} wrapClassName="min-w-36 flex-1 sm:flex-none">

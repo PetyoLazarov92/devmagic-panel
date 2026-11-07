@@ -706,6 +706,45 @@ fpm_tree() {
   [ ! -e "$T/php/8.1/fpm/conf.d/99-devmagic-panel.ini" ]
 }
 
+@test "mysql-config-write keeps allow-listed settings in the file MySQL reads last, in the list's order, and none removes it" {
+  mkdir -p "$T/mysql/mysql.conf.d"
+  run dmp mysql-config-write max_connections=300 innodb_buffer_pool_size=4294967296 long_query_time=0.5 slow_query_log=1
+  [ "$status" -eq 0 ]
+  cnf="$T/mysql/mysql.conf.d/zz-devmagic-panel.cnf"
+  [ "$(sed -n 2p "$cnf")" = '[mysqld]' ]
+  [ "$(sed -n '3,$p' "$cnf")" = "$(printf 'innodb_buffer_pool_size = 4294967296\nmax_connections = 300\nslow_query_log = 1\nlong_query_time = 0.5')" ]
+  [ "$(stat -c %a "$cnf")" = 644 ]
+  run dmp mysql-config-write
+  [ "$status" -eq 0 ]
+  [ ! -e "$cnf" ]
+}
+
+@test "mysql-config-write uses MariaDB's folder when there is one" {
+  mkdir -p "$T/mysql/mysql.conf.d" "$T/mysql/mariadb.conf.d"
+  run dmp mysql-config-write max_allowed_packet=67108864
+  [ "$status" -eq 0 ]
+  grep -qx 'max_allowed_packet = 67108864' "$T/mysql/mariadb.conf.d/zz-devmagic-panel.cnf"
+  [ ! -e "$T/mysql/mysql.conf.d/zz-devmagic-panel.cnf" ]
+}
+
+@test "mysql-config-write refuses names off the list, text, values out of bounds and repeats, and writes nothing" {
+  mkdir -p "$T/mysql/mysql.conf.d"
+  for pair in "init_file=/tmp/x.sql" "plugin_load=x.so" "max_connections=5" "max_connections=99999" "innodb_buffer_pool_size=1G" \
+    "innodb_flush_log_at_trx_commit=0" "long_query_time=61" "long_query_time=1e3" "max_connections=300;x" "max_connections" \
+    $'max_connections=300\ninit_file=/tmp/x.sql' "Max_Connections=300"; do
+    run dmp mysql-config-write "$pair"
+    [ "$status" -eq 2 ]
+  done
+  run dmp mysql-config-write max_connections=300 max_connections=400
+  [ "$status" -eq 2 ]
+  [ ! -e "$T/mysql/mysql.conf.d/zz-devmagic-panel.cnf" ]
+}
+
+@test "mysql-config-write fails without MySQL's config folders" {
+  run dmp mysql-config-write max_connections=300
+  [ "$status" -eq 1 ]
+}
+
 @test "php-ini-reset puts the packaged php.ini back and php-ini-put-back restores yours" {
   fpm_tree
   mkdir -p "$T/php-lib/8.3" "$T/php/8.3/cli"

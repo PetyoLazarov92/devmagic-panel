@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { apacheModuleLock, apacheModuleName } from './apache.js';
-import { mysqlAccount, mysqlBackupName, mysqlDatabaseName } from './mysql.js';
+import { MYSQL_SETTING_NAMES, mysqlAccount, mysqlBackupName, mysqlDatabaseName, mysqlSettingError, type MysqlSettingName } from './mysql.js';
 import { mysqlIdentifier, WP_CONTENT_KINDS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS, WP_TABLE_FIXES } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
@@ -548,6 +548,23 @@ export const actions = {
     changesSystem: true,
     input: z.object({ database: mysqlDatabaseName, tables: z.array(mysqlIdentifier).min(1).max(200).optional() }),
   },
+  'mysql.setSettings': {
+    title: 'Change MySQL settings',
+    description:
+      "Changes MySQL's buffer pool, biggest packet, redo log, connections, temp tables in memory, how often it writes to disk, and the slow query log: at once with SET GLOBAL, and kept for MySQL's next start in the panel's own file in mysql.conf.d (or mariadb.conf.d). Null takes a setting out of that file, so MySQL's own applies from its next start. Only these settings, with whole numbers inside bounds. Undo puts the values from before back. Starts a job.",
+    changesSystem: true,
+    input: z.object({
+      values: z
+        .partialRecord(z.enum(MYSQL_SETTING_NAMES), z.number().nullable())
+        .superRefine((values, ctx) => {
+          for (const [name, value] of Object.entries(values)) {
+            const error = value === null || value === undefined ? null : mysqlSettingError(name as MysqlSettingName, value);
+            if (error) ctx.addIssue({ code: 'custom', message: error, path: [name] });
+          }
+          if (Object.keys(values).length === 0) ctx.addIssue({ code: 'custom', message: 'Change at least one setting' });
+        }),
+    }),
+  },
   'mysql.dropDatabase': {
     title: 'Delete a database',
     description:
@@ -829,13 +846,15 @@ export const actions = {
   'db.cleanContent': {
     title: 'Delete revisions, drafts, trash and spam',
     description:
-      "Deletes the kinds picked of a WordPress site: post revisions (all, or all but the newest few of each post), auto-drafts, posts in the trash, spam comments, comments in the trash; with a post go its meta, terms and comments, as WordPress does. And what plugins leave: oEmbed caches (made again when a page shows them), Akismet's history in comment meta, Action Scheduler's finished, failed and cancelled actions with their logs, expired WooCommerce sessions, saved login sessions (everyone signs in again), and post meta that repeats the same key and value on a post. Saved first (14 days), so Undo puts them back. Starts a job.",
+      "Deletes the kinds picked of a WordPress site: post revisions (all, or all but the newest few of each post), auto-drafts, posts in the trash, spam comments, comments in the trash; with a post go its meta, terms and comments, as WordPress does. And what plugins leave: oEmbed caches (made again when a page shows them), Akismet's history in comment meta, Action Scheduler's finished, failed and cancelled actions with their logs, expired WooCommerce sessions, saved login sessions (everyone signs in again), and post meta that repeats the same key and value on a post. With orphans, also what was left behind (as Delete what was left behind does), in the same job. Saved first (14 days), so Undo puts them back. Starts a job.",
     changesSystem: true,
     input: z.object({
       domain: localName,
       path: sitePath,
       blog: blogNumber,
-      kinds: z.array(z.enum(WP_CONTENT_KINDS)).min(1),
+      kinds: z.array(z.enum(WP_CONTENT_KINDS)).default([]),
+      /** Leftovers ticked in the same card, deleted in the same job (the planner refuses when nothing is picked). */
+      orphans: z.array(z.enum(WP_ORPHAN_KINDS)).default([]),
       /** Revisions: keep the newest this many of each post. */
       keepRevisions: z.union(WP_KEEP_REVISIONS.map((n) => z.literal(n)) as unknown as [z.ZodLiteral<1>, z.ZodLiteral<3>, z.ZodLiteral<5>, z.ZodLiteral<10>]).optional(),
     }),

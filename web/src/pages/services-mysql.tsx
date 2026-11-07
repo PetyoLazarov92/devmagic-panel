@@ -2,6 +2,7 @@ import type { ActionId, MysqlBackup, MysqlProcess, UploadResult, MysqlDatabase, 
 import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, OctagonX, RotateCcw, Table2, Trash2, Upload, Users, Wand2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
+import { MysqlSettingsCard } from '@/components/mysql-settings';
 import { SqlRunner } from '@/components/sql-runner';
 import { Segmented } from '@/components/ui/segmented';
 import { settled, StepList, useJob } from '@/components/job-steps';
@@ -251,6 +252,8 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
           </Button>
         </div>
       </Card>
+
+      <MysqlSettingsCard />
 
       <ProcessesCard refresh={refresh} />
 

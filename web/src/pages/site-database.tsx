@@ -2,7 +2,7 @@ import type { CleanCopyInfo, CleanPreview, KeptDatabaseInfo, Site, SnapshotInfo,
 import { CLEAN_FORM_TABLES, CLEAN_LOG_TABLES, CLEAN_WOO_TABLES, isLocalName } from '@devmagic-panel/shared';
 import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCircle, PackageCheck, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
+import { DatabaseBrowser, type DbLocation, rowsSeedState } from '@/components/db-browser';
 import { JobFooter } from '@/components/job-box';
 import { settled, useJob, useResumeJob } from '@/components/job-steps';
 import { SqlRunner } from '@/components/sql-runner';
@@ -80,7 +80,7 @@ export function DatabaseTab({ site }: { site: Site }) {
       ) : view === 'sql' ? (
         <SqlRunner key={site.db.name} database={site.db.name} canWrite />
       ) : view === 'wordpress' ? (
-        <WordpressDbView site={site} blog={blog} onBlog={(b) => go('wordpress', undefined, b)} onTable={(t) => go('tables', { table: t, show: 'rows' })} />
+        <WordpressDbView site={site} blog={blog} onBlog={(b) => go('wordpress', undefined, b)} onTable={(t, seed) => navigate(databaseHref(site, 'tables', { table: t, show: 'rows' }), { scroll: false, state: seed ? rowsSeedState({ ...seed, table: t }) : null })} />
       ) : (
         <DatabaseBrowser key={site.db.name} database={site.db.name} location={{ table, show }} onNavigate={(location) => go('tables', location)} />
       )}

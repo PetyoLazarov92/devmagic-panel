@@ -67,6 +67,16 @@ globs: ["web/**"]
   browser never offers to save it. Only the panel login and the panel
   password use `PasswordInput`; `web/test/secret-field.test.ts` keeps it so.
 
+## Long lists in cards
+
+A list inside a summary card (the WordPress view's options, meta keys, tables,
+issues, users, clean-up kinds) shows its first `WP_DB_LIST_ROWS` (7) rows and
+a **Show all N** link under it, remembered per list in the preferences
+(`wpdbShowAll`). When the rows it hides can still be acted on (ticked
+clean-up kinds), the link says how many. A name or a count that has rows
+behind it opens them in Tables: plain filters or a clean-up's kind go in the
+history entry (`navigate(..., { state })`), never the address.
+
 ## One layout per page type
 
 Every page is made of the pieces in `web/src/components/page.tsx` and

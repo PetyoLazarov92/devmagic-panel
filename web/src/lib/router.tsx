@@ -15,9 +15,11 @@ let search = typeof window === 'undefined' ? '' : window.location.search;
  * Goes to a path; a query string (like /mail?site=x) is kept in the URL, while
  * routes match on the path alone. With replace, the path takes the place of
  * the current one in the browser's history, and the page stays where it is;
- * scroll false keeps it where it is too, as for a tab.
+ * scroll false keeps it where it is too, as for a tab. state goes with the
+ * history entry, not the address: what a page hands the next one that must
+ * not reach a URL or a log, like a filter's value; Back finds it again.
  */
-export function navigate(to: string, { replace = false, scroll = !replace }: { replace?: boolean; scroll?: boolean } = {}): void {
+export function navigate(to: string, { replace = false, scroll = !replace, state = null }: { replace?: boolean; scroll?: boolean; state?: unknown } = {}): void {
   const at = to.indexOf('?');
   const path = (at >= 0 ? to.slice(0, at) : to) || '/';
   const query = at >= 0 && at < to.length - 1 ? to.slice(at) : '';
@@ -25,8 +27,8 @@ export function navigate(to: string, { replace = false, scroll = !replace }: { r
   current = path;
   search = query;
   try {
-    if (replace) window.history.replaceState(null, '', to);
-    else window.history.pushState(null, '', to);
+    if (replace) window.history.replaceState(state, '', to);
+    else window.history.pushState(state, '', to);
   } catch {
     // Sandboxed frames may refuse URL changes; the in-memory path still moves.
   }

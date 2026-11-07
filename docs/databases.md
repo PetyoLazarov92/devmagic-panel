@@ -59,6 +59,10 @@ shows what the panel read last time at once ("Read 3 h ago" in its bar), reads
 the quick parts again, and the parts that read whole tables only on **Check
 again** or after a job changed the site; each of those fills its card in when
 it is read, with up to a minute. Leaving the view stops its reads in MySQL too.
+A long list shows its first 7 rows and **Show all**, which the view
+remembers per list. A name in a list (an option, a meta key, a post type)
+opens its table in Tables, filtered on it; the filter's value goes with the
+page's history, never its address.
 
 - **Table health**: the site's WordPress tables against how WordPress makes
   them. A lost primary key or AUTO_INCREMENT (a bad import's mark: new posts
@@ -73,16 +77,22 @@ it is read, with up to a minute. Leaving the view stops its reads in MySQL too.
   writes it: on and off, or yes and no before 6.6).
 - **Transients**, with the expired ones still stored, and **Delete expired** or
   **Delete all**.
-- **What a clean-up would find**: revisions (all, or all but the newest 1, 3,
-  5 or 10 of each post), auto-drafts, posts and comments in the trash, spam,
-  and what plugins leave where the site has their tables: oEmbed caches,
-  Akismet's history, Action Scheduler's finished, failed and cancelled actions
-  with their logs, expired WooCommerce sessions, and saved login sessions (not
-  ticked: everyone signs in again). **Look for repeated post meta** reads
-  every value of postmeta, with up to two minutes, for the same key and value
-  twice on a post. Then meta or terms left behind by something deleted. Each
-  kind has a tick, and **Delete the ticked**. A post goes with its meta, terms
-  and comments, as WordPress deletes it; a link's terms stay.
+- **What a clean-up would find**, in four groups. **Posts**: revisions (with
+  **Keep** under the row: all of them go, or all but the newest 1, 3, 5 or 10
+  of each post), auto-drafts and posts in the trash. **Comments**: spam, the
+  trash and Akismet's history. **Caches and logs**, where the site has their
+  tables: oEmbed caches, Action Scheduler's finished, failed and cancelled
+  actions with their logs, expired WooCommerce sessions, saved login sessions
+  (not ticked: everyone signs in again) and repeated post meta (**Look for
+  them** reads every value of postmeta, with up to two minutes). **Left behind
+  by something deleted**: meta and terms whose post, comment, term or user is
+  gone. Kinds with nothing to clean fold into one line. Each count opens its
+  rows in Tables with a chip like "Only: spam comments", built by the server
+  from the clean-up's own condition, so what shows is what it would delete;
+  deleting rows there takes only those rows, while the clean-up also takes a
+  post's meta, terms and comments, as WordPress deletes it (a link's terms
+  stay). One **Delete the ticked** runs every ticked kind as one job with one
+  Undo.
 - **Post meta by key**: the custom fields (`meta_key`) that fill postmeta, to
   see what makes it big (a page builder's data, an old plugin's leftovers).
   Up to 300,000 rows they come by size; on a bigger table by rows first, as a
@@ -152,6 +162,16 @@ The runner never touches another database, accounts, rights, routines or files.
   first to the panel's MySQL backups for 14 days, so Undo puts it back;
   **Saved copies** lists them, with Delete to remove one sooner); reset a
   site's database user.
+- **Settings**: the buffer pool, the biggest packet, the redo log,
+  connections, temp tables in memory, how often InnoDB writes to disk and the
+  slow query log, with what each runs at now, what the panel keeps, what an
+  import holds raised for its run, and a suggestion where the value is low
+  (the buffer pool from your sites' InnoDB data). **Change** or a suggestion's
+  **Use** starts a job: `SET GLOBAL` applies it at once, and `dmp-root
+  mysql-config-write` keeps it for the next start in
+  `zz-devmagic-panel.cnf` in `mysql.conf.d` (or `mariadb.conf.d`), which MySQL
+  reads last. Only these settings go in, as numbers inside bounds; clearing
+  one takes it out of the file. Undo puts the values from before back.
 - **Processes**: what MySQL runs now, the longest first, with **Stop** for a
   statement (never one of MySQL's own threads).
 - **Import a dump** into a new database, or into one no site uses, which is

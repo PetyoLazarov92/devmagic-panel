@@ -218,18 +218,36 @@ function toCell(value: string | null, binary: boolean): DbCell {
   return chars.length > DB_CELL_HEAD ? { head: chars.slice(0, DB_CELL_HEAD).join(''), length: chars.length } : value;
 }
 
+/** A clean-up's rows in the mockup, as plain filters: close enough to show the chip and a few rows. */
+function cleanupFilters(kind: string): DbFilter[] | null {
+  const eq = (column: string, value: string): DbFilter => ({ column, op: 'eq', value });
+  const filters: Record<string, DbFilter[]> = {
+    revisions: [eq('post_type', 'revision')],
+    autoDrafts: [eq('post_status', 'auto-draft')],
+    trashedPosts: [eq('post_status', 'trash')],
+    spamComments: [eq('comment_approved', 'spam')],
+    trashedComments: [eq('comment_approved', 'trash')],
+    transients: [{ column: 'option_name', op: 'startsWith', value: '_transient' }],
+    expiredTransients: [{ column: 'option_name', op: 'startsWith', value: '_transient_timeout' }],
+    oembed: [{ column: 'meta_key', op: 'startsWith', value: '_oembed_' }],
+    sessionTokens: [eq('meta_key', 'session_tokens')],
+  };
+  return filters[kind] ?? null;
+}
+
 export function mockDbRows(database: string, table: string, query: DbRowsQuery): DbRowsPage {
   const t = find(database, table);
   const page = query.page ?? 1;
   const pageSize = query.pageSize ?? 50;
-  const filters = query.filters ?? [];
+  const only = query.cleanup ? cleanupFilters(query.cleanup.kind) : [];
+  const filters = [...(query.filters ?? []), ...(only ?? [])];
   const index = (name: string) => {
     const i = t.columns.findIndex((c) => c.name === name);
     if (i < 0) throw new Error(`No column called ${name} in this table`);
     return i;
   };
   const test = (r: Array<string | null>, f: DbFilter) => matches(r[index(f.column)] ?? null, f, Boolean(t.columns[index(f.column)]?.numeric));
-  let rows = t.rows.filter((r) => !filters.length || (query.match === 'any' ? filters.some((f) => test(r, f)) : filters.every((f) => test(r, f))));
+  let rows = t.rows.filter((r) => only !== null && (!filters.length || (query.match === 'any' ? filters.some((f) => test(r, f)) : filters.every((f) => test(r, f)))));
   if (query.sort) {
     const i = index(query.sort.column);
     const numeric = t.columns[i]?.numeric;

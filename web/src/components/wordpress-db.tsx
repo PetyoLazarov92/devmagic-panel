@@ -1,8 +1,9 @@
-import type { Site, WpDbBlog, WpDbReport, WpDbSection, WpPluginState, WpTableFix } from '@devmagic-panel/shared';
-import { WP_DB_ON_DEMAND, WP_DB_SECTIONS, WP_DB_SLOW_SECTIONS, WP_KEEP_REVISIONS } from '@devmagic-panel/shared';
-import { Gauge, Hourglass, KeyRound, type LucideIcon, Puzzle, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, TrendingUp, Users, Wrench } from 'lucide-react';
+import type { DbCleanupView, Site, WpDbBlog, WpDbList, WpDbReport, WpDbSection, WpPluginState, WpTableFix } from '@devmagic-panel/shared';
+import { WP_DB_LIST_ROWS, WP_DB_ON_DEMAND, WP_DB_SECTIONS, WP_DB_SLOW_SECTIONS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS } from '@devmagic-panel/shared';
+import { ChevronDown, ChevronRight, ChevronUp, Gauge, Hourglass, KeyRound, type LucideIcon, Puzzle, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, TrendingUp, Users, Wrench } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
+import type { RowsSeed } from '@/components/db-browser';
 import { JobFooter } from '@/components/job-box';
 import { settled, useJob, useResumeJob } from '@/components/job-steps';
 import { toastRowChange } from '@/components/row-editor';
@@ -13,6 +14,7 @@ import { Select } from '@/components/ui/field';
 import { Bar, CardLinesSkeleton, CardSkeleton, Reading } from '@/components/skeletons';
 import { api } from '@/lib/api';
 import { bytes } from '@/lib/format';
+import { savePreferences, usePreferences } from '@/lib/preferences';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -31,14 +33,19 @@ interface Props {
   /** The site of a network the view is about; 1 for a single site. */
   blog: number;
   onBlog: (blog: number) => void;
-  /** Opens a table in the Tables view. */
-  onTable: (table: string) => void;
+  /** Opens a table in the Tables view, with filters or a clean-up's rows to start with. */
+  onTable: OnTable;
 }
+
+type OnTable = (table: string, seed?: Omit<RowsSeed, 'table'>) => void;
+
+/** The site a clean-up's rows belong to, as the rows request names it. */
+type Target = Pick<DbCleanupView, 'domain' | 'path' | 'blog'>;
 
 type Slot = 'health' | 'plugins' | 'transients' | 'content' | 'orphans';
 type Errors = WpDbReport['errors'];
 /** The card each clean-up's job shows in. */
-const SLOT_OF: Partial<Record<string, Slot>> = { 'db.fixTable': 'health', 'db.autoloadOff': 'plugins', 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans' };
+const SLOT_OF: Partial<Record<string, Slot>> = { 'db.fixTable': 'health', 'db.autoloadOff': 'plugins', 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'content' };
 
 const QUICK = WP_DB_SECTIONS.filter((s) => !WP_DB_SLOW_SECTIONS.includes(s) && !WP_DB_ON_DEMAND.includes(s));
 
@@ -217,13 +224,13 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
           <AutoloadCard view={view} onTable={onTable} onAutoloadOff={(o) => void autoloadOff(o)} />
-          <TransientsCard view={view} busy={busy} onDelete={(scope) => setAsking(transientsAsk(r, scope))} footer={footerFor('transients')} />
+          <TransientsCard view={view} target={target} busy={busy} onTable={onTable} onDelete={(scope) => setAsking(transientsAsk(r, scope))} footer={footerFor('transients')} />
           <MetaKeysCard view={view} onTable={onTable} onSizes={report.readSizes} />
           <PluginsCard view={view} busy={busy} onTable={onTable} onAsk={setAsking} footer={footerFor('plugins')} />
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
           <HealthCard view={view} busy={busy} onFix={setAsking} footer={footerFor('health')} />
-          <CleanupCard view={view} busy={busy} onClean={setAsking} onScan={report.readDuplicates} footer={footerFor('content', 'orphans')} />
+          <CleanupCard view={view} target={target} busy={busy} onClean={setAsking} onScan={report.readDuplicates} onTable={onTable} footer={footerFor('content', 'orphans')} />
           <UsersCard view={view} />
           <GrowthCard view={view} onTable={onTable} />
         </div>
@@ -307,6 +314,48 @@ function SectionError({ text }: { text: string | undefined }) {
 /** True while a part has nothing to show yet: asked for, and no answer from this or an earlier read. */
 const waiting = (view: View, section: WpDbSection) => view.report[section] === undefined && !view.errors[section];
 
+/**
+ * The first few rows of a list, every row once Show all is picked: the choice
+ * is kept per list with the other view choices, so a long card stays short.
+ */
+function useShowAll<T>(list: WpDbList, items: readonly T[], hiddenNote?: (hidden: readonly T[]) => string): { shown: readonly T[]; more: ReactNode } {
+  const prefs = usePreferences();
+  const all = prefs.wpdbShowAll.includes(list);
+  if (items.length <= WP_DB_LIST_ROWS) return { shown: items, more: null };
+  const toggle = () => savePreferences({ wpdbShowAll: all ? prefs.wpdbShowAll.filter((l) => l !== list) : [...prefs.wpdbShowAll, list] });
+  return {
+    shown: all ? items : items.slice(0, WP_DB_LIST_ROWS),
+    more: (
+      <button type="button" aria-expanded={all} onClick={toggle} className="flex w-full items-center gap-1 border-t px-5 py-2 text-left text-xs font-medium text-primary hover:bg-muted/50">
+        {all ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+        {all ? 'Show fewer' : `Show all ${number(items.length)}${hiddenNote?.(items.slice(WP_DB_LIST_ROWS)) ?? ''}`}
+      </button>
+    ),
+  };
+}
+
+/** A name in a list that opens the table filtered on it, like a meta key in postmeta. */
+function NameLink({ name, title, onOpen, className }: { name: ReactNode; title: string; onOpen: () => void; className?: string }) {
+  return (
+    <button type="button" className={cn('min-w-0 truncate text-left font-mono hover:text-primary hover:underline', className)} title={title} onClick={onOpen}>
+      {name}
+    </button>
+  );
+}
+
+/** A count that opens the rows it counts in the Tables view; a plain number at 0. */
+function CountLink({ n, title, onOpen }: { n: number; title: string; onOpen: () => void }) {
+  if (n === 0) return <span className="text-right tabular-nums">0</span>;
+  return (
+    <button type="button" className="group inline-flex items-center justify-end gap-0.5 text-right tabular-nums hover:text-primary hover:underline" title={title} aria-label={`${number(n)}: ${title}`} onClick={onOpen}>
+      {number(n)}
+      <ChevronRight className="size-3.5 text-muted-foreground group-hover:text-primary" aria-hidden />
+    </button>
+  );
+}
+
+const eq = (column: string, value: string) => ({ filters: [{ column, op: 'eq' as const, value }] });
+
 function Facts({ rows }: { rows: Array<[ReactNode, ReactNode]> }) {
   return (
     <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 px-5 py-4 text-sm">
@@ -320,9 +369,11 @@ function Facts({ rows }: { rows: Array<[ReactNode, ReactNode]> }) {
   );
 }
 
-function AutoloadCard({ view, onTable, onAutoloadOff }: { view: View; onTable: (t: string) => void; onAutoloadOff: (option: string) => void }) {
+function AutoloadCard({ view, onTable, onAutoloadOff }: { view: View; onTable: OnTable; onAutoloadOff: (option: string) => void }) {
   const { report, errors } = view;
   const a = report.autoload;
+  const options = `${report.blogPrefix}options`;
+  const { shown, more } = useShowAll('autoload', a?.top ?? []);
   const over = a ? a.bytes > a.limitBytes : false;
   const biggest = a?.top[0]?.bytes ?? 1;
   return (
@@ -349,9 +400,9 @@ function AutoloadCard({ view, onTable, onAutoloadOff }: { view: View; onTable: (
             <>
               <p className="px-5 pt-4 text-xs font-medium text-muted-foreground">The biggest</p>
               <ul className="mt-1 grid gap-1 px-5 pb-2">
-                {a.top.map((o) => (
+                {shown.map((o) => (
                   <li key={o.name} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 text-[13px]">
-                    <span className="truncate font-mono" title={o.name}>{o.name}</span>
+                    <NameLink name={o.name} title={`See ${o.name} in ${options}`} onOpen={() => onTable(options, eq('option_name', o.name))} />
                     <span className="text-right text-xs text-muted-foreground tabular-nums">{bytes(o.bytes)}</span>
                     <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => onAutoloadOff(o.name)} aria-label={`Stop loading ${o.name} on every page`} title="Load it only when a plugin asks for it">
                       Turn off
@@ -362,10 +413,11 @@ function AutoloadCard({ view, onTable, onAutoloadOff }: { view: View; onTable: (
                   </li>
                 ))}
               </ul>
+              {more}
             </>
           )}
-          <div className="px-5 pb-4">
-            <Button size="sm" variant="outline" onClick={() => onTable(`${report.blogPrefix}options`)}>Browse {report.blogPrefix}options</Button>
+          <div className={cn('px-5 pb-4', more && 'border-t pt-3')}>
+            <Button size="sm" variant="outline" onClick={() => onTable(options)}>Browse {options}</Button>
           </div>
         </>
       )}
@@ -374,9 +426,11 @@ function AutoloadCard({ view, onTable, onAutoloadOff }: { view: View; onTable: (
   );
 }
 
-function TransientsCard({ view, busy, onDelete, footer }: { view: View; busy: boolean; onDelete: (scope: 'expired' | 'all') => void; footer: ReactNode }) {
+function TransientsCard({ view, target, busy, onTable, onDelete, footer }: { view: View; target: Target; busy: boolean; onTable: OnTable; onDelete: (scope: 'expired' | 'all') => void; footer: ReactNode }) {
   const { report } = view;
   const t = report.transients;
+  const options = `${report.blogPrefix}options`;
+  const open = (kind: 'transients' | 'expiredTransients', label: string) => onTable(options, { cleanup: { ...target, kind }, label, note: 'Each transient has two rows: its value, and _transient_timeout_ with its expiry.' });
   return (
     <Card>
       <Header title="Transients" icon={Hourglass} reading={view.reading('transients')} />
@@ -385,8 +439,8 @@ function TransientsCard({ view, busy, onDelete, footer }: { view: View; busy: bo
       {t && (
         <Facts
           rows={[
-            ['Transients', `${number(t.count)} (${bytes(t.bytes)})`],
-            ['Expired, still stored', number(t.expired)],
+            ['Transients', <span key="all" className="inline-flex items-center gap-1.5"><CountLink n={t.count} title={`See the transients in ${options}`} onOpen={() => open('transients', 'transients')} /><span className="text-muted-foreground">({bytes(t.bytes)})</span></span>],
+            ['Expired, still stored', <CountLink key="expired" n={t.expired} title={`See the expired transients in ${options}`} onOpen={() => open('expiredTransients', 'expired transients, with their timeout rows')} />],
             ...(t.site ? ([[report.network ? 'Network transients' : 'Site transients', `${number(t.site.count)} (${bytes(t.site.bytes)}), ${number(t.site.expired)} expired`]] as Array<[string, string]>) : []),
           ]}
         />
@@ -419,6 +473,7 @@ function HealthCard({ view, busy, onFix, footer }: { view: View; busy: boolean; 
   const h = view.report.health;
   const byTable = new Map<string, NonNullable<typeof h>['issues']>();
   for (const issue of h?.issues ?? []) byTable.set(issue.table, [...(byTable.get(issue.table) ?? []), issue]);
+  const { shown, more } = useShowAll('health', [...byTable.entries()]);
   return (
     <Card>
       <Header title="Table health" icon={ShieldCheck} reading={view.reading('health')} />
@@ -432,7 +487,7 @@ function HealthCard({ view, busy, onFix, footer }: { view: View; busy: boolean; 
       )}
       {h && h.issues.length > 0 && (
         <ul className="divide-y">
-          {[...byTable.entries()].map(([table, issues]) => (
+          {shown.map(([table, issues]) => (
             <li key={table} className="grid gap-2 px-5 py-3 text-sm">
               <span className="font-mono text-[13px] font-medium">{table}</span>
               {issues.map((issue) => (
@@ -463,6 +518,7 @@ function HealthCard({ view, busy, onFix, footer }: { view: View; busy: boolean; 
           ))}
         </ul>
       )}
+      {more}
       {h?.free && h.free.length > 0 && (
         <div className="grid gap-2 border-t px-5 py-3 text-sm">
           <p className="text-muted-foreground">
@@ -497,7 +553,7 @@ function HealthCard({ view, busy, onFix, footer }: { view: View; busy: boolean; 
 }
 
 /** The tables that grew most since the oldest size the panel noted: what keeps filling the disk. */
-function GrowthCard({ view, onTable }: { view: View; onTable: (t: string) => void }) {
+function GrowthCard({ view, onTable }: { view: View; onTable: OnTable }) {
   const g = view.report.growth;
   if (g === null) return null;
   return (
@@ -538,9 +594,14 @@ const PLUGIN_STATE: Record<WpPluginState, { label: string; tone: 'neutral' | 'wa
  * options a plugin that is off still loads on every page. Guesses by name,
  * said as guesses; a table of a plugin that is on is never offered to delete.
  */
-function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy: boolean; onTable: (t: string) => void; onAsk: (ask: Ask) => void; footer: ReactNode }) {
+function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy: boolean; onTable: OnTable; onAsk: (ask: Ask) => void; footer: ReactNode }) {
   const p = view.report.plugins;
   const pt = view.report.postTypes;
+  const groups = useShowAll('pluginOptions', p?.autoload ?? []);
+  const tables = useShowAll('pluginTables', p?.tables ?? []);
+  const types = useShowAll('postTypes', pt?.unregistered ?? []);
+  const options = `${view.report.blogPrefix}options`;
+  const posts = `${view.report.blogPrefix}posts`;
   const [open, setOpen] = useState<string | null>(null);
   const database = view.report.database;
   return (
@@ -552,7 +613,7 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
         <div className="grid gap-2 border-b px-5 py-4">
           <p className="text-xs font-medium text-muted-foreground">Loaded on every page for plugins that are off or gone</p>
           <ul className="grid gap-2 text-sm">
-            {p.autoload.map((g) => (
+            {groups.shown.map((g) => (
               <li key={g.plugin} className="grid gap-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{g.plugin}</span>
@@ -580,17 +641,22 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
                     Turn off autoload
                   </Button>
                 </div>
-                {open === g.plugin && <p className="font-mono text-xs break-words text-muted-foreground">{g.options.join(', ')}</p>}
+                {open === g.plugin && (
+                  <p className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                    {g.options.map((o) => <NameLink key={o} name={o} title={`See ${o} in ${options}`} onOpen={() => onTable(options, eq('option_name', o))} />)}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
         </div>
       )}
+      {groups.more && <div className="-mt-px border-b">{groups.more}</div>}
       {p && p.tables.length > 0 && (
         <>
           <p className="px-5 pt-3 text-xs text-muted-foreground">Tables that are not WordPress's own, with the plugin each likely belongs to, by its name.</p>
           <ul className="mt-1 divide-y">
-            {p.tables.map((t) => (
+            {tables.shown.map((t) => (
               <li key={t.table} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-2 text-[13px]">
                 <span className="min-w-0">
                   <span className="block truncate font-mono" title={t.table}>{t.table}</span>
@@ -627,6 +693,7 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
               </li>
             ))}
           </ul>
+          {tables.more}
         </>
       )}
       {p && p.tables.length === 0 && p.autoload.length === 0 && <p className="px-5 py-4 text-sm text-muted-foreground">No tables of plugins, and no plugin that is off still loads options on every page.</p>}
@@ -641,13 +708,14 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
         <div className="grid gap-1.5 border-t px-5 py-3 text-sm">
           <p className="text-xs font-medium text-muted-foreground">Posts of types nothing registers now</p>
           <ul className="grid gap-1">
-            {pt.unregistered.map((t) => (
+            {types.shown.map((t) => (
               <li key={t.type} className="flex items-center justify-between gap-3 text-[13px]">
-                <span className="truncate font-mono" title={t.type}>{t.type}</span>
+                <NameLink name={t.type} title={`See the ${t.type} posts in ${posts}`} onOpen={() => onTable(posts, eq('post_type', t.type))} />
                 <span className="tabular-nums text-muted-foreground">{number(t.count)}</span>
               </li>
             ))}
           </ul>
+          {types.more && <div className="-mx-5">{types.more}</div>}
           <p className="text-xs text-muted-foreground">A plugin or theme that made them is off or gone, so WordPress no longer shows them. They are in {view.report.blogPrefix}posts with their meta.</p>
         </div>
       )}
@@ -656,92 +724,221 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
   );
 }
 
-function CleanupCard({ view, busy, onClean, onScan, footer }: { view: View; busy: boolean; onClean: (ask: Ask) => void; onScan: () => void; footer: ReactNode }) {
+/** One kind a clean-up can take: its id, its name, how many there are, a word about it, and the table its rows show in. */
+interface CleanRow {
+  kind: string;
+  label: string;
+  count: number;
+  hint?: string;
+  /** The table and the label of its rows in the Tables view; none for a count the view cannot show. */
+  rows?: { table: string; label: string; note?: string };
+  /** Under the row while it is ticked: a choice for that kind, like how many revisions to keep. */
+  extra?: ReactNode;
+}
+
+const WITH_POST = 'Deleting here takes only these rows: the clean-up also deletes their meta, terms and comments, as WordPress does.';
+const WITH_COMMENT = 'Deleting here takes only these comments: the clean-up also deletes their meta.';
+const ORPHANS = new Set<string>(WP_ORPHAN_KINDS);
+/** Ticked from the start when there are any; login sessions are not, since deleting them signs everyone out. */
+const NOT_TICKED = new Set(['sessionTokens']);
+
+/**
+ * What a clean-up would find, in four short groups (posts, comments, caches
+ * and logs, what was left behind), the kinds with nothing to clean folded
+ * into one line, each count opening its rows in the Tables view, and one
+ * button that deletes every ticked kind as one job with one Undo.
+ */
+function CleanupCard({ view, target, busy, onClean, onScan, onTable, footer }: { view: View; target: Target; busy: boolean; onClean: (ask: Ask) => void; onScan: () => void; onTable: OnTable; footer: ReactNode }) {
   const { report, errors } = view;
   const c = report.content;
   const o = report.orphans;
   const d = report.duplicates;
+  const scanning = view.reading('duplicates');
   // Revisions: all of them, or all but the newest few of each post.
   const [keep, setKeep] = useState<0 | (typeof WP_KEEP_REVISIONS)[number]>(0);
-  const scanning = view.reading('duplicates');
-  const rows: TickRow[] = c
-    ? [
-        ['revisions', keep ? `Revisions past the newest ${keep} of each post` : 'Revisions', keep ? (c.revisionsOver?.[keep] ?? 0) : c.revisions],
-        ['autoDrafts', 'Auto-drafts', c.autoDrafts],
-        ['trashedPosts', 'Posts in the trash', c.trashedPosts],
-        ['spamComments', 'Spam comments', c.spamComments],
-        ['trashedComments', 'Comments in the trash', c.trashedComments],
-        ...(c.oembed !== undefined ? [['oembed', 'oEmbed caches', c.oembed, 'WordPress makes them again when a page shows the embed'] as TickRow] : []),
-        ...(c.akismet !== undefined ? [['akismet', "Akismet's history on comments", c.akismet] as TickRow] : []),
-        ...(c.actionsDone !== undefined ? [['actionsDone', 'Finished Action Scheduler actions', c.actionsDone, c.actionLogs ? `Complete, failed and cancelled, with ${number(c.actionLogs)} log lines` : 'Complete, failed and cancelled'] as TickRow] : []),
-        ...(c.wcSessions !== undefined ? [['wcSessions', 'Expired WooCommerce sessions', c.wcSessions] as TickRow] : []),
-        ...(c.sessionTokens !== undefined ? [['sessionTokens', 'Saved login sessions', c.sessionTokens, 'Everyone signs in again'] as TickRow] : []),
-        ...(d ? [['duplicateMeta', 'Repeated post meta', d.rows, d.keys.length ? `Most under ${d.keys.slice(0, 3).map((k) => k.key || 'an empty key').join(', ')}; the first of each stays` : 'The first of each stays'] as TickRow] : []),
-      ]
-    : [];
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const seen = useRef(new Set<string>());
+  const name = (n: string) => `${report.blogPrefix}${n}`;
+  const revisions = keep ? `revisions past the newest ${keep} of each post` : 'revisions';
+
+  const groups: Array<{ title: string; rows: CleanRow[]; loading?: boolean; error?: string | undefined }> = [
+    {
+      title: 'Posts',
+      rows: c
+        ? [
+            {
+              kind: 'revisions',
+              label: keep ? `Revisions past the newest ${keep} of each post` : 'Revisions',
+              count: keep ? (c.revisionsOver?.[keep] ?? 0) : c.revisions,
+              rows: { table: name('posts'), label: revisions, note: WITH_POST },
+              ...(c.revisionsOver && c.revisions > 0
+                ? {
+                    extra: (
+                      <label className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        Keep
+                        <Select value={keep} onChange={(e) => setKeep(Number(e.target.value) as typeof keep)} wrapClassName="w-full max-w-60 sm:w-60" className="h-7 py-0 text-xs">
+                          <option value={0}>none, delete all</option>
+                          {WP_KEEP_REVISIONS.map((n) => <option key={n} value={n}>the newest {n} of each post</option>)}
+                        </Select>
+                      </label>
+                    ),
+                  }
+                : {}),
+            },
+            { kind: 'autoDrafts', label: 'Auto-drafts', count: c.autoDrafts, rows: { table: name('posts'), label: 'auto-drafts', note: WITH_POST } },
+            { kind: 'trashedPosts', label: 'Posts in the trash', count: c.trashedPosts, rows: { table: name('posts'), label: 'posts in the trash', note: WITH_POST } },
+          ]
+        : [],
+      loading: waiting(view, 'content'),
+      error: errors.content,
+    },
+    {
+      title: 'Comments',
+      rows: c
+        ? [
+            { kind: 'spamComments', label: 'Spam comments', count: c.spamComments, rows: { table: name('comments'), label: 'spam comments', note: WITH_COMMENT } },
+            { kind: 'trashedComments', label: 'Comments in the trash', count: c.trashedComments, rows: { table: name('comments'), label: 'comments in the trash', note: WITH_COMMENT } },
+            ...(c.akismet !== undefined ? [{ kind: 'akismet', label: "Akismet's history on comments", count: c.akismet, rows: { table: name('commentmeta'), label: "Akismet's history" } }] : []),
+          ]
+        : [],
+    },
+    {
+      title: 'Caches and logs',
+      rows: c
+        ? [
+            ...(c.oembed !== undefined ? [{ kind: 'oembed', label: 'oEmbed caches', count: c.oembed, hint: 'WordPress makes them again when a page shows the embed', rows: { table: name('postmeta'), label: 'oEmbed caches' } }] : []),
+            ...(c.actionsDone !== undefined
+              ? [{ kind: 'actionsDone', label: 'Finished Action Scheduler actions', count: c.actionsDone, hint: c.actionLogs ? `Complete, failed and cancelled, with ${number(c.actionLogs)} log lines` : 'Complete, failed and cancelled', rows: { table: name('actionscheduler_actions'), label: 'finished actions', note: 'Deleting here takes only the actions: the clean-up also deletes their logs.' } }]
+              : []),
+            ...(c.wcSessions !== undefined ? [{ kind: 'wcSessions', label: 'Expired WooCommerce sessions', count: c.wcSessions, rows: { table: name('woocommerce_sessions'), label: 'expired sessions' } }] : []),
+            ...(c.sessionTokens !== undefined ? [{ kind: 'sessionTokens', label: 'Saved login sessions', count: c.sessionTokens, hint: 'Everyone signs in again', rows: { table: `${report.prefix}usermeta`, label: 'saved login sessions' } }] : []),
+            ...(d ? [{ kind: 'duplicateMeta', label: 'Repeated post meta', count: d.rows, hint: d.keys.length ? `Most under ${d.keys.slice(0, 3).map((k) => k.key || 'an empty key').join(', ')}; the first of each stays` : 'The first of each stays', rows: { table: name('postmeta'), label: 'repeats of the same key and value on a post', note: 'The first of each is not shown: it stays.' } }] : []),
+          ]
+        : [],
+      error: errors.duplicates,
+    },
+    {
+      title: 'Left behind by something deleted',
+      rows: o
+        ? [
+            { kind: 'postmeta', label: 'Post meta without its post', count: o.postmeta, rows: { table: name('postmeta'), label: 'post meta without its post' } },
+            { kind: 'commentmeta', label: 'Comment meta without its comment', count: o.commentmeta, rows: { table: name('commentmeta'), label: 'comment meta without its comment' } },
+            { kind: 'termmeta', label: 'Term meta without its term', count: o.termmeta, rows: { table: name('termmeta'), label: 'term meta without its term' } },
+            { kind: 'termRelationships', label: 'Terms on posts that are gone', count: o.termRelationships, rows: { table: name('term_relationships'), label: 'terms on posts that are gone' } },
+            ...(o.usermeta !== undefined ? [{ kind: 'usermeta', label: 'User meta without its user', count: o.usermeta, rows: { table: `${report.prefix}usermeta`, label: 'user meta without its user' } }] : []),
+          ]
+        : [],
+      loading: waiting(view, 'orphans'),
+      error: errors.orphans,
+    },
+  ];
+  const all = groups.flatMap((g) => g.rows);
+  // The first few kinds with something to clean show, across the groups in order; the link says how many more are ticked, since Delete takes them too.
+  const { shown: visible, more } = useShowAll(
+    'cleanup',
+    all.filter((r) => r.count > 0),
+    (hidden) => {
+      const n = hidden.filter((r) => ticked.has(r.kind)).length;
+      return n ? `, ${n} more ticked` : '';
+    },
+  );
+  const showing = new Set(visible.map((r) => r.kind));
+  const cut = visible.length < all.filter((r) => r.count > 0).length;
+  // Every kind with something to clean is ticked the first time it shows (but login sessions); the leftovers answer later than the rest.
+  const found = all.filter((r) => r.count > 0).map((r) => r.kind).join(',');
+  useEffect(() => {
+    const fresh = found.split(',').filter((k) => k && !seen.current.has(k));
+    if (!fresh.length) return;
+    for (const k of fresh) seen.current.add(k);
+    setTicked((t) => new Set([...t, ...fresh.filter((k) => !NOT_TICKED.has(k))]));
+  }, [found]);
+  const picked = all.filter((r) => ticked.has(r.kind) && r.count > 0);
+  const total = picked.reduce((sum, r) => sum + r.count, 0);
+  const nothing = all.filter((r) => r.count === 0);
+  const toggle = (kind: string, on: boolean) => setTicked((t) => {
+    const next = new Set(t);
+    if (on) next.add(kind);
+    else next.delete(kind);
+    return next;
+  });
+
+  function remove() {
+    const kinds = picked.filter((r) => !ORPHANS.has(r.kind)).map((r) => r.kind);
+    const orphans = picked.filter((r) => ORPHANS.has(r.kind)).map((r) => r.kind);
+    const words = { ...CONTENT_WORDS, revisions };
+    const left = orphans.length ? `${describe(orphans, ORPHAN_WORDS)} left behind by something deleted` : '';
+    const what = kinds.length ? `${describe(kinds, words)}, with what WordPress deletes with them${left ? `; and ${left.charAt(0).toLowerCase()}${left.slice(1)}` : ''}` : left;
+    onClean({
+      slot: 'content',
+      action: 'db.cleanContent',
+      input: { kinds, orphans, ...(keep && kinds.includes('revisions') ? { keepRevisions: keep } : {}) },
+      title: `Delete ${number(total)} ${total === 1 ? 'row' : 'rows'}?`,
+      description: `${what}. ${SAVED}`,
+      button: 'Delete them',
+    });
+  }
+
+  const open = (r: CleanRow) => r.rows && onTable(r.rows.table, { cleanup: { ...target, kind: r.kind as DbCleanupView['kind'], ...(r.kind === 'revisions' && keep ? { keepRevisions: keep } : {}) }, label: r.rows.label, ...(r.rows.note ? { note: r.rows.note } : {}) });
+  const unscanned = c && !d && c.oembed !== undefined;
+
   return (
     <Card>
       <Header title="What a clean-up would find" icon={Sparkles} reading={view.reading('content') || view.reading('orphans')} />
-      <SectionError text={errors.content} />
-      {waiting(view, 'content') && <CardLinesSkeleton lines={5} />}
-      {c && (
-        <TickList
-          id="content"
-          rows={rows}
-          off={['sessionTokens']}
-          busy={busy}
-          note="A post goes with its meta, terms and comments, as WordPress deletes it."
-          onDelete={(kinds, total) => {
-            const keeping = keep && kinds.includes('revisions') ? { keepRevisions: keep } : {};
-            const words = { ...CONTENT_WORDS, ...(keep ? { revisions: `revisions past the newest ${keep} of each post` } : {}) };
-            onClean({ slot: 'content', action: 'db.cleanContent', input: { kinds, ...keeping }, title: `Delete ${number(total)} ${total === 1 ? 'item' : 'items'}?`, description: `${describe(kinds, words)}, with what WordPress deletes with them. ${SAVED}`, button: 'Delete them' });
-          }}
-        >
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {c.revisionsOver && c.revisions > 0 && (
-              <label className="flex flex-wrap items-center gap-2">
-                <span>Revisions:</span>
-                <Select value={keep} onChange={(e) => setKeep(Number(e.target.value) as typeof keep)} wrapClassName="w-auto" className="h-8 w-auto text-xs">
-                  <option value={0}>delete all</option>
-                  {WP_KEEP_REVISIONS.map((n) => <option key={n} value={n}>keep the newest {n} of each post</option>)}
-                </Select>
-              </label>
+      {groups.map((g) => {
+        const rows = g.rows.filter((r) => r.count > 0 && showing.has(r.kind));
+        const scan = g.title === 'Caches and logs' && (unscanned || (c && !d)) && !cut;
+        if (!rows.length && !g.loading && !g.error && !scan) return null;
+        return (
+          <section key={g.title} aria-label={g.title} className="grid gap-1.5 border-b px-5 py-3 last-of-type:border-b-0">
+            <h3 className="text-xs font-medium text-muted-foreground">{g.title}</h3>
+            {g.error && <p role="alert" className="text-sm text-danger">{g.error}</p>}
+            {g.loading && <CardLinesSkeleton lines={g.title === 'Posts' ? 3 : 4} className="px-0 py-1" />}
+            {rows.length > 0 && (
+              <ul className="grid gap-1.5 text-sm">
+                {rows.map((r) => (
+                  <li key={r.kind} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1">
+                    <input id={`clean-${r.kind}`} type="checkbox" className="mt-1" checked={ticked.has(r.kind)} onChange={(e) => toggle(r.kind, e.target.checked)} />
+                    <label htmlFor={`clean-${r.kind}`} className="text-muted-foreground">
+                      {r.label}
+                      {r.hint && <span className="block text-xs text-muted-foreground/80">{r.hint}</span>}
+                    </label>
+                    {r.rows ? <CountLink n={r.count} title={`See the ${r.rows.label} in ${r.rows.table}`} onOpen={() => open(r)} /> : <span className="text-right tabular-nums">{number(r.count)}</span>}
+                    {r.extra && ticked.has(r.kind) && <div className="col-start-2 col-end-4">{r.extra}</div>}
+                  </li>
+                ))}
+              </ul>
             )}
-            {!d && (
-              <Button size="sm" variant="ghost" className="h-8 text-xs" disabled={scanning} onClick={onScan} title="Reads every value of postmeta, with up to two minutes">
-                {scanning ? <RefreshCw className="animate-spin" /> : <Search />}
-                {scanning ? 'Looking for repeated post meta...' : 'Look for repeated post meta'}
-              </Button>
+            {scan && (
+              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 text-sm">
+                <input type="checkbox" className="invisible" aria-hidden tabIndex={-1} />
+                <span className="text-muted-foreground">
+                  Repeated post meta
+                  <span className="block text-xs text-muted-foreground/80">Reads every value of postmeta, with up to two minutes</span>
+                </span>
+                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={scanning} onClick={onScan}>
+                  {scanning ? <RefreshCw className="animate-spin" /> : <Search />}
+                  {scanning ? 'Looking...' : 'Look for them'}
+                </Button>
+              </div>
             )}
+          </section>
+        );
+      })}
+      {more}
+      {nothing.length > 0 && !cut && (
+        <p className="border-t px-5 py-3 text-xs text-muted-foreground">
+          Nothing to clean: {nothing.map((r) => r.label.charAt(0).toLowerCase() + r.label.slice(1)).join(', ')}.
+        </p>
+      )}
+      {(c || o) && (
+        <div className="grid gap-2 border-t px-5 py-3">
+          <p className="text-xs text-muted-foreground">A post goes with its meta, terms and comments, as WordPress deletes it. A count opens its rows in Tables.</p>
+          <div>
+            <Button size="sm" variant="outline" disabled={busy || total === 0} onClick={remove}>
+              <Trash2 />Delete the ticked{total > 0 ? ` (${number(total)})` : ''}
+            </Button>
           </div>
-          <SectionError text={errors.duplicates} />
-        </TickList>
-      )}
-      <SectionError text={errors.orphans} />
-      {waiting(view, 'orphans') && (
-        <div className="border-t">
-          <p className="px-5 pt-3 text-xs text-muted-foreground">Looking for meta and terms left behind by something deleted...</p>
-          <CardLinesSkeleton lines={4} />
         </div>
-      )}
-      {o && (
-        <>
-          <p className="border-t px-5 pt-3 text-xs font-medium text-muted-foreground">Left behind by something deleted</p>
-          <TickList
-            id="orphans"
-            rows={[
-              ['postmeta', 'Post meta without its post', o.postmeta],
-              ['commentmeta', 'Comment meta without its comment', o.commentmeta],
-              ['termmeta', 'Term meta without its term', o.termmeta],
-              ['termRelationships', 'Terms on posts that are gone', o.termRelationships],
-              ...(o.usermeta !== undefined ? ([['usermeta', 'User meta without its user', o.usermeta]] as Array<[string, string, number]>) : []),
-            ]}
-            busy={busy}
-            onDelete={(kinds, total) =>
-              onClean({ slot: 'orphans', action: 'db.cleanOrphans', input: { kinds }, title: `Delete ${number(total)} ${total === 1 ? 'row' : 'rows'} left behind?`, description: `${describe(kinds, ORPHAN_WORDS)}. ${SAVED}`, button: 'Delete them' })
-            }
-          />
-        </>
       )}
       {footer}
     </Card>
@@ -770,66 +967,17 @@ function describe(kinds: string[], words: Record<string, string>): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** One kind a clean-up can take: its id, its name, how many there are, and a word about it. */
-type TickRow = [kind: string, label: string, count: number, hint?: string];
-
-/**
- * Counts with a tick each, the ones above 0 ticked (but those in off, like
- * login sessions, which sign everyone out), something to pick for a kind
- * (children), and a button that deletes the ticked.
- */
-function TickList({ id, rows, busy, note, off = [], children, onDelete }: { id: string; rows: TickRow[]; busy: boolean; note?: string; off?: string[]; children?: ReactNode; onDelete: (kinds: string[], total: number) => void }) {
-  const [ticked, setTicked] = useState<Set<string>>(() => new Set(rows.filter(([k, , n]) => n > 0 && !off.includes(k)).map(([k]) => k)));
-  const picked = rows.filter(([k, , n]) => ticked.has(k) && n > 0);
-  const total = picked.reduce((sum, [, , n]) => sum + n, 0);
-  return (
-    <div className="grid gap-3 px-5 py-4">
-      <ul className="grid gap-1.5 text-sm">
-        {rows.map(([kind, label, n, hint]) => (
-          <li key={kind}>
-            <label htmlFor={`${id}-${kind}`} className={cn('grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2', n === 0 && 'text-muted-foreground')}>
-              <input
-                id={`${id}-${kind}`}
-                type="checkbox"
-                className="mt-1"
-                disabled={n === 0}
-                checked={ticked.has(kind) && n > 0}
-                onChange={(e) => setTicked((t) => {
-                  const next = new Set(t);
-                  if (e.target.checked) next.add(kind);
-                  else next.delete(kind);
-                  return next;
-                })}
-              />
-              <span className={n > 0 ? 'text-muted-foreground' : ''}>
-                {label}
-                {hint && <span className="block text-xs text-muted-foreground/80">{hint}</span>}
-              </span>
-              <span className="text-right tabular-nums">{number(n)}</span>
-            </label>
-          </li>
-        ))}
-      </ul>
-      {children}
-      {note && <p className="text-xs text-muted-foreground">{note}</p>}
-      <div>
-        <Button size="sm" variant="outline" disabled={busy || total === 0} onClick={() => onDelete(picked.map(([k]) => k), total)}>
-          <Trash2 />Delete the ticked{total > 0 ? ` (${number(total)})` : ''}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /**
  * The custom fields (meta_key) that fill postmeta, to see what makes it big:
  * a page builder's data, an old plugin's leftovers. By size on a table up to
  * WP_META_SIZE_ROWS rows; on a bigger one by rows first, as a size needs every
  * value read, with Count sizes to read them anyway.
  */
-function MetaKeysCard({ view, onTable, onSizes }: { view: View; onTable: (t: string) => void; onSizes: () => void }) {
+function MetaKeysCard({ view, onTable, onSizes }: { view: View; onTable: OnTable; onSizes: () => void }) {
   const { report } = view;
   const m = report.metaKeys;
+  const postmeta = `${report.blogPrefix}postmeta`;
+  const { shown, more } = useShowAll('metaKeys', m?.keys ?? []);
   const reading = view.reading('metaKeys');
   return (
     <Card>
@@ -844,23 +992,24 @@ function MetaKeysCard({ view, onTable, onSizes }: { view: View; onTable: (t: str
       )}
       {m && m.keys.length > 0 && (
         <ul className="mt-2 divide-y">
-          {m.keys.map((k) => (
+          {shown.map((k) => (
             <li key={k.key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-5 py-2 text-[13px]">
-              <span className="truncate font-mono" title={k.key}>{k.key || <span className="text-muted-foreground italic">empty key</span>}</span>
+              <NameLink name={k.key || <span className="text-muted-foreground italic">empty key</span>} title={`See the rows of ${k.key || 'the empty key'} in ${postmeta}`} onOpen={() => onTable(postmeta, eq('meta_key', k.key))} />
               <span className="text-right text-xs text-muted-foreground tabular-nums">{k.bytes === undefined ? `${number(k.count)} rows` : `${bytes(k.bytes)} in ${number(k.count)} rows`}</span>
             </li>
           ))}
         </ul>
       )}
+      {more}
       {m && m.keys.length === 0 && <p className="px-5 py-4 text-sm text-muted-foreground">No post meta.</p>}
       {(m || view.errors.metaKeys) && (
-        <div className="flex flex-wrap gap-2 px-5 py-3">
+        <div className={cn('flex flex-wrap gap-2 px-5 py-3', more && 'border-t')}>
           {(!m?.sized || view.errors.metaKeys) && (
             <Button size="sm" variant="outline" disabled={reading} onClick={onSizes} title="Reads every value for its size, with up to a minute">
               {reading ? <RefreshCw className="animate-spin" /> : null}Count sizes
             </Button>
           )}
-          <Button size="sm" variant="outline" onClick={() => onTable(`${report.blogPrefix}postmeta`)}>Browse {report.blogPrefix}postmeta</Button>
+          <Button size="sm" variant="outline" onClick={() => onTable(postmeta)}>Browse {postmeta}</Button>
         </div>
       )}
     </Card>
@@ -870,6 +1019,7 @@ function MetaKeysCard({ view, onTable, onSizes }: { view: View; onTable: (t: str
 function UsersCard({ view }: { view: View }) {
   const { report } = view;
   const u = report.users;
+  const { shown, more } = useShowAll('users', u?.list ?? []);
   return (
     <Card>
       <Header title="Users" icon={Users} reading={view.reading('users')} />
@@ -881,7 +1031,7 @@ function UsersCard({ view }: { view: View }) {
             {number(u.count)} {u.count === 1 ? 'user' : 'users'}{report.network ? ' on the network, with their roles on this site' : ''}{u.count > u.list.length ? `, the first ${u.list.length} shown` : ''}.
           </p>
           <ul className="mt-2 divide-y">
-            {u.list.map((user) => (
+            {shown.map((user) => (
               <li key={user.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2 text-sm">
                 <span className="font-medium">{user.login}</span>
                 <span className="min-w-40 flex-1 truncate text-xs text-muted-foreground" title={user.email}>{user.email}</span>
@@ -891,6 +1041,7 @@ function UsersCard({ view }: { view: View }) {
               </li>
             ))}
           </ul>
+          {more}
         </>
       )}
     </Card>

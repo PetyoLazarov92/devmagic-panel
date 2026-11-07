@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { DbCellValue, DbColumn, DbSchema, DbIndex, DbOverview, DbRowsPage, DbStructure, DbTable, MysqlDatabase } from '@devmagic-panel/shared';
-import { dbCellQuery, dbRowsQuery, isSystemDatabase, mysqlDatabaseName, mysqlIdentifier } from '@devmagic-panel/shared';
+import { type DbCleanupView, dbCellQuery, dbRowsQuery, isSystemDatabase, mysqlDatabaseName, mysqlIdentifier } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { ExecResult, Executor } from './exec.js';
 import type { MysqlAccount } from './mysql-limits.js';
@@ -296,21 +296,28 @@ function parseBody<T>(schema: { safeParse: (v: unknown) => { success: true; data
 }
 
 /** The rows that match, exactly when that is quick; MySQL's estimate for a big table without filters; null when counting took too long. */
-async function countRows(ctx: BrowseContext, meta: TableMeta, filtered: boolean, sql: string): Promise<{ total: number | null; totalExact: boolean }> {
+async function countRows(ctx: BrowseContext, meta: TableMeta, filtered: boolean, sql: string, database: string): Promise<{ total: number | null; totalExact: boolean }> {
   if (!filtered && !meta.table.view && meta.table.rows > EXACT_COUNT_ROWS) return { total: meta.table.rows, totalExact: false };
   try {
-    const lines = await read(ctx, sql, { limitMs: COUNT_LIMIT_MS });
+    const lines = await read(ctx, sql, { limitMs: COUNT_LIMIT_MS, database });
     return { total: num(lines[0]), totalExact: true };
   } catch {
     return filtered || meta.table.view ? { total: null, totalExact: false } : { total: meta.table.rows, totalExact: false };
   }
 }
 
-export async function dbRows(ctx: BrowseContext, database: string, table: string, body: unknown): Promise<DbRowsPage> {
+/** The condition of a clean-up's rows, built by the server from the kind the browser named. */
+export type CleanupWhere = (database: string, table: string, view: DbCleanupView) => Promise<string>;
+
+export async function dbRows(ctx: BrowseContext, database: string, table: string, body: unknown, cleanupWhere?: CleanupWhere): Promise<DbRowsPage> {
   const query = parseBody(dbRowsQuery, body);
   const meta = await tableMeta(ctx, database, table);
-  const sql = rowsSql(database, table, meta.columns, meta.primaryKey, query);
-  const [lines, counted] = await Promise.all([read(ctx, sql.rows, { maxBytes: 32 * 1024 * 1024 }), countRows(ctx, meta, query.filters.length > 0, sql.count)]);
+  if (query.cleanup && !cleanupWhere) throw new BrowseError('This table cannot show a clean-up');
+  const only = query.cleanup && cleanupWhere ? await cleanupWhere(database, meta.table.name, query.cleanup) : undefined;
+  const sql = rowsSql(database, table, meta.columns, meta.primaryKey, query, only);
+  // A clean-up's condition names the site's other tables without their database, so it reads with that database picked.
+  const at = only ? database : '';
+  const [lines, counted] = await Promise.all([read(ctx, sql.rows, { maxBytes: 32 * 1024 * 1024, database: at }), countRows(ctx, meta, query.filters.length > 0 || only !== undefined, sql.count, at)]);
   const rows = parseRows(lines, meta.columns, meta.primaryKey);
   return {
     database,

@@ -33,6 +33,8 @@ export interface SystemConfig {
   NGINX_SITES_AVAILABLE: string;
   NGINX_SITES_ENABLED: string;
   NGINX_LOG_DIR: string;
+  /** MySQL's (or MariaDB's) config root, with mysql.conf.d or mariadb.conf.d in it; optional, /etc/mysql. */
+  MYSQL_CONF_DIR: string;
   /** Where nginx and Apache each answer once nginx is set up next to Apache; optional, 127.0.0.2 and 127.0.0.1. */
   NGINX_ADDRESS: string;
   APACHE_ADDRESS: string;
@@ -61,6 +63,7 @@ const OPTIONAL = {
   NGINX_SITES_AVAILABLE: '/etc/nginx/sites-available',
   NGINX_SITES_ENABLED: '/etc/nginx/sites-enabled',
   NGINX_LOG_DIR: '/var/log/nginx',
+  MYSQL_CONF_DIR: '/etc/mysql',
   NGINX_ADDRESS: DEFAULT_NGINX_ADDRESS,
   APACHE_ADDRESS: DEFAULT_APACHE_ADDRESS,
   UPDATE_REPO: '',
@@ -95,7 +98,7 @@ export function parseConfig(text: string, source: string): SystemConfig {
   if (nginxAddress === apacheAddress) throw new Error(`NGINX_ADDRESS and APACHE_ADDRESS must differ in ${source}`);
   const { UPDATE_REPO, UPDATE_GIT_URL, ...rest } = values;
   return {
-    ...(rest as unknown as Omit<SystemConfig, 'PANEL_PORT' | 'PHP_CONF_DIR' | 'PHP_LIB_DIR' | 'STATE_DIR' | 'NGINX_SITES_AVAILABLE' | 'NGINX_SITES_ENABLED' | 'NGINX_LOG_DIR' | 'NGINX_ADDRESS' | 'APACHE_ADDRESS'>),
+    ...(rest as unknown as Omit<SystemConfig, 'PANEL_PORT' | 'PHP_CONF_DIR' | 'PHP_LIB_DIR' | 'STATE_DIR' | 'NGINX_SITES_AVAILABLE' | 'NGINX_SITES_ENABLED' | 'NGINX_LOG_DIR' | 'MYSQL_CONF_DIR' | 'NGINX_ADDRESS' | 'APACHE_ADDRESS'>),
     PANEL_PORT: port,
     PHP_CONF_DIR: values.PHP_CONF_DIR || OPTIONAL.PHP_CONF_DIR,
     PHP_LIB_DIR: values.PHP_LIB_DIR || OPTIONAL.PHP_LIB_DIR,
@@ -103,6 +106,7 @@ export function parseConfig(text: string, source: string): SystemConfig {
     NGINX_SITES_AVAILABLE: values.NGINX_SITES_AVAILABLE || OPTIONAL.NGINX_SITES_AVAILABLE,
     NGINX_SITES_ENABLED: values.NGINX_SITES_ENABLED || OPTIONAL.NGINX_SITES_ENABLED,
     NGINX_LOG_DIR: values.NGINX_LOG_DIR || OPTIONAL.NGINX_LOG_DIR,
+    MYSQL_CONF_DIR: values.MYSQL_CONF_DIR || OPTIONAL.MYSQL_CONF_DIR,
     NGINX_ADDRESS: nginxAddress,
     APACHE_ADDRESS: apacheAddress,
     ...(UPDATE_REPO ? { UPDATE_REPO } : {}),

@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
-import type { ActionInput, CleanupInfo } from '@devmagic-panel/shared';
-import { cleanupId, isSystemDatabase } from '@devmagic-panel/shared';
+import type { ActionInput, CleanupInfo, DbCleanupView } from '@devmagic-panel/shared';
+import { cleanupId, isSystemDatabase, WP_ORPHAN_KINDS } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { ExecResult } from './exec.js';
 import type { JobStep } from './jobs.js';
@@ -354,28 +354,37 @@ function transientWhere(scope: 'expired' | 'all', table: string, name: string, v
   return `(${timeout}) OR (${any} AND NOT ${like(name, `\\_${kind}\\_timeout\\_%`)} AND CONCAT('${prefix}', SUBSTRING(${name}, ${start})) IN (SELECT n FROM (SELECT ${name} AS n FROM ${ident(table)} WHERE ${timeout}) AS expired))`;
 }
 
-export async function planTransients(ctx: RowsContext, { domain, path, blog = 1, scope }: ActionInput<'db.cleanTransients'>): Promise<JobStep[]> {
-  const t = await siteTablesFor(ctx, domain, path, blog);
+/** What a transients clean-up removes: the site's options, and on a network's first site the network's own in sitemeta. */
+export function transientParts(t: WordpressTables, scope: 'expired' | 'all'): CleanupPart[] {
   const options = `${t.blogPrefix}options`;
   if (!t.names.has(options)) throw new MysqlRefused(`${options} is not in ${t.database}`);
   const parts: CleanupPart[] = [{ table: options, how: 'delete', key: KEYS.options, oneStatement: true, where: `(${transientWhere(scope, options, 'option_name', 'option_value', 'transient')}) OR (${transientWhere(scope, options, 'option_name', 'option_value', 'site\\_transient')})` }];
   // A network keeps its own transients in sitemeta: they go with the first site's.
   const sitemeta = `${t.prefix}sitemeta`;
-  if (t.network && blog === 1 && t.names.has(sitemeta)) parts.push({ table: sitemeta, how: 'delete', key: KEYS.sitemeta, oneStatement: true, where: transientWhere(scope, sitemeta, 'meta_key', 'meta_value', 'site\\_transient') });
+  if (t.network && t.blog === 1 && t.names.has(sitemeta)) parts.push({ table: sitemeta, how: 'delete', key: KEYS.sitemeta, oneStatement: true, where: transientWhere(scope, sitemeta, 'meta_key', 'meta_value', 'site\\_transient') });
+  return parts;
+}
+
+export async function planTransients(ctx: RowsContext, { domain, path, blog = 1, scope }: ActionInput<'db.cleanTransients'>): Promise<JobStep[]> {
+  const t = await siteTablesFor(ctx, domain, path, blog);
   const title = scope === 'expired' ? 'Delete expired transients' : 'Delete every transient';
-  return planCleanup(ctx, t.database, 'transients', title, parts, `${domain}${path ?? ''}`);
+  return planCleanup(ctx, t.database, 'transients', title, transientParts(t, scope), `${domain}${path ?? ''}`);
 }
 
 /** WordPress's own kinds; any other in a clean-up makes its title the general one. */
 const OWN_KINDS = new Set(['revisions', 'autoDrafts', 'trashedPosts', 'spamComments', 'trashedComments']);
 
 /** The title of a content clean-up, for its job and Run history. */
-export function contentTitle(kinds: readonly string[]): string {
-  return kinds.every((k) => OWN_KINDS.has(k)) ? 'Delete revisions, drafts, trash and spam' : 'Delete what a clean-up found';
+export function contentTitle(kinds: readonly string[], orphans: readonly string[] = []): string {
+  return orphans.length === 0 && kinds.every((k) => OWN_KINDS.has(k)) ? 'Delete revisions, drafts, trash and spam' : 'Delete what a clean-up found';
 }
 
-export async function planContent(ctx: RowsContext, { domain, path, blog = 1, kinds, keepRevisions }: ActionInput<'db.cleanContent'>): Promise<JobStep[]> {
-  const t = await siteTablesFor(ctx, domain, path, blog);
+/**
+ * What a content clean-up removes, table by table: with a post its comments
+ * and their meta, its meta and its terms, as WordPress deletes it; and what
+ * plugins leave. The part a kind's count counts comes last.
+ */
+export function contentParts(t: WordpressTables, kinds: readonly string[], keepRevisions?: number): CleanupPart[] {
   const name = (n: string) => `${t.blogPrefix}${n}`;
   const has = (n: string) => t.names.has(name(n));
   const posts = ident(name('posts'));
@@ -411,7 +420,7 @@ export async function planContent(ctx: RowsContext, { domain, path, blog = 1, ki
     parts.push({ table: name('actionscheduler_actions'), how: 'delete', key: 'action_id', where: `status IN ${ACTIONS_DONE}` });
   }
   if (kinds.includes('wcSessions') && has('woocommerce_sessions')) parts.push({ table: name('woocommerce_sessions'), how: 'delete', key: 'session_id', where: 'session_expiry < UNIX_TIMESTAMP()' });
-  if (kinds.includes('sessionTokens') && blog === 1 && t.names.has(`${t.prefix}usermeta`)) {
+  if (kinds.includes('sessionTokens') && t.blog === 1 && t.names.has(`${t.prefix}usermeta`)) {
     parts.push({ table: `${t.prefix}usermeta`, how: 'delete', key: KEYS.usermeta, where: "meta_key = 'session_tokens'" });
   }
   if (kinds.includes('duplicateMeta') && has('postmeta')) {
@@ -425,12 +434,11 @@ export async function planContent(ctx: RowsContext, { domain, path, blog = 1, ki
       where: `meta_id IN (SELECT meta_id FROM (SELECT meta_id, ROW_NUMBER() OVER (PARTITION BY post_id, meta_key, MD5(meta_value) ORDER BY meta_id) AS n FROM ${pm}) d WHERE d.n > 1)`,
     });
   }
-  if (!parts.length) throw new MysqlRefused('This site has none of those tables');
-  return planCleanup(ctx, t.database, 'content', contentTitle(kinds), parts, `${domain}${path ?? ''}`);
+  return parts;
 }
 
-export async function planOrphans(ctx: RowsContext, { domain, path, blog = 1, kinds }: ActionInput<'db.cleanOrphans'>): Promise<JobStep[]> {
-  const t = await siteTablesFor(ctx, domain, path, blog);
+/** What an orphans clean-up removes: meta without its post, comment, term or user, and terms on posts that are gone (never a link's). */
+export function orphanParts(t: WordpressTables, kinds: readonly string[]): CleanupPart[] {
   const name = (n: string, shared = false) => `${shared ? t.prefix : t.blogPrefix}${n}`;
   const has = (n: string, shared = false) => t.names.has(name(n, shared));
   const orphan = (meta: 'postmeta' | 'commentmeta' | 'termmeta' | 'usermeta', parent: string, column: string, parentKey: string, shared = false): CleanupPart | null =>
@@ -451,9 +459,44 @@ export async function planOrphans(ctx: RowsContext, { domain, path, blog = 1, ki
     });
   }
   // Users are the network's: their meta is cleaned with the first site.
-  if (kinds.includes('usermeta') && blog === 1) add(orphan('usermeta', 'users', 'user_id', 'ID', true));
+  if (kinds.includes('usermeta') && t.blog === 1) add(orphan('usermeta', 'users', 'user_id', 'ID', true));
+  return parts;
+}
+
+/** A content clean-up, and with it the leftovers ticked in the same card: one job, one Undo. */
+type ContentInput = Omit<ActionInput<'db.cleanContent'>, 'kinds' | 'orphans'> & Partial<Pick<ActionInput<'db.cleanContent'>, 'kinds' | 'orphans'>>;
+
+export async function planContent(ctx: RowsContext, { domain, path, blog = 1, kinds = [], orphans = [], keepRevisions }: ContentInput): Promise<JobStep[]> {
+  if (kinds.length + orphans.length === 0) throw new MysqlRefused('Pick at least one kind to delete');
+  const t = await siteTablesFor(ctx, domain, path, blog);
+  const parts = [...contentParts(t, kinds, keepRevisions), ...orphanParts(t, orphans)];
+  if (!parts.length) throw new MysqlRefused('This site has none of those tables');
+  return planCleanup(ctx, t.database, 'content', contentTitle(kinds, orphans), parts, `${domain}${path ?? ''}`);
+}
+
+export async function planOrphans(ctx: RowsContext, { domain, path, blog = 1, kinds }: ActionInput<'db.cleanOrphans'>): Promise<JobStep[]> {
+  const t = await siteTablesFor(ctx, domain, path, blog);
+  const parts = orphanParts(t, kinds);
   if (!parts.length) throw new MysqlRefused('This site has none of those tables');
   return planCleanup(ctx, t.database, 'orphans', 'Delete what was left behind', parts, `${domain}${path ?? ''}`);
+}
+
+/**
+ * The condition a clean-up kind counts on its table, for the Tables view to
+ * show those rows: built by the same code the clean-up runs, so what shows is
+ * what it would delete. Refused for a table the kind does not count.
+ */
+export function cleanupViewWhere(t: WordpressTables, view: DbCleanupView, table: string): string {
+  const kind = view.kind;
+  const parts =
+    kind === 'transients' || kind === 'expiredTransients'
+      ? transientParts(t, kind === 'transients' ? 'all' : 'expired').slice(0, 1)
+      : (WP_ORPHAN_KINDS as readonly string[]).includes(kind)
+        ? orphanParts(t, [kind])
+        : contentParts(t, [kind], kind === 'revisions' ? view.keepRevisions : undefined).slice(-1);
+  const part = parts.at(-1);
+  if (!part?.where || part.table !== table) throw new MysqlRefused(`That clean-up does not count rows of ${table}`);
+  return part.where;
 }
 
 // ── whole tables ─────────────────────────────────────────────

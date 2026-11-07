@@ -4,8 +4,9 @@ import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { type ActionContext, runAction } from '../src/actions.js';
 import { type JobRuntime, type JobStep, Jobs } from '../src/jobs.js';
-import { cleanupsDir, listCleanups, planContent, planDropTable, planEmptyTable, planOrphans, planTransients, pruneCleanups, setAutoload, undoCleanup } from '../src/mysql-cleanup.js';
+import { cleanupsDir, cleanupViewWhere, contentTitle, listCleanups, planContent, planDropTable, planEmptyTable, planOrphans, planTransients, pruneCleanups, setAutoload, undoCleanup } from '../src/mysql-cleanup.js';
 import type { RowsContext } from '../src/mysql-rows.js';
+import type { WordpressTables } from '../src/mysql-wordpress.js';
 import { RunStore } from '../src/store.js';
 import { type FakeCall, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
@@ -313,5 +314,41 @@ describe('what plugins leave', () => {
     const { contentTitle } = await import('../src/mysql-cleanup.js');
     expect(contentTitle(['revisions', 'spamComments'])).toBe('Delete revisions, drafts, trash and spam');
     expect(contentTitle(['revisions', 'oembed'])).toBe('Delete what a clean-up found');
+  });
+});
+
+describe('one clean-up for the whole card', () => {
+  it('deletes content and what was left behind in one job, with one saved copy and one Undo', async () => {
+    const fake = fakeDb();
+    const { undos } = await run(await planContent(ctxFor(fake), { domain: 'local.shop.com', kinds: ['spamComments'], orphans: ['postmeta'] }));
+    expect(dumps(fake).map((c) => c.args.at(-1))).toEqual(['wp_commentmeta', 'wp_comments', 'wp_postmeta']);
+    expect(deletes(fake)).toContain('DELETE FROM `wp_postmeta` WHERE (NOT EXISTS (SELECT 1 FROM `wp_posts` p WHERE p.ID = `wp_postmeta`.post_id))');
+    expect(undos).toHaveLength(1);
+    expect(contentTitle(['spamComments'], ['postmeta'])).toBe('Delete what a clean-up found');
+    expect(contentTitle(['spamComments'])).toBe('Delete revisions, drafts, trash and spam');
+  });
+
+  it('refuses a clean-up with nothing picked', async () => {
+    await expect(planContent(ctxFor(fakeDb()), { domain: 'local.shop.com', kinds: [], orphans: [] })).rejects.toThrow('Pick at least one kind to delete');
+  });
+});
+
+describe("a clean-up's rows in the Tables view", () => {
+  const t: WordpressTables = { database: 'shop_com', prefix: 'wp_', blog: 1, blogPrefix: 'wp_', names: new Set([...SINGLE, 'wp_actionscheduler_actions', 'wp_actionscheduler_logs']) };
+  const view = (kind: Parameters<typeof cleanupViewWhere>[1]['kind'], extra = {}) => ({ domain: 'local.shop.com', kind, ...extra });
+
+  it('uses the condition the clean-up deletes by, on the table its count counts', () => {
+    expect(cleanupViewWhere(t, view('revisions'), 'wp_posts')).toBe("post_type = 'revision'");
+    expect(cleanupViewWhere(t, view('revisions', { keepRevisions: 3 }), 'wp_posts')).toMatch(/^\(post_type = 'revision' AND ID IN \(SELECT ID FROM \(.*\) r WHERE r\.n > 3\)\)$/);
+    expect(cleanupViewWhere(t, view('spamComments'), 'wp_comments')).toBe("comment_approved = 'spam'");
+    expect(cleanupViewWhere(t, view('actionsDone'), 'wp_actionscheduler_actions')).toMatch(/^status IN /);
+    expect(cleanupViewWhere(t, view('postmeta'), 'wp_postmeta')).toBe('NOT EXISTS (SELECT 1 FROM `wp_posts` p WHERE p.ID = `wp_postmeta`.post_id)');
+    expect(cleanupViewWhere(t, view('expiredTransients'), 'wp_options')).toContain('UNIX_TIMESTAMP()');
+    expect(cleanupViewWhere(t, view('sessionTokens'), 'wp_usermeta')).toBe("meta_key = 'session_tokens'");
+  });
+
+  it('refuses a table the kind does not count', () => {
+    expect(() => cleanupViewWhere(t, view('revisions'), 'wp_postmeta')).toThrow('That clean-up does not count rows of wp_postmeta');
+    expect(() => cleanupViewWhere(t, view('wcSessions'), 'wp_options')).toThrow(/does not count rows/);
   });
 });

@@ -33,6 +33,7 @@ STATE_DIR=$T/state
 NGINX_SITES_AVAILABLE=$T/nginx/sites-available
 NGINX_SITES_ENABLED=$T/nginx/sites-enabled
 NGINX_LOG_DIR=$T/nginx/log
+MYSQL_CONF_DIR=$T/mysql
 NGINX_ADDRESS=127.0.0.2
 APACHE_ADDRESS=127.0.0.1
 EOF

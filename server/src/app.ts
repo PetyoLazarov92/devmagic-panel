@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -23,14 +23,15 @@ import { servicesReport } from './services.js';
 import { apacheErrorLog, apacheReport } from './apache.js';
 import { nginxErrorLog, nginxReport, nginxSetUp } from './nginx.js';
 import { nginxPhpVersion } from './sites/server-switch.js';
-import { type BrowseContext, dbCell, dbOverview, dbRows, dbSchema, dbStructure } from './mysql-browse.js';
+import { type BrowseContext, type CleanupWhere, dbCell, dbOverview, dbRows, dbSchema, dbStructure } from './mysql-browse.js';
 import { runQuery } from './mysql-query.js';
-import { listCleanups } from './mysql-cleanup.js';
+import { cleanupViewWhere, listCleanups } from './mysql-cleanup.js';
+import { readSettings } from './mysql-settings.js';
 import { checkWrite, mysqlProcesses } from './mysql-write.js';
 import { exportDatabase } from './mysql-transfer.js';
 import { listRowChanges } from './mysql-rows.js';
-import { databaseSummary, wordpressReport } from './mysql-wordpress.js';
-import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
+import { databaseSummary, wordpressReport, wordpressTables } from './mysql-wordpress.js';
+import { MysqlRefused, mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
 import { BrowseError } from './mysql-sql.js';
 import { Jobs } from './jobs.js';
 import { defaultClaude, type ClaudeFactory } from './assistant/briefing.js';
@@ -362,6 +363,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const mailpitBin = mailpitPaths(dirname(deps.uploadsDir), deps.hostPaths.home).bin;
     api.get('/api/services', async (): Promise<ServicesReport> => servicesReport(deps.config, deps.exec, Date.now, mailpitBin));
     // The Services page's MySQL and Apache tabs, read only; their changes are registry actions.
+    // The MySQL settings the MySQL page changes: what runs now, what the panel's file keeps, what an import holds raised.
+    api.get('/api/mysql/settings', async (_request, reply): Promise<MysqlSettings | undefined> => {
+      try {
+        return await readSettings({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, dmpRoot: deps.dmpRoot, memo: deps.store });
+      } catch (error) {
+        return reply.code(error instanceof MysqlRefused ? 409 : 500).send({ error: (error as Error).message });
+      }
+    });
     api.get('/api/mysql', async (): Promise<MysqlReport> =>
       mysqlReport({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases(), backupsDir: mysqlBackupsDir(deps.uploadsDir) }));
     // The database browser: reads only, in a read-only transaction with a time limit. Rows and full
@@ -377,12 +386,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       }
     };
     type TableParams = { Params: { database: string; table: string } };
+    // A clean-up's rows, for the Tables view: the site's tables read again, and the condition the clean-up itself would use.
+    const cleanupWhere: CleanupWhere = async (database, table, view) => {
+      if (!localName.safeParse(view.domain).success || (view.path !== undefined && !mountPath.safeParse(view.path).success)) throw new BrowseError('A local site like local.acme.com, with its path if it has one', 400);
+      const t = await wordpressTables(browse(), view.domain, view.path, view.blog ?? 1);
+      if (t.database !== database) throw new BrowseError(`${view.domain} keeps its tables in ${t.database}`, 400);
+      try {
+        return cleanupViewWhere(t, view, table);
+      } catch (error) {
+        throw new BrowseError((error as Error).message, 400);
+      }
+    };
     api.get<{ Params: { database: string } }>('/api/mysql/databases/:database', async (request, reply): Promise<DbOverview | undefined> =>
       browsing(reply, () => dbOverview(browse(), request.params.database)));
     api.get<TableParams>('/api/mysql/databases/:database/tables/:table', async (request, reply): Promise<DbStructure | undefined> =>
       browsing(reply, () => dbStructure(browse(), request.params.database, request.params.table)));
     api.post<TableParams>('/api/mysql/databases/:database/tables/:table/rows', async (request, reply): Promise<DbRowsPage | undefined> =>
-      browsing(reply, () => dbRows(browse(), request.params.database, request.params.table, request.body)));
+      browsing(reply, () => dbRows(browse(), request.params.database, request.params.table, request.body, cleanupWhere)));
     api.post<TableParams>('/api/mysql/databases/:database/tables/:table/cell', async (request, reply): Promise<DbCellValue | undefined> =>
       browsing(reply, () => dbCell(browse(), request.params.database, request.params.table, request.body)));
     // The row changes saved for Undo on a table, newest first: kinds and counts, never values.

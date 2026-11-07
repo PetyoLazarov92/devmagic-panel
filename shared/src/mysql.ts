@@ -91,3 +91,59 @@ export interface MysqlReport {
   /** Why the accounts could not be read, when the databases could. */
   usersError?: string;
 }
+
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
+/**
+ * The MySQL settings the MySQL page shows and keeps, with the bounds
+ * dmp-root's mysql-config-write takes (DMP_MYSQL_SETTINGS in scripts/lib/mysql.sh):
+ * change both together. Each changes while MySQL runs, so a change applies
+ * at once with SET GLOBAL and is kept in the panel's file for the next start.
+ * The redo log is innodb_redo_log_capacity on MySQL 8.0.30+ and
+ * innodb_log_file_size on MariaDB 10.9+; a server shows the one it has.
+ */
+export const MYSQL_SETTINGS = [
+  { name: 'innodb_buffer_pool_size', label: 'Buffer pool', unit: 'bytes', min: 128 * MB, max: 64 * GB, about: 'Where InnoDB keeps tables and indexes in memory. Too small for your sites, and pages read from the disk.' },
+  { name: 'max_allowed_packet', label: 'Biggest packet', unit: 'bytes', min: MB, max: GB, about: 'The biggest statement or row MySQL takes: a dump with big rows needs more.' },
+  { name: 'innodb_redo_log_capacity', label: 'Redo log', unit: 'bytes', min: 8 * MB, max: 16 * GB, about: 'Room for changes before InnoDB writes them to the tables: bigger makes imports faster.' },
+  { name: 'innodb_log_file_size', label: 'Redo log', unit: 'bytes', min: 4 * MB, max: 8 * GB, about: 'Room for changes before InnoDB writes them to the tables: bigger makes imports faster.' },
+  { name: 'max_connections', label: 'Connections', unit: 'count', min: 10, max: 2000, about: 'How many clients can connect at once.' },
+  { name: 'tmp_table_size', label: 'Temp tables in memory', unit: 'bytes', min: MB, max: 4 * GB, about: 'How big a temporary table of a query can grow in memory before it goes to the disk. Sets max_heap_table_size too.' },
+  { name: 'innodb_flush_log_at_trx_commit', label: 'Write to disk', unit: 'choice', min: 1, max: 2, about: 'Every commit to disk (1, safest), or once a second (2): much faster imports, and a crash of the computer can lose the last second.' },
+  { name: 'slow_query_log', label: 'Slow query log', unit: 'switch', min: 0, max: 1, about: 'Notes the queries slower than the time below in MySQL\'s slow log.' },
+  { name: 'long_query_time', label: 'Slow above', unit: 'seconds', min: 0, max: 60, about: 'How slow a query must be to go in the slow log.' },
+] as const;
+
+export type MysqlSettingName = (typeof MYSQL_SETTINGS)[number]['name'] | 'max_heap_table_size';
+export const MYSQL_SETTING_NAMES = [...MYSQL_SETTINGS.map((s) => s.name), 'max_heap_table_size'] as unknown as [MysqlSettingName, ...MysqlSettingName[]];
+
+export function mysqlSettingError(name: MysqlSettingName, value: number): string | null {
+  const s = MYSQL_SETTINGS.find((x) => x.name === (name === 'max_heap_table_size' ? 'tmp_table_size' : name));
+  if (!s) return `${name} is not a setting the panel keeps`;
+  if (s.unit === 'seconds' ? Math.round(value * 1000) !== value * 1000 : !Number.isInteger(value)) return `${name} takes ${s.unit === 'seconds' ? 'seconds like 2 or 0.5' : 'a whole number'}`;
+  if (value < s.min || value > s.max) return `${name} must be between ${s.min} and ${s.max}`;
+  return null;
+}
+
+/** One setting as the MySQL page shows it. */
+export interface MysqlSetting {
+  name: MysqlSettingName;
+  /** What MySQL runs with now. */
+  value: number;
+  /** What the panel's file keeps for the next start, if anything. */
+  kept?: number;
+  /** Set higher for an import that runs now: it goes back to the value from before when the import ends. */
+  raisedFrom?: number;
+  /** What the panel suggests for this computer, when it has a view. */
+  suggested?: number;
+  why?: string;
+}
+
+export interface MysqlSettings {
+  product: 'MySQL' | 'MariaDB';
+  settings: MysqlSetting[];
+  /** The panel's file, or why none can be kept. */
+  file: string | null;
+  fileNote?: string;
+}

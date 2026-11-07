@@ -1,5 +1,13 @@
 # Changelog
 
+### v1.19.0 (2026-11-07)
+* **Databases:** the WordPress view's long lists show their first 7 rows with Show all, remembered per list, so What plugins keep, Table health, Post meta by key and the rest stay short
+* **Databases:** What a clean-up would find comes in four groups (posts, comments, caches and logs, what was left behind), with Keep for revisions right under its row, the repeated post meta search in its place, the kinds with nothing to clean on one line, and one Delete the ticked that runs as one job with one Undo
+* **Databases:** a count in What a clean-up would find and Transients opens those rows in Tables, by the clean-up's own condition, with a chip saying what they are; an option, a meta key or a post type opens its table filtered on it
+* **MySQL:** a Settings card shows the buffer pool, packet size, redo log, connections, temp tables, disk writes and the slow query log, with what an import holds raised and suggestions; a change applies at once and is kept for MySQL's next start in the panel's own file, with Undo
+* **Environment:** MySQL memory for site data has a fix that sets the buffer pool, the same way
+* This release changes the root scripts, so the Updates page asks for your sudo password to install it, as for any release that does
+
 ### v1.18.0 (2026-11-07)
 * **Databases:** the WordPress view shows what it read last time at once, with when, and reads the parts that scan whole tables again only on Check again or after a job changed the site. Leaving the view stops its reads in MySQL too, and two asks for the same read share one
 * **Databases:** a clean-up deletes in batches of 5,000 rows, each its own short transaction, with the rows done so far and Stop, which ends it after the batch it is on: Retry carries on and Undo puts back what it removed. It checks the disk has room for its copy first. Transients still go in one statement, a value with its timeout

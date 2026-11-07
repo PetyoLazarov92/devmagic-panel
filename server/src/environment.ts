@@ -16,6 +16,7 @@ import { installedCores, readWpcoreConfig } from './wpcore.js';
 import type { Secrets } from './secrets.js';
 import { selfChecks } from './self-check.js';
 import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
+import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
@@ -197,8 +198,8 @@ export const BUFFER_POOL_SQL =
 /**
  * InnoDB's buffer pool against the sites' data: much smaller, and every page
  * of a big site reads from the disk, the most common reason a big local site
- * is slow. The setting is root's (my.cnf), so the check says what to set and
- * where; the panel never writes MySQL's config.
+ * is slow. The fix sets it like the MySQL page does: at once, and kept in
+ * the panel's own settings file through dmp-root.
  */
 async function bufferPoolCheck(ctx: CheckContext, account: { user: string; host: string; password: string }): Promise<Check[]> {
   const label = 'MySQL memory for site data';
@@ -209,13 +210,17 @@ async function bufferPoolCheck(ctx: CheckContext, account: { user: string; host:
   if (r.code !== 0 || !Number.isFinite(poolBytes) || !Number.isFinite(dataBytes) || poolBytes <= 0) return [];
   const ram = ctx.totalMemory?.() ?? totalmem();
   const mb = 1024 * 1024;
-  // Room for the data with a quarter to spare, never more than half the memory, in steps of 128 MB.
-  const target = Math.max(128 * mb, Math.ceil(Math.min(dataBytes * 1.25, ram / 2) / (128 * mb)) * 128 * mb);
+  const target = bufferPoolTarget(dataBytes, ram);
   const setting = target >= 1024 * mb && target % (1024 * mb) === 0 ? `${target / (1024 * mb)}G` : `${target / mb}M`;
   const fact = `${formatBytes(poolBytes)} for ${formatBytes(dataBytes)} of InnoDB data`;
   if (poolBytes >= target / 2) return [ok('mysql.bufferPool', label, fact, { optional: true })];
-  const file = /mariadb/i.test(version) ? '/etc/mysql/mariadb.conf.d/50-server.cnf' : '/etc/mysql/mysql.conf.d/mysqld.cnf';
-  return [warn('mysql.bufferPool', label, `${fact}: big sites read from the disk on every page. Set innodb_buffer_pool_size = ${setting} under [mysqld] in ${file}, then sudo systemctl restart mysql`, { optional: true })];
+  const product = /mariadb/i.test(version) ? 'MariaDB' : 'MySQL';
+  return [
+    warn('mysql.bufferPool', label, `${fact}: big sites read from the disk on every page. Set the buffer pool to ${setting}, on the MySQL page or here`, {
+      optional: true,
+      fixes: [{ action: 'mysql.setSettings', input: { values: { innodb_buffer_pool_size: target } }, label: `Set it to ${setting}`, confirm: `${product} takes the new size at once, and keeps it for its next start in the panel's own settings file. Undo on the job puts the old size back.` }],
+    }),
+  ];
 }
 
 /** The SQL runner's account: it reads with SELECT and SHOW VIEW only, so a query can change nothing. */

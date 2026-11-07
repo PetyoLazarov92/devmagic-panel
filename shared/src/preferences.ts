@@ -15,10 +15,16 @@ export const SITES_SORT_LABELS: Record<(typeof SITES_SORTS)[number], string> = {
 /** How a database's tables list: by name, or biggest first. */
 export const TABLE_SORTS = ['name', 'size'] as const;
 
+/** The lists of the WordPress view that show every row, not only the first few. */
+export const WP_DB_LISTS = ['autoload', 'metaKeys', 'pluginTables', 'pluginOptions', 'health', 'users', 'postTypes', 'cleanup'] as const;
+export type WpDbList = (typeof WP_DB_LISTS)[number];
+/** How many rows a list of the WordPress view shows before Show all. */
+export const WP_DB_LIST_ROWS = 7;
+
 /** The web server a new site of its own gets, once nginx runs next to Apache. */
 export const SITE_SERVERS = ['apache', 'nginx'] as const;
 
-const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS) };
+const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS), wpdbShowAll: z.array(z.enum(WP_DB_LISTS)).max(WP_DB_LISTS.length) };
 
 export const preferences = z.object({
   theme: fields.theme.default('system'),
@@ -26,6 +32,7 @@ export const preferences = z.object({
   sitesSort: fields.sitesSort.default('name'),
   newSiteServer: fields.newSiteServer.default('apache'),
   tablesSort: fields.tablesSort.default('name'),
+  wpdbShowAll: fields.wpdbShowAll.default([]),
 });
 
 export type Preferences = z.infer<typeof preferences>;

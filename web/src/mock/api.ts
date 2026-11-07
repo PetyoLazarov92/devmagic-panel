@@ -1,4 +1,5 @@
 import type { WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
@@ -425,6 +426,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     'mysql.dropDatabase': [{ id: 'export', label: `Export ${String(input.database)} to the MySQL backups` }, { id: 'drop', label: `Delete database ${String(input.database)}` }],
     'mysql.dropUsers': [{ id: 'save', label: `Save ${accounts.length === 1 ? accounts[0] : `${accounts.length} accounts`} and their rights` }, { id: 'drop', label: `Delete ${accounts.join(', ')}` }],
     'mysql.optimize': [{ id: 'optimize', label: `Optimize the tables of ${String(input.database)}` }],
+    'mysql.setSettings': [{ id: 'apply', label: 'Apply them now' }, { id: 'keep', label: 'Keep them for the next start' }],
     'mysql.importDump': [
       ...(input.mode === 'replace' ? [{ id: 'save', label: `Save ${String(input.database)} to the MySQL backups` }] : []),
       { id: 'make', label: input.mode === 'replace' ? `Empty ${String(input.database)}` : `Make database ${String(input.database)}` },
@@ -615,6 +617,15 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     job.undoable = ['Put back what it removed'];
     // Deletes go in batches, so a clean-up stops safely between two.
     if (id.startsWith('db.clean') || id === 'mysql.emptyTable') job.stoppable = true;
+  } else if (id === 'mysql.setSettings') {
+    const changes = (input.values ?? {}) as Record<string, number | null>;
+    job.title = Object.keys(changes).length === 1 ? `Change MySQL's ${Object.keys(changes)[0]}` : `Change MySQL's ${Object.keys(changes).length} settings`;
+    job.undoable = ['Put the settings back as they were'];
+    const applied = () => {
+      if (job.status === 'running' || job.status === 'queued') return void window.setTimeout(applied, 400);
+      if (job.status === 'done') mockApplyMysqlSettings(changes);
+    };
+    applied();
   } else if (id.startsWith('mysql.')) {
     job.title = id === 'mysql.optimize' ? `Optimize ${Array.isArray(input.tables) ? (input.tables.length === 1 ? String(input.tables[0]) : `${input.tables.length} tables`) + ' of ' : ''}${String(input.database)}` : id === 'mysql.dropDatabase' ? `Delete database ${String(input.database)}` : `Delete ${accounts.length === 1 ? accounts[0] : `${accounts.length} MySQL users`}`;
     if (id !== 'mysql.optimize') job.undoable = [id === 'mysql.dropDatabase' ? `Put ${String(input.database)} back from its export` : 'Make the accounts again'];
@@ -1215,6 +1226,10 @@ export const mockApi: Api = {
   mysql: async (): Promise<MysqlReport> => {
     await wait(300);
     return mockMysql();
+  },
+  mysqlSettings: async () => {
+    await wait(350);
+    return mockMysqlSettings();
   },
   dbOverview: async (database) => {
     await wait(250);

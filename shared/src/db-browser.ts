@@ -31,6 +31,42 @@ export const dbFilter = z.object({
 });
 export type DbFilter = z.infer<typeof dbFilter>;
 
+export const WP_CONTENT_KINDS = [
+  'revisions',
+  'autoDrafts',
+  'trashedPosts',
+  'spamComments',
+  'trashedComments',
+  'oembed',
+  'akismet',
+  'actionsDone',
+  'wcSessions',
+  'sessionTokens',
+  'duplicateMeta',
+] as const;
+/** Keep the newest this many revisions of each post: the choices the WordPress view offers. */
+export const WP_KEEP_REVISIONS = [1, 3, 5, 10] as const;
+export const WP_ORPHAN_KINDS = ['postmeta', 'commentmeta', 'termmeta', 'termRelationships', 'usermeta'] as const;
+
+
+/** The clean-up kinds whose rows the Tables view can show, with transients (expired, or all). */
+export const WP_CLEANUP_VIEWS = [...WP_CONTENT_KINDS, ...WP_ORPHAN_KINDS, 'expiredTransients', 'transients'] as const;
+export type WpCleanupView = (typeof WP_CLEANUP_VIEWS)[number];
+
+/**
+ * Only the rows a clean-up of the WordPress view counts: named by its kind,
+ * never by SQL. The server builds the condition with the code the clean-up
+ * runs, for the site named, and refuses a table the kind does not count.
+ */
+export const dbCleanupView = z.object({
+  domain: z.string().min(1).max(253),
+  path: z.string().max(200).optional(),
+  blog: z.number().int().min(1).max(1_000_000).optional(),
+  kind: z.enum(WP_CLEANUP_VIEWS),
+  keepRevisions: z.number().int().refine((n) => (WP_KEEP_REVISIONS as readonly number[]).includes(n), 'Keep 1, 3, 5 or 10 revisions').optional(),
+});
+export type DbCleanupView = z.infer<typeof dbCleanupView>;
+
 /** One page of a table's rows: sent in a POST body, since a filter's value can be data that must not reach a URL or a log. */
 export const dbRowsQuery = z.object({
   page: z.number().int().min(1).max(1_000_000).default(1),
@@ -39,6 +75,8 @@ export const dbRowsQuery = z.object({
   filters: z.array(dbFilter).max(10).default([]),
   /** all: a row matches every filter (AND); any: at least one (OR). */
   match: z.enum(['all', 'any']).default('all'),
+  /** Only the rows a clean-up would take, ANDed with the filters. */
+  cleanup: dbCleanupView.optional(),
 });
 export type DbRowsQuery = z.input<typeof dbRowsQuery>;
 /** A rows query once the server filled in its defaults. */
@@ -382,23 +420,6 @@ export interface CleanupInfo {
   savedAt: string;
   purgeAt: string;
 }
-
-export const WP_CONTENT_KINDS = [
-  'revisions',
-  'autoDrafts',
-  'trashedPosts',
-  'spamComments',
-  'trashedComments',
-  'oembed',
-  'akismet',
-  'actionsDone',
-  'wcSessions',
-  'sessionTokens',
-  'duplicateMeta',
-] as const;
-/** Keep the newest this many revisions of each post: the choices the WordPress view offers. */
-export const WP_KEEP_REVISIONS = [1, 3, 5, 10] as const;
-export const WP_ORPHAN_KINDS = ['postmeta', 'commentmeta', 'termmeta', 'termRelationships', 'usermeta'] as const;
 
 /** One statement that writes, for the SQL runner's check before it runs. */
 export const dbWrite = z.object({ sql: z.string().min(1).max(100_000, 'A statement under 100,000 characters') });
