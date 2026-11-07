@@ -3,6 +3,7 @@ import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, OctagonX, 
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { MysqlSettingsCard } from '@/components/mysql-settings';
+import { type Look, NeedsALook } from '@/components/needs-a-look';
 import { SlowQueries } from '@/components/slow-queries';
 import { SqlRunner, sqlSeed, sqlSeedState } from '@/components/sql-runner';
 import { Segmented } from '@/components/ui/segmented';
@@ -183,6 +184,11 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
   const databases = data.databases.filter((d) => (filter === 'all' ? d.kind !== 'system' : d.kind === filter));
   const count = (f: DbFilter) => data.databases.filter((d) => (f === 'all' ? d.kind !== 'system' : d.kind === f)).length;
   const leftovers = data.users.filter((u) => u.kind === 'leftover');
+  const unused = data.databases.filter((d) => d.kind === 'unused');
+  const looks: Look[] = [
+    ...(unused.length ? [{ key: 'unused', tone: 'warning' as const, text: `${unused.length === 1 ? '1 database' : `${unused.length} databases`} no site uses, ${bytes(unused.reduce((n, d) => n + d.sizeBytes, 0))}`, card: 'mysql-databases', before: () => setFilter('unused') }] : []),
+    ...(leftovers.length ? [{ key: 'leftover', tone: 'warning' as const, text: `${leftovers.length === 1 ? '1 user' : `${leftovers.length} users`} left behind`, card: 'mysql-users' }] : []),
+  ];
 
   const dbMenu = (d: MysqlDatabase): MenuItem[] => {
     const browse = { label: 'Browse tables', icon: <Table2 />, onSelect: () => navigate(browseHref(d)) };
@@ -230,6 +236,8 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
         </div>
       )}
 
+      <NeedsALook items={looks} />
+
       <Card>
         <CardHeader><CardTitle>{data.server.product} server</CardTitle><Database className="size-4 text-muted-foreground" /></CardHeader>
         <div className="flex flex-wrap items-end gap-4 p-5">
@@ -265,7 +273,7 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
         </div>
       </Card>
 
-      <Card>
+      <Card id="mysql-databases" className="scroll-mt-4">
         <CardHeader><CardTitle>Databases</CardTitle><Database className="size-4 text-muted-foreground" /></CardHeader>
         <div className="flex flex-wrap gap-1.5 px-5 pt-4" role="group" aria-label="Show">
           {DB_FILTERS.filter((f) => f.value === 'all' || count(f.value) > 0).map((f) => (
@@ -303,7 +311,7 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
 
       <ImportDumpCard databases={data.databases} onDone={report.reload} />
 
-      <Card>
+      <Card id="mysql-users" className="scroll-mt-4">
         <CardHeader><CardTitle>Users</CardTitle><Users className="size-4 text-muted-foreground" /></CardHeader>
         {data.usersError && <p role="alert" className="mx-5 mt-4 text-sm text-danger">{data.usersError}</p>}
         {leftovers.length > 0 && (

@@ -17,6 +17,8 @@ import { bytes } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { wordpressFindings } from '@/lib/wp-findings';
+import { NeedsALook } from '@/components/needs-a-look';
 import { Notice, ViewBar } from '@/components/page';
 
 const number = (n: number) => n.toLocaleString('en-US');
@@ -221,16 +223,17 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
           Tables WordPress makes that this database lacks: <span className="font-mono">{r.missingTables.join(', ')}</span>. Older WordPress versions had no termmeta table.
         </Notice>
       )}
+      <NeedsALook items={wordpressFindings(r).map((f) => ({ ...f, key: `${f.card}:${f.text}` }))} />
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
-          <AutoloadCard view={view} onTable={onTable} onAutoloadOff={(o) => void autoloadOff(o)} />
-          <TransientsCard view={view} target={target} busy={busy} onTable={onTable} onDelete={(scope) => setAsking(transientsAsk(r, scope))} footer={footerFor('transients')} />
+          <div id="wp-autoload" className="grid scroll-mt-4"><AutoloadCard view={view} onTable={onTable} onAutoloadOff={(o) => void autoloadOff(o)} /></div>
+          <div id="wp-transients" className="grid scroll-mt-4"><TransientsCard view={view} target={target} busy={busy} onTable={onTable} onDelete={(scope) => setAsking(transientsAsk(r, scope))} footer={footerFor('transients')} /></div>
           <MetaKeysCard view={view} onTable={onTable} onSizes={report.readSizes} />
-          <PluginsCard view={view} busy={busy} onTable={onTable} onAsk={setAsking} footer={footerFor('plugins')} />
+          <div id="wp-plugins" className="grid scroll-mt-4"><PluginsCard view={view} busy={busy} onTable={onTable} onAsk={setAsking} footer={footerFor('plugins')} /></div>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
-          <HealthCard view={view} busy={busy} onFix={setAsking} footer={footerFor('health')} />
-          <CleanupCard view={view} target={target} busy={busy} onClean={setAsking} onScan={report.readDuplicates} onTable={onTable} footer={footerFor('content', 'orphans')} />
+          <div id="wp-health" className="grid scroll-mt-4"><HealthCard view={view} busy={busy} onFix={setAsking} footer={footerFor('health')} /></div>
+          <div id="wp-cleanup" className="grid scroll-mt-4"><CleanupCard view={view} target={target} busy={busy} onClean={setAsking} onScan={report.readDuplicates} onTable={onTable} footer={footerFor('content', 'orphans')} /></div>
           <UsersCard view={view} />
           <GrowthCard view={view} onTable={onTable} />
         </div>
@@ -1131,3 +1134,4 @@ function UsersCard({ view }: { view: View }) {
     </Card>
   );
 }
+
