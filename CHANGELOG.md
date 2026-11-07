@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.19.1 (2026-11-07)
+* **Databases:** Show all in the WordPress view is remembered per site (and site of a network) in this browser, so another site's cards open short instead of taking the last site's choice
+* An update installs this release from the panel as usual
+
 ### v1.19.0 (2026-11-07)
 * **Databases:** the WordPress view's long lists show their first 7 rows with Show all, remembered per list, so What plugins keep, Table health, Post meta by key and the rest stay short
 * **Databases:** What a clean-up would find comes in four groups (posts, comments, caches and logs, what was left behind), with Keep for revisions right under its row, the repeated post meta search in its place, the kinds with nothing to clean on one line, and one Delete the ticked that runs as one job with one Undo

@@ -59,8 +59,8 @@ shows what the panel read last time at once ("Read 3 h ago" in its bar), reads
 the quick parts again, and the parts that read whole tables only on **Check
 again** or after a job changed the site; each of those fills its card in when
 it is read, with up to a minute. Leaving the view stops its reads in MySQL too.
-A long list shows its first 7 rows and **Show all**, which the view
-remembers per list. A name in a list (an option, a meta key, a post type)
+A long list shows its first 7 rows and **Show all**, which this browser
+remembers per site: another site's lists open short. A name in a list (an option, a meta key, a post type)
 opens its table in Tables, filtered on it; the filter's value goes with the
 page's history, never its address.
 

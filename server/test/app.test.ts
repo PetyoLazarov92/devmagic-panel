@@ -264,18 +264,15 @@ describe('preferences', () => {
     const cookie = await login();
     const headers = { host: HOST, origin: ORIGIN, cookie };
     expect((await app.inject({ method: 'GET', url: '/api/preferences', headers: { host: HOST } })).statusCode).toBe(401);
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', wpdbShowAll: [] });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name' });
     const saved = await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { theme: 'dark', sitesView: 'list' } });
-    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', wpdbShowAll: [] });
-    await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { sitesSort: 'newest', tablesSort: 'size', wpdbShowAll: [] } });
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', wpdbShowAll: [] });
-    await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { wpdbShowAll: ['metaKeys'] } });
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toMatchObject({ wpdbShowAll: ['metaKeys'] });
-    await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { wpdbShowAll: [] } });
-    for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }, { wpdbShowAll: ['everything'] }]) {
+    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name' });
+    await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { sitesSort: 'newest', tablesSort: 'size' } });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size' });
+    for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }]) {
       expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload })).statusCode).toBe(400);
     }
-    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', wpdbShowAll: [] });
+    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size' });
   });
 });
 

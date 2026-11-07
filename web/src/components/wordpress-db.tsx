@@ -1,7 +1,7 @@
 import type { DbCleanupView, Site, WpDbBlog, WpDbList, WpDbReport, WpDbSection, WpPluginState, WpTableFix } from '@devmagic-panel/shared';
 import { WP_DB_LIST_ROWS, WP_DB_ON_DEMAND, WP_DB_SECTIONS, WP_DB_SLOW_SECTIONS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS } from '@devmagic-panel/shared';
 import { ChevronDown, ChevronRight, ChevronUp, Gauge, Hourglass, KeyRound, type LucideIcon, Puzzle, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, TrendingUp, Users, Wrench } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import type { RowsSeed } from '@/components/db-browser';
 import { JobFooter } from '@/components/job-box';
@@ -14,7 +14,6 @@ import { Select } from '@/components/ui/field';
 import { Bar, CardLinesSkeleton, CardSkeleton, Reading } from '@/components/skeletons';
 import { api } from '@/lib/api';
 import { bytes } from '@/lib/format';
-import { savePreferences, usePreferences } from '@/lib/preferences';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -196,6 +195,7 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
   const view: View = { report: r, errors: report.errors, reading: report.reading };
 
   return (
+    <ShowAllScope.Provider value={`${siteKey}#${blog}`}>
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <ViewBar
         onCheck={report.reload}
@@ -240,6 +240,7 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
         <ConfirmCleanup title={asking.title} description={asking.description} action={asking.button} {...(asking.typed ? { typed: asking.typed } : {})} onClose={() => setAsking(null)} onConfirm={(confirm) => start(asking.typed ? { ...asking, input: { ...asking.input, confirm } } : asking)} />
       )}
     </div>
+    </ShowAllScope.Provider>
   );
 }
 
@@ -314,15 +315,48 @@ function SectionError({ text }: { text: string | undefined }) {
 /** True while a part has nothing to show yet: asked for, and no answer from this or an earlier read. */
 const waiting = (view: View, section: WpDbSection) => view.report[section] === undefined && !view.errors[section];
 
+/** The site (and site of a network) the lists belong to, so Show all is remembered per site. */
+const ShowAllScope = createContext('');
+/** This browser's memory of the lists shown in full, per site: a convenience, never sent to the panel. */
+const SHOW_ALL_KEY = 'dmp-wpdb-show-all';
+
+function shownInFull(scope: string): string[] {
+  try {
+    const kept = JSON.parse(localStorage.getItem(SHOW_ALL_KEY) ?? '{}') as Record<string, unknown>;
+    const lists = kept[scope];
+    return Array.isArray(lists) ? lists.filter((l): l is string => typeof l === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function keepShownInFull(scope: string, lists: string[]): void {
+  try {
+    const kept = JSON.parse(localStorage.getItem(SHOW_ALL_KEY) ?? '{}') as Record<string, unknown>;
+    if (lists.length) kept[scope] = lists;
+    else delete kept[scope];
+    localStorage.setItem(SHOW_ALL_KEY, JSON.stringify(kept));
+  } catch {
+    // Private windows may refuse storage: the list still opens, only for now.
+  }
+}
+
 /**
- * The first few rows of a list, every row once Show all is picked: the choice
- * is kept per list with the other view choices, so a long card stays short.
+ * The first few rows of a list, every row once Show all is picked: kept per
+ * site in this browser, so a long card stays short, and a site you have not
+ * opened in full starts short too.
  */
 function useShowAll<T>(list: WpDbList, items: readonly T[], hiddenNote?: (hidden: readonly T[]) => string): { shown: readonly T[]; more: ReactNode } {
-  const prefs = usePreferences();
-  const all = prefs.wpdbShowAll.includes(list);
+  const scope = useContext(ShowAllScope);
+  const [state, setState] = useState(() => ({ scope, all: shownInFull(scope).includes(list) }));
+  // Another site: what it remembers, not what the last one had.
+  const all = state.scope === scope ? state.all : shownInFull(scope).includes(list);
   if (items.length <= WP_DB_LIST_ROWS) return { shown: items, more: null };
-  const toggle = () => savePreferences({ wpdbShowAll: all ? prefs.wpdbShowAll.filter((l) => l !== list) : [...prefs.wpdbShowAll, list] });
+  const toggle = () => {
+    const others = shownInFull(scope).filter((l) => l !== list);
+    keepShownInFull(scope, all ? others : [...others, list]);
+    setState({ scope, all: !all });
+  };
   return {
     shown: all ? items : items.slice(0, WP_DB_LIST_ROWS),
     more: (
