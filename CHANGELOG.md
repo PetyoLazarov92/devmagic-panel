@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.16.3 (2026-11-07)
+* **Databases:** a serialized object with protected or private properties can be typed in Add a row, Duplicate or Change a row: type `\0*\0name` or `\0Class\0name` and **Turn \0 into NUL bytes** puts the NUL bytes PHP writes there in place of the typed backslash and zero, counts the lengths again, and is offered only when the value then reads
+* **Databases:** Add a row flags a value that starts like a serialized array or object and does not read, as Change a row already did
+* An update installs this release from the panel as usual
+
 ### v1.16.2 (2026-11-07)
 * **Databases:** Change a row and Add a copy edit a value with NUL bytes or Windows line breaks in an editor that shows them as `\0` and `\r` and keeps them as they are. The plain text box hid NUL bytes and turned every `\r\n` into `\n` once you typed, which changed the value and broke a serialized one
 * **Databases:** when a protected or private property of a serialized object loses a NUL byte around its name, the row editor names it and no longer offers Count the lengths again, which would have made it a new public property without a word

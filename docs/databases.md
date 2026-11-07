@@ -39,6 +39,11 @@ and tick rows on a page to delete them together.
   an object's protected and private properties: when one is deleted, the
   panel names the property and does not offer to count the lengths again,
   which would quietly make it a public one.
+- A NUL byte cannot be typed: `\0` typed is a backslash and a zero. Type
+  `\0*\0name` or `\0Class\0name` in a property name and click **Turn \0 into
+  NUL bytes**: only those spots change, the lengths are counted again, and it
+  is offered only when the value then reads. A new value that starts like a
+  serialized array or object and does not read is flagged too.
 - A change applies only while the row still holds what you saw, so an edit
   made since is never overwritten.
 - Each change saves the rows as they were first, and **Undo** (in the toast or

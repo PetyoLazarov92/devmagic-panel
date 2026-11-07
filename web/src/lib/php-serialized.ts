@@ -217,3 +217,24 @@ export function lostPropertyMarks(original: string, edited: string): PropertyNam
   }
   return lost;
 }
+
+// `\0*\0` or `\0Class\0` typed as text at the start of a string, where PHP puts NUL bytes around a property name.
+const TYPED_MARK = /:"\\0(\*|[A-Za-z_\x80-\uFFFF][\w\\\x80-\uFFFF]*)\\0/g;
+
+/**
+ * A NUL byte cannot be typed: `\0` typed is a backslash and a zero. This
+ * turns `\0*\0name` and `\0Class\0name` typed at the start of a string into
+ * the NUL bytes PHP writes there, counts the lengths again when they do not
+ * add up, and gives the result only when it reads as a whole serialized
+ * value; null otherwise. Any other `\0` stays as typed.
+ */
+export function withNulMarks(text: string): string | null {
+  if (!text.includes('\\0')) return null;
+  const marked = text.replace(TYPED_MARK, (_, scope: string) => `:"\0${scope}\0`);
+  if (marked === text) return null;
+  if (parsePhpSerialized(marked)) return marked;
+  return fixSerializedLengths(marked);
+}
+
+/** Text that starts the way a serialized array or object does, for a value that had none before. */
+export const looksSerialized = (text: string): boolean => /^\s*(?:a|O):\d+:/.test(text);

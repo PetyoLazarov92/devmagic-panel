@@ -9,7 +9,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input, Textarea } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { shortDate, timeAgo } from '@/lib/format';
-import { fixSerializedLengths, lostPropertyMarks, needsExactEditor, parseJsonValue, parsePhpSerialized, type PropertyName } from '@/lib/php-serialized';
+import { fixSerializedLengths, looksSerialized, lostPropertyMarks, needsExactEditor, parseJsonValue, parsePhpSerialized, type PropertyName, withNulMarks } from '@/lib/php-serialized';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
@@ -199,12 +199,16 @@ const lostName = (p: PropertyName) => (p.visibility === 'private' ? `${p.name} (
 function FieldRow({ column, field, original, locked, mode, onChange }: { column: DbColumnHead; field: Field; original: string | null; locked: string | null; mode: EditorMode; onChange: (next: Partial<Field>) => void }) {
   const id = `field-${column.name}`;
   // A value that was PHP serialized or JSON and no longer reads would reach WordPress as plain text.
+  // A new value counts too once it starts like a serialized array or object.
   const broken = useMemo(() => {
-    if (field.isNull || original === null || field.value === original) return null;
-    if (parsePhpSerialized(original) && !parsePhpSerialized(field.value)) return 'serialized';
-    if (parseJsonValue(original) !== undefined && parseJsonValue(field.value) === undefined) return 'json';
+    if (field.isNull || field.value === original) return null;
+    const wasSerialized = original !== null && parsePhpSerialized(original) !== null;
+    if ((wasSerialized || looksSerialized(field.value)) && !parsePhpSerialized(field.value)) return 'serialized';
+    if (original !== null && parseJsonValue(original) !== undefined && parseJsonValue(field.value) === undefined) return 'json';
     return null;
   }, [field, original]);
+  // \0 typed around a property name is two characters, not the NUL byte PHP writes there.
+  const marked = useMemo(() => (field.isNull ? null : withNulMarks(field.value)), [field]);
   // Protected and private properties keep NUL bytes around their names; one deleted makes a new public property.
   const lost = useMemo(() => (field.isNull || original === null || field.value === original || !parsePhpSerialized(original) ? [] : lostPropertyMarks(original, field.value)), [field, original]);
   // A plain text box hides NUL bytes and turns \r\n into \n: such a value is edited where both show and stay.
@@ -254,7 +258,16 @@ function FieldRow({ column, field, original, locked, mode, onChange }: { column:
           </span>
         </p>
       )}
-      {broken && (
+      {marked !== null && (
+        <p className="flex items-start gap-2 text-xs text-warning">
+          <TriangleAlert className="mt-px size-3.5 shrink-0" aria-label="Warning" />
+          <span className="flex-1">
+            A typed <code className="rounded-sm bg-foreground/10 px-0.5">\0</code> is a backslash and a zero. Around a property name PHP needs a NUL byte, which makes it protected (<code className="rounded-sm bg-foreground/10 px-0.5">\0*\0name</code>) or private (<code className="rounded-sm bg-foreground/10 px-0.5">\0Class\0name</code>).
+          </span>
+          <Button size="sm" variant="outline" onClick={() => onChange({ value: marked })}><Wand2 />Turn \0 into NUL bytes</Button>
+        </p>
+      )}
+      {broken && marked === null && (
         <p className="flex flex-wrap items-center gap-2 text-xs text-warning">
           <TriangleAlert className="size-3.5" aria-label="Warning" />
           {broken === 'serialized' ? 'No longer a whole PHP serialized value (a string length does not add up): WordPress would read it as plain text.' : 'No longer valid JSON.'}

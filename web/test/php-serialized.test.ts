@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { controlRuns, fixSerializedLengths, lostPropertyMarks, needsExactEditor, parseJsonValue, parsePhpSerialized, propertyName } from '../src/lib/php-serialized';
+import { controlRuns, fixSerializedLengths, looksSerialized, lostPropertyMarks, needsExactEditor, parseJsonValue, parsePhpSerialized, propertyName, withNulMarks } from '../src/lib/php-serialized';
 
 describe('PHP serialized values', () => {
   it('reads nested arrays with every scalar type', () => {
@@ -112,5 +112,35 @@ describe('editing values with NUL bytes', () => {
   it('names a private property taken out, with the class it belongs to', () => {
     const taken = original.replace('s:25:"\0Acme_Task_Schedule\0start";i:1780000000;', '').replace(':3:{', ':2:{');
     expect(lostPropertyMarks(original, taken)).toEqual([{ name: 'start', visibility: 'private', owner: 'Acme_Task_Schedule' }]);
+  });
+});
+
+describe('typing \\0 for a NUL byte', () => {
+  const real = 'O:18:"Acme_Task_Schedule":2:{s:9:"\0*\0recurs";i:86400;s:25:"\0Acme_Task_Schedule\0start";i:1780000000;}';
+
+  it('turns typed marks into NUL bytes when the lengths count them as one byte', () => {
+    const typed = 'O:18:"Acme_Task_Schedule":2:{s:9:"\\0*\\0recurs";i:86400;s:25:"\\0Acme_Task_Schedule\\0start";i:1780000000;}';
+    expect(parsePhpSerialized(typed)).toBeNull();
+    expect(withNulMarks(typed)).toBe(real);
+  });
+
+  it('counts the lengths again when they were written for the typed text', () => {
+    const typed = 'O:18:"Acme_Task_Schedule":2:{s:11:"\\0*\\0recurs";i:86400;s:27:"\\0Acme_Task_Schedule\\0start";i:1780000000;}';
+    expect(withNulMarks(typed)).toBe(real);
+  });
+
+  it('leaves a \\0 that is not around a property name, and gives nothing when there is no mark', () => {
+    const regex = 'a:1:{s:7:"pattern";s:6:"a\\0b\\0c";}';
+    expect(withNulMarks(regex)).toBeNull();
+    expect(withNulMarks('a:1:{s:4:"text";s:5:"plain";}')).toBeNull();
+    // A mark in a value that still does not read is not offered.
+    expect(withNulMarks('O:18:"Acme_Task_Schedule":1:{s:9:"\\0*\\0recurs";i:86400')).toBeNull();
+  });
+
+  it('knows a serialized array or object by its start', () => {
+    expect(looksSerialized('O:18:"Acme_Task_Schedule":1:{')).toBe(true);
+    expect(looksSerialized('a:2:{i:0;')).toBe(true);
+    expect(looksSerialized('Acme')).toBe(false);
+    expect(looksSerialized('{"theme":"dark"}')).toBe(false);
   });
 });
