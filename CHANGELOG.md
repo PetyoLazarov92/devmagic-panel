@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.21.0 (2026-11-07)
+* **Databases:** Table health has Turn all into InnoDB for a site's MyISAM tables of every kind, WordPress's, plugins' and themes': one job, the smallest table first, each saved whole first, with Stop between two tables and one Undo for them all
+* **Databases:** What plugins and themes keep (it was What plugins keep) looks for a table no name explains in the site's code, so a theme's own table, a must-use plugin's or a plugin's by another name gets its owner, and Delete is no longer offered for a table the theme in use or a must-use plugin makes. A table nothing in the code names says so
+* **Databases:** the counts in What a clean-up would find and Transients are plain numbers that show as a link on hover, without the arrow after them
+* An update installs this release from the panel as usual
+
 ### v1.20.0 (2026-11-07)
 * **Command palette:** Ctrl+K runs quick actions as well as jumping: a site's clear cache, flush rewrite rules, snapshot, clear debug.log, terminal, fetch, pull and reissue the certificate (the open site's first), and reload Apache or nginx, restart a service and clear Mail, asking first where it matters. Mail, Archive, Jobs and Developer options are in it too
 * **Databases:** Slow queries, a new view of a site's Database tab and a card on Services, MySQL, lists the queries that cost the most time, with runs, time in all and each, rows read for rows sent, a missing index hint, one real run on request and Open in SQL to EXPLAIN. MySQL 8 counts every query with nothing to switch on; on MariaDB the slow log, which now goes to its table too, is grouped by query. Start counting again measures from now

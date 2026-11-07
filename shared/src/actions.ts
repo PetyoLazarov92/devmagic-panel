@@ -896,6 +896,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath, blog: blogNumber, table: mysqlIdentifier, fix: z.enum(WP_TABLE_FIXES) }),
   },
+  'db.toInnodb': {
+    title: 'Turn every MyISAM table into InnoDB',
+    description:
+      "Turns every MyISAM table of a WordPress site into InnoDB (WordPress's, plugins' and themes', by the site's table prefix; a network's shared tables with its first site), the smallest first, one at a time. Each is saved whole first (14 days); Stop ends it between two tables, and Undo puts back every table it converted. Starts a job.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, blog: blogNumber }),
+  },
   'db.autoloadOff': {
     title: 'Turn off autoload for options',
     description:

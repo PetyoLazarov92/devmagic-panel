@@ -1,6 +1,6 @@
-import type { DbCleanupView, Site, WpDbBlog, WpDbList, WpDbReport, WpDbSection, WpPluginState, WpTableFix } from '@devmagic-panel/shared';
+import type { DbCleanupView, Site, WpDbPluginTable, WpDbBlog, WpDbList, WpDbReport, WpDbSection, WpPluginState, WpTableFix } from '@devmagic-panel/shared';
 import { WP_DB_LIST_ROWS, WP_DB_ON_DEMAND, WP_DB_SECTIONS, WP_DB_SLOW_SECTIONS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS } from '@devmagic-panel/shared';
-import { ChevronDown, ChevronRight, ChevronUp, Gauge, Hourglass, KeyRound, type LucideIcon, Puzzle, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, TrendingUp, Users, Wrench } from 'lucide-react';
+import { ChevronDown, ChevronUp, Gauge, Hourglass, KeyRound, type LucideIcon, Puzzle, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, TrendingUp, Users, Wrench } from 'lucide-react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import type { RowsSeed } from '@/components/db-browser';
@@ -44,7 +44,7 @@ type Target = Pick<DbCleanupView, 'domain' | 'path' | 'blog'>;
 type Slot = 'health' | 'plugins' | 'transients' | 'content' | 'orphans';
 type Errors = WpDbReport['errors'];
 /** The card each clean-up's job shows in. */
-const SLOT_OF: Partial<Record<string, Slot>> = { 'db.fixTable': 'health', 'db.autoloadOff': 'plugins', 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'content' };
+const SLOT_OF: Partial<Record<string, Slot>> = { 'db.fixTable': 'health', 'db.toInnodb': 'health', 'db.autoloadOff': 'plugins', 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'content' };
 
 const QUICK = WP_DB_SECTIONS.filter((s) => !WP_DB_SLOW_SECTIONS.includes(s) && !WP_DB_ON_DEMAND.includes(s));
 
@@ -140,7 +140,7 @@ function useWordpressReport(domain: string, path: string | undefined, blog: numb
   const reading = (section: WpDbSection) => state.reading.includes(section);
   return { ...state, errors, reading, loading: state.reading.length > 0, reload: load, readSizes: () => ask(['metaKeys'], true), readDuplicates: () => ask(['duplicates']) };
 }
-type Ask = { slot: Slot; action: 'db.fixTable' | 'mysql.optimize' | 'mysql.dropTable' | 'db.autoloadOff' | 'db.cleanTransients' | 'db.cleanContent' | 'db.cleanOrphans'; input: Record<string, unknown>; title: string; description: string; button: string; typed?: string };
+type Ask = { slot: Slot; action: 'db.fixTable' | 'db.toInnodb' | 'mysql.optimize' | 'mysql.dropTable' | 'db.autoloadOff' | 'db.cleanTransients' | 'db.cleanContent' | 'db.cleanOrphans'; input: Record<string, unknown>; title: string; description: string; button: string; typed?: string };
 
 /**
  * A WordPress database as WordPress sees it: autoloaded options against Site
@@ -377,13 +377,12 @@ function NameLink({ name, title, onOpen, className }: { name: ReactNode; title: 
   );
 }
 
-/** A count that opens the rows it counts in the Tables view; a plain number at 0. */
+/** A count that opens the rows it counts in the Tables view, shown as a link on hover; a plain number at 0. */
 function CountLink({ n, title, onOpen }: { n: number; title: string; onOpen: () => void }) {
   if (n === 0) return <span className="text-right tabular-nums">0</span>;
   return (
-    <button type="button" className="group inline-flex items-center justify-end gap-0.5 text-right tabular-nums hover:text-primary hover:underline" title={title} aria-label={`${number(n)}: ${title}`} onClick={onOpen}>
+    <button type="button" className="text-right tabular-nums underline-offset-2 hover:text-primary hover:underline focus-visible:text-primary focus-visible:underline" title={title} aria-label={`${number(n)}: ${title}`} onClick={onOpen}>
       {number(n)}
-      <ChevronRight className="size-3.5 text-muted-foreground group-hover:text-primary" aria-hidden />
     </button>
   );
 }
@@ -553,6 +552,35 @@ function HealthCard({ view, busy, onFix, footer }: { view: View; busy: boolean; 
         </ul>
       )}
       {more}
+      {h?.myisam && (h.myisam.length > 1 || !h.issues.some((i) => i.fix === 'engine' && i.table === h.myisam?.[0]?.table)) && (
+        <div className="grid gap-2 border-t px-5 py-3 text-sm">
+          <p className="text-muted-foreground">
+            {h.myisam.length === 1 ? 'One table is' : `${h.myisam.length} tables are`} MyISAM, with no transactions and no crash recovery: {h.myisam.map((m) => m.table).join(', ')}.
+          </p>
+          <div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                const list = h.myisam ?? [];
+                const total = list.reduce((n, m) => n + m.bytes, 0);
+                const one = list.length === 1;
+                onFix({
+                  slot: 'health',
+                  action: 'db.toInnodb',
+                  input: {},
+                  title: one ? `Turn ${list[0]?.table} into InnoDB?` : `Turn all ${list.length} tables into InnoDB?`,
+                  description: `${list.map((m) => `${m.table} (${bytes(m.bytes)})`).join(', ')}. MySQL rebuilds ${one ? 'it' : 'them one at a time, the smallest first'}; only how ${one ? 'it is' : 'they are'} stored changes, not what ${one ? 'it holds' : 'they hold'}. ${bytes(total)} in all, and a table is busy while it is rebuilt. ${one ? 'It is' : 'Each is'} saved whole first (14 days), so Undo puts ${one ? 'it' : 'them'} back.`,
+                  button: one ? 'Turn into InnoDB' : `Turn all ${list.length} into InnoDB`,
+                });
+              }}
+            >
+              <Wrench />{h.myisam.length === 1 ? 'Turn it into InnoDB' : `Turn all ${h.myisam.length} into InnoDB`}
+            </Button>
+          </div>
+        </div>
+      )}
       {h?.free && h.free.length > 0 && (
         <div className="grid gap-2 border-t px-5 py-3 text-sm">
           <p className="text-muted-foreground">
@@ -622,6 +650,28 @@ const PLUGIN_STATE: Record<WpPluginState, { label: string; tone: 'neutral' | 'wa
   unknown: { label: 'not known', tone: 'neutral' },
 };
 
+/** Who a table likely belongs to, in a few words: the plugin, the theme or the must-use plugin, and how the panel knows. */
+function ownerOf(t: WpDbPluginTable): string {
+  if (!t.plugin) return t.unused ? "Nothing in this site's code names it" : 'No plugin known by this name';
+  const what = t.kind === 'theme' ? `Theme ${t.plugin}` : t.kind === 'muPlugin' ? (t.plugin === 'must-use plugins' ? 'A must-use plugin' : `Must-use plugin ${t.plugin}`) : t.plugin;
+  return t.by === 'code' ? `${what}, named in its code` : what;
+}
+
+/** Its badge: on, off or gone, said for a theme or a must-use plugin as it is for one. */
+function stateOf(t: WpDbPluginTable): { label: string; tone: 'neutral' | 'warning' | 'primary' } {
+  if (t.kind === 'muPlugin') return { label: 'always on', tone: 'neutral' };
+  if (t.kind === 'theme') return t.state === 'active' ? { label: 'theme in use', tone: 'neutral' } : { label: 'theme not in use', tone: 'primary' };
+  return PLUGIN_STATE[t.state];
+}
+
+/** What the Delete dialog says about why the table may go, or why to look first. */
+function deleteWhy(t: WpDbPluginTable): string {
+  if (t.kind === 'theme') return `Theme ${t.plugin} names it in its code and is not the theme in use: switching to it again may need this table.`;
+  if (t.state === 'missing') return `${t.plugin} is not in the plugins folder any more, so this table is likely left over.`;
+  if (t.state === 'inactive') return `${t.plugin} is off: turning it on again may need this table.`;
+  return t.unused ? "Nothing in this site's themes, plugins or must-use plugins names it, so it is likely left over: look at it first." : 'No plugin the panel knows makes it: look at it first.';
+}
+
 /**
  * The tables and autoloaded options of plugins: each table with the plugin it
  * likely belongs to and whether that plugin is on, off or gone, and the
@@ -640,7 +690,7 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
   const database = view.report.database;
   return (
     <Card>
-      <Header title="What plugins keep" icon={Puzzle} reading={view.reading('plugins') || view.reading('postTypes')} />
+      <Header title="What plugins and themes keep" icon={Puzzle} reading={view.reading('plugins') || view.reading('postTypes')} />
       <SectionError text={view.errors.plugins} />
       {waiting(view, 'plugins') && <CardLinesSkeleton lines={4} />}
       {p && p.autoload.length > 0 && (
@@ -688,15 +738,15 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
       {groups.more && <div className="-mt-px border-b">{groups.more}</div>}
       {p && p.tables.length > 0 && (
         <>
-          <p className="px-5 pt-3 text-xs text-muted-foreground">Tables that are not WordPress's own, with the plugin each likely belongs to, by its name.</p>
+          <p className="px-5 pt-3 text-xs text-muted-foreground">Tables that are not WordPress's own, with the plugin or theme each likely belongs to: by its name, or found in the site's code.</p>
           <ul className="mt-1 divide-y">
             {tables.shown.map((t) => (
               <li key={t.table} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-2 text-[13px]">
                 <span className="min-w-0">
                   <span className="block truncate font-mono" title={t.table}>{t.table}</span>
                   <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                    {t.plugin ?? 'No plugin known by this name'}
-                    <Badge tone={PLUGIN_STATE[t.state].tone}>{PLUGIN_STATE[t.state].label}</Badge>
+                    {ownerOf(t)}
+                    {t.plugin && <Badge tone={stateOf(t).tone}>{stateOf(t).label}</Badge>}
                     <span className="tabular-nums">{bytes(t.bytes)}, about {number(t.rows)} rows</span>
                   </span>
                 </span>
@@ -714,7 +764,7 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
                           action: 'mysql.dropTable',
                           input: { database, table: t.table },
                           title: `Delete ${t.table}?`,
-                          description: `${t.state === 'missing' ? `${t.plugin} is not in the plugins folder any more, so this table is likely left over.` : t.state === 'inactive' ? `${t.plugin} is off: turning it on again may need this table.` : 'No plugin the panel knows makes it: look at it first.'} It is saved whole first (14 days), so Undo makes it again.`,
+                          description: `${deleteWhy(t)} It is saved whole first (14 days), so Undo makes it again.`,
                           button: 'Delete the table',
                           typed: t.table,
                         })

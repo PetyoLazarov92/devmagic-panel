@@ -14,8 +14,11 @@ import { wordpressTables } from './mysql-wordpress.js';
 /**
  * The tables and autoloaded options a site has that are not WordPress's own,
  * with the plugin each likely belongs to and whether that plugin is on, off or
- * gone. It is a guess by name (known prefixes, then the plugins folder), shown
- * as one: the panel never deletes by it on its own.
+ * gone. A table's owner is a guess by name (known prefixes, then the plugins
+ * folder); a table no name explains is looked for in the site's PHP code
+ * (themes, must-use plugins, plugins), which finds the tables a theme or a
+ * plugin by another name makes. Shown as guesses: the panel never deletes by
+ * them on its own.
  */
 interface Known {
   name: string;
@@ -113,6 +116,69 @@ function guess(name: string, known: Array<[string, Known]>, installed: Set<strin
   return folder ? { name: folder.slug, slugs: [folder.slug] } : undefined;
 }
 
+/** Where a table's name was found in the site's code, and what that makes its owner. */
+interface CodeOwner {
+  plugin: string;
+  slug: string;
+  kind?: 'theme' | 'muPlugin';
+  state: WpPluginState;
+}
+
+/** How sure a code owner is that the table is in use: what runs now first. */
+const OWNER_RANK: Record<WpPluginState, number> = { active: 0, inactive: 1, missing: 2, unknown: 3 };
+/** The longest a code search may take, and the most it may print. */
+const CODE_SEARCH_MS = 15_000;
+const CODE_SEARCH_BYTES = 4 * 1024 * 1024;
+/** A table's name after the prefix this short is too common a word to search for. */
+const MIN_SEARCH = 4;
+
+/**
+ * The owner of each table the code names: one grep over the site's themes,
+ * must-use plugins and plugins (PHP files only, whole words, the names as
+ * fixed strings, no shell), for each table's name after the prefix (as in
+ * $wpdb->prefix . 'acme_log') and its full name. The active theme and its
+ * parent, and must-use plugins, count as on. Null when the search could not
+ * run, so no table is said to be named nowhere.
+ */
+export async function codeOwners(
+  ctx: Pick<BrowseContext, 'exec'>,
+  docroot: string,
+  tables: Array<{ table: string; short: string }>,
+  site: { active: Set<string>; installed: Set<string>; themes: Set<string> },
+): Promise<Map<string, CodeOwner> | null> {
+  const owners = new Map<string, CodeOwner>();
+  const wanted = tables.filter((t) => t.short.length >= MIN_SEARCH);
+  if (!wanted.length) return owners;
+  const content = join(docroot, 'wp-content');
+  const patterns = [...new Set(wanted.flatMap((t) => [t.short, t.table]))];
+  const r = await ctx.exec(
+    'grep',
+    ['-rIowF', '--include=*.php', '--exclude-dir=node_modules', '--exclude-dir=.git', ...patterns.flatMap((p) => ['-e', p]), '--', join(content, 'themes'), join(content, 'mu-plugins'), join(content, 'plugins')],
+    { timeoutMs: CODE_SEARCH_MS, maxBufferBytes: CODE_SEARCH_BYTES },
+  );
+  // 1 is no match, 2 a folder that is not there: what it printed still counts.
+  if (r.code > 2 || (r.code === 2 && !r.stdout && !/No such file/.test(r.stderr))) return null;
+  const byName = new Map<string, string[]>();
+  for (const t of wanted) for (const n of [t.short, t.table]) byName.set(n, [...(byName.get(n) ?? []), t.table]);
+  for (const line of r.stdout.split('\n')) {
+    const at = line.lastIndexOf(':');
+    if (at <= 0) continue;
+    const file = line.slice(0, at);
+    const match = line.slice(at + 1);
+    const where = file.startsWith(`${content}/`) ? file.slice(content.length + 1).split('/') : [];
+    let owner: CodeOwner | null = null;
+    if (where[0] === 'themes' && where[1]) owner = { plugin: where[1], slug: where[1], kind: 'theme', state: site.themes.has(where[1]) ? 'active' : 'inactive' };
+    else if (where[0] === 'mu-plugins') owner = { plugin: where.length > 2 ? (where[1] as string) : 'must-use plugins', slug: where[1] ?? 'mu-plugins', kind: 'muPlugin', state: 'active' };
+    else if (where[0] === 'plugins' && where[1] && where.length > 2) owner = { plugin: where[1], slug: where[1], state: stateOf([where[1]], site.active, site.installed, true) };
+    if (!owner) continue;
+    for (const table of byName.get(match) ?? []) {
+      const had = owners.get(table);
+      if (!had || OWNER_RANK[owner.state] < OWNER_RANK[had.state]) owners.set(table, owner);
+    }
+  }
+  return owners;
+}
+
 /** The folders in the site's wp-content/plugins, or none when it cannot be read. */
 function pluginFolders(docroot: string | undefined): Set<string> {
   if (!docroot) return new Set();
@@ -135,6 +201,7 @@ export async function wordpressPlugins(ctx: BrowseContext, args: { domain: strin
     `SELECT JSON_ARRAY('pa', option_value) FROM ${options} WHERE option_name = 'active_plugins';\n` +
       (sitemeta ? `SELECT JSON_ARRAY('pa', meta_value) FROM ${sitemeta} WHERE meta_key = 'active_sitewide_plugins';\n` : '') +
       `SELECT JSON_ARRAY('po', option_name, LENGTH(option_value)) FROM ${options} WHERE ${autoloaded};\n` +
+      `SELECT JSON_ARRAY('th', option_value) FROM ${options} WHERE option_name IN ('template', 'stylesheet');\n` +
       `SELECT JSON_ARRAY('pt', TABLE_NAME, COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0), COALESCE(TABLE_ROWS, 0)) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${textLiteral(database)} AND TABLE_TYPE = 'BASE TABLE';\n`,
   );
   const rows = lines.map(parseJson);
@@ -146,13 +213,23 @@ export async function wordpressPlugins(ctx: BrowseContext, args: { domain: strin
   const core = new Set(Object.keys(CORE_SCHEMA).map((c) => `${CORE_SCHEMA[c]?.shared ? prefix : blogPrefix}${c}`));
   const networkTables = ['blogs', 'blogmeta', 'site', 'sitemeta', 'signups', 'registration_log', 'blog_versions'].map((t) => `${prefix}${t}`);
   const other = new RegExp(`^${prefix}\\d+_`);
-  const tables: WpDbPluginTable[] = rows
+  const themes = new Set(rows.filter((r) => r[0] === 'th').map((r) => String(r[1] ?? '')).filter(Boolean));
+  const found = rows
     .filter((r) => r[0] === 'pt')
     .map(([, t, b, n]) => ({ table: String(t), bytes: num(b), rows: num(n) }))
     .filter((t) => t.table.startsWith(blogPrefix) && !core.has(t.table) && !networkTables.includes(t.table) && (blog !== 1 || !other.test(t.table)))
-    .map((t) => {
-      const known = guess(t.table.slice(blogPrefix.length), KNOWN_TABLES, installed);
-      return { ...t, ...(known ? { plugin: known.name, slug: known.slugs[0] as string } : {}), state: known ? stateOf(known.slugs, active, installed, true) : 'unknown' };
+    .map((t) => ({ ...t, known: guess(t.table.slice(blogPrefix.length), KNOWN_TABLES, installed) }));
+  // A table no name explains: what in the site's code names it, a theme's or a plugin's by another name.
+  const unexplained = found.filter((t) => !t.known).map((t) => ({ table: t.table, short: t.table.slice(blogPrefix.length) }));
+  const owners = site?.docroot && unexplained.length ? await codeOwners(ctx, site.docroot, unexplained, { active, installed, themes }) : null;
+  const tables: WpDbPluginTable[] = found
+    .map(({ known, ...t }): WpDbPluginTable => {
+      if (known) return { ...t, plugin: known.name, slug: known.slugs[0] as string, by: 'name', state: stateOf(known.slugs, active, installed, true) };
+      const owner = owners?.get(t.table);
+      if (owner) return { ...t, plugin: owner.plugin, slug: owner.slug, ...(owner.kind ? { kind: owner.kind } : {}), by: 'code', state: owner.state };
+      // Said to be named nowhere only when its name was searched for, and the search ran.
+      const searched = owners !== null && t.table.length - blogPrefix.length >= MIN_SEARCH;
+      return { ...t, state: 'unknown', ...(searched ? { unused: true } : {}) };
     })
     .sort((a, b) => b.bytes - a.bytes);
 

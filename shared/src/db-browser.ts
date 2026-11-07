@@ -276,9 +276,15 @@ export interface WpDbPluginTable {
   table: string;
   bytes: number;
   rows: number;
-  /** The plugin it likely belongs to, by its name, and that plugin's folder. */
+  /** What it likely belongs to (a plugin, a theme, a must-use plugin) and its folder. */
   plugin?: string;
   slug?: string;
+  /** A theme or a must-use plugin; a plugin when left out. */
+  kind?: 'theme' | 'muPlugin';
+  /** How the owner was found: its name in the site's PHP code, or the table's name alone. */
+  by?: 'code' | 'name';
+  /** For a table nothing is known by name: the site's code was searched, and nothing in it names the table. */
+  unused?: boolean;
   state: WpPluginState;
 }
 
@@ -325,6 +331,8 @@ export interface WpDbHealth {
   issues: WpDbHealthIssue[];
   /** The site's tables with space a rebuild gives back, like after a clean-up: OPTIMIZE TABLE frees it. */
   free?: Array<{ table: string; freeBytes: number; bytes: number }>;
+  /** The site's MyISAM tables of every kind, the smallest first, for Turn all into InnoDB. */
+  myisam?: Array<{ table: string; bytes: number }>;
 }
 
 /** The postmeta keys with the most rows or bytes; bytes only when the sizes were read. */

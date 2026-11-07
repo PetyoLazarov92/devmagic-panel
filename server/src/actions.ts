@@ -56,7 +56,7 @@ import { forgetOnFailure, type HeldPassword, installRunning, planInstallRelease 
 import { changeCrontab, type CronChange, type CronCommand, cronCommand, type CronContext, cronLockDir, CronRefused, findTask, newTaskId, type PanelTask, parseCrontab, readCrontab, taskArgs, tasksOf, undoCrontab } from './cron.js';
 import { runCronTask, taskRefusal } from './cron-run.js';
 import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } from './sites/wp-cron.js';
-import { planFixTable } from './mysql-health.js';
+import { planFixTable, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 
 export interface ActionContext {
@@ -328,6 +328,10 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'db.cleanTransients': async (ctx, input) => startJob(ctx, await planTransients(rowsCtx(ctx), input), input.scope === 'expired' ? 'Delete expired transients' : 'Delete every transient', siteKeyOf(input), { stoppable: true }),
   'db.cleanContent': async (ctx, input) => startJob(ctx, await planContent(rowsCtx(ctx), input), contentTitle(input.kinds, input.orphans), siteKeyOf(input), { stoppable: true }),
   'db.cleanOrphans': async (ctx, input) => startJob(ctx, await planOrphans(rowsCtx(ctx), input), 'Delete what was left behind', siteKeyOf(input), { stoppable: true }),
+  'db.toInnodb': async (ctx, input) => {
+    const { title, steps } = await planToInnodb(rowsCtx(ctx), input);
+    return startJob(ctx, steps, title, siteKeyOf(input), { stoppable: true });
+  },
   'db.fixTable': async (ctx, input) => {
     const { title, steps } = await planFixTable(rowsCtx(ctx), input);
     return startJob(ctx, steps, title, siteKeyOf(input));

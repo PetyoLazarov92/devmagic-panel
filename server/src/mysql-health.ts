@@ -198,15 +198,18 @@ async function tableIssues(ctx: BrowseContext, database: string, table: string, 
 /** The health of a site's WordPress tables, from information_schema; counts are read only for a table that lost its keys. */
 export async function wordpressHealth(ctx: BrowseContext, database: string, names: Set<string>, prefix: string, blogPrefix: string, blog: number): Promise<WpDbHealth> {
   const tables = coreTables(names, prefix, blogPrefix, blog);
-  const free = await freeSpaceOf(ctx, database, siteTableNames(names, prefix, blogPrefix, blog));
-  if (tables.length === 0) return { tables: 0, issues: [], ...(free.length ? { free } : {}) };
+  const facts = await tableFacts(ctx, database, siteTableNames(names, prefix, blogPrefix, blog));
+  const free = freeSpaceOf(facts);
+  const myisam = myisamOf(facts);
+  const extra = { ...(free.length ? { free } : {}), ...(myisam.length ? { myisam } : {}) };
+  if (tables.length === 0) return { tables: 0, issues: [], ...extra };
   const found = await readFound(ctx, database, tables.map((t) => t.table));
   const issues: WpDbHealthIssue[] = [];
   for (const t of tables) {
     const f = found.get(t.table);
     if (f) issues.push(...(await tableIssues(ctx, database, t.table, t.schema, f)));
   }
-  return { tables: tables.length, issues, ...(free.length ? { free } : {}) };
+  return { tables: tables.length, issues, ...extra };
 }
 
 /** This site's tables of every kind: its prefix, without another site of the network's (wp_2_) on the first one. */
@@ -218,18 +221,35 @@ function siteTableNames(names: Set<string>, prefix: string, blogPrefix: string, 
 /** At least this much free, and a tenth of the table, before a rebuild is worth offering. */
 const FREE_WORTH = 16 * 1024 * 1024;
 
+interface TableFact {
+  table: string;
+  freeBytes: number;
+  bytes: number;
+  engine: string;
+}
+
+/** The site's tables as information_schema lists them: free space, size and engine. */
+async function tableFacts(ctx: BrowseContext, database: string, tables: string[]): Promise<TableFact[]> {
+  if (tables.length === 0) return [];
+  const lines = await read(
+    ctx,
+    `SELECT JSON_ARRAY(TABLE_NAME, COALESCE(DATA_FREE, 0), COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0), COALESCE(ENGINE, '')) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${textLiteral(database)} AND TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME IN (${tables.map((t) => textLiteral(t)).join(', ')});\n`,
+  );
+  return lines.map(parseJson).map(([t, f, b, e]) => ({ table: String(t), freeBytes: num(f), bytes: num(b), engine: String(e ?? '') }));
+}
+
+/** The site's MyISAM tables of every kind (WordPress's, plugins', themes'), the smallest first: the order Turn all into InnoDB takes them in. */
+function myisamOf(facts: TableFact[]): Array<{ table: string; bytes: number }> {
+  return facts.filter((f) => f.engine.toLowerCase() === 'myisam').map(({ table, bytes }) => ({ table, bytes })).sort((a, b) => a.bytes - b.bytes || a.table.localeCompare(b.table));
+}
+
 /**
  * Tables with room a rebuild (OPTIMIZE TABLE) gives back to the disk, like
  * after a clean-up. With every table in one shared InnoDB file they all show
  * the same free space, which a rebuild does not give back: none is offered.
  */
-async function freeSpaceOf(ctx: BrowseContext, database: string, tables: string[]): Promise<NonNullable<WpDbHealth['free']>> {
-  if (tables.length === 0) return [];
-  const lines = await read(
-    ctx,
-    `SELECT JSON_ARRAY(TABLE_NAME, COALESCE(DATA_FREE, 0), COALESCE(DATA_LENGTH, 0) + COALESCE(INDEX_LENGTH, 0)) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${textLiteral(database)} AND TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME IN (${tables.map((t) => textLiteral(t)).join(', ')});\n`,
-  );
-  const rows = lines.map(parseJson).map(([t, f, b]) => ({ table: String(t), freeBytes: num(f), bytes: num(b) }));
+function freeSpaceOf(facts: TableFact[]): NonNullable<WpDbHealth['free']> {
+  const rows = facts.map(({ table, freeBytes, bytes }) => ({ table, freeBytes, bytes }));
   const same = new Map<number, number>();
   for (const r of rows) if (r.freeBytes > 0) same.set(r.freeBytes, (same.get(r.freeBytes) ?? 0) + 1);
   if ([...same.values()].some((n) => n > 3)) return [];
@@ -329,6 +349,72 @@ export async function planFixTable(ctx: RowsContext, { domain, path, blog = 1, t
         return { code: 0, stdout: `${statement}. Undo puts ${table} back as it was, for 14 days`, stderr: '' };
       },
     },
+  ];
+  return { title, steps };
+}
+
+/**
+ * Every MyISAM table of the site (its prefix; a network's shared tables with
+ * its first site) into InnoDB, the smallest first, one step a table: each is
+ * saved whole, then ALTER TABLE ... ENGINE=InnoDB. One saved copy holds the
+ * tables converted so far, so Stop between two, Retry carries on, and Undo
+ * puts back every table the job converted.
+ */
+export async function planToInnodb(ctx: RowsContext, { domain, path, blog = 1 }: ActionInput<'db.toInnodb'>): Promise<{ title: string; steps: JobStep[] }> {
+  const browse: BrowseContext = { config: ctx.config, exec: ctx.exec, mysql: ctx.mysql, kept: ctx.kept };
+  const t = await wordpressTables(browse, domain, path, blog);
+  const tables = myisamOf(await tableFacts(browse, t.database, siteTableNames(t.names, t.prefix, t.blogPrefix, blog)));
+  if (tables.length === 0) throw new MysqlRefused('This site has no MyISAM tables');
+  const title = `Turn ${tables.length === 1 ? (tables[0] as { table: string }).table : `${tables.length} tables`} into InnoDB`;
+  const site = `${domain}${path ?? ''}`;
+  const database = t.database;
+  const now = ctx.now?.() ?? new Date();
+  const id = `${stamp(now)}-${randomBytes(4).toString('hex').slice(0, 6)}`;
+  const dir = join(cleanupsDir(ctx.config), id);
+  const saved: SavedCleanup = { title, kind: 'fix', database, site, parts: [], savedAt: now.toISOString() };
+  let undoing = false;
+  const steps: JobStep[] = [
+    {
+      id: 'room',
+      label: 'Check the disk has room',
+      run: async () => {
+        // The copies of them all, and MySQL's rebuild of the biggest next to the old one.
+        const total = tables.reduce((n, x) => n + x.bytes, 0);
+        const need = total + Math.max(...tables.map((x) => x.bytes));
+        const free = freeSpace(existingFolder(cleanupsDir(ctx.config))).bytes;
+        if (need > free) throw new MysqlRefused(`Saving and rebuilding ${tables.length === 1 ? 'the table' : `${tables.length} tables`} needs up to ${formatBytes(need)}, and the disk has ${formatBytes(free)} free: make room, then try again`);
+        mkdirSync(cleanupsDir(ctx.config), { recursive: true, mode: 0o700 });
+        pruneCleanups(cleanupsDir(ctx.config), now.getTime());
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+        return { code: 0, stdout: `${formatBytes(need)} needed, ${formatBytes(free)} free`, stderr: '' };
+      },
+    },
+    ...tables.map(({ table, bytes }, i): JobStep => ({
+      id: `table-${i + 1}`,
+      label: `Turn ${table} into InnoDB`,
+      weight: Math.max(1, Math.round(bytes / (64 * 1024 * 1024))),
+      run: async (job): Promise<ExecResult> => {
+        // A table converted already (an earlier try, or by hand) is left as it is.
+        const [engine = ''] = await adminSql(ctx, database, `SELECT COALESCE(ENGINE, '') FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${textLiteral(table)};\n`);
+        if (engine.toLowerCase() !== 'myisam') return { code: 0, stdout: `${table} is ${engine || 'gone'} already: left as it is`, stderr: '' };
+        const file = `${String(i + 1).padStart(2, '0')}-${table}.sql.gz`;
+        await dumpPart(ctx, database, { table, how: 'replace' }, undefined, join(dir, file), (b) => job.progress(0.5, `${formatBytes(b)} of SQL`));
+        try {
+          await adminSql(ctx, database, `SET SESSION lock_wait_timeout = 60;\nALTER TABLE ${ident(table)} ENGINE=InnoDB;\n`, 2 * 60 * 60_000);
+        } catch (error) {
+          // MySQL changed nothing: this table's copy goes.
+          rmSync(join(dir, file), { force: true });
+          return { code: 1, stdout: '', stderr: (error as Error).message };
+        }
+        saved.parts.push({ table, how: 'replace', rows: 0, file });
+        writeFileSync(join(dir, 'cleanup.json'), JSON.stringify(saved), { mode: 0o600 });
+        if (!undoing) {
+          undoing = true;
+          job.onUndo('Put the tables back as they were', () => undoCleanup(ctx, { database, cleanup: id }));
+        }
+        return { code: 0, stdout: `${table} is InnoDB now`, stderr: '' };
+      },
+    })),
   ];
   return { title, steps };
 }

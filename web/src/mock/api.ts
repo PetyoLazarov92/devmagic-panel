@@ -449,6 +449,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       ]),
     ),
     'db.autoloadOff': [{ id: 'save', label: 'Save the options for Undo' }, { id: 'remove', label: 'Turn off autoload' }],
+    'db.toInnodb': [{ id: 'room', label: 'Check the disk has room' }, { id: 'tables', label: 'Turn the MyISAM tables into InnoDB, the smallest first' }],
     'db.fixTable': [{ id: 'save', label: `Save ${String(input.table)} for Undo` }, { id: 'fix', label: { keys: `Give ${String(input.table)} its primary key back`, index: `Add the missing indexes to ${String(input.table)}`, engine: `Turn ${String(input.table)} into InnoDB`, charset: `Turn ${String(input.table)} into utf8mb4` }[String(input.fix)] ?? 'Fix the table' }],
     'db.snapshot': [{ id: 'snapshot', label: `Snapshot the database${input.label ? ` (${String(input.label)})` : ''}` }],
     'db.restore': [snapshot, { id: 'restore', label: `Import ${String(input.snapshot)}` }, { id: 'flush', label: 'Flush caches and rewrite rules' }],
@@ -596,6 +597,20 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       if (job.status === 'done') mockPluginGone(db, names);
     };
     done();
+  }
+  if (id === 'db.toInnodb') {
+    job.title = 'Turn the MyISAM tables into InnoDB';
+    job.undoable = ['Put the tables back as they were'];
+    job.stoppable = true;
+    const db = sites.find((x) => x.domain === domain && x.path === (input.path as string | undefined))?.db?.name ?? '';
+    const converted = () => {
+      if (job.status === 'running' || job.status === 'queued') return void window.setTimeout(converted, 400);
+      if (job.status === 'done') {
+        mockTableFixed(db, '*', 'engine');
+        mockTableFixed(db, `${input.blog && input.blog !== 1 ? `wp_${String(input.blog)}_` : 'wp_'}options`, 'engine');
+      }
+    };
+    converted();
   }
   if (id === 'db.fixTable') {
     job.title = job.steps.at(-1)?.label ?? job.title;

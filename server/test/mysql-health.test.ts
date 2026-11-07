@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { JobRuntime, JobStep } from '../src/jobs.js';
-import { CORE_SCHEMA, planFixTable, wordpressHealth } from '../src/mysql-health.js';
+import { CORE_SCHEMA, planFixTable, planToInnodb, wordpressHealth } from '../src/mysql-health.js';
 import type { RowsContext } from '../src/mysql-rows.js';
 import { type FakeCall, fakeExec, wpSiteTree } from './helpers.js';
 
@@ -44,6 +44,7 @@ function fakeShop({ zeroIds = 0, free = [] as unknown[][] } = {}) {
       if (sql.includes('COUNT(DISTINCT `option_name`)')) return { stdout: json([3]) };
       if (sql.includes('TABLE_COLLATION LIKE')) return { stdout: 'utf8mb4_unicode_520_ci\n' };
       if (sql.includes('DATA_FREE')) return { stdout: json(...free) };
+      if (sql.includes("SELECT COALESCE(ENGINE, '')")) return { stdout: sql.includes(Buffer.from('wp_done').toString('hex')) ? 'InnoDB\n' : 'MyISAM\n' };
       return { stdout: '' };
     },
   });
@@ -129,5 +130,42 @@ describe('space a rebuild gives back', () => {
     expect(health.free).toEqual([{ table: 'wp_acme_log', freeBytes: 90 * mb, bytes: 120 * mb }, { table: 'wp_postmeta', freeBytes: 48 * mb, bytes: 300 * mb }]);
     const shared = TABLES.map((t) => [t, 512 * mb, 64 * mb]);
     expect((await wordpressHealth(browse(fakeShop({ free: shared })), 'shop_com', new Set(TABLES), 'wp_', 'wp_', 1)).free).toBeUndefined();
+  });
+});
+
+describe('turning every MyISAM table into InnoDB', () => {
+  const mb = 1024 * 1024;
+  const runAll = async (steps: JobStep[]) => {
+    const undos: string[] = [];
+    const job: JobRuntime = { onUndo: (label) => void undos.push(label), progress: () => undefined };
+    const out: string[] = [];
+    for (const step of steps) {
+      const r = await step.run(job);
+      for (const x of Array.isArray(r) ? r : [r]) out.push(x.code === 0 ? x.stdout : `failed: ${x.stderr}`);
+    }
+    return { out, undos };
+  };
+  const facts = [['wp_acme_log', 0, 40 * mb, 'MyISAM'], ['wp_options', 0, 2 * mb, 'MyISAM'], ['wp_done', 0, mb, 'MyISAM'], ['wp_posts', 0, 90 * mb, 'InnoDB']];
+
+  it("lists the site's MyISAM tables of every kind, the smallest first", async () => {
+    const health = await wordpressHealth(browse(fakeShop({ free: facts })), 'shop_com', new Set([...TABLES, 'wp_acme_log', 'wp_done']), 'wp_', 'wp_', 1);
+    expect(health.myisam).toEqual([{ table: 'wp_done', bytes: mb }, { table: 'wp_options', bytes: 2 * mb }, { table: 'wp_acme_log', bytes: 40 * mb }]);
+  });
+
+  it('saves and converts them one step a table, leaves one converted since, and Undo takes back only what it converted', async () => {
+    const fake = fakeShop({ free: facts });
+    const { title, steps } = await planToInnodb(rows(fake), { domain: 'local.shop.com' });
+    expect(title).toBe('Turn 3 tables into InnoDB');
+    expect(steps.map((x) => x.label)).toEqual(['Check the disk has room', 'Turn wp_done into InnoDB', 'Turn wp_options into InnoDB', 'Turn wp_acme_log into InnoDB']);
+    const { out, undos } = await runAll(steps);
+    expect(out.slice(1)).toEqual(['wp_done is InnoDB already: left as it is', 'wp_options is InnoDB now', 'wp_acme_log is InnoDB now']);
+    const alters = fake.calls.filter((c) => c.input?.includes('ALTER TABLE')).map((c) => c.input?.match(/ALTER TABLE .*;/)?.[0]);
+    expect(alters).toEqual(['ALTER TABLE `wp_options` ENGINE=InnoDB;', 'ALTER TABLE `wp_acme_log` ENGINE=InnoDB;']);
+    expect(fake.calls.filter((c) => c.file === 'mysqldump').map((c) => c.args.at(-1))).toEqual(['wp_options', 'wp_acme_log']);
+    expect(undos).toEqual(['Put the tables back as they were']);
+  });
+
+  it('refuses a site with no MyISAM table', async () => {
+    await expect(planToInnodb(rows(fakeShop({ free: [['wp_posts', 0, mb, 'InnoDB']] })), { domain: 'local.shop.com' })).rejects.toThrow('This site has no MyISAM tables');
   });
 });

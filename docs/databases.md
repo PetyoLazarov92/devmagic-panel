@@ -73,7 +73,10 @@ page's history, never its address.
   duplicate or zero IDs are there, and says how many. latin1 is only flagged:
   its text may already hold UTF-8 bytes, which a conversion would garble.
   Tables with room a rebuild gives back (like after a clean-up) get
-  **Optimize**.
+  **Optimize**. When the site has MyISAM tables of any kind (WordPress's,
+  plugins', themes'), **Turn all into InnoDB** converts them in one job, the
+  smallest first, each saved whole first: Stop ends it between two tables,
+  and Undo puts back every table it converted.
 - **Autoloaded options** against Site Health's 800 KB limit, the biggest by
   name, and **Turn off** for a big one (written as the site's WordPress
   writes it: on and off, or yes and no before 6.6).
@@ -99,13 +102,18 @@ page's history, never its address.
   see what makes it big (a page builder's data, an old plugin's leftovers).
   Up to 300,000 rows they come by size; on a bigger table by rows first, as a
   size needs every value read, and **Count sizes** reads the sizes anyway.
-- **What plugins keep**: the tables that are not WordPress's own, each with
-  the plugin it likely belongs to and whether that plugin is on, off or gone
-  from the plugins folder, with **Delete** (type the name; saved whole first)
-  for one whose plugin is not on; the options a plugin that is off or gone
-  still loads on every page, with **Turn off autoload**; and posts of types no
-  plugin or theme registers any more (WP-CLI's list, with plugins loaded).
-  These are guesses by name, said as guesses.
+- **What plugins and themes keep**: the tables that are not WordPress's own,
+  each with what it likely belongs to and whether that is on, off or gone.
+  First by the table's name (known plugins, then the plugins folder); a table
+  no name explains is looked for in the site's PHP code, as `acme_log` in
+  `$wpdb->prefix . 'acme_log'` or its full name: one `grep` over the themes,
+  must-use plugins and plugins finds the theme in use, another theme, a
+  must-use plugin (always on) or a plugin by another name. A table nothing
+  in the code names says so. **Delete** (type the name; saved whole first) is
+  only for a table whose owner is not in use. Then the options a plugin that
+  is off or gone still loads on every page, with **Turn off autoload**; and
+  posts of types no plugin or theme registers any more (WP-CLI's list, with
+  plugins loaded). These are guesses, said as guesses.
 - The users with their roles.
 - **What grows**: the panel notes the site's table sizes once a day when this
   view opens (30 days, names and sizes only) and shows the tables that grew

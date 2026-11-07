@@ -18,7 +18,7 @@ export function removed(c: Pick<CleanupInfo, 'kind' | 'tables'>): string {
   if (c.kind === 'sql') return c.tables.length ? `saved ${c.tables.map((t) => t.table).join(', ')}` : 'saved what was there';
   if (c.kind === 'drop') return `table ${c.tables[0]?.table ?? ''}`;
   if (c.kind === 'empty') return `every row of ${c.tables[0]?.table ?? ''}`;
-  if (c.kind === 'fix') return `saved ${c.tables[0]?.table ?? ''} whole`;
+  if (c.kind === 'fix') return c.tables.length > 1 ? `saved ${c.tables.length} tables whole: ${c.tables.map((t) => t.table).join(', ')}` : `saved ${c.tables[0]?.table ?? ''} whole`;
   if (c.kind === 'autoload') return `${number(c.tables[0]?.rows ?? 0)} ${c.tables[0]?.rows === 1 ? 'option' : 'options'} of ${c.tables[0]?.table ?? ''}`;
   return c.tables.map((t, i) => `${number(t.rows)} ${i === 0 ? (t.rows === 1 ? 'row of ' : 'rows of ') : 'of '}${t.table}`).join(', ');
 }

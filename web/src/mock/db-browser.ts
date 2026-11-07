@@ -361,6 +361,11 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
     // Room a clean-up left in the big site's postmeta and comments, until they are optimized.
     ...(heavy ? { free: [{ table: `${blogPrefix}postmeta`, freeBytes: 48 * 1024 ** 2, bytes: 310 * 1024 ** 2 }, { table: `${blogPrefix}comments`, freeBytes: 21 * 1024 ** 2, bytes: 64 * 1024 ** 2 }].filter((f) => !fixedTables.has(`${site.db?.name}.${f.table}.optimize`)) } : {}),
   };
+  // The same old move left the options and two tables of the theme and a plugin on MyISAM too, until Turn all into InnoDB.
+  const myisam = (heavy ? [{ table: `${blogPrefix}brand_quotes`, bytes: 180_000 }, { table: `${blogPrefix}options`, bytes: 31 * 1024 ** 2 }, { table: `${blogPrefix}acme_slider_log`, bytes: 12 * 1024 ** 2 }] : []).filter(
+    (m) => !fixedTables.has(`${site.db?.name}.${m.table}.engine`) && !fixedTables.has(`${site.db?.name}.*.engine`),
+  );
+  if (myisam.length) healthIssues.myisam = myisam.sort((a, b) => a.bytes - b.bytes);
   const full: WpDbReport = {
     database: site.db.name,
     prefix: 'wp_',
@@ -381,10 +386,13 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
               { table: `${blogPrefix}actionscheduler_logs`, bytes: 412 * 1024 ** 2, rows: 548_000, plugin: 'Action Scheduler (WooCommerce and others)', slug: 'woocommerce', state: 'active' as const },
               { table: `${blogPrefix}actionscheduler_actions`, bytes: 236 * 1024 ** 2, rows: 192_000, plugin: 'Action Scheduler (WooCommerce and others)', slug: 'woocommerce', state: 'active' as const },
               { table: `${blogPrefix}yoast_indexable`, bytes: 88 * 1024 ** 2, rows: 41_000, plugin: 'Yoast SEO', slug: 'wordpress-seo', state: 'missing' as const },
-              { table: `${blogPrefix}acme_slider_log`, bytes: 12 * 1024 ** 2, rows: 9_400, plugin: 'acme-slider', slug: 'acme-slider', state: 'inactive' as const },
+              { table: `${blogPrefix}acme_slider_log`, bytes: 12 * 1024 ** 2, rows: 9_400, plugin: 'acme-slider', slug: 'acme-slider', by: 'name' as const, state: 'inactive' as const },
+              { table: `${blogPrefix}brand_quotes`, bytes: 180_000, rows: 640, plugin: 'acme-theme', slug: 'acme-theme', kind: 'theme' as const, by: 'code' as const, state: 'active' as const },
+              { table: `${blogPrefix}old_slides`, bytes: 2_400_000, rows: 80, plugin: 'acme-classic', slug: 'acme-classic', kind: 'theme' as const, by: 'code' as const, state: 'inactive' as const },
+              { table: `${blogPrefix}shop_queue`, bytes: 96_000, rows: 12, plugin: 'must-use plugins', slug: 'mu-plugins', kind: 'muPlugin' as const, by: 'code' as const, state: 'active' as const },
             ]
           : []),
-        { table: `${blogPrefix}mystery_cache`, bytes: 1_200_000, rows: 310, state: 'unknown' as const },
+        { table: `${blogPrefix}mystery_cache`, bytes: 1_200_000, rows: 310, state: 'unknown' as const, unused: true },
       ].filter((t) => !pluginGone.has(`${site.db?.name}.${t.table}`)),
       autoload: heavy
         ? [
@@ -543,15 +551,15 @@ const cleanups: MockCleanup[] = [];
 
 /** A clean-up job of the mockup leaves its saved copy in the list, as the panel would once its job is done. */
 export function mockCleanupStarted(id: string, input: Record<string, unknown>): void {
-  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop', 'db.fixTable': 'fix', 'db.autoloadOff': 'autoload', 'mysql.runSql': 'sql' };
+  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop', 'db.fixTable': 'fix', 'db.toInnodb': 'fix', 'db.autoloadOff': 'autoload', 'mysql.runSql': 'sql' };
   const kind = kinds[id];
   if (!kind) return;
   const site = input.domain ? `${String(input.domain)}${input.path ? String(input.path) : ''}` : undefined;
   const database = site ? sites.find((s) => `${s.domain}${s.path ?? ''}` === site)?.db?.name ?? '' : String(input.database);
   const prefix = Number(input.blog ?? 1) > 1 ? `wp_${String(input.blog)}_` : 'wp_';
   const written = kind === 'sql' ? mockCheckWrite(String(input.database), String(input.sql)) : null;
-  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}`, sql: `${written?.statement ?? 'SQL'} on ${written?.tables.map((t) => t.name).join(', ') || 'a new table'}`, fix: `Fix ${String(input.table)}`, autoload: 'Turn off autoload for options of plugins that are off' }[kind];
-  const tables = written ? written.tables.map((t) => ({ table: t.name, rows: 0 })) : kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : [{ table: String(input.table), rows: 0 }];
+  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}`, sql: `${written?.statement ?? 'SQL'} on ${written?.tables.map((t) => t.name).join(', ') || 'a new table'}`, fix: id === 'db.toInnodb' ? 'Turn the MyISAM tables into InnoDB' : `Fix ${String(input.table)}`, autoload: 'Turn off autoload for options of plugins that are off' }[kind];
+  const tables = written ? written.tables.map((t) => ({ table: t.name, rows: 0 })) : kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : id === 'db.toInnodb' ? [`${prefix}brand_quotes`, `${prefix}acme_slider_log`, `${prefix}options`].map((table) => ({ table, rows: 0 })) : [{ table: String(input.table), rows: 0 }];
   const now = new Date();
   cleanups.unshift({ id: `20261107-${String(103000 + cleanups.length).padStart(6, '0')}-mockcl`, title, kind, tables, bytes: 3_400_000, savedAt: now.toISOString(), purgeAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(), database, ...(site ? { site } : {}) });
 }
