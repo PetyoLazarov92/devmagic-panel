@@ -1,5 +1,15 @@
 # Changelog
 
+### v1.18.0 (2026-11-07)
+* **Databases:** the WordPress view shows what it read last time at once, with when, and reads the parts that scan whole tables again only on Check again or after a job changed the site. Leaving the view stops its reads in MySQL too, and two asks for the same read share one
+* **Databases:** a clean-up deletes in batches of 5,000 rows, each its own short transaction, with the rows done so far and Stop, which ends it after the batch it is on: Retry carries on and Undo puts back what it removed. It checks the disk has room for its copy first. Transients still go in one statement, a value with its timeout
+* **Databases:** Table health checks the site's WordPress tables against how WordPress makes them: a lost primary key or AUTO_INCREMENT, a missing index, MyISAM or utf8, each with a fix that saves the table whole first. A key fix waits while duplicate or zero IDs are there; latin1 is only flagged. Tables with room to give back get Optimize
+* **Databases:** What a clean-up would find adds oEmbed caches, Akismet's history, Action Scheduler's finished actions with their logs, expired WooCommerce sessions, saved login sessions, repeated post meta (looked for on request) and keeping the newest revisions of each post
+* **Databases:** What plugins keep lists the tables that are not WordPress's own with the plugin each likely belongs to and whether it is on, off or gone, the options a plugin that is off still loads on every page (Turn off autoload, saved first), and posts of types nothing registers any more. What grows shows the tables that grew most, from a note of their sizes once a day
+* **Panel:** a job keeps its place when you leave its page: open the page again and it is back in its card, and a toast says when a job you are not looking at ends. The panel no longer updates or restarts while any job runs, and a run a restart cut off says so in Run history
+* **Environment:** MySQL memory for site data warns when InnoDB's buffer pool is far smaller than the sites' data, with the setting and the file to put it in
+* An update installs this release from the panel as usual
+
 ### v1.17.0 (2026-11-07)
 * **Databases:** the WordPress view shows in a moment on a big database: autoload, transients and users come first, and the clean-up counts and Post meta by key fill in their own cards as they are read, with a minute each instead of 15 seconds. Read again keeps the cards until the new counts arrive
 * **Databases:** Post meta by key lists the custom fields that fill postmeta. Above 300,000 rows it counts them by rows first, as a size needs every value read, and **Count sizes** reads the sizes with up to a minute

@@ -680,6 +680,10 @@ export interface JobView {
   startedAt: string;
   /** Its row in Run history. */
   runId: number;
+  /** Stop ends it at its next safe point, like between two batches of a clean-up. */
+  stoppable?: boolean;
+  /** Stop was asked for and the job ends at its next safe point. */
+  stopping?: boolean;
 }
 
 /** One thing install.sh put on the machine, from its root-owned list. */

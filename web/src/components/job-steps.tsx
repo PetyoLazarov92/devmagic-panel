@@ -1,11 +1,55 @@
 import type { JobView, RunStep } from '@devmagic-panel/shared';
 import { Check, ChevronRight, CircleX, LoaderCircle, SkipForward } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnsiText } from '@/components/ansi-text';
 import { api } from '@/lib/api';
 import { duration } from '@/lib/format';
 import { loadThroughRestart } from '@/lib/startup';
 import { cn } from '@/lib/utils';
+
+/** The jobs a page shows right now: the header tells about any other one when it ends. */
+const followed = new Set<string>();
+export const isFollowed = (id: string) => followed.has(id);
+
+/** Marks a job as shown on this page while the component lives (a job's own page, an install screen). */
+export function useFollowed(id: string | undefined) {
+  useEffect(() => {
+    if (!id) return;
+    followed.add(id);
+    return () => {
+      followed.delete(id);
+    };
+  }, [id]);
+}
+
+/**
+ * Shows again a job of this site that runs since before the page opened, like
+ * a clean-up you started and left: in the card whose button started it.
+ * kinds maps the job's action to that card; found is told which one.
+ */
+export function useResumeJob<T>(runner: { job: JobView | null; attach: (view: JobView) => void }, target: string, kinds: Partial<Record<string, T>>, found: (slot: T) => void) {
+  const keep = useRef({ runner, kinds, found });
+  keep.current = { runner, kinds, found };
+  useEffect(() => {
+    let live = true;
+    api.jobs().then(
+      (list) => {
+        const { runner: r, kinds: k, found: f } = keep.current;
+        if (!live || r.job) return;
+        const job = list
+          .filter((j) => j.target === target && j.kind !== undefined && k[j.kind] !== undefined && (j.status === 'running' || j.status === 'queued' || j.status === 'undoing'))
+          .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+        if (!job?.kind) return;
+        f(k[job.kind] as T);
+        r.attach(job);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [target]);
+}
 
 /** True once a job stopped moving: done, failed, or undone. A queued job has not started yet. */
 export const settled = (job: JobView | null) => job !== null && job.status !== 'running' && job.status !== 'undoing' && job.status !== 'queued';
@@ -17,6 +61,7 @@ export const settled = (job: JobView | null) => job !== null && job.status !== '
 export function useJob() {
   const [job, setJob] = useState<JobView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useFollowed(job?.id);
 
   useEffect(() => {
     if (!job || settled(job)) return;
@@ -52,7 +97,23 @@ export function useJob() {
     }
   }
 
-  return { job, error, follow, retry, clear: () => { setJob(null); setError(null); } };
+  /** Shows a job that started before this page opened, like one still running after you came back. */
+  function attach(view: JobView) {
+    setError(null);
+    setJob(view);
+  }
+
+  /** Asks the job to stop at its next safe point; it ends failed, so Retry carries on and Undo puts back what it did. */
+  async function stop() {
+    if (!job) return;
+    try {
+      setJob(await api.stopJob(job.id));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  return { job, error, follow, retry, attach, stop, clear: () => { setJob(null); setError(null); } };
 }
 
 export function StepList({ steps, open, setOpen }: { steps: RunStep[]; open: string | null; setOpen: (id: string | null) => void }) {

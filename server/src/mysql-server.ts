@@ -50,6 +50,8 @@ export interface SiteDatabase extends MysqlSiteRef {
   dbHost?: string;
   /** Its table prefix, like wp_. */
   prefix?: string;
+  /** The folder its wp-config.php is in. */
+  docroot?: string;
 }
 
 export function siteDatabases(config: SystemConfig): SiteDatabase[] {
@@ -68,7 +70,7 @@ export function siteDatabases(config: SystemConfig): SiteDatabase[] {
       }
       const wp = parseWpConfig(text);
       if (!isLocalDbHost(wp.dbHost)) continue;
-      out.push({ domain, ...(path ? { path } : {}), ...(wp.dbName ? { db: wp.dbName } : {}), ...(wp.dbUser ? { user: wp.dbUser } : {}), ...(wp.dbHost ? { dbHost: wp.dbHost } : {}), ...(wp.tablePrefix ? { prefix: wp.tablePrefix } : {}) });
+      out.push({ domain, ...(path ? { path } : {}), ...(wp.dbName ? { db: wp.dbName } : {}), ...(wp.dbUser ? { user: wp.dbUser } : {}), ...(wp.dbHost ? { dbHost: wp.dbHost } : {}), ...(wp.tablePrefix ? { prefix: wp.tablePrefix } : {}), ...(docroot ? { docroot } : {}) });
     }
   }
   return out;
@@ -249,16 +251,19 @@ async function databaseSize(q: ReturnType<typeof client>, database: string): Pro
  * each, which gives the space of deleted rows back to the disk. Refused for
  * a site's database while a job works on that site.
  */
-export async function planOptimize(ctx: MysqlContext, { database }: ActionInput<'mysql.optimize'>, siteBusy: (site: MysqlSiteRef) => boolean): Promise<JobStep[]> {
+export async function planOptimize(ctx: MysqlContext, { database, tables: only }: ActionInput<'mysql.optimize'>, siteBusy: (site: MysqlSiteRef) => boolean): Promise<JobStep[]> {
   const q = client(ctx);
   await changeable(q, database);
   const busy = siteDatabases(ctx.config).find((s) => s.db === database && siteBusy(s));
   if (busy) throw new MysqlRefused(`${siteHost(busy.domain, busy.path)} uses ${database} and is busy; wait until its job finishes`);
-  const tables = await baseTables(q, database);
+  // Only the tables asked for (like the ones a clean-up left room in), and only ones the database has.
+  const all = await baseTables(q, database);
+  const tables = only ? all.filter((t) => only.includes(t)) : all;
+  if (tables.length === 0) throw new MysqlRefused(`${database} has none of those tables`);
   return [
     {
       id: 'optimize',
-      label: `Optimize ${tables.length} tables of ${database}`,
+      label: only ? `Optimize ${tables.length === 1 ? tables[0] : `${tables.length} tables`} of ${database}` : `Optimize ${tables.length} tables of ${database}`,
       run: async (job) => {
         const before = await databaseSize(q, database);
         const errors: string[] = [];

@@ -274,6 +274,18 @@ export function mockDbCell(database: string, table: string, column: string, key:
   return { value: value === null ? null : t.columns[i]?.binary ? { head: value, length: value.length / 2, binary: true } : value, cut: false };
 }
 
+/** Plugin tables deleted and options whose autoload went off in the mockup: database.name. */
+const pluginGone = new Set<string>();
+export function mockPluginGone(database: string, names: string[]): void {
+  for (const n of names) pluginGone.add(`${database}.${n}`);
+}
+
+/** Tables a fix job of the mockup made as WordPress makes them: database.table.fix. */
+const fixedTables = new Set<string>();
+export function mockTableFixed(database: string, table: string, fix: string): void {
+  fixedTables.add(`${database}.${table}.${fix}`);
+}
+
 /** A site's database as WordPress sees it, in the mockup: one site over Site Health's autoload limit, a network with three sites. */
 export function mockWordpressDb(domain: string, path: string | undefined, blog = 1, { sections = WP_DB_SECTIONS, sizes = false }: { sections?: readonly WpDbSection[]; sizes?: boolean } = {}): WpDbReport {
   const site = sites.find((s) => s.domain === domain && s.path === path);
@@ -299,6 +311,20 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
     { key: '_edit_lock', count: n(3_100), bytes: n(68_000) },
     { key: '_thumbnail_id', count: n(2_900), bytes: n(14_000) },
   ];
+  // The big site was moved by hand once: a MyISAM options table and a postmeta without its meta_key index.
+  const healthIssues: WpDbReport['health'] = {
+    tables: blog === 1 ? 11 : 9,
+    issues: [
+      ...(heavy
+        ? [
+            { table: `${blogPrefix}options`, problem: 'engine' as const, text: 'It is MyISAM: no transactions, and a crash can damage it. WordPress makes InnoDB tables', fix: 'engine' as const },
+            { table: `${blogPrefix}postmeta`, problem: 'missingIndex' as const, text: 'Missing the index meta_key (meta_key): reads by it scan the whole table', fix: 'index' as const },
+          ]
+        : [{ table: `${blogPrefix}comments`, problem: 'utf8mb3' as const, text: 'It is utf8mb3_general_ci: emoji and some characters cannot be saved. utf8mb4 holds them all, and this change loses nothing', fix: 'charset' as const }]),
+    ].filter((i) => !fixedTables.has(`${site.db?.name}.${i.table}.${i.fix}`)),
+    // Room a clean-up left in the big site's postmeta and comments, until they are optimized.
+    ...(heavy ? { free: [{ table: `${blogPrefix}postmeta`, freeBytes: 48 * 1024 ** 2, bytes: 310 * 1024 ** 2 }, { table: `${blogPrefix}comments`, freeBytes: 21 * 1024 ** 2, bytes: 64 * 1024 ** 2 }].filter((f) => !fixedTables.has(`${site.db?.name}.${f.table}.optimize`)) } : {}),
+  };
   const full: WpDbReport = {
     database: site.db.name,
     prefix: 'wp_',
@@ -306,6 +332,31 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
     blogPrefix,
     ...(network ? { network } : {}),
     missingTables: heavy ? [] : [`${blogPrefix}termmeta`],
+    health: healthIssues,
+    postTypes: { unregistered: heavy ? [{ type: 'elementor_library', count: n(1_240) }, { type: 'acme_portfolio', count: n(12) }] : [] },
+    growth: heavy
+      ? { since: '2026-10-29', days: 9, tables: [{ table: `${blogPrefix}actionscheduler_logs`, bytes: 412 * 1024 ** 2, grewBytes: 118 * 1024 ** 2 }, { table: `${blogPrefix}options`, bytes: 31 * 1024 ** 2, grewBytes: 9 * 1024 ** 2 }, { table: `${blogPrefix}postmeta`, bytes: 310 * 1024 ** 2, grewBytes: 4 * 1024 ** 2 }] }
+      : { since: '2026-11-07', days: 0, tables: [] },
+    // The big site runs a shop, once had Yoast SEO, and has a slider plugin switched off that still loads its cache.
+    plugins: {
+      tables: [
+        ...(heavy
+          ? [
+              { table: `${blogPrefix}actionscheduler_logs`, bytes: 412 * 1024 ** 2, rows: 548_000, plugin: 'Action Scheduler (WooCommerce and others)', slug: 'woocommerce', state: 'active' as const },
+              { table: `${blogPrefix}actionscheduler_actions`, bytes: 236 * 1024 ** 2, rows: 192_000, plugin: 'Action Scheduler (WooCommerce and others)', slug: 'woocommerce', state: 'active' as const },
+              { table: `${blogPrefix}yoast_indexable`, bytes: 88 * 1024 ** 2, rows: 41_000, plugin: 'Yoast SEO', slug: 'wordpress-seo', state: 'missing' as const },
+              { table: `${blogPrefix}acme_slider_log`, bytes: 12 * 1024 ** 2, rows: 9_400, plugin: 'acme-slider', slug: 'acme-slider', state: 'inactive' as const },
+            ]
+          : []),
+        { table: `${blogPrefix}mystery_cache`, bytes: 1_200_000, rows: 310, state: 'unknown' as const },
+      ].filter((t) => !pluginGone.has(`${site.db?.name}.${t.table}`)),
+      autoload: heavy
+        ? [
+            { plugin: 'acme-slider', slug: 'acme-slider', state: 'inactive' as const, count: 2, bytes: 902_000, options: ['acme_slider_cache', 'acme_slider_settings'] },
+            { plugin: 'Yoast SEO', slug: 'wordpress-seo', state: 'missing' as const, count: 4, bytes: 61_000, options: ['wpseo_titles', 'wpseo', 'wpseo_social', 'wpseo_ms'] },
+          ].filter((g) => !g.options.every((o) => pluginGone.has(`${site.db?.name}.${o}`)))
+        : [],
+    },
     autoload: {
       count: n(heavy ? 1_240 : 412),
       bytes: n(heavy ? 1_930_000 : 212_000),
@@ -321,7 +372,20 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
       ].sort((a, b) => b.bytes - a.bytes),
     },
     transients: { count: n(heavy ? 3_120 : 64), bytes: n(heavy ? 41_000_000 : 380_000), expired: n(heavy ? 2_870 : 9), site: { count: 12, bytes: 210_000, expired: 4 } },
-    content: { revisions: n(heavy ? 18_400 : 620), autoDrafts: n(14), trashedPosts: n(37), spamComments: n(heavy ? 9_800 : 0), trashedComments: n(12) },
+    content: {
+      revisions: n(heavy ? 18_400 : 620),
+      revisionsOver: { 1: n(heavy ? 15_100 : 410), 3: n(heavy ? 11_300 : 240), 5: n(heavy ? 8_900 : 150), 10: n(heavy ? 4_200 : 40) },
+      autoDrafts: n(14),
+      trashedPosts: n(37),
+      spamComments: n(heavy ? 9_800 : 0),
+      trashedComments: n(12),
+      oembed: n(heavy ? 2_140 : 96),
+      akismet: n(heavy ? 31_000 : 0),
+      // The big site runs a shop: Action Scheduler and WooCommerce sessions.
+      ...(heavy ? { actionsDone: n(186_000), actionLogs: n(548_000), wcSessions: n(1_260) } : {}),
+      ...(blog === 1 ? { sessionTokens: 3 } : {}),
+    },
+    duplicates: { rows: n(heavy ? 12_480 : 36), keys: [{ key: '_edit_lock', rows: n(heavy ? 9_100 : 30) }, { key: '_acme_price', rows: n(heavy ? 3_380 : 6) }] },
     orphans: { postmeta: n(heavy ? 4_210 : 0), commentmeta: n(heavy ? 1_300 : 0), termmeta: 0, termRelationships: n(26), ...(blog === 1 ? { usermeta: 3 } : {}) },
     metaKeys: { estimatedRows, sized, keys: sized ? metaKeys : [...metaKeys].sort((a, b) => b.count - a.count).map(({ key, count }) => ({ key, count })) },
     users: {
@@ -443,14 +507,14 @@ const cleanups: MockCleanup[] = [];
 
 /** A clean-up job of the mockup leaves its saved copy in the list, as the panel would once its job is done. */
 export function mockCleanupStarted(id: string, input: Record<string, unknown>): void {
-  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop', 'mysql.runSql': 'sql' };
+  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop', 'db.fixTable': 'fix', 'db.autoloadOff': 'autoload', 'mysql.runSql': 'sql' };
   const kind = kinds[id];
   if (!kind) return;
   const site = input.domain ? `${String(input.domain)}${input.path ? String(input.path) : ''}` : undefined;
   const database = site ? sites.find((s) => `${s.domain}${s.path ?? ''}` === site)?.db?.name ?? '' : String(input.database);
   const prefix = Number(input.blog ?? 1) > 1 ? `wp_${String(input.blog)}_` : 'wp_';
   const written = kind === 'sql' ? mockCheckWrite(String(input.database), String(input.sql)) : null;
-  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}`, sql: `${written?.statement ?? 'SQL'} on ${written?.tables.map((t) => t.name).join(', ') || 'a new table'}` }[kind];
+  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}`, sql: `${written?.statement ?? 'SQL'} on ${written?.tables.map((t) => t.name).join(', ') || 'a new table'}`, fix: `Fix ${String(input.table)}`, autoload: 'Turn off autoload for options of plugins that are off' }[kind];
   const tables = written ? written.tables.map((t) => ({ table: t.name, rows: 0 })) : kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : [{ table: String(input.table), rows: 0 }];
   const now = new Date();
   cleanups.unshift({ id: `20261107-${String(103000 + cleanups.length).padStart(6, '0')}-mockcl`, title, kind, tables, bytes: 3_400_000, savedAt: now.toISOString(), purgeAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(), database, ...(site ? { site } : {}) });

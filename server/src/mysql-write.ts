@@ -12,7 +12,7 @@ import type { RowsContext } from './mysql-rows.js';
 import { MysqlRefused, siteDatabases } from './mysql-server.js';
 import { BrowseError } from './mysql-sql.js';
 import { formatBytes } from './sites/db.js';
-import { freeSpace } from './sites/space.js';
+import { existingFolder, freeSpace } from './sites/space.js';
 
 /**
  * SQL that writes, run from the SQL runner as a job: one statement that
@@ -118,12 +118,6 @@ export async function planned(ctx: RowsContext, database: string, sql: string): 
 }
 
 /** The nearest folder that exists, for free space before the backups folder is made. */
-function existingFolder(path: string): string {
-  let p = path;
-  while (!existsSync(p) && dirname(p) !== p) p = dirname(p);
-  return p;
-}
-
 /**
  * What a statement would do, before it runs: its tables, their size and the
  * disk's room for the copy, and for a change of rows on InnoDB tables how

@@ -14,7 +14,7 @@ import { findVhost } from './sites/discover.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
 import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
 import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
-import { planContent, planDropTable, planEmptyTable, planOrphans, planTransients, setAutoload, undoCleanup } from './mysql-cleanup.js';
+import { contentTitle, planContent, planDropTable, planEmptyTable, planOrphans, planTransients, setAutoload, undoCleanup } from './mysql-cleanup.js';
 import { deleteRows, insertRow, type RowsContext, undoRowChange, updateRow } from './mysql-rows.js';
 import { killQuery, planWrite } from './mysql-write.js';
 import { planImportDump } from './mysql-transfer.js';
@@ -53,6 +53,8 @@ import { forgetOnFailure, type HeldPassword, installRunning, planInstallRelease 
 import { changeCrontab, type CronChange, type CronCommand, cronCommand, type CronContext, cronLockDir, CronRefused, findTask, newTaskId, type PanelTask, parseCrontab, readCrontab, taskArgs, tasksOf, undoCrontab } from './cron.js';
 import { runCronTask, taskRefusal } from './cron-run.js';
 import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } from './sites/wp-cron.js';
+import { planFixTable } from './mysql-health.js';
+import { planAutoloadOff } from './wordpress-plugins.js';
 
 export interface ActionContext {
   config: SystemConfig;
@@ -228,7 +230,7 @@ async function trustBrowsers(ctx: ActionContext): Promise<ExecResult[]> {
 export const MAX_PARALLEL_INSTALLS = 2;
 
 /** Starts a job; the job finishes the run history row itself. */
-function startJob(ctx: ActionContext, steps: JobStep[], title: string, target: string, extra: Pick<JobOptions, 'onDone' | 'onUndone' | 'upload'> = {}): HandlerOutcome {
+function startJob(ctx: ActionContext, steps: JobStep[], title: string, target: string, extra: Pick<JobOptions, 'onDone' | 'onUndone' | 'upload' | 'stoppable'> = {}): HandlerOutcome {
   const view = ctx.jobs.start(steps, { runId: ctx.runId as number, title, target, ...(ctx.actionId ? { kind: ctx.actionId } : {}), ...extra });
   return { results: [{ code: 0, stdout: `started ${view.id}`, stderr: '' }], data: { jobId: view.id }, detached: true };
 }
@@ -316,9 +318,17 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'mysql.deleteRows': async (ctx, input) => rowOutcome(await deleteRows(rowsCtx(ctx), input)),
   'mysql.undoRowChange': async (ctx, input) => [await undoRowChange(rowsCtx(ctx), input)],
   // Clean-ups are jobs: save what they remove, then remove it; their Undo, and mysql.undoCleanup later, put it back.
-  'db.cleanTransients': async (ctx, input) => startJob(ctx, await planTransients(rowsCtx(ctx), input), input.scope === 'expired' ? 'Delete expired transients' : 'Delete every transient', siteKeyOf(input)),
-  'db.cleanContent': async (ctx, input) => startJob(ctx, await planContent(rowsCtx(ctx), input), 'Delete revisions, drafts, trash and spam', siteKeyOf(input)),
-  'db.cleanOrphans': async (ctx, input) => startJob(ctx, await planOrphans(rowsCtx(ctx), input), 'Delete what was left behind', siteKeyOf(input)),
+  'db.cleanTransients': async (ctx, input) => startJob(ctx, await planTransients(rowsCtx(ctx), input), input.scope === 'expired' ? 'Delete expired transients' : 'Delete every transient', siteKeyOf(input), { stoppable: true }),
+  'db.cleanContent': async (ctx, input) => startJob(ctx, await planContent(rowsCtx(ctx), input), contentTitle(input.kinds), siteKeyOf(input), { stoppable: true }),
+  'db.cleanOrphans': async (ctx, input) => startJob(ctx, await planOrphans(rowsCtx(ctx), input), 'Delete what was left behind', siteKeyOf(input), { stoppable: true }),
+  'db.fixTable': async (ctx, input) => {
+    const { title, steps } = await planFixTable(rowsCtx(ctx), input);
+    return startJob(ctx, steps, title, siteKeyOf(input));
+  },
+  'db.autoloadOff': async (ctx, input) => {
+    const { title, steps } = await planAutoloadOff(rowsCtx(ctx), input);
+    return startJob(ctx, steps, title, siteKeyOf(input), { stoppable: true });
+  },
   'db.setAutoload': async (ctx, input) => rowOutcome(await setAutoload(rowsCtx(ctx), input)),
   'mysql.emptyTable': async (ctx, input) => startJob(ctx, await planEmptyTable(rowsCtx(ctx), input), `Empty ${input.table}`, `database ${input.database}`),
   'mysql.dropTable': async (ctx, input) => startJob(ctx, await planDropTable(rowsCtx(ctx), input), `Delete table ${input.table}`, `database ${input.database}`),
@@ -688,8 +698,10 @@ export async function runAction(ctx: ActionContext, id: ActionId, rawInput: unkn
   }
   // One update or switch at a time, and none while installs run: both restart the panel.
   const restarts = (kind?: string) => kind === 'panel.update' || kind === 'panel.switchRelease' || kind === 'panel.installRelease';
-  if (restarts(id) && ctx.jobs.list().some((j) => (restarts(j.kind) || j.kind === 'site.create') && (j.status === 'running' || j.status === 'queued'))) {
-    throw new ActionBusyError('Wait for the running installs and updates to finish: this restarts the panel');
+  // Any job: a restart would cut a clean-up, an import or an install off half way.
+  const active = ctx.jobs.list().filter((j) => j.status === 'running' || j.status === 'queued' || j.status === 'undoing');
+  if (restarts(id) && active.length > 0) {
+    throw new ActionBusyError(`Wait for ${active.length === 1 ? `${active[0]?.title ?? 'the running job'} to finish` : `the ${active.length} running jobs to finish`}: this restarts the panel`, active[0]?.id);
   }
   // While install.sh swaps the root scripts nothing else may run them.
   if (actions[id].changesSystem && ctx.jobs.list().some((j) => j.kind === 'panel.installRelease' && (j.status === 'running' || j.status === 'queued'))) {

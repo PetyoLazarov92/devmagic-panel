@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.17.0-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.18.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -256,7 +256,7 @@ When the installer put Node.js in place for the panel, use
 | [Run history](docs/pages.md#run-history) | Every action the panel ran, with its result, kept 90 days |
 | [Archive](docs/pages.md#archive) | Copies of removed or replaced sites from the last 14 days, to restore or delete |
 
-The database tools (tables, rows, SQL, clean-ups, imports and exports) are in
+The database tools (tables, rows, SQL, table health, clean-ups, plugin leftovers, imports and exports) are in
 [Databases](docs/databases.md).
 
 [⬆️ Back to top](#-table-of-contents)

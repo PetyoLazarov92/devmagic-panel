@@ -45,6 +45,8 @@ export interface ExecOptions {
    * panel's environment without LC_ALL=C, as a window for a person.
    */
   detach?: boolean;
+  /** Stops the program when it aborts, like a read the browser no longer waits for. */
+  signal?: AbortSignal;
 }
 
 export type Executor = (file: string, args: readonly string[], options?: ExecOptions) => Promise<ExecResult>;
@@ -71,6 +73,7 @@ const runToStream = (file: string, args: readonly string[], options: ExecOptions
       child.kill('SIGTERM');
     };
     const timer = setTimeout(() => stop('stopped: it took too long'), options.timeoutMs ?? 30_000);
+    options.signal?.addEventListener('abort', () => stop('stopped: no longer needed'), { once: true });
     child.on('error', (error) => {
       // Not started: 127, as for a program the buffered way cannot start.
       stderr = error.message;
@@ -149,6 +152,14 @@ const runBuffered: Executor = (file, args, options = {}) =>
       },
     );
     child.stdin?.on('error', () => undefined);
+    options.signal?.addEventListener(
+      'abort',
+      () => {
+        stopped ??= 'stopped: no longer needed';
+        child.kill('SIGTERM');
+      },
+      { once: true },
+    );
     if (options.onStderr) child.stderr?.on('data', (chunk: Buffer | string) => options.onStderr?.(String(chunk)));
     if (options.onStdout) child.stdout?.on('data', (chunk: Buffer | string) => options.onStdout?.(String(chunk)));
     const input = options.inputStream;

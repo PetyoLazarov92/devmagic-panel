@@ -24,6 +24,8 @@ export interface BrowseContext {
   readOnly?: MysqlAccount | null | undefined;
   /** The databases the panel keeps a site's tables in, with the site's key. */
   kept: () => Array<{ name: string; site: string }>;
+  /** Aborts when nobody waits for the answer any more: the read stops in MySQL too. */
+  signal?: AbortSignal;
 }
 
 /** How long one read may run on the server before MySQL stops it. */
@@ -66,21 +68,42 @@ export async function flavor(ctx: BrowseContext): Promise<'mysql' | 'mariadb'> {
 export async function read(ctx: BrowseContext, sql: string, { limitMs = READ_LIMIT_MS, maxBytes = 8 * 1024 * 1024, raw = true, database = '' } = {}): Promise<string[]> {
   const mysql = account(ctx);
   const limit = (await flavor(ctx)) === 'mariadb' ? `SET SESSION max_statement_time = ${limitMs / 1000};` : `SET SESSION max_execution_time = ${limitMs};`;
-  const input = `SET SESSION TRANSACTION READ ONLY;\n${limit}\n${sql}`;
-  const r = await ctx.exec('mysql', [...baseArgs(mysql), ...(raw ? ['--raw'] : []), ...(database ? [`--database=${checkDatabase(database)}`] : [])], {
+  const { signal } = ctx;
+  if (signal?.aborted) throw new BrowseError('The read is no longer needed', 499);
+  // A read that can be stopped first says which connection it is, so a stop ends the query in MySQL too, not only the client.
+  const input = `SET SESSION TRANSACTION READ ONLY;\n${limit}\n${signal ? `SELECT '${CONNECTION_MARK}', CONNECTION_ID();\n` : ''}${sql}`;
+  let connection: number | undefined;
+  const onAbort = () => {
+    if (connection) void ctx.exec('mysql', [...baseArgs(mysql), '-e', `KILL QUERY ${connection}`], { env: { MYSQL_PWD: mysql.password }, timeoutMs: 10_000 });
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  const r = await ctx.exec('mysql', [...baseArgs(mysql), ...(raw ? ['--raw'] : []), ...(signal ? ['--unbuffered'] : []), ...(database ? [`--database=${checkDatabase(database)}`] : [])], {
     env: { MYSQL_PWD: mysql.password },
     input,
     timeoutMs: limitMs + 10_000,
     maxBufferBytes: maxBytes,
+    ...(signal
+      ? {
+          signal,
+          onStdout: (chunk: string) => {
+            connection ??= Number(new RegExp(`^${CONNECTION_MARK}\\t(\\d+)`, 'm').exec(chunk)?.[1]) || undefined;
+          },
+        }
+      : {}),
   });
+  signal?.removeEventListener('abort', onAbort);
+  if (signal?.aborted) throw new BrowseError('The read is no longer needed', 499);
   if (r.code !== 0) {
     if (/maximum statement execution time|max_statement_time|Query execution was interrupted/i.test(r.stderr)) {
       throw new BrowseError(`MySQL stopped the read after ${limitMs / 1000} seconds: narrow it with a filter`, 504);
     }
     throw new BrowseError(`MySQL refused the read: ${firstLine(r)}`, 502);
   }
-  return r.stdout.split('\n').filter((line) => line !== '');
+  return r.stdout.split('\n').filter((line) => line !== '' && !line.startsWith(CONNECTION_MARK));
 }
+
+/** The first line of a read that can be stopped: which connection it runs on. */
+const CONNECTION_MARK = 'dmp-connection';
 
 export function checkDatabase(database: string): string {
   if (!mysqlDatabaseName.safeParse(database).success) throw new BrowseError('A database name like acme_com');

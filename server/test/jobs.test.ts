@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { type ActionContext, runAction } from '../src/actions.js';
+import { tempTree } from './helpers.js';
 import { Jobs, KEPT_ACTIVITY, locksMeet, type JobStep, type JobView } from '../src/jobs.js';
 import { RunStore } from '../src/store.js';
 
@@ -237,5 +239,55 @@ describe('Jobs queue and progress', () => {
     expect(seen?.progress).toBeCloseTo(2.5 / 4);
     expect(done.progress).toBe(1);
     expect(done.steps[1]?.progress).toBeUndefined();
+  });
+});
+
+describe('stopping a job', () => {
+  it('ends a stoppable job at its next safe point, failed, so Retry carries on from there', async () => {
+    const store = new RunStore(':memory:');
+    const jobs = new Jobs(store);
+    let release: () => void = () => {};
+    const ran: string[] = [];
+    const steps: JobStep[] = [
+      { id: 'a', label: 'A', run: (job) => new Promise((done) => { release = () => done(job.stopped?.() ? fail('Stopped after 5,000 of 9,000 rows') : ok()); }) },
+      { id: 'b', label: 'B', run: async () => (ran.push('b'), ok()) },
+    ];
+    const started = jobs.start(steps, { runId: store.start('db.cleanOrphans', {}), title: 'Clean', target: 'local.a.com', stoppable: true });
+    expect(started.stoppable).toBe(true);
+    expect(jobs.stop(started.id)?.stopping).toBe(true);
+    release();
+    const stopped = await settle(jobs, started.id);
+    expect(stopped.status).toBe('failed');
+    expect(stopped.steps[0]?.output).toContain('Stopped after 5,000 of 9,000 rows');
+    expect(ran).toEqual([]);
+    jobs.retry(started.id);
+    release();
+    const done = await settle(jobs, started.id);
+    expect(done.status).toBe('done');
+    expect(done.stopping).toBeUndefined();
+    expect(ran).toEqual(['b']);
+  });
+
+  it('refuses a job that cannot stop safely, and one that is not running', async () => {
+    const store = new RunStore(':memory:');
+    const jobs = new Jobs(store);
+    const view = jobs.start([{ id: 'a', label: 'A', run: async () => ok() }], { runId: store.start('site.create', {}), title: 'Create' });
+    expect(jobs.stop(view.id)).toBeUndefined();
+    await settle(jobs, view.id);
+    expect(jobs.stop(view.id)).toBeUndefined();
+  });
+});
+
+describe('a restart while a job runs', () => {
+  it('waits for any running job, not only installs', async () => {
+    const store = new RunStore(':memory:');
+    const jobs = new Jobs(store);
+    const tree = tempTree();
+    let release: () => void = () => {};
+    const view = jobs.start([{ id: 'a', label: 'A', run: () => new Promise((done) => { release = () => done(ok()); }) }], { runId: store.start('db.cleanOrphans', {}), title: 'Delete what was left behind', target: 'local.a.com' });
+    const ctx = { config: tree.config, exec: async () => ok(), store, dmpRoot: '/x', wpcoreBin: '/x', wpcoreConf: '/x', home: tree.root, jobs, uploadsDir: tree.root } as unknown as ActionContext;
+    await expect(runAction(ctx, 'panel.switchRelease', { release: 'v1.17.0' })).rejects.toThrow('Wait for Delete what was left behind to finish: this restarts the panel');
+    release();
+    await settle(jobs, view.id);
   });
 });

@@ -1,7 +1,7 @@
 import type { JobView } from '@devmagic-panel/shared';
 import { ArrowRight, CircleX, ExternalLink, LogIn, RotateCcw, SkipForward, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { settled, StepList } from '@/components/job-steps';
+import { settled, StepList, useFollowed } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { draftHref } from '@/lib/drafts';
@@ -27,6 +27,7 @@ export function JobScreen({ jobId, wordpress }: { jobId: string; wordpress?: boo
   const [job, setJob] = useState<JobView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  useFollowed(jobId);
 
   useEffect(() => {
     if (settled(job)) return;

@@ -60,6 +60,10 @@ export function registerCreateRoutes(api: FastifyInstance, deps: CreateRouteDeps
     deps.jobs.retry(request.params.id) ?? reply.code(409).send({ error: 'only a failed job can be retried' }),
   );
 
+  api.post<{ Params: { id: string } }>('/api/jobs/:id/stop', async (request, reply) =>
+    deps.jobs.stop(request.params.id) ?? reply.code(409).send({ error: 'only a running job that can stop safely can be stopped' }),
+  );
+
   api.post<{ Params: { id: string } }>('/api/jobs/:id/skip', async (request, reply) =>
     deps.jobs.skip(request.params.id) ?? reply.code(409).send({ error: 'only a failed step the panel marks as skippable can be skipped' }),
   );

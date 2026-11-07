@@ -54,28 +54,58 @@ and tick rows on a page to delete them together.
 
 ## WordPress
 
-What WordPress keeps in its database, for each site of a network. Autoload,
-transients and users show first; the clean-up counts and the postmeta keys
-read whole tables, so each fills its card in when it is read, with up to a
-minute.
+What WordPress keeps in its database, for each site of a network. The view
+shows what the panel read last time at once ("Read 3 h ago" in its bar), reads
+the quick parts again, and the parts that read whole tables only on **Check
+again** or after a job changed the site; each of those fills its card in when
+it is read, with up to a minute. Leaving the view stops its reads in MySQL too.
 
+- **Table health**: the site's WordPress tables against how WordPress makes
+  them. A lost primary key or AUTO_INCREMENT (a bad import's mark: new posts
+  get ID 0), a missing index, MyISAM, or utf8 (utf8mb3) each get a fix that
+  saves the table whole first, so Undo puts it back. A key fix waits while
+  duplicate or zero IDs are there, and says how many. latin1 is only flagged:
+  its text may already hold UTF-8 bytes, which a conversion would garble.
+  Tables with room a rebuild gives back (like after a clean-up) get
+  **Optimize**.
 - **Autoloaded options** against Site Health's 800 KB limit, the biggest by
   name, and **Turn off** for a big one (written as the site's WordPress
   writes it: on and off, or yes and no before 6.6).
 - **Transients**, with the expired ones still stored, and **Delete expired** or
   **Delete all**.
-- **What a clean-up would find**: revisions, auto-drafts, posts and comments in
-  the trash, spam, and meta or terms left behind by something deleted, each
-  with a tick, and **Delete the ticked**. A post goes with its meta, terms and
-  comments, as WordPress deletes it; a link's terms stay.
+- **What a clean-up would find**: revisions (all, or all but the newest 1, 3,
+  5 or 10 of each post), auto-drafts, posts and comments in the trash, spam,
+  and what plugins leave where the site has their tables: oEmbed caches,
+  Akismet's history, Action Scheduler's finished, failed and cancelled actions
+  with their logs, expired WooCommerce sessions, and saved login sessions (not
+  ticked: everyone signs in again). **Look for repeated post meta** reads
+  every value of postmeta, with up to two minutes, for the same key and value
+  twice on a post. Then meta or terms left behind by something deleted. Each
+  kind has a tick, and **Delete the ticked**. A post goes with its meta, terms
+  and comments, as WordPress deletes it; a link's terms stay.
 - **Post meta by key**: the custom fields (`meta_key`) that fill postmeta, to
   see what makes it big (a page builder's data, an old plugin's leftovers).
   Up to 300,000 rows they come by size; on a bigger table by rows first, as a
   size needs every value read, and **Count sizes** reads the sizes anyway.
+- **What plugins keep**: the tables that are not WordPress's own, each with
+  the plugin it likely belongs to and whether that plugin is on, off or gone
+  from the plugins folder, with **Delete** (type the name; saved whole first)
+  for one whose plugin is not on; the options a plugin that is off or gone
+  still loads on every page, with **Turn off autoload**; and posts of types no
+  plugin or theme registers any more (WP-CLI's list, with plugins loaded).
+  These are guesses by name, said as guesses.
 - The users with their roles.
+- **What grows**: the panel notes the site's table sizes once a day when this
+  view opens (30 days, names and sizes only) and shows the tables that grew
+  most since.
 
-Each clean-up is a job that saves what it removes first; see
-[Undo](#undo-and-saved-copies).
+Each clean-up and fix is a job that saves what it changes first; see
+[Undo](#undo-and-saved-copies). A clean-up deletes in batches of 5,000 rows,
+each its own short transaction, with the rows done so far and **Stop**: it ends
+after the batch it is on, Retry carries on, and Undo puts back what it
+removed. It checks the disk has room for its copy first. A job keeps running
+when you leave the page: open the view again and it is back in its card, and
+a toast says when one you are not looking at ends.
 
 ## SQL
 
@@ -135,6 +165,7 @@ The runner never touches another database, accounts, rights, routines or files.
 | --- | --- | --- |
 | A row changed, added or deleted | `~/devmagic-panel-backups/row-changes/` | Puts it back while the row still holds what the change left |
 | A clean-up, an emptied or deleted table | `~/devmagic-panel-backups/cleanups/` | Puts the rows back; a row made again since stays as it is |
+| A table fix, autoload turned off for options | `~/devmagic-panel-backups/cleanups/` | Puts the table, or the options, back as they were |
 | SQL that writes | `~/devmagic-panel-backups/cleanups/` | Puts the tables it names back as they were before it |
 | A replaced or deleted database | The panel's MySQL backups | Puts the database back |
 

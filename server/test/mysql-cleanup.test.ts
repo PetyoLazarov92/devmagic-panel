@@ -47,7 +47,8 @@ async function run(steps: JobStep[]) {
   return { out, undos };
 }
 const dumps = (fake: ReturnType<typeof fakeExec>) => fake.calls.filter((c) => c.file === 'mysqldump');
-const deletes = (fake: ReturnType<typeof fakeExec>) => fake.calls.find((c) => c.input?.includes('START TRANSACTION'))?.input ?? '';
+/** Every batched DELETE a clean-up sent, in order. */
+const deletes = (fake: ReturnType<typeof fakeExec>) => fake.calls.filter((c) => c.input?.includes('DELETE FROM')).map((c) => c.input).join('\n');
 
 describe('deleting transients', () => {
   it('saves the expired ones and their timeouts first, then deletes only what the copy holds', async () => {
@@ -89,17 +90,67 @@ describe('deleting transients', () => {
   });
 });
 
+describe('removing in batches', () => {
+  it('deletes a big part in batches with progress, and a stop ends it between two with Undo in place', async () => {
+    let left = 12_000;
+    const fake = fakeDb(SINGLE, (sql) => {
+      if (sql.includes('COUNT(*)') && sql.includes('wp_postmeta')) return { stdout: '40\t12000' };
+      if (sql.includes('DELETE FROM')) {
+        const n = Math.min(5000, left);
+        left -= n;
+        return { stdout: String(n) };
+      }
+      return undefined;
+    });
+    const steps = await planOrphans(ctxFor(fake), { domain: 'local.shop.com', kinds: ['postmeta'] });
+    const notes: string[] = [];
+    const undos: string[] = [];
+    let stop = false;
+    const job: JobRuntime = { onUndo: (label) => void undos.push(label), dropUndo: (label) => void undos.splice(undos.indexOf(label), 1), progress: (_f, note) => void (note && notes.push(note)), stopped: () => stop };
+    await (steps[0] as JobStep).run(job);
+    // Stop after the first batch.
+    let batches = 0;
+    const once: JobRuntime = { ...job, progress: (f, note) => { job.progress(f, note); batches += 1; stop = batches >= 1; } };
+    const stopped = (await (steps[1] as JobStep).run(once)) as { code: number; stderr: string };
+    expect(stopped.code).toBe(1);
+    expect(stopped.stderr).toBe('Stopped after 5,000 of 12,000 rows: Retry carries on, Undo puts back what was removed.');
+    expect(undos).toEqual(['Put back what delete what was left behind removed']);
+    // Retry carries on until a batch takes fewer rows than it may.
+    stop = false;
+    const done = (await (steps[1] as JobStep).run(job)) as { code: number; stdout: string };
+    expect(done.code).toBe(0);
+    expect(notes.at(-1)).toBe('12,000 of 12,000 rows');
+    expect(undos).toHaveLength(1);
+    expect(fake.calls.filter((c) => c.input?.includes('DELETE FROM `wp_postmeta`')).every((c) => c.input?.includes('ORDER BY `meta_id` LIMIT 5000;'))).toBe(true);
+  });
+
+  it('refuses before saving when the copy may not fit on the disk', async () => {
+    const fake = fakeDb(SINGLE, (sql) => (sql.includes('AVG_ROW_LENGTH') ? { stdout: 'wp_options\t900000000000000\t0\n' } : undefined));
+    const [save] = await planTransients(ctxFor(fake), { domain: 'local.shop.com', scope: 'all' });
+    await expect((save as JobStep).run({ onUndo: () => undefined, progress: () => undefined })).rejects.toThrow(/Saving what it removes first needs up to .*, and the disk has .* free: make room, then try again/);
+    expect(dumps(fake)).toHaveLength(0);
+  });
+
+  it('removes transients in one statement: a value and its timeout go together', async () => {
+    const fake = fakeDb();
+    await run(await planTransients(ctxFor(fake), { domain: 'local.shop.com', scope: 'expired' }));
+    const sent = fake.calls.filter((c) => c.input?.includes('DELETE FROM `wp_options`'));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.input).not.toContain('LIMIT');
+  });
+});
+
 describe('deleting content and what was left behind', () => {
   it('deletes posts with what WordPress deletes with them, the meta first and the posts last', async () => {
     const fake = fakeDb();
     await run(await planContent(ctxFor(fake), { domain: 'local.shop.com', kinds: ['revisions', 'trashedPosts', 'spamComments'] }));
     expect(dumps(fake).map((c) => c.args.at(-1))).toEqual(['wp_commentmeta', 'wp_comments', 'wp_postmeta', 'wp_term_relationships', 'wp_posts', 'wp_commentmeta', 'wp_comments']);
     const sql = deletes(fake);
-    expect(sql).toContain("DELETE FROM `wp_postmeta` WHERE (post_id IN (SELECT ID FROM `wp_posts` WHERE post_type = 'revision' OR post_status = 'trash')) AND `meta_id` <= 40;");
+    expect(sql).toContain("DELETE FROM `wp_postmeta` WHERE (post_id IN (SELECT ID FROM `wp_posts` WHERE post_type = 'revision' OR post_status = 'trash')) AND `meta_id` <= 40 ORDER BY `meta_id` LIMIT 5000;");
     expect(sql).toContain("taxonomy = 'link_category'");
     // A table without a one-column key is deleted by its condition alone.
     expect(sql).toMatch(/DELETE FROM `wp_term_relationships` WHERE object_id IN \(SELECT ID FROM `wp_posts` WHERE post_type = 'revision' OR post_status = 'trash'\) AND term_taxonomy_id NOT IN/);
-    expect(sql).toContain("DELETE FROM `wp_comments` WHERE (comment_approved = 'spam') AND `comment_ID` <= 40;");
+    expect(sql).toContain("DELETE FROM `wp_comments` WHERE (comment_approved = 'spam') AND `comment_ID` <= 40 ORDER BY `comment_ID` LIMIT 5000;");
     expect(sql.indexOf('`wp_posts` WHERE (post_type')).toBeGreaterThan(sql.indexOf('DELETE FROM `wp_postmeta`'));
   });
 
@@ -107,9 +158,9 @@ describe('deleting content and what was left behind', () => {
     const fake = fakeDb();
     await run(await planOrphans(ctxFor(fake), { domain: 'local.shop.com', kinds: ['postmeta', 'termRelationships', 'usermeta'] }));
     const sql = deletes(fake);
-    expect(sql).toContain('DELETE FROM `wp_postmeta` WHERE (NOT EXISTS (SELECT 1 FROM `wp_posts` p WHERE p.ID = `wp_postmeta`.post_id)) AND `meta_id` <= 40;');
+    expect(sql).toContain('DELETE FROM `wp_postmeta` WHERE (NOT EXISTS (SELECT 1 FROM `wp_posts` p WHERE p.ID = `wp_postmeta`.post_id)) AND `meta_id` <= 40 ORDER BY `meta_id` LIMIT 5000;');
     expect(sql).toContain("NOT EXISTS (SELECT 1 FROM `wp_posts` p WHERE p.ID = `wp_term_relationships`.object_id) AND term_taxonomy_id NOT IN (SELECT term_taxonomy_id FROM `wp_term_taxonomy` WHERE taxonomy = 'link_category')");
-    expect(sql).toContain('DELETE FROM `wp_usermeta` WHERE (NOT EXISTS (SELECT 1 FROM `wp_users` p WHERE p.ID = `wp_usermeta`.user_id)) AND `umeta_id` <= 40;');
+    expect(sql).toContain('DELETE FROM `wp_usermeta` WHERE (NOT EXISTS (SELECT 1 FROM `wp_users` p WHERE p.ID = `wp_usermeta`.user_id)) AND `umeta_id` <= 40 ORDER BY `umeta_id` LIMIT 5000;');
     const tree = wpSiteTree({ multisite: true });
     await expect(planOrphans(ctxFor(fakeDb(NETWORK), tree.config), { domain: 'local.shop.com', blog: 2, kinds: ['usermeta'] })).rejects.toThrow(/none of those tables/);
   });
@@ -231,5 +282,36 @@ describe('autoload', () => {
     await expect(runAction(ctx, 'db.setAutoload', { domain: 'local.shop.com', option: 'acme_cache', autoload: 'off' })).rejects.toThrow(/local.shop.com is busy: Clean up local.shop.com/);
     finish();
     expect(job.id).toBeTruthy();
+  });
+});
+
+describe('what plugins leave', () => {
+  it('deletes oEmbed caches, Akismet history, finished actions after their logs, expired sessions and login sessions', async () => {
+    const fake = fakeDb([...SINGLE, 'wp_actionscheduler_actions', 'wp_actionscheduler_logs', 'wp_woocommerce_sessions']);
+    await run(await planContent(ctxFor(fake), { domain: 'local.shop.com', kinds: ['oembed', 'akismet', 'actionsDone', 'wcSessions', 'sessionTokens'] }));
+    expect(dumps(fake).map((c) => c.args.at(-1))).toEqual(['wp_postmeta', 'wp_commentmeta', 'wp_actionscheduler_logs', 'wp_actionscheduler_actions', 'wp_woocommerce_sessions', 'wp_usermeta']);
+    const sql = deletes(fake);
+    expect(sql).toContain("DELETE FROM `wp_postmeta` WHERE (meta_key LIKE '\\_oembed\\_%') AND `meta_id` <= 40 ORDER BY `meta_id` LIMIT 5000;");
+    expect(sql).toContain("DELETE FROM `wp_commentmeta` WHERE (meta_key IN ('akismet_history', 'akismet_as_submitted'))");
+    expect(sql.indexOf('DELETE FROM `wp_actionscheduler_logs`')).toBeLessThan(sql.indexOf('DELETE FROM `wp_actionscheduler_actions`'));
+    expect(sql).toContain("DELETE FROM `wp_actionscheduler_actions` WHERE (status IN ('complete', 'failed', 'canceled')) AND `action_id` <= 40");
+    expect(sql).toContain('DELETE FROM `wp_woocommerce_sessions` WHERE (session_expiry < UNIX_TIMESTAMP()) AND `session_id` <= 40');
+    expect(sql).toContain("DELETE FROM `wp_usermeta` WHERE (meta_key = 'session_tokens') AND `umeta_id` <= 40");
+  });
+
+  it('keeps the newest revisions of each post when asked, and removes repeated post meta in one statement', async () => {
+    const fake = fakeDb();
+    await run(await planContent(ctxFor(fake), { domain: 'local.shop.com', kinds: ['revisions', 'duplicateMeta'], keepRevisions: 3 }));
+    const sql = deletes(fake);
+    expect(sql).toContain("DELETE FROM `wp_posts` WHERE ((post_type = 'revision' AND ID IN (SELECT ID FROM (SELECT ID, ROW_NUMBER() OVER (PARTITION BY post_parent ORDER BY post_date DESC, ID DESC) AS n FROM `wp_posts` WHERE post_type = 'revision') r WHERE r.n > 3)))");
+    const repeats = fake.calls.filter((c) => c.input?.includes('PARTITION BY post_id, meta_key, MD5(meta_value)') && c.input.includes('DELETE FROM'));
+    expect(repeats).toHaveLength(1);
+    expect(repeats[0]?.input).not.toContain('LIMIT');
+  });
+
+  it('names a clean-up of plugin leftovers for what it is', async () => {
+    const { contentTitle } = await import('../src/mysql-cleanup.js');
+    expect(contentTitle(['revisions', 'spamComments'])).toBe('Delete revisions, drafts, trash and spam');
+    expect(contentTitle(['revisions', 'oembed'])).toBe('Delete what a clean-up found');
   });
 });

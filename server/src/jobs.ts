@@ -19,6 +19,8 @@ export interface JobRuntime {
   progress(fraction: number, note?: string): void;
   /** Adds a line of what the current step is doing, like "Reading README.md"; the last KEPT_ACTIVITY show, and stay when it ends. */
   activity?(line: string): void;
+  /** True once Stop was asked for: a step that works in batches ends after the one it is on. */
+  stopped?(): boolean;
 }
 
 export interface JobStep {
@@ -46,6 +48,8 @@ export interface JobOptions {
   onUndone?: () => void;
   /** The uploaded dump the job reads; kept while the job may still need it (running, or failed for a retry). */
   upload?: string;
+  /** Stop may end it between batches or steps, failed, so Retry carries on and Undo puts back what it did. */
+  stoppable?: boolean;
 }
 
 export type { JobView };
@@ -90,11 +94,12 @@ export class Jobs {
   private nextHold = 0;
   /** When a job last ended, so cached site lists know to look again. */
   finishedAt = 0;
+  private readonly ended: Array<(view: JobView) => void> = [];
 
   constructor(private readonly store: RunStore) {}
 
   start(steps: JobStep[], options: JobOptions): JobView {
-    const { runId, title, target, kind, limit, onDone, onFailed, onUndone, upload } = options;
+    const { runId, title, target, kind, limit, onDone, onFailed, onUndone, upload, stoppable } = options;
     const id = randomUUID();
     const busy = kind && limit ? [...this.jobs.values()].filter((j) => j.view.kind === kind && j.view.status === 'running').length : 0;
     const job: Job = {
@@ -110,6 +115,7 @@ export class Jobs {
         progress: 0,
         startedAt: new Date().toISOString(),
         runId,
+        ...(stoppable ? { stoppable } : {}),
       },
       steps,
       undos: [],
@@ -177,11 +183,20 @@ export class Jobs {
     return () => this.holds.delete(id);
   }
 
+  /** Asks a stoppable job to end at its next safe point: between batches of a step, or before the next step. */
+  stop(id: string): JobView | undefined {
+    const job = this.jobs.get(id);
+    if (!job || job.view.status !== 'running' || !job.view.stoppable) return undefined;
+    job.view.stopping = true;
+    return structuredClone(job.view);
+  }
+
   /** Runs a failed job again from its failed step. */
   retry(id: string): JobView | undefined {
     const job = this.jobs.get(id);
     if (!job || job.view.status !== 'failed') return undefined;
     const from = job.view.steps.findIndex((s) => s.status === 'failed');
+    delete job.view.stopping;
     job.view.status = 'running';
     void this.runFrom(job, Math.max(0, from));
     return structuredClone(job.view);
@@ -233,11 +248,20 @@ export class Jobs {
         const view = job.view.steps[current] as RunStep;
         view.activity = [...(view.activity ?? []), line].slice(-KEPT_ACTIVITY);
       },
+      stopped: () => job.view.stopping === true,
     };
     for (let i = from; i < job.steps.length; i++) {
       current = i;
       const step = job.steps[i] as JobStep;
       const view = job.view.steps[i] as RunStep;
+      if (job.view.stopping) {
+        view.status = 'failed';
+        view.output = 'Stopped before this step: Retry carries on from here, Undo puts back what the job did.';
+        job.view.status = 'failed';
+        this.finish(job, 1, 'stopped');
+        this.startQueued(job.view.kind);
+        return;
+      }
       view.status = 'running';
       delete view.output;
       delete view.progress;
@@ -318,8 +342,14 @@ export class Jobs {
     if (!failed) job.onUndone?.();
   }
 
+  /** Called each time a job ends, undone or failed too, like to forget what was read about its site. */
+  onEnd(listener: (view: JobView) => void): void {
+    this.ended.push(listener);
+  }
+
   private finish(job: Job, exitCode: number, note?: string, skipped?: number): void {
     this.finishedAt = Date.now();
+    for (const listener of this.ended) listener(structuredClone(job.view));
     const lines = job.view.steps.map((s) => `${s.status.padEnd(7)} ${s.label}${s.output ? `\n${s.output}` : ''}`);
     if (note) lines.push(note);
     this.store.finish(job.runId, exitCode, lines.join('\n'), skipped);

@@ -20,11 +20,12 @@ export class ApiError extends Error {
 /** The answer to a request made after the session ended: it does not go out. */
 const loggedOut = () => new ApiError(401, 'Log in first');
 
-async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown): Promise<T> {
+async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   if (refused(url)) throw loggedOut();
   const res = await fetch(url, {
     method,
     credentials: 'same-origin',
+    ...(signal ? { signal } : {}),
     headers: body === undefined ? {} : { 'content-type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
@@ -92,7 +93,9 @@ export interface Api {
   dbQuery: (database: string, query: DbQuery) => Promise<DbQueryResult>;
   /** A WordPress site's database as WordPress sees it; blog picks a site of a network. */
   /** The WordPress view of a site's database; sections picks the parts to read, sizes reads every postmeta value for its size. */
-  wordpressDb: (domain: string, path?: string, blog?: number, options?: { sections?: readonly WpDbSection[]; sizes?: boolean }) => Promise<WpDbReport>;
+  wordpressDb: (domain: string, path?: string, blog?: number, options?: { sections?: readonly WpDbSection[]; sizes?: boolean; signal?: AbortSignal }) => Promise<WpDbReport>;
+  /** The report kept from the last reads of the WordPress view, at once; undefined when there is none. */
+  wordpressDbKept: (domain: string, path?: string, blog?: number) => Promise<WpDbReport | undefined>;
   /** The vhosts, modules and configtest for the Apache tab, and Apache's own error log. */
   apache: () => Promise<ApacheReport>;
   apacheLog: () => Promise<SiteLog>;
@@ -207,6 +210,8 @@ export interface Api {
   /** Queued, running and recent jobs. */
   jobs: () => Promise<JobView[]>;
   retryJob: (id: string) => Promise<JobView>;
+  /** Asks a stoppable job to end at its next safe point. */
+  stopJob: (id: string) => Promise<JobView>;
   skipJob: (id: string) => Promise<JobView>;
   undoJob: (id: string) => Promise<JobView>;
 }
@@ -285,7 +290,13 @@ const realApi: Api = {
     if (options.sections) query.set('sections', options.sections.join(','));
     if (options.sizes) query.set('sizes', '1');
     const q = query.toString();
-    return request('GET', `/api/sites/${encodeURIComponent(domain)}/db/wordpress${q ? `?${q}` : ''}`);
+    return request('GET', `/api/sites/${encodeURIComponent(domain)}/db/wordpress${q ? `?${q}` : ''}`, undefined, options.signal);
+  },
+  wordpressDbKept: (domain, path, blog) => {
+    const query = new URLSearchParams({ cached: '1' });
+    if (path) query.set('path', path);
+    if (blog && blog !== 1) query.set('blog', String(blog));
+    return request<WpDbReport | undefined>('GET', `/api/sites/${encodeURIComponent(domain)}/db/wordpress?${query.toString()}`);
   },
   apache: () => request('GET', '/api/apache'),
   apacheLog: () => request('GET', '/api/apache/log'),
@@ -382,6 +393,7 @@ const realApi: Api = {
   mailMessage: (id) => request('GET', `/api/mail/${encodeURIComponent(id)}`),
   mailUnread: () => request('GET', '/api/mail/unread'),
   retryJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/retry`, {}),
+  stopJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/stop`, {}),
   skipJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/skip`, {}),
   undoJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/undo`, {}),
 };

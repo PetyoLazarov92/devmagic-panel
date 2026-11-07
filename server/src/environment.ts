@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { CheckFix, CheckResult, EnvironmentReport } from '@devmagic-panel/shared';
 import { APACHE_MODULES, isLocalName, MAILPIT_SMTP, MAILPIT_WEB } from '@devmagic-panel/shared';
@@ -15,6 +16,7 @@ import { installedCores, readWpcoreConfig } from './wpcore.js';
 import type { Secrets } from './secrets.js';
 import { selfChecks } from './self-check.js';
 import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
+import { formatBytes } from './sites/db.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
 export interface HostPaths {
@@ -47,6 +49,8 @@ export interface CheckContext {
   self?: { repo: string; version: string };
   /** The GitLab hosts in use (settings, selected groups, the sites' remotes); none shows nothing about GitLab. */
   gitlabHosts?: () => Promise<string[]>;
+  /** The machine's memory in bytes; the system's own when not given. */
+  totalMemory?: () => number;
 }
 
 export const NSS_NICKNAME = 'devmagic-panel Local CA';
@@ -182,7 +186,36 @@ async function databaseChecks(ctx: CheckContext): Promise<Check[]> {
       ? ok('mysql.reachable', 'MySQL admin account', `connected as ${mysql.user}@${mysql.host}`)
       : fail('mysql.reachable', 'MySQL admin account', firstLine(ping.stderr) || 'cannot connect'),
     ...(ping.code === 0 ? [await readOnlyCheck(ctx)] : []),
+    ...(ping.code === 0 ? await bufferPoolCheck(ctx, mysql) : []),
   ];
+}
+
+/** The query the buffer pool check runs: MySQL's version, its buffer pool, and the InnoDB data of every database but MySQL's own. */
+export const BUFFER_POOL_SQL =
+  "SELECT VERSION(), @@innodb_buffer_pool_size, (SELECT COALESCE(SUM(DATA_LENGTH + INDEX_LENGTH), 0) FROM information_schema.TABLES WHERE ENGINE = 'InnoDB' AND TABLE_SCHEMA NOT IN ('mysql', 'sys', 'performance_schema', 'information_schema'))";
+
+/**
+ * InnoDB's buffer pool against the sites' data: much smaller, and every page
+ * of a big site reads from the disk, the most common reason a big local site
+ * is slow. The setting is root's (my.cnf), so the check says what to set and
+ * where; the panel never writes MySQL's config.
+ */
+async function bufferPoolCheck(ctx: CheckContext, account: { user: string; host: string; password: string }): Promise<Check[]> {
+  const label = 'MySQL memory for site data';
+  const r = await ctx.exec('mysql', ['--user', account.user, '--host', account.host, '--batch', '--skip-column-names', '-e', BUFFER_POOL_SQL], { env: { MYSQL_PWD: account.password }, timeoutMs: 15_000 });
+  const [version = '', pool = '', data = ''] = r.stdout.trim().split('\t');
+  const poolBytes = Number(pool);
+  const dataBytes = Number(data);
+  if (r.code !== 0 || !Number.isFinite(poolBytes) || !Number.isFinite(dataBytes) || poolBytes <= 0) return [];
+  const ram = ctx.totalMemory?.() ?? totalmem();
+  const mb = 1024 * 1024;
+  // Room for the data with a quarter to spare, never more than half the memory, in steps of 128 MB.
+  const target = Math.max(128 * mb, Math.ceil(Math.min(dataBytes * 1.25, ram / 2) / (128 * mb)) * 128 * mb);
+  const setting = target >= 1024 * mb && target % (1024 * mb) === 0 ? `${target / (1024 * mb)}G` : `${target / mb}M`;
+  const fact = `${formatBytes(poolBytes)} for ${formatBytes(dataBytes)} of InnoDB data`;
+  if (poolBytes >= target / 2) return [ok('mysql.bufferPool', label, fact, { optional: true })];
+  const file = /mariadb/i.test(version) ? '/etc/mysql/mariadb.conf.d/50-server.cnf' : '/etc/mysql/mysql.conf.d/mysqld.cnf';
+  return [warn('mysql.bufferPool', label, `${fact}: big sites read from the disk on every page. Set innodb_buffer_pool_size = ${setting} under [mysqld] in ${file}, then sudo systemctl restart mysql`, { optional: true })];
 }
 
 /** The SQL runner's account: it reads with SELECT and SHOW VIEW only, so a query can change nothing. */

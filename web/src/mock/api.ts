@@ -1,11 +1,14 @@
-import type { AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockRowAction, mockUndoCleanup, mockRowChanges, mockWordpressDb } from './db-browser';
+import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
+
+/** The WordPress view's reports the mockup keeps, as the panel keeps the last reads. */
+const keptReports = new Map<string, WpDbReport>();
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -37,6 +40,10 @@ const environment: EnvironmentReport = {
     {
       id: 'mysql.readonly', group: 'database', label: 'Read-only MySQL account', status: 'warn', optional: true, detail: 'not made yet: the SQL runner on the Database tab needs it',
       fixes: [{ action: 'mysql.makeReadOnlyAccount', input: {}, label: 'Make it' }],
+    },
+    {
+      id: 'mysql.bufferPool', group: 'database', label: 'MySQL memory for site data', status: 'warn', optional: true,
+      detail: '128 MB for 6.4 GB of InnoDB data: big sites read from the disk on every page. Set innodb_buffer_pool_size = 7680M under [mysqld] in /etc/mysql/mysql.conf.d/mysqld.cnf, then sudo systemctl restart mysql',
     },
     { id: 'php.version', group: 'php', label: 'PHP', status: 'ok', detail: '8.3.6' },
     { id: 'php.imagick', group: 'php', label: 'Imagick', status: 'ok', detail: 'installed', recommended: true },
@@ -116,6 +123,22 @@ function advance(job: JobView, list: 'steps' | 'undo', failAt?: string, outputs:
   const steps = job[list];
   const tick = () => {
     const running = steps.find((s) => s.status === 'running');
+    // A stop ends a clean-up's removal between two batches, as the panel does.
+    if (running && running.id === 'remove' && job.stopping) {
+      delete running.progress;
+      delete running.note;
+      running.status = 'failed';
+      running.output = `Stopped after ${Math.round((job.progress ?? 0) * 100)}% of the rows: Retry carries on, Undo puts back what was removed.`;
+      job.status = 'failed';
+      return;
+    }
+    if (running && running.id === 'remove' && (running.progress ?? 0) < 1) {
+      running.progress = Math.min(1, (running.progress ?? 0) + 0.1);
+      running.note = `${Math.round(running.progress * 18_400).toLocaleString('en-US')} of 18,400 rows`;
+      job.progress = (steps.filter((s) => s.status === 'done').length + running.progress) / steps.length;
+      setTimeout(tick, 500);
+      return;
+    }
     // Clone and import report progress in the real panel; the mockup walks them in a few ticks.
     if (running && (running.id === 'clone' || running.id === 'import') && (running.progress ?? 0) < 1) {
       running.progress = Math.min(1, (running.progress ?? 0) + 0.2);
@@ -368,6 +391,8 @@ function afterMysqlJob(job: JobView, input: Record<string, unknown>) {
   if (job.status === 'running') return void window.setTimeout(() => afterMysqlJob(job, input), 500);
   if (job.status !== 'done') return;
   const saved = { savedAt: new Date().toISOString(), purgeAt: savedAgo(-14).toISOString() };
+  // Optimizing tables gives their free room back: the WordPress view no longer offers it.
+  if (job.kind === 'mysql.optimize' && Array.isArray(input.tables)) for (const t of input.tables) mockTableFixed(String(input.database), String(t), 'optimize');
   if (job.kind === 'mysql.dropDatabase') {
     mockMysqlExtra.databases = mockMysqlExtra.databases.filter((d) => d.name !== input.database);
     mockBackups = [{ name: `${String(input.database)}-20261029-101500.sql.gz`, kind: 'database', subject: String(input.database), sizeBytes: 61_000_000, ...saved }, ...mockBackups];
@@ -420,6 +445,8 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
         ],
       ]),
     ),
+    'db.autoloadOff': [{ id: 'save', label: 'Save the options for Undo' }, { id: 'remove', label: 'Turn off autoload' }],
+    'db.fixTable': [{ id: 'save', label: `Save ${String(input.table)} for Undo` }, { id: 'fix', label: { keys: `Give ${String(input.table)} its primary key back`, index: `Add the missing indexes to ${String(input.table)}`, engine: `Turn ${String(input.table)} into InnoDB`, charset: `Turn ${String(input.table)} into utf8mb4` }[String(input.fix)] ?? 'Fix the table' }],
     'db.snapshot': [{ id: 'snapshot', label: `Snapshot the database${input.label ? ` (${String(input.label)})` : ''}` }],
     'db.restore': [snapshot, { id: 'restore', label: `Import ${String(input.snapshot)}` }, { id: 'flush', label: 'Flush caches and rewrite rules' }],
     'db.import': [{ id: 'import', label: 'Import the dump' }, { id: 'swap', label: 'Swap the imported tables in' }, { id: 'replace', label: 'Replace production domains' }, { id: 'flush', label: 'Flush caches and rewrite rules' }, { id: 'cleanup', label: 'Remove the tables from before the import' }],
@@ -553,6 +580,30 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     };
     done();
   }
+  if (id === 'db.autoloadOff' || id === 'mysql.dropTable') {
+    const db = id === 'mysql.dropTable' ? String(input.database) : (sites.find((x) => x.domain === domain && x.path === (input.path as string | undefined))?.db?.name ?? '');
+    const names = id === 'mysql.dropTable' ? [String(input.table)] : (input.options as string[]);
+    if (id === 'db.autoloadOff') {
+      job.title = `Turn off autoload for ${names.length === 1 ? names[0] : `${names.length} options`}`;
+      job.undoable = ['Put the options back as they were'];
+      job.stoppable = true;
+    }
+    const done = () => {
+      if (job.status === 'running') return void window.setTimeout(done, 400);
+      if (job.status === 'done') mockPluginGone(db, names);
+    };
+    done();
+  }
+  if (id === 'db.fixTable') {
+    job.title = job.steps.at(-1)?.label ?? job.title;
+    job.undoable = [`Put ${String(input.table)} back as it was`];
+    const db = sites.find((x) => x.domain === domain && x.path === (input.path as string | undefined))?.db?.name ?? '';
+    const done = () => {
+      if (job.status === 'running') return void window.setTimeout(done, 400);
+      if (job.status === 'done') mockTableFixed(db, String(input.table), String(input.fix));
+    };
+    done();
+  }
   if (id === 'mysql.importDump') {
     job.title = input.mode === 'replace' ? `Replace ${String(input.database)} with a dump` : `Import a dump into a new database ${String(input.database)}`;
     job.undoable = [input.mode === 'replace' ? `Put ${String(input.database)} back from the MySQL backups` : `Delete database ${String(input.database)}`];
@@ -562,8 +613,10 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
   } else if (id === 'mysql.emptyTable' || id === 'mysql.dropTable' || id === 'mysql.runSql' || id.startsWith('db.clean')) {
     job.title = (job.steps.at(-1)?.label ?? job.title);
     job.undoable = ['Put back what it removed'];
+    // Deletes go in batches, so a clean-up stops safely between two.
+    if (id.startsWith('db.clean') || id === 'mysql.emptyTable') job.stoppable = true;
   } else if (id.startsWith('mysql.')) {
-    job.title = id === 'mysql.optimize' ? `Optimize ${String(input.database)}` : id === 'mysql.dropDatabase' ? `Delete database ${String(input.database)}` : `Delete ${accounts.length === 1 ? accounts[0] : `${accounts.length} MySQL users`}`;
+    job.title = id === 'mysql.optimize' ? `Optimize ${Array.isArray(input.tables) ? (input.tables.length === 1 ? String(input.tables[0]) : `${input.tables.length} tables`) + ' of ' : ''}${String(input.database)}` : id === 'mysql.dropDatabase' ? `Delete database ${String(input.database)}` : `Delete ${accounts.length === 1 ? accounts[0] : `${accounts.length} MySQL users`}`;
     if (id !== 'mysql.optimize') job.undoable = [id === 'mysql.dropDatabase' ? `Put ${String(input.database)} back from its export` : 'Make the accounts again'];
     afterMysqlJob(job, input);
   }
@@ -1201,9 +1254,20 @@ export const mockApi: Api = {
   },
   wordpressDb: async (domain, path, blog, options = {}) => {
     // The parts that read whole tables answer later, as on a big database.
-    const slow = { content: 900, orphans: 1600, metaKeys: options.sizes ? 3200 : 2100 } as Record<string, number>;
+    const slow = { content: 900, orphans: 1600, metaKeys: options.sizes ? 3200 : 2100, postTypes: 1300, duplicates: 2800 } as Record<string, number>;
     await wait(Math.max(350, ...(options.sections ?? []).map((s) => slow[s] ?? 0)));
-    return mockWordpressDb(domain, path, blog, options);
+    if (options.signal?.aborted) throw new Error('aborted');
+    const report = mockWordpressDb(domain, path, blog, options);
+    const key = `${domain}${path ?? ''}#${blog ?? 1}`;
+    const kept = keptReports.get(key);
+    const readAt = { ...(kept?.readAt ?? {}) } as Record<string, string>;
+    for (const s of options.sections ?? []) readAt[s] = report.checkedAt;
+    keptReports.set(key, { ...(kept ?? {}), ...report, errors: { ...kept?.errors, ...report.errors }, readAt });
+    return report;
+  },
+  wordpressDbKept: async (domain, path, blog) => {
+    await wait(60);
+    return keptReports.get(`${domain}${path ?? ''}#${blog ?? 1}`);
   },
   dbCell: async (database, table, query) => {
     await wait(150);
@@ -1791,6 +1855,7 @@ export const mockApi: Api = {
   },
   retryJob: async (id) => {
     const job = mockJobs.get(id) as JobView;
+    delete job.stopping;
     const failed = job.steps.find((s) => s.status === 'failed');
     if (failed) {
       failed.status = 'pending';
@@ -1798,6 +1863,12 @@ export const mockApi: Api = {
     }
     job.status = 'running';
     advance(job, 'steps');
+    return structuredClone(job);
+  },
+  stopJob: async (id) => {
+    const job = mockJobs.get(id) as JobView;
+    if (job.status !== 'running' || !job.stoppable) throw new Error('only a running job that can stop safely can be stopped');
+    job.stopping = true;
     return structuredClone(job);
   },
   skipJob: async (id) => {

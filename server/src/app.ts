@@ -3,7 +3,7 @@ import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_SECTIONS } from '@devmagic-panel/shared';
+import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
 import { cronReport } from './cron.js';
@@ -49,6 +49,8 @@ import { listTrash } from './sites/trash.js';
 import type { RunStore } from './store.js';
 import { installedCores, readWpcoreConfig } from './wpcore.js';
 import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPaths, readMail, unreadMail } from './mailpit.js';
+import { cachedReport, forgetReport, keepReport, SharedReads } from './wordpress-report-cache.js';
+import { tableGrowth } from './table-growth.js';
 
 export interface AppDeps {
   config: SystemConfig;
@@ -111,6 +113,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   const sessions = new Sessions(deps.store, () => deps.secrets()?.panelPasswordHash);
   const jobs = new Jobs(deps.store);
+  // A job on a site may have changed its database: the WordPress view reads it anew next time.
+  jobs.onEnd((view) => {
+    if (view.target) forgetReport(deps.store, view.target);
+  });
   const limiter = new LoginLimiter();
   const resetLock = new GlobalLock();
   // Too many wrong passwords: when to try again, for the login page's countdown, and as Retry-After.
@@ -158,6 +164,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // The panel may have just restarted in the middle of an install from the Updates page; its installer goes on for up to a minute.
     void install().catch(() => undefined);
     setTimeout(() => void install().catch(() => undefined), 90_000).unref();
+    // A job a stopped panel left half way ended with it: its run says so, and what it saved first is still kept.
+    const cut = deps.store.stopUnfinished(
+      'Stopped: the panel restarted while it ran. What it saved first is still kept (a clean-up shows under Changes you can undo), and its page can start it again.',
+      (action) => action.startsWith('panel.'),
+    );
+    if (cut) app.log.warn(`housekeeping: ${cut} runs were cut off by a restart`);
     // Uploads and downloads a stopped panel left half way go at start: nothing can still be writing them.
     const unfinished = removeUnfinishedUploads(deps.uploadsDir);
     if (unfinished.length) app.log.info(`housekeeping: removed ${unfinished.length} unfinished downloads`);
@@ -354,6 +366,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       mysqlReport({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, kept: () => deps.store.keptDatabases(), backupsDir: mysqlBackupsDir(deps.uploadsDir) }));
     // The database browser: reads only, in a read-only transaction with a time limit. Rows and full
     // values are POSTs, so a filter's value or a row's key never reaches a URL or Apache's log.
+    const wordpressReads = new SharedReads<WpDbReport>();
     const browse = (): BrowseContext => ({ config: deps.config, exec: deps.exec, mysql: deps.secrets()?.mysql, readOnly: deps.secrets()?.mysqlReadOnly, kept: () => deps.store.keptDatabases() });
     const browsing = async <T>(reply: FastifyReply, read: () => Promise<T>): Promise<T | undefined> => {
       try {
@@ -407,16 +420,28 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       browsing(reply, () => runQuery(browse(), request.params.database, request.body)));
     // A WordPress site's database as WordPress sees it: autoload, transients, clean-up counts, users. ?blog= picks a site of a network,
     // ?sections=autoload,users the parts to read (the page asks for the slow ones one at a time), ?sizes=1 the size of every postmeta value.
-    api.get<{ Params: { domain: string }; Querystring: { path?: string; blog?: string; sections?: string; sizes?: string } }>('/api/sites/:domain/db/wordpress', async (request, reply): Promise<WpDbReport | undefined> =>
+    // ?cached=1 answers with the report kept from the last reads, at once, or 204 when there is none.
+    api.get<{ Params: { domain: string }; Querystring: { path?: string; blog?: string; sections?: string; sizes?: string; cached?: string } }>('/api/sites/:domain/db/wordpress', async (request, reply): Promise<WpDbReport | undefined> =>
       browsing(reply, async () => {
         const { domain } = request.params;
-        const { path, blog, sections, sizes } = request.query;
+        const { path, blog, sections, sizes, cached } = request.query;
         if (!localName.safeParse(domain).success || (path !== undefined && !mountPath.safeParse(path).success)) throw new BrowseError(`no site called ${domain}${path ?? ''}`, 404);
         if (blog !== undefined && !/^\d{1,9}$/.test(blog)) throw new BrowseError('A site of the network by its number, like 2');
         const parts = sections === undefined ? undefined : sections.split(',');
         const unknown = parts?.find((p) => !(WP_DB_SECTIONS as readonly string[]).includes(p));
         if (unknown !== undefined) throw new BrowseError(`No part of the WordPress view called ${unknown.slice(0, 40)}`);
-        return wordpressReport(browse(), domain, path, blog === undefined ? 1 : Number(blog), Date.now, { ...(parts ? { sections: parts as WpDbSection[] } : {}), sizes: sizes === '1' });
+        const site = blog === undefined ? 1 : Number(blog);
+        if (cached === '1') return cachedReport(deps.store, domain, path, site) ?? reply.code(204).send();
+        // The read stops in MySQL once the browser no longer waits for it (another view, Check again).
+        const gone = new AbortController();
+        reply.raw.on('close', () => {
+          if (!reply.raw.writableFinished) gone.abort();
+        });
+        const wanted = (parts as WpDbSection[] | undefined) ?? WP_DB_SECTIONS.filter((s) => !WP_DB_ON_DEMAND.includes(s));
+        const id = `${domain}${path ?? ''}#${site}:${wanted.join(',')}:${sizes === '1' ? 'sizes' : ''}`;
+        const report = await wordpressReads.read(id, (signal) => wordpressReport({ ...browse(), signal }, domain, path, site, Date.now, { sections: wanted, sizes: sizes === '1', history: (database, tables) => tableGrowth(deps.store, database, tables) }), gone.signal);
+        keepReport(deps.store, domain, path, site, report, wanted);
+        return report;
       }));
     api.get('/api/apache', async (): Promise<ApacheReport> => apacheReport(deps.config, deps.exec, deps.dmpRoot));
     api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));

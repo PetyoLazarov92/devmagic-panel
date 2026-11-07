@@ -1,5 +1,5 @@
 import type { JobView } from '@devmagic-panel/shared';
-import { LoaderCircle, RotateCcw, Undo2 } from 'lucide-react';
+import { LoaderCircle, RotateCcw, Square, Undo2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { settled, StepList } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { lastLine } from '@/lib/site-actions';
  * Retry when it failed and the way to Undo once it settled. The header's jobs
  * indicator is the view of every job.
  */
-export function JobBox({ job, onRetry }: { job: JobView; onRetry: () => void }) {
+export function JobBox({ job, onRetry, onStop }: { job: JobView; onRetry: () => void; onStop?: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   // A new job comes into view where it was started, clear of a sticky strip at the top (the PHP tab's).
@@ -24,6 +24,17 @@ export function JobBox({ job, onRetry }: { job: JobView; onRetry: () => void }) 
     <div ref={ref} className="grid scroll-mt-24 gap-2">
       <p className="flex items-center gap-2 text-sm font-medium">{!settled(job) && <LoaderCircle className="size-4 animate-spin text-primary" />}{job.title}</p>
       <StepList steps={job.steps} open={open} setOpen={setOpen} />
+      {job.stoppable && job.status === 'running' && onStop && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" disabled={job.stopping} onClick={onStop}>
+            <Square />
+            {job.stopping ? 'Stopping...' : 'Stop'}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {job.stopping ? 'It ends after the batch it is on.' : 'Ends after the batch it is on; Retry carries on, Undo puts back what it removed.'}
+          </span>
+        </div>
+      )}
       {job.status === 'failed' && (
         <div className="flex flex-wrap items-center gap-2">
           <p className="flex-1 text-sm text-danger">{lastLine(job.steps.find((s) => s.status === 'failed')?.output ?? '')}</p>
@@ -46,11 +57,11 @@ export function JobBox({ job, onRetry }: { job: JobView; onRetry: () => void }) 
  * way every page shows one: never a box of its own between cards, so the cards
  * around it stay where they are. With the error when the job did not start.
  */
-export function JobFooter({ job, error, onRetry }: { job: JobView | null; error?: string | null; onRetry: () => void }) {
+export function JobFooter({ job, error, onRetry, onStop }: { job: JobView | null; error?: string | null; onRetry: () => void; onStop?: () => void }) {
   if (!job && !error) return null;
   return (
     <div className="grid gap-3 border-t px-5 py-4 text-sm">
-      {job && <JobBox job={job} onRetry={onRetry} />}
+      {job && <JobBox job={job} onRetry={onRetry} {...(onStop ? { onStop } : {})} />}
       {error && <p role="alert" className="text-danger">{error}</p>}
     </div>
   );

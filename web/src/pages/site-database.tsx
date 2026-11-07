@@ -4,7 +4,7 @@ import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCirc
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { JobFooter } from '@/components/job-box';
-import { settled, useJob } from '@/components/job-steps';
+import { settled, useJob, useResumeJob } from '@/components/job-steps';
 import { SqlRunner } from '@/components/sql-runner';
 import { WordpressDbView } from '@/components/wordpress-db';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,12 @@ const JOB_ACTIONS = {
   snapshot: 'db.snapshot', restore: 'db.restore', import: 'db.import', preview: 'db.searchReplace', replace: 'db.searchReplace',
   clean: 'db.cleanCopy', cleanCurrent: 'db.cleanCurrent', export: 'db.exportClean', restoreKept: 'db.restoreKept',
 } as const;
+
+/** The kind of job each action starts, to show a running one in its card again. */
+const KIND_OF: Partial<Record<string, JobKind>> = {
+  'db.snapshot': 'snapshot', 'db.restore': 'restore', 'db.import': 'import', 'db.searchReplace': 'replace',
+  'db.cleanCopy': 'clean', 'db.cleanCurrent': 'cleanCurrent', 'db.exportClean': 'export', 'db.restoreKept': 'restoreKept',
+};
 
 type DbView = 'tables' | 'wordpress' | 'sql' | 'tools';
 
@@ -95,6 +101,8 @@ function DatabaseTools({ site }: { site: Site }) {
   const preview = useAsync(() => api.cleanPreview(site.domain, site.path), [site.domain, site.path]);
   const runner = useJob();
   const [kind, setKind] = useState<JobKind | null>(null);
+  // A job still running since before you came back shows in its card again (search and replace's preview has its own place).
+  useResumeJob(runner, `${site.domain}${site.path ?? ''}`, KIND_OF, setKind);
   const busy = runner.job !== null && !settled(runner.job);
   const lastDone = useRef<string | null>(null);
 
@@ -120,7 +128,7 @@ function DatabaseTools({ site }: { site: Site }) {
   }
 
   // A job is the footer of the card that started it.
-  const jobIn = (card: JobCardSlot) => (JOB_CARD[kind ?? 'replace'] === card ? <JobFooter job={runner.job} error={runner.error} onRetry={() => void runner.retry()} /> : null);
+  const jobIn = (card: JobCardSlot) => (JOB_CARD[kind ?? 'replace'] === card ? <JobFooter job={runner.job} error={runner.error} onRetry={() => void runner.retry()} onStop={() => void runner.stop()} /> : null);
 
   const reading = list.loading || copies.loading || kept.loading || preview.loading;
   const readAgain = () => {

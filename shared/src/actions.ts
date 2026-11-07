@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { apacheModuleLock, apacheModuleName } from './apache.js';
 import { mysqlAccount, mysqlBackupName, mysqlDatabaseName } from './mysql.js';
-import { mysqlIdentifier, WP_CONTENT_KINDS, WP_ORPHAN_KINDS } from './db-browser.js';
+import { mysqlIdentifier, WP_CONTENT_KINDS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS, WP_TABLE_FIXES } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
 import { cronSchedule } from './cron.js';
@@ -546,7 +546,7 @@ export const actions = {
     description:
       'Runs OPTIMIZE TABLE on every table of one database, which rebuilds them and gives the space rows deleted since back to the disk, as after cleared logs. Takes a while on a big database, and the tables are busy meanwhile. Not for MySQL\'s own databases. Starts a job.',
     changesSystem: true,
-    input: z.object({ database: mysqlDatabaseName }),
+    input: z.object({ database: mysqlDatabaseName, tables: z.array(mysqlIdentifier).min(1).max(200).optional() }),
   },
   'mysql.dropDatabase': {
     title: 'Delete a database',
@@ -829,9 +829,16 @@ export const actions = {
   'db.cleanContent': {
     title: 'Delete revisions, drafts, trash and spam',
     description:
-      "Deletes the kinds picked of a WordPress site: post revisions, auto-drafts, posts in the trash, spam comments, comments in the trash; with a post go its meta, terms and comments, as WordPress does. Saved first (14 days), so Undo puts them back. Starts a job.",
+      "Deletes the kinds picked of a WordPress site: post revisions (all, or all but the newest few of each post), auto-drafts, posts in the trash, spam comments, comments in the trash; with a post go its meta, terms and comments, as WordPress does. And what plugins leave: oEmbed caches (made again when a page shows them), Akismet's history in comment meta, Action Scheduler's finished, failed and cancelled actions with their logs, expired WooCommerce sessions, saved login sessions (everyone signs in again), and post meta that repeats the same key and value on a post. Saved first (14 days), so Undo puts them back. Starts a job.",
     changesSystem: true,
-    input: z.object({ domain: localName, path: sitePath, blog: blogNumber, kinds: z.array(z.enum(WP_CONTENT_KINDS)).min(1) }),
+    input: z.object({
+      domain: localName,
+      path: sitePath,
+      blog: blogNumber,
+      kinds: z.array(z.enum(WP_CONTENT_KINDS)).min(1),
+      /** Revisions: keep the newest this many of each post. */
+      keepRevisions: z.union(WP_KEEP_REVISIONS.map((n) => z.literal(n)) as unknown as [z.ZodLiteral<1>, z.ZodLiteral<3>, z.ZodLiteral<5>, z.ZodLiteral<10>]).optional(),
+    }),
   },
   'db.cleanOrphans': {
     title: 'Delete what was left behind',
@@ -839,6 +846,20 @@ export const actions = {
       "Deletes the rows of a WordPress site that belong to something deleted: post, comment, term and user meta without theirs, and terms on posts that are gone (never a link's). Saved first (14 days), so Undo puts them back. Starts a job.",
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath, blog: blogNumber, kinds: z.array(z.enum(WP_ORPHAN_KINDS)).min(1) }),
+  },
+  'db.fixTable': {
+    title: 'Fix a WordPress table',
+    description:
+      "Makes one of the site's WordPress tables as WordPress makes it: its primary key and AUTO_INCREMENT back (refused while duplicate or zero IDs are there), its missing indexes, InnoDB instead of MyISAM, or utf8mb4 instead of utf8. The table is saved whole first (14 days), so Undo puts it back. Starts a job.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, blog: blogNumber, table: mysqlIdentifier, fix: z.enum(WP_TABLE_FIXES) }),
+  },
+  'db.autoloadOff': {
+    title: 'Turn off autoload for options',
+    description:
+      "Stops WordPress loading the options named on every page, like those of a plugin that is off or gone, in the way its version writes it (off, or no before 6.6). The rows are saved first (14 days), so Undo puts them back as they were. Starts a job.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, blog: blogNumber, options: z.array(z.string().min(1).max(191)).min(1).max(500) }),
   },
   'db.setAutoload': {
     title: 'Turn autoload on or off for an option',

@@ -36,8 +36,9 @@ when it is missing.
 Checks the panel's own installation (files, root scripts, build), Apache,
 nginx once it is installed (set up, running, `nginx -t`, each server on its own
 address, configs made by hand that take Apache's ports), certificates, hosts
-entries, MySQL (with the read-only account the SQL runner uses), PHP, tools and
-access. Each check is marked required, recommended or optional, most have a
+entries, MySQL (with the read-only account the SQL runner uses, and whether
+its memory for InnoDB data fits the sites: a buffer pool far smaller than
+them gets the setting and the file to put it in), PHP, tools and access. Each check is marked required, recommended or optional, most have a
 one-click fix, and groups that all pass start closed.
 
 Its **Settings** tab (`/environment/settings`) holds the panel password, the

@@ -1,11 +1,13 @@
 import type { JobView } from '@devmagic-panel/shared';
 import { CircleAlert, ListChecks, LoaderCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { isFollowed } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
 import { api, JOB_STARTED } from '@/lib/api';
 import { jobActive, jobState } from '@/lib/jobs';
-import { Link, usePath } from '@/lib/router';
+import { Link, navigate, usePath } from '@/lib/router';
 import { onJobSeen, seenJobs } from '@/lib/seen-jobs';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 const SHOWN = 6;
@@ -21,6 +23,7 @@ export function JobsIndicator() {
   const [seen, setSeen] = useState(seenJobs);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const last = useRef(new Map<string, JobView['status']>());
   const path = usePath();
 
   useEffect(() => {
@@ -30,6 +33,18 @@ export function JobsIndicator() {
       api.jobs().then(
         (list) => {
           if (stop) return;
+          // A job that ended while no page shows it, like after you left its page: say so, with the way there.
+          for (const j of list) {
+            const before = last.current.get(j.id);
+            if (before && jobActive({ status: before } as JobView) && !jobActive(j) && !isFollowed(j.id)) {
+              toast({
+                tone: j.status === 'done' ? 'success' : j.status === 'failed' ? 'danger' : 'info',
+                title: `${j.title}: ${j.status === 'done' ? 'done' : j.status === 'failed' ? 'failed' : j.status}`,
+                action: { label: 'Open', run: () => navigate(`/jobs/${encodeURIComponent(j.id)}`) },
+              });
+            }
+          }
+          last.current = new Map(list.map((j) => [j.id, j.status]));
           setJobs(list);
           // One timer only, even when a started job asked for an extra look while a poll was out.
           window.clearTimeout(timer);

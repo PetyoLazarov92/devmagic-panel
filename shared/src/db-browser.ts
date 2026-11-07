@@ -194,12 +194,100 @@ export interface WpDbUser {
 }
 
 /** The parts of the WordPress view, each read on its own. */
-export const WP_DB_SECTIONS = ['autoload', 'transients', 'users', 'content', 'orphans', 'metaKeys'] as const;
+export const WP_DB_SECTIONS = ['health', 'autoload', 'plugins', 'growth', 'transients', 'users', 'content', 'orphans', 'metaKeys', 'postTypes', 'duplicates'] as const;
 export type WpDbSection = (typeof WP_DB_SECTIONS)[number];
 /** The parts that read whole tables (posts, every meta table): asked for one at a time, after the rest, with more time. */
-export const WP_DB_SLOW_SECTIONS: readonly WpDbSection[] = ['content', 'orphans', 'metaKeys'];
+export const WP_DB_SLOW_SECTIONS: readonly WpDbSection[] = ['content', 'orphans', 'metaKeys', 'postTypes'];
+/** Parts that read every row of a big table: only when you ask (Look for duplicates), never with the rest. */
+export const WP_DB_ON_DEMAND: readonly WpDbSection[] = ['duplicates'];
 /** Above this many rows in postmeta (MySQL's estimate) the keys are counted first, and their sizes only on request. */
 export const WP_META_SIZE_ROWS = 300_000;
+
+/**
+ * What a clean-up would find: WordPress's own (revisions, drafts, trash, spam)
+ * and what plugins leave (oEmbed caches, Akismet's history, Action Scheduler's
+ * finished actions, expired WooCommerce sessions, login sessions). A count is
+ * there only when the site has its table.
+ */
+export interface WpDbContent {
+  revisions: number;
+  /** Revisions beyond the newest N of each post, for N in WP_KEEP_REVISIONS. */
+  revisionsOver?: Partial<Record<(typeof WP_KEEP_REVISIONS)[number], number>>;
+  autoDrafts: number;
+  trashedPosts: number;
+  spamComments: number;
+  trashedComments: number;
+  oembed?: number;
+  akismet?: number;
+  /** Finished, failed and cancelled actions, and the logs that go with them. */
+  actionsDone?: number;
+  actionLogs?: number;
+  wcSessions?: number;
+  /** Users with saved login sessions: deleting them signs everyone out. */
+  sessionTokens?: number;
+}
+
+/**
+ * Whether the plugin a table or an option belongs to is on, off (installed),
+ * gone from the plugins folder, or not known: the panel guesses it from the
+ * name, so it is a hint, never a reason to delete on its own.
+ */
+export type WpPluginState = 'active' | 'inactive' | 'missing' | 'unknown';
+
+export interface WpDbPluginTable {
+  table: string;
+  bytes: number;
+  rows: number;
+  /** The plugin it likely belongs to, by its name, and that plugin's folder. */
+  plugin?: string;
+  slug?: string;
+  state: WpPluginState;
+}
+
+/** Autoloaded options that likely belong to a plugin that is off or gone. */
+export interface WpDbPluginOptions {
+  plugin: string;
+  slug: string;
+  state: 'inactive' | 'missing';
+  count: number;
+  bytes: number;
+  /** Their names, the biggest first, at most 200. */
+  options: string[];
+}
+
+/** The tables that are not WordPress's own, and autoload of plugins that are off: both guesses by name. */
+export interface WpDbPlugins {
+  tables: WpDbPluginTable[];
+  autoload: WpDbPluginOptions[];
+}
+
+/** What the panel can fix in a WordPress table, each as a job that saves the table first. */
+export const WP_TABLE_FIXES = ['keys', 'index', 'engine', 'charset'] as const;
+export type WpTableFix = (typeof WP_TABLE_FIXES)[number];
+
+/**
+ * A WordPress table that differs from how WordPress makes it: a lost primary
+ * key or AUTO_INCREMENT (a bad import's mark: new posts get ID 0), a missing
+ * index, MyISAM, or an old character set.
+ */
+export interface WpDbHealthIssue {
+  table: string;
+  problem: 'noPrimaryKey' | 'noAutoIncrement' | 'missingIndex' | 'notUnique' | 'engine' | 'utf8mb3' | 'charset';
+  /** What is wrong, in a sentence. */
+  text: string;
+  /** The fix the panel can make; none when a person has to look (latin1 text, an index name in use). */
+  fix?: WpTableFix;
+  /** Why the fix cannot run yet, like duplicate IDs: the rows to sort out first. */
+  blocked?: string;
+}
+
+export interface WpDbHealth {
+  /** The WordPress tables checked. */
+  tables: number;
+  issues: WpDbHealthIssue[];
+  /** The site's tables with space a rebuild gives back, like after a clean-up: OPTIMIZE TABLE frees it. */
+  free?: Array<{ table: string; freeBytes: number; bytes: number }>;
+}
 
 /** The postmeta keys with the most rows or bytes; bytes only when the sizes were read. */
 export interface WpDbMetaKeys {
@@ -227,14 +315,24 @@ export interface WpDbReport {
   network?: WpDbBlog[];
   /** Core tables this site lacks. */
   missingTables: string[];
+  health?: WpDbHealth | null;
+  plugins?: WpDbPlugins | null;
+  /** Posts of types no plugin or theme registers now (WP-CLI's list against the posts table): WordPress no longer shows them. */
+  postTypes?: { unregistered: Array<{ type: string; count: number }> } | null;
+  /** The tables that grew most since the oldest size the panel noted (once a day, when this view opens, kept 30 days). */
+  growth?: { since: string; days: number; tables: Array<{ table: string; bytes: number; grewBytes: number }> } | null;
   autoload?: { count: number; bytes: number; limitBytes: number; top: Array<{ name: string; bytes: number }> } | null;
   transients?: { count: number; bytes: number; expired: number; site?: { count: number; bytes: number; expired: number } } | null;
-  content?: { revisions: number; autoDrafts: number; trashedPosts: number; spamComments: number; trashedComments: number } | null;
+  content?: WpDbContent | null;
+  /** Post meta that repeats the same key and value on a post, found by Look for duplicates. */
+  duplicates?: { rows: number; keys: Array<{ key: string; rows: number }> } | null;
   orphans?: { postmeta: number; commentmeta: number; termmeta: number; termRelationships: number; usermeta?: number } | null;
   metaKeys?: WpDbMetaKeys | null;
   users?: { count: number; list: WpDbUser[] } | null;
   errors: Partial<Record<WpDbSection, string>>;
   checkedAt: string;
+  /** When each part was read, for a report the panel kept from an earlier visit. */
+  readAt?: Partial<Record<WpDbSection, string>>;
 }
 
 /** One statement for the SQL runner; explain asks MySQL how it would run it instead. */
@@ -277,7 +375,7 @@ export interface DbSchema {
 export interface CleanupInfo {
   id: string;
   title: string;
-  kind: 'transients' | 'content' | 'orphans' | 'empty' | 'drop' | 'sql';
+  kind: 'transients' | 'content' | 'orphans' | 'empty' | 'drop' | 'sql' | 'fix' | 'autoload';
   tables: Array<{ table: string; rows: number }>;
   /** The copy's size, gzipped. */
   bytes: number;
@@ -285,7 +383,21 @@ export interface CleanupInfo {
   purgeAt: string;
 }
 
-export const WP_CONTENT_KINDS = ['revisions', 'autoDrafts', 'trashedPosts', 'spamComments', 'trashedComments'] as const;
+export const WP_CONTENT_KINDS = [
+  'revisions',
+  'autoDrafts',
+  'trashedPosts',
+  'spamComments',
+  'trashedComments',
+  'oembed',
+  'akismet',
+  'actionsDone',
+  'wcSessions',
+  'sessionTokens',
+  'duplicateMeta',
+] as const;
+/** Keep the newest this many revisions of each post: the choices the WordPress view offers. */
+export const WP_KEEP_REVISIONS = [1, 3, 5, 10] as const;
 export const WP_ORPHAN_KINDS = ['postmeta', 'commentmeta', 'termmeta', 'termRelationships', 'usermeta'] as const;
 
 /** One statement that writes, for the SQL runner's check before it runs. */

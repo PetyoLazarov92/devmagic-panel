@@ -123,6 +123,8 @@ export function healthyResponses(): Record<string, Partial<ExecResult>> {
     [`sudo -n ${DMP} apache-configtest`]: { stdout: 'ok: apache configtest passed\n' },
     'ss -ltnH': { stdout: 'LISTEN 0 511 *:80 *:*\nLISTEN 0 511 *:443 *:*\n' },
     'mysql --user': { stdout: '1\n' },
+    // The buffer pool check: 1 GB for 512 MB of InnoDB data, enough.
+    "mysql --user root --host localhost --batch --skip-column-names -e SELECT VERSION(),": { stdout: '8.0.43\t1073741824\t536870912\n' },
     'php -r': { stdout: '8.3.6' },
     'php -m': { stdout: '[PHP Modules]\ncurl\ngd\nimagick\nintl\nmbstring\nmysqli\nxml\nzip\nxdebug\n' },
     'wp --version': { stdout: 'WP-CLI 2.11.0\n' },

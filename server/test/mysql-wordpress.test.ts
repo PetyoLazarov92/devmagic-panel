@@ -12,6 +12,8 @@ const NETWORK = [...SINGLE, 'wp_termmeta', 'wp_blogs', 'wp_sitemeta', 'wp_2_opti
 /** Answers like MySQL for shop_com: the table list, then each section by what its SQL asks. */
 function fakeWp(tables: string[], override: (sql: string) => Partial<{ code: number; stdout: string; stderr: string }> | undefined = () => undefined) {
   return fakeExec({
+    // The post types WordPress and its plugins register.
+    wp: () => ({ stdout: 'post\npage\nattachment\nrevision\nnav_menu_item\nproduct\n' }),
     mysql: (call: FakeCall) => {
       const e = call.args.indexOf('-e');
       if (e >= 0) return call.args[e + 1] === 'SELECT VERSION()' ? { stdout: '8.0.43\n' } : { stdout: 'information_schema_stats_expiry\t86400\n' };
@@ -20,6 +22,9 @@ function fakeWp(tables: string[], override: (sql: string) => Partial<{ code: num
       if (special) return special;
       if (sql.includes('SELECT TABLE_NAME FROM information_schema.TABLES')) return { stdout: `${tables.join('\n')}\n` };
       if (sql.includes('SELECT TABLE_ROWS FROM information_schema.TABLES')) return { stdout: '1200\n' };
+      // The health check: tables MySQL does not list are not checked; health.test.ts answers these in full.
+      if (sql.includes("JSON_ARRAY('ht'") || sql.includes('DATA_FREE') || sql.includes("JSON_ARRAY('pa'")) return { stdout: '' };
+      if (sql.includes('GROUP BY post_type')) return { stdout: json(['post', 900], ['product', 40], ['elementor_library', 1240], ['acme_portfolio', 12]) };
       if (sql.includes('SELECT JSON_ARRAY(blog_id')) return { stdout: json([1, 'local.shop.com', '/', 0, 0, 0], [2, 'local.shop.com', '/outlet/', 0, 0, 0], [3, 'local.shop.com', '/old/', 1, 0, 0]) };
       if (sql.includes("JSON_ARRAY('a'")) return { stdout: json(['a', 412, 912_000], ['o', 'acme_big_cache', 400_000], ['o', 'rewrite_rules', 90_000]) };
       if (sql.includes("JSON_ARRAY('t'")) return { stdout: json(['t', 40, 52_000], ['tx', 7], ['s', 3, 900], ['sx', 1]) };
@@ -150,5 +155,74 @@ describe('the WordPress view of a database', () => {
     const text = JSON.stringify(summary);
     expect(text).not.toContain('acme.com');
     expect(text).not.toContain('alex');
+  });
+});
+
+describe('what plugins leave, and revisions past the newest few', () => {
+  it('counts oEmbed caches, Akismet history, finished actions, expired sessions and login sessions where the site has their tables', async () => {
+    const tables = [...SINGLE, 'wp_actionscheduler_actions', 'wp_actionscheduler_logs', 'wp_woocommerce_sessions'];
+    const fake = fakeWp(tables, (sql) => {
+      if (sql.includes("JSON_ARRAY('p'")) return { stdout: json(['p', 40, 3, 5], ['c', 80, 2], ['oe', 120], ['ak', 900], ['as', 31_000], ['al', 92_000], ['ws', 14], ['st', 2]) };
+      if (sql.includes("JSON_ARRAY('r'")) return { stdout: json(['r', 30, 22, 15, 4]) };
+      return undefined;
+    });
+    const r = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['content'] });
+    expect(r.content).toEqual({
+      revisions: 40,
+      revisionsOver: { 1: 30, 3: 22, 5: 15, 10: 4 },
+      autoDrafts: 3,
+      trashedPosts: 5,
+      spamComments: 80,
+      trashedComments: 2,
+      oembed: 120,
+      akismet: 900,
+      actionsDone: 31_000,
+      actionLogs: 92_000,
+      wcSessions: 14,
+      sessionTokens: 2,
+    });
+    const sql = inputs(fake);
+    expect(sql).toContain("FROM `shop_com`.`wp_actionscheduler_actions` WHERE status IN ('complete', 'failed', 'canceled')");
+    expect(sql).toContain("WHERE meta_key LIKE '\\_oembed\\_%'");
+    expect(sql).toContain('ROW_NUMBER() OVER (PARTITION BY post_parent ORDER BY post_date DESC, ID DESC)');
+  });
+
+  it('leaves out the counts of tables the site lacks, and keeping revisions where MySQL has no window functions', async () => {
+    const fake = fakeWp(SINGLE, (sql) => (sql.includes("JSON_ARRAY('r'") ? { code: 1, stderr: "ERROR 1064 (42000): You have an error in your SQL syntax near '(PARTITION BY'" } : undefined));
+    const r = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['content'] });
+    expect(r.content).not.toHaveProperty('actionsDone');
+    expect(r.content).not.toHaveProperty('wcSessions');
+    expect(r.content).not.toHaveProperty('revisionsOver');
+    expect(r.errors).toEqual({});
+  });
+
+  it('looks for duplicate post meta only when asked', async () => {
+    const fake = fakeWp(SINGLE, (sql) => (sql.includes('MD5(meta_value)') ? { stdout: json(['_edit_lock', 400], ['_acme_price', 12]) } : undefined));
+    const all = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined);
+    expect(all).not.toHaveProperty('duplicates');
+    expect(inputs(fake)).not.toContain('MD5(meta_value)');
+    const asked = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['duplicates'] });
+    expect(asked.duplicates).toEqual({ rows: 412, keys: [{ key: '_edit_lock', rows: 400 }, { key: '_acme_price', rows: 12 }] });
+    expect(fake.calls.find((c) => c.input?.includes('MD5(meta_value)'))?.input).toContain('max_execution_time = 120000');
+  });
+});
+
+describe('post types nothing registers any more', () => {
+  it("lists the posts of types WP-CLI does not know, with plugins and the theme loaded, the most first", async () => {
+    const fake = fakeWp(SINGLE);
+    const r = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['postTypes'] });
+    expect(r.postTypes).toEqual({ unregistered: [{ type: 'elementor_library', count: 1240 }, { type: 'acme_portfolio', count: 12 }] });
+    const wp = fake.calls.find((c) => c.file === 'wp');
+    expect(wp?.args).toEqual([expect.stringMatching(/^--path=.*local\.shop\.com$/), '--url=https://local.shop.com/', 'post-type', 'list', '--field=name']);
+  });
+
+  it('says why when WP-CLI cannot list them, and keeps the rest', async () => {
+    const fake = fakeExec({ wp: { code: 1, stdout: '', stderr: 'Error: Error establishing a database connection.' } });
+    const both = fakeWp(SINGLE);
+    const exec: typeof fake.exec = (file, args, options) => (file === 'wp' ? fake.exec(file, args, options) : both.exec(file, args, options));
+    const r = await wordpressReport({ ...ctxFor(both), exec }, 'local.shop.com', undefined, 1, Date.now, { sections: ['postTypes', 'users'] });
+    expect(r.postTypes).toBeNull();
+    expect(r.errors).toEqual({ postTypes: 'WP-CLI could not list the post types: Error: Error establishing a database connection.' });
+    expect(r.users?.count).toBe(2);
   });
 });

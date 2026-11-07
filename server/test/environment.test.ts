@@ -227,3 +227,32 @@ describe('hostsNames', () => {
     expect([...names].sort()).toEqual(['a.test', 'c.test', 'localhost']);
   });
 });
+
+describe("MySQL's memory for site data", () => {
+  const pool = (answer: string) => ({ ...healthyResponses(), "mysql --user root --host localhost --batch --skip-column-names -e SELECT VERSION(),": { stdout: answer } });
+
+  it('says how much to set and where when the buffer pool is far smaller than the data', async () => {
+    const tree = healthyTree();
+    const { exec } = fakeExec(pool(`8.0.43\t${128 * 1024 ** 2}\t${6 * 1024 ** 3}\n`));
+    const report = await checkEnvironment({ config: tree.config, exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, totalMemory: () => 16 * 1024 ** 3 });
+    expect(byId(report, 'mysql.bufferPool')).toMatchObject({
+      status: 'warn',
+      optional: true,
+      detail: '128 MB for 6.0 GB of InnoDB data: big sites read from the disk on every page. Set innodb_buffer_pool_size = 7680M under [mysqld] in /etc/mysql/mysql.conf.d/mysqld.cnf, then sudo systemctl restart mysql',
+    });
+  });
+
+  it('never asks for more than half the memory, and names MariaDB\'s file', async () => {
+    const tree = healthyTree();
+    const { exec } = fakeExec(pool(`10.11.6-MariaDB-0ubuntu0.24.04.1\t${128 * 1024 ** 2}\t${40 * 1024 ** 3}\n`));
+    const report = await checkEnvironment({ config: tree.config, exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, totalMemory: () => 8 * 1024 ** 3 });
+    expect(byId(report, 'mysql.bufferPool')?.detail).toContain('innodb_buffer_pool_size = 4G under [mysqld] in /etc/mysql/mariadb.conf.d/50-server.cnf');
+  });
+
+  it('is fine when the pool holds a good part of the data', async () => {
+    const tree = healthyTree();
+    const { exec } = fakeExec(healthyResponses());
+    const report = await checkEnvironment({ config: tree.config, exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+    expect(byId(report, 'mysql.bufferPool')).toMatchObject({ status: 'ok', detail: '1.0 GB for 512 MB of InnoDB data' });
+  });
+});

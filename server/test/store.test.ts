@@ -39,3 +39,18 @@ describe('RunStore', () => {
     expect(store.installs().get('local.shop.com/learn')).toEqual({ how: 'wordpress', at: '2026-10-25T08:00:00Z' });
   });
 });
+
+describe('runs a restart cut off', () => {
+  it('ends them as stopped at start, and leaves the panel\'s own updates to their installer', () => {
+    const store = new RunStore(':memory:');
+    const cleanup = store.start('db.cleanOrphans', { domain: 'local.shop.com' });
+    const update = store.start('panel.installRelease', {});
+    const done = store.start('cert.reissue', {});
+    store.finish(done, 0, 'ok');
+    expect(store.stopUnfinished('Stopped: the panel restarted while it ran.', (a) => a.startsWith('panel.'))).toBe(1);
+    const runs = store.recent();
+    expect(runs.find((r) => r.id === cleanup)).toMatchObject({ exitCode: 1, output: 'Stopped: the panel restarted while it ran.' });
+    expect(runs.find((r) => r.id === update)?.finishedAt ?? null).toBeNull();
+    expect(runs.find((r) => r.id === done)).toMatchObject({ exitCode: 0, output: 'ok' });
+  });
+});

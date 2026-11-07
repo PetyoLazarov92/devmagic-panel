@@ -7,7 +7,7 @@ import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from '../src/mysql-se
 import { freshStatsSql } from '../src/mysql-stats.js';
 import type { Secrets } from '../src/secrets.js';
 import { RunStore } from '../src/store.js';
-import { type FakeCall, fakeExec, type FakeResponse, wpSiteTree } from './helpers.js';
+import { type FakeCall, fakeExec, type FakeResponse, tempTree, wpSiteTree } from './helpers.js';
 
 const secrets: Secrets = { panelPasswordHash: 'x', mysql: { user: 'devmagic_panel', host: 'localhost', password: 'adminpw' } };
 const Q = 'mysql --batch --skip-column-names --user devmagic_panel --host localhost -e';
@@ -282,5 +282,27 @@ describe('pruneMysqlBackups', () => {
     utimesSync(join(dir, 'old.sql.gz'), old, old);
     expect(pruneMysqlBackups(dir)).toEqual(['old.sql.gz']);
     expect(existsSync(join(dir, 'new.sql.gz'))).toBe(true);
+  });
+});
+
+describe('optimizing some tables', () => {
+  it('rebuilds only the tables asked for that the database has, and refuses when it has none of them', async () => {
+    const { planOptimize } = await import('../src/mysql-server.js');
+    const fake = fakeExec({
+      mysql: (call: FakeCall) => {
+        const text = [...call.args, call.input ?? ''].join(' ');
+        if (/SCHEMATA|SHOW DATABASES/.test(text)) return { stdout: 'shop_com\n' };
+        if (text.includes("TABLE_TYPE = 'BASE TABLE'")) return { stdout: 'wp_options\nwp_postmeta\nwp_posts\n' };
+        if (text.includes('SUM(DATA_LENGTH')) return { stdout: '1000\n' };
+        return { stdout: '' };
+      },
+    });
+    const ctx = { config: tempTree().config, exec: fake.exec, mysql: { user: 'devmagic_panel', host: 'localhost', password: 'adminpw' }, kept: () => [], backupsDir: tempTree().root };
+    const [step] = await planOptimize(ctx, { database: 'shop_com', tables: ['wp_postmeta', 'wp_acme_gone'] }, () => false);
+    expect(step?.label).toBe('Optimize wp_postmeta of shop_com');
+    await step?.run({ onUndo: () => undefined, progress: () => undefined });
+    const optimized = fake.calls.map((c) => [...c.args, c.input ?? ''].join(' ')).filter((t) => t.includes('OPTIMIZE TABLE'));
+    expect(optimized).toEqual([expect.stringContaining('OPTIMIZE TABLE `shop_com`.`wp_postmeta`;')]);
+    await expect(planOptimize(ctx, { database: 'shop_com', tables: ['wp_acme_gone'] }, () => false)).rejects.toThrow('shop_com has none of those tables');
   });
 });

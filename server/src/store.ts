@@ -218,6 +218,12 @@ export class RunStore {
     this.db.prepare('DELETE FROM meta WHERE key = ?').run(key);
   }
 
+  /** The keys of kept values that start with prefix. */
+  metaKeys(prefix: string): string[] {
+    const like = `${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    return (this.db.prepare("SELECT key FROM meta WHERE key LIKE ? ESCAPE '\\'").all(like) as Array<{ key: string }>).map((r) => r.key);
+  }
+
   /** A login session, by the hash of its token: the token itself is never stored. */
   getSession(tokenHash: string): StoredSession | undefined {
     const row = this.db.prepare('SELECT password, expires_at FROM sessions WHERE token_hash = ?').get(tokenHash) as { password: string; expires_at: number } | undefined;
@@ -299,6 +305,18 @@ export class RunStore {
     this.db
       .prepare('UPDATE runs SET exit_code = ?, output = ?, finished_at = ?, skipped = ? WHERE id = ?')
       .run(exitCode, output, new Date().toISOString(), skipped || null, id);
+  }
+
+  /**
+   * Marks the runs a stopped panel left without an end as stopped, at start,
+   * when nothing of this panel can still be running them. The panel's own
+   * updates are left alone: their installer goes on and finishes its run.
+   */
+  stopUnfinished(note: string, except: (action: string) => boolean): number {
+    const rows = this.db.prepare('SELECT id, action, output FROM runs WHERE finished_at IS NULL').all() as Array<{ id: number; action: string; output: string }>;
+    const stopped = rows.filter((r) => !except(r.action));
+    for (const r of stopped) this.finish(r.id, 1, [r.output, note].filter(Boolean).join('\n'));
+    return stopped.length;
   }
 
   /** The newest runs, for the assistant's look at what happened lately. */

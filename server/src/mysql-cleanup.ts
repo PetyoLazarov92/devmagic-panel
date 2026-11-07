@@ -14,8 +14,9 @@ import { type BrowseContext, tableMeta } from './mysql-browse.js';
 import { type RowsContext, updateRow } from './mysql-rows.js';
 import { MysqlRefused, siteDatabases } from './mysql-server.js';
 import { ident, textLiteral } from './mysql-sql.js';
-import { type WordpressTables, wordpressTables } from './mysql-wordpress.js';
+import { ACTIONS_DONE, AKISMET_WHERE, OEMBED_WHERE, revisionRanks, type WordpressTables, wordpressTables } from './mysql-wordpress.js';
 import { formatBytes } from './sites/db.js';
+import { existingFolder, freeSpace } from './sites/space.js';
 import { dumpStream } from './sites/sql-stream.js';
 
 /**
@@ -24,23 +25,30 @@ import { dumpStream } from './sites/sql-stream.js';
  * saves exactly what it will remove with mysqldump --where, as INSERT IGNORE
  * (the whole table, CREATE TABLE included, for a delete), gzipped to
  * BACKUP_DIR/cleanups/<id> (0700, files 0600, 14 days), streamed so a big
- * one never sits in memory; then it removes it in one transaction, only the
- * rows that were there when the copy was taken. Undo imports the copy back;
- * a row made again since stays as it is.
+ * one never sits in memory; then it removes it in batches of DELETE_BATCH
+ * rows, each its own short transaction (a stop ends it between two), only
+ * the rows that were there when the copy was taken. Undo imports the copy
+ * back; a row made again since stays as it is.
  *
  * Every condition here is built from constants and table names the database
  * listed, in backticks: nothing a person typed reaches the SQL.
  */
 export const CLEANUP_DAYS = 14;
+/** Rows one DELETE of a clean-up takes: each batch is its own short transaction. */
+export const DELETE_BATCH = 5000;
 
 export interface CleanupPart {
   table: string;
+  /** Removed in one statement, not in batches: its condition reads the same table, like a transient with its timeout. */
+  oneStatement?: boolean;
   /** Which rows; none for a whole table. */
   where?: string;
   /** replace: saved whole with its DROP and CREATE, so Undo puts the table back as it was (SQL that writes). */
-  how: 'delete' | 'empty' | 'drop' | 'replace';
+  how: 'delete' | 'empty' | 'drop' | 'replace' | 'update';
   /** A one-column numeric key: the delete stops at the highest one the copy saw. */
   key?: string;
+  /** update: what changes, a constant like autoload = 'off'. Saved with REPLACE first, so Undo puts the rows back as they were. */
+  set?: string;
 }
 
 interface SavedPart {
@@ -82,6 +90,20 @@ export async function adminSql(ctx: RowsContext, database: string, statements: s
   });
   if (r.code !== 0) throw new MysqlRefused(`MySQL refused it: ${firstError(r)}`);
   return r.stdout.split('\n').filter((l) => l !== '');
+}
+
+/**
+ * Refuses a clean-up whose saved copy may not fit on the disk: rows times the
+ * table's average row length for a delete, the whole table for the rest. The
+ * copy is gzipped, so this is more than it needs, never less.
+ */
+async function enoughRoom(ctx: RowsContext, database: string, parts: Array<CleanupPart & { rows: number }>): Promise<void> {
+  const names = [...new Set(parts.map((p) => p.table))];
+  const lines = await adminSql(ctx, database, `SELECT TABLE_NAME, COALESCE(AVG_ROW_LENGTH, 0), COALESCE(DATA_LENGTH, 0) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (${names.map((n) => textLiteral(n)).join(', ')});\n`);
+  const sizes = new Map(lines.map((l) => l.split('\t')).map(([name = '', avg = '0', data = '0']) => [name, { avg: Number(avg) || 0, data: Number(data) || 0 }]));
+  const need = parts.reduce((n, p) => n + (p.how === 'delete' || p.how === 'update' ? p.rows * (sizes.get(p.table)?.avg ?? 0) : (sizes.get(p.table)?.data ?? 0)), 0);
+  const free = freeSpace(existingFolder(cleanupsDir(ctx.config))).bytes;
+  if (need > free) throw new MysqlRefused(`Saving what it removes first needs up to ${formatBytes(need)}, and the disk has ${formatBytes(free)} free: make room, then try again`);
 }
 
 const stamp = (d: Date) => d.toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
@@ -156,7 +178,8 @@ export async function dumpPart(ctx: RowsContext, database: string, part: Cleanup
       // Removed rows come back with INSERT IGNORE, next to rows made since. A deleted table keeps its
       // CREATE TABLE and never a DROP: Undo must not replace a table made again since. A table SQL
       // changed is saved whole with its DROP: Undo puts it back exactly as it was.
-      ...(part.how === 'replace' ? [] : ['--insert-ignore']),
+      // A changed row comes back with REPLACE, over the change.
+      ...(part.how === 'replace' ? [] : part.how === 'update' ? ['--replace'] : ['--insert-ignore']),
       ...(part.how === 'drop' ? ['--skip-add-drop-table'] : part.how === 'replace' ? [] : ['--no-create-info']),
       ...(where ? [`--where=${where}`] : []),
       '--', database, part.table,
@@ -210,6 +233,8 @@ export async function undoCleanup(ctx: RowsContext, { database, cleanup }: Actio
 export function planCleanup(ctx: RowsContext, database: string, kind: CleanupInfo['kind'], title: string, parts: CleanupPart[], site?: string): JobStep[] {
   let id = '';
   let todo: Array<CleanupPart & { bounded?: string; rows: number; file: string }> = [];
+  // Rows removed so far, kept across a stop and its Retry so the progress carries on.
+  let removed = 0;
   return [
     {
       id: 'save',
@@ -235,8 +260,9 @@ export function planCleanup(ctx: RowsContext, database: string, kind: CleanupInf
             const bounded = p.where && p.key ? `(${p.where}) AND ${ident(p.key)} <= ${Number(max)}` : p.where;
             return { ...p, ...(bounded ? { bounded } : {}), rows: Number(rows), file: `${String(i + 1).padStart(2, '0')}-${p.table}.sql.gz` };
           })
-          .filter((p) => p.how !== 'delete' || p.rows > 0);
+          .filter((p) => (p.how !== 'delete' && p.how !== 'update') || p.rows > 0);
         if (todo.length === 0) return { code: 0, stdout: 'nothing to remove', stderr: '' };
+        await enoughRoom(ctx, database, todo);
         const root = cleanupsDir(ctx.config);
         mkdirSync(root, { recursive: true, mode: 0o700 });
         pruneCleanups(root, now.getTime());
@@ -248,7 +274,7 @@ export function planCleanup(ctx: RowsContext, database: string, kind: CleanupInf
         const saved: SavedCleanup = { title, kind, database, ...(site ? { site } : {}), parts: todo.map(({ table, how, rows, file }) => ({ table, how, rows, file })), savedAt: now.toISOString() };
         writeFileSync(join(dir, 'cleanup.json'), JSON.stringify(saved), { mode: 0o600 });
         const size = todo.reduce((n, p) => n + statSync(join(dir, p.file)).size, 0);
-        return { code: 0, stdout: `saved ${todo.map((p) => `${p.table} (${p.how === 'delete' ? `${p.rows.toLocaleString('en-US')} rows` : 'all of it'})`).join(', ')}: ${formatBytes(size)} gzipped, kept ${CLEANUP_DAYS} days`, stderr: '' };
+        return { code: 0, stdout: `saved ${todo.map((p) => `${p.table} (${p.how === 'delete' || p.how === 'update' ? `${p.rows.toLocaleString('en-US')} rows` : 'all of it'})`).join(', ')}: ${formatBytes(size)} gzipped, kept ${CLEANUP_DAYS} days`, stderr: '' };
       },
     },
     {
@@ -257,15 +283,40 @@ export function planCleanup(ctx: RowsContext, database: string, kind: CleanupInf
       weight: 2,
       run: async (job) => {
         if (todo.length === 0) return { code: 0, stdout: 'nothing to remove', stderr: '' };
-        const deletes = todo.filter((p) => p.how === 'delete');
-        const lines = deletes.length
-          ? await adminSql(ctx, database, `START TRANSACTION;\n${deletes.map((p) => `DELETE FROM ${ident(p.table)} WHERE ${p.bounded};\nSELECT ROW_COUNT();\n`).join('')}COMMIT;\n`)
-          : [];
-        const whole = todo.filter((p) => p.how !== 'delete');
+        // Undo is there from the first batch: a stop or a failure halfway leaves the saved copy to put back.
+        const undoLabel = kind === 'autoload' ? 'Put the options back as they were' : `Put back what ${title.toLowerCase()} removed`;
+        job.dropUndo?.(undoLabel);
+        job.onUndo(undoLabel, () => undoCleanup(ctx, { database, cleanup: id }));
+        // Small batches, each its own transaction: short locks on a big table, progress, and a stop between two.
+        // Each batch takes only rows that were there when the copy was saved, so Retry carries on where it stopped.
+        const deletes = todo.filter((p) => p.how === 'delete' || p.how === 'update');
+        const total = deletes.reduce((n, p) => n + p.rows, 0);
+        const counts: number[] = [];
+        const stopped = () => ({
+          code: 1,
+          stdout: '',
+          stderr: `Stopped after ${removed.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} rows: Retry carries on, Undo puts back what was removed.`,
+        });
+        for (const p of deletes) {
+          let gone = 0;
+          for (;;) {
+            if (job.stopped?.()) return stopped();
+            const batch = p.oneStatement ? '' : `${p.key ? ` ORDER BY ${ident(p.key)}` : ''} LIMIT ${DELETE_BATCH}`;
+            const change = p.how === 'update' ? `UPDATE ${ident(p.table)} SET ${p.set} WHERE` : `DELETE FROM ${ident(p.table)} WHERE`;
+            const [count = '0'] = await adminSql(ctx, database, `${change} ${p.bounded ?? p.where}${batch};\nSELECT ROW_COUNT();\n`);
+            const n = Number(count) || 0;
+            gone += n;
+            removed += n;
+            job.progress(total ? Math.min(1, removed / total) : 1, `${removed.toLocaleString('en-US')} of ${total.toLocaleString('en-US')} rows`);
+            if (p.oneStatement || n < DELETE_BATCH) break;
+          }
+          counts.push(gone);
+        }
+        if (job.stopped?.()) return stopped();
+        const whole = todo.filter((p) => p.how !== 'delete' && p.how !== 'update');
         if (whole.length) await adminSql(ctx, database, whole.map((p) => `${p.how === 'drop' ? 'DROP TABLE' : 'TRUNCATE TABLE'} ${ident(p.table)};\n`).join(''));
-        job.onUndo(`Put back what ${title.toLowerCase()} removed`, () => undoCleanup(ctx, { database, cleanup: id }));
         const said = [
-          ...deletes.map((p, i) => `${p.table}: ${Number(lines[i] ?? 0).toLocaleString('en-US')} rows`),
+          ...deletes.map((p, i) => `${p.table}: ${(counts[i] ?? 0).toLocaleString('en-US')} rows`),
           ...whole.map((p) => `${p.table}: ${p.how === 'drop' ? 'deleted' : 'emptied'}`),
         ];
         return { code: 0, stdout: `${said.join(', ')}. Undo puts ${whole.length && !deletes.length ? 'it' : 'them'} back for ${CLEANUP_DAYS} days`, stderr: '' };
@@ -307,21 +358,31 @@ export async function planTransients(ctx: RowsContext, { domain, path, blog = 1,
   const t = await siteTablesFor(ctx, domain, path, blog);
   const options = `${t.blogPrefix}options`;
   if (!t.names.has(options)) throw new MysqlRefused(`${options} is not in ${t.database}`);
-  const parts: CleanupPart[] = [{ table: options, how: 'delete', key: KEYS.options, where: `(${transientWhere(scope, options, 'option_name', 'option_value', 'transient')}) OR (${transientWhere(scope, options, 'option_name', 'option_value', 'site\\_transient')})` }];
+  const parts: CleanupPart[] = [{ table: options, how: 'delete', key: KEYS.options, oneStatement: true, where: `(${transientWhere(scope, options, 'option_name', 'option_value', 'transient')}) OR (${transientWhere(scope, options, 'option_name', 'option_value', 'site\\_transient')})` }];
   // A network keeps its own transients in sitemeta: they go with the first site's.
   const sitemeta = `${t.prefix}sitemeta`;
-  if (t.network && blog === 1 && t.names.has(sitemeta)) parts.push({ table: sitemeta, how: 'delete', key: KEYS.sitemeta, where: transientWhere(scope, sitemeta, 'meta_key', 'meta_value', 'site\\_transient') });
+  if (t.network && blog === 1 && t.names.has(sitemeta)) parts.push({ table: sitemeta, how: 'delete', key: KEYS.sitemeta, oneStatement: true, where: transientWhere(scope, sitemeta, 'meta_key', 'meta_value', 'site\\_transient') });
   const title = scope === 'expired' ? 'Delete expired transients' : 'Delete every transient';
   return planCleanup(ctx, t.database, 'transients', title, parts, `${domain}${path ?? ''}`);
 }
 
-export async function planContent(ctx: RowsContext, { domain, path, blog = 1, kinds }: ActionInput<'db.cleanContent'>): Promise<JobStep[]> {
+/** WordPress's own kinds; any other in a clean-up makes its title the general one. */
+const OWN_KINDS = new Set(['revisions', 'autoDrafts', 'trashedPosts', 'spamComments', 'trashedComments']);
+
+/** The title of a content clean-up, for its job and Run history. */
+export function contentTitle(kinds: readonly string[]): string {
+  return kinds.every((k) => OWN_KINDS.has(k)) ? 'Delete revisions, drafts, trash and spam' : 'Delete what a clean-up found';
+}
+
+export async function planContent(ctx: RowsContext, { domain, path, blog = 1, kinds, keepRevisions }: ActionInput<'db.cleanContent'>): Promise<JobStep[]> {
   const t = await siteTablesFor(ctx, domain, path, blog);
   const name = (n: string) => `${t.blogPrefix}${n}`;
   const has = (n: string) => t.names.has(name(n));
   const posts = ident(name('posts'));
   const comments = ident(name('comments'));
-  const postWhen = [kinds.includes('revisions') && "post_type = 'revision'", kinds.includes('autoDrafts') && "post_status = 'auto-draft'", kinds.includes('trashedPosts') && "post_status = 'trash'"].filter(Boolean).join(' OR ');
+  // Keep the newest few revisions of each post: the rest are the ones ranked past them.
+  const revisionsWhen = keepRevisions ? `(post_type = 'revision' AND ID IN (SELECT ID FROM (${revisionRanks(posts)}) r WHERE r.n > ${Number(keepRevisions)}))` : "post_type = 'revision'";
+  const postWhen = [kinds.includes('revisions') && revisionsWhen, kinds.includes('autoDrafts') && "post_status = 'auto-draft'", kinds.includes('trashedPosts') && "post_status = 'trash'"].filter(Boolean).join(' OR ');
   const commentWhen = [kinds.includes('spamComments') && "comment_approved = 'spam'", kinds.includes('trashedComments') && "comment_approved = 'trash'"].filter(Boolean).join(' OR ');
   const parts: CleanupPart[] = [];
   if (postWhen && has('posts')) {
@@ -339,8 +400,33 @@ export async function planContent(ctx: RowsContext, { domain, path, blog = 1, ki
     if (has('commentmeta')) parts.push({ table: name('commentmeta'), how: 'delete', key: KEYS.commentmeta, where: `comment_id IN (SELECT comment_ID FROM ${comments} WHERE ${commentWhen})` });
     parts.push({ table: name('comments'), how: 'delete', key: KEYS.comments, where: commentWhen });
   }
+  // What plugins leave. Action Scheduler's logs go before their actions, so none is left without one.
+  if (kinds.includes('oembed') && has('postmeta')) parts.push({ table: name('postmeta'), how: 'delete', key: KEYS.postmeta, where: OEMBED_WHERE });
+  if (kinds.includes('akismet') && has('commentmeta')) parts.push({ table: name('commentmeta'), how: 'delete', key: KEYS.commentmeta, where: AKISMET_WHERE });
+  if (kinds.includes('actionsDone') && has('actionscheduler_actions')) {
+    const actions = ident(name('actionscheduler_actions'));
+    if (has('actionscheduler_logs')) {
+      parts.push({ table: name('actionscheduler_logs'), how: 'delete', key: 'log_id', where: `NOT EXISTS (SELECT 1 FROM ${actions} a WHERE a.action_id = ${ident(name('actionscheduler_logs'))}.action_id AND a.status NOT IN ${ACTIONS_DONE})` });
+    }
+    parts.push({ table: name('actionscheduler_actions'), how: 'delete', key: 'action_id', where: `status IN ${ACTIONS_DONE}` });
+  }
+  if (kinds.includes('wcSessions') && has('woocommerce_sessions')) parts.push({ table: name('woocommerce_sessions'), how: 'delete', key: 'session_id', where: 'session_expiry < UNIX_TIMESTAMP()' });
+  if (kinds.includes('sessionTokens') && blog === 1 && t.names.has(`${t.prefix}usermeta`)) {
+    parts.push({ table: `${t.prefix}usermeta`, how: 'delete', key: KEYS.usermeta, where: "meta_key = 'session_tokens'" });
+  }
+  if (kinds.includes('duplicateMeta') && has('postmeta')) {
+    // Each repeat after the first of the same post, key and value. One statement: the ranking reads the whole table, once.
+    const pm = ident(name('postmeta'));
+    parts.push({
+      table: name('postmeta'),
+      how: 'delete',
+      key: KEYS.postmeta,
+      oneStatement: true,
+      where: `meta_id IN (SELECT meta_id FROM (SELECT meta_id, ROW_NUMBER() OVER (PARTITION BY post_id, meta_key, MD5(meta_value) ORDER BY meta_id) AS n FROM ${pm}) d WHERE d.n > 1)`,
+    });
+  }
   if (!parts.length) throw new MysqlRefused('This site has none of those tables');
-  return planCleanup(ctx, t.database, 'content', 'Delete revisions, drafts, trash and spam', parts, `${domain}${path ?? ''}`);
+  return planCleanup(ctx, t.database, 'content', contentTitle(kinds), parts, `${domain}${path ?? ''}`);
 }
 
 export async function planOrphans(ctx: RowsContext, { domain, path, blog = 1, kinds }: ActionInput<'db.cleanOrphans'>): Promise<JobStep[]> {
