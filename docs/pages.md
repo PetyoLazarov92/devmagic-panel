@@ -96,11 +96,13 @@ site, after it is archived too), or delete it for good. See
 
 ## Long tool pages
 
-The WordPress view of a site's database and the MySQL page start with what
+The Overview of a site's Database tab and the MySQL page start with what
 needs a look, when anything does: one link per card that found something
 (table problems, autoload over its limit, expired transients, leftovers of
 plugins that are gone, rows to clean up; databases no site uses, users left
-behind), worst first, which scrolls to the card.
+behind), worst first, which scrolls to the card and rings it for two
+seconds, so you see which card you landed on. The count of rows to clean up
+is the card's own: what its Delete button takes as it opens.
 
 ## Developer options
 

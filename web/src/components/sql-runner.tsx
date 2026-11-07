@@ -15,13 +15,14 @@ import { Textarea } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
 import { api, ApiError } from '@/lib/api';
 import { runWithToast } from '@/lib/site-actions';
+import { loadSqlEditor } from '@/lib/sql-editor-load';
 import { addHistory, clearHistory, readHistory, toCsv } from '@/lib/sql-history';
 import { bytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 
-const SqlEditor = lazy(() => import('@/components/sql-editor'));
+const SqlEditor = lazy(loadSqlEditor);
 
 const HEIGHT_KEY = 'dmp:sql-editor-height';
 const DEFAULT_HEIGHT = 176;
@@ -82,20 +83,24 @@ const CELL_SHOWN = 200;
  * of what it changes and with the tables it names saved first for Undo. The
  * last 30 statements stay in this browser.
  */
-/** Opens the SQL view with this statement in the editor, like a slow query to EXPLAIN; kept in the browser's history only. */
-export const sqlSeedState = (sql: string) => ({ sqlSeed: sql });
+/**
+ * Opens the SQL view with this statement in the editor, like a slow query;
+ * with explain, the view explains it at once. Kept in the browser's history
+ * only.
+ */
+export const sqlSeedState = (sql: string, explain = false) => ({ sqlSeed: sql, ...(explain ? { sqlExplain: true } : {}) });
 
-/** The statement the page was opened with, if any. */
-export function sqlSeed(): string | undefined {
+/** The statement the page was opened with, if any, and whether to explain it. */
+export function sqlSeed(): { sql: string; explain: boolean } | undefined {
   try {
-    const seed = (window.history.state as { sqlSeed?: unknown } | null)?.sqlSeed;
-    return typeof seed === 'string' ? seed : undefined;
+    const state = window.history.state as { sqlSeed?: unknown; sqlExplain?: unknown } | null;
+    return typeof state?.sqlSeed === 'string' ? { sql: state.sqlSeed, explain: state.sqlExplain === true } : undefined;
   } catch {
     return undefined;
   }
 }
 
-export function SqlRunner({ database, placeholder, canWrite = false, initialSql }: { database: string; placeholder?: string; canWrite?: boolean; initialSql?: string | undefined }) {
+export function SqlRunner({ database, placeholder, canWrite = false, seed }: { database: string; placeholder?: string; canWrite?: boolean; seed?: { sql: string; explain: boolean } | undefined }) {
   const [mode, setMode] = useState<'read' | 'write'>('read');
   const writing = canWrite && mode === 'write';
   const [checked, setChecked] = useState<WriteCheck | null>(null);
@@ -104,7 +109,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, initialSql 
   const runner = useJob();
   const done = useRef<string | null>(null);
   const { job } = runner;
-  const [sql, setSql] = useState(initialSql ?? '');
+  const [sql, setSql] = useState(seed?.sql ?? '');
   const [result, setResult] = useState<DbQueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [needsAccount, setNeedsAccount] = useState(false);
@@ -121,6 +126,14 @@ export function SqlRunner({ database, placeholder, canWrite = false, initialSql 
     setRefresh((n) => n + 1);
     if (job.status === 'done') toast({ tone: 'success', title: `${job.title}: done` });
   }, [job, schema]);
+  // Opened to explain a statement, like a slow query: the plan shows without a second click.
+  const explainSeed = useRef(seed?.explain === true);
+  useEffect(() => {
+    if (!explainSeed.current) return;
+    explainSeed.current = false;
+    void run(true);
+    // Once, with the statement it opened with: run is the newest on the first render.
+  }, []);
   const hint = placeholder ?? "SELECT * FROM wp_options WHERE autoload = 'on' LIMIT 50";
   const plain = (
     <Textarea
@@ -336,11 +349,21 @@ function ResultCard({ result, onOpen, onCsv }: { result: DbQueryResult; onOpen: 
           <Button size="sm" variant="outline" onClick={onCsv}><Download />CSV</Button>
         )}
       </CardHeader>
-      {/* Without a grid below it, the line keeps the card's padding at the bottom too. */}
-      <p className={cn('px-5 pt-3 text-xs text-muted-foreground', n === 0 && 'pb-4')}>
-        {n === 0 ? 'No rows' : `${number(n)} ${n === 1 ? 'row' : 'rows'}`}
-        {result.hasMore ? ', the first 1,000: more match, so narrow it with WHERE or LIMIT' : ''} in {number(result.ms)} ms.
-      </p>
+      {result.explained && (
+        <div className="grid gap-1 px-5 pt-3 text-xs text-muted-foreground">
+          <p>MySQL explains a {result.statement} only to an account that may run it, so this is the plan of the SELECT that finds the same rows: what makes the {result.statement} slow.</p>
+          <code className="font-mono text-[12px] break-all whitespace-pre-wrap text-foreground">{result.explained}</code>
+        </div>
+      )}
+      {result.note ? (
+        <p className="px-5 py-4 text-sm text-muted-foreground">{result.note}</p>
+      ) : (
+        /* Without a grid below it, the line keeps the card's padding at the bottom too. */
+        <p className={cn('px-5 pt-3 text-xs text-muted-foreground', n === 0 && 'pb-4')}>
+          {n === 0 ? 'No rows' : `${number(n)} ${n === 1 ? 'row' : 'rows'}`}
+          {result.hasMore ? ', the first 1,000: more match, so narrow it with WHERE or LIMIT' : ''} in {number(result.ms)} ms.
+        </p>
+      )}
       {n > 0 && (
         <div className="mt-2 overflow-x-auto">
           <table className="w-full border-collapse text-left text-[13px]">

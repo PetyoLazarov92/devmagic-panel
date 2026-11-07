@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { JobRuntime, JobStep } from '../src/jobs.js';
-import { CORE_SCHEMA, planFixTable, planToInnodb, wordpressHealth } from '../src/mysql-health.js';
+import { CORE_SCHEMA, planFixTable, planFixTables, planToInnodb, wordpressHealth } from '../src/mysql-health.js';
 import type { RowsContext } from '../src/mysql-rows.js';
 import { type FakeCall, fakeExec, wpSiteTree } from './helpers.js';
 
@@ -167,5 +167,55 @@ describe('turning every MyISAM table into InnoDB', () => {
 
   it('refuses a site with no MyISAM table', async () => {
     await expect(planToInnodb(rows(fakeShop({ free: [['wp_posts', 0, mb, 'InnoDB']] })), { domain: 'local.shop.com' })).rejects.toThrow('This site has no MyISAM tables');
+  });
+});
+
+describe('fixing every problem Table health found', () => {
+  const mb = 1024 * 1024;
+  const facts = [['wp_options', 0, 2 * mb, 'MyISAM'], ['wp_posts', 0, 90 * mb, 'InnoDB'], ['wp_postmeta', 0, mb, 'InnoDB']];
+  const runAll = async (steps: JobStep[]) => {
+    const undos: string[] = [];
+    const job: JobRuntime = { onUndo: (label) => void undos.push(label), progress: () => undefined };
+    const out: string[] = [];
+    for (const step of steps) {
+      const r = await step.run(job);
+      for (const x of Array.isArray(r) ? r : [r]) out.push(x.code === 0 ? x.stdout : `failed: ${x.stderr}`);
+    }
+    return { out, undos };
+  };
+
+  it('fixes what the panel fixes, a table a step, the smallest first, each saved once, and leaves what needs a person', async () => {
+    const fake = fakeShop({ free: facts });
+    const { title, steps } = await planFixTables(rows(fake), { domain: 'local.shop.com' });
+    expect(title).toBe('Fix 4 problems in 3 tables');
+    expect(steps.map((x) => x.label)).toEqual(['Check the disk has room', 'Fix wp_postmeta: its indexes', 'Fix wp_options: InnoDB, utf8mb4', 'Fix wp_posts: its primary key']);
+    const { undos } = await runAll(steps);
+    const alters = fake.calls.filter((c) => c.input?.includes('ALTER TABLE')).map((c) => c.input?.match(/ALTER TABLE .*;/)?.[0]);
+    expect(alters).toEqual([
+      'ALTER TABLE `wp_postmeta` ADD KEY `meta_key` (`meta_key`(191));',
+      'ALTER TABLE `wp_options` ENGINE=InnoDB;',
+      'ALTER TABLE `wp_options` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;',
+      'ALTER TABLE `wp_posts` ADD PRIMARY KEY (`ID`), MODIFY `ID` bigint(20) unsigned NOT NULL AUTO_INCREMENT;',
+    ]);
+    // wp_options is saved once for its two fixes; wp_comments (latin1) and the repeated option names are left to a person.
+    expect(fake.calls.filter((c) => c.file === 'mysqldump').map((c) => c.args.at(-1))).toEqual(['wp_postmeta', 'wp_options', 'wp_posts']);
+    expect(undos).toEqual(['Put the tables back as they were']);
+  });
+
+  it("turns a plugin's MyISAM table into InnoDB too, and does only the tables asked for", async () => {
+    const withLog = [...facts, ['wp_acme_log', 0, 3 * mb, 'MyISAM']];
+    const all = await planFixTables(rows(fakeShop({ free: withLog })), { domain: 'local.shop.com' });
+    expect(all.steps.map((x) => x.label)).toContain('Fix wp_acme_log: InnoDB');
+    const fake = fakeShop({ free: withLog });
+    const one = await planFixTables(rows(fake), { domain: 'local.shop.com', tables: ['wp_acme_log'] });
+    expect(one.title).toBe('Fix wp_acme_log');
+    await runAll(one.steps);
+    expect(fake.calls.filter((c) => c.input?.includes('ALTER TABLE')).map((c) => c.input?.match(/ALTER TABLE .*;/)?.[0])).toEqual(['ALTER TABLE `wp_acme_log` ENGINE=InnoDB;']);
+    await expect(planFixTables(rows(fakeShop({ free: facts })), { domain: 'local.shop.com', tables: ['wp_terms'] })).rejects.toThrow('wp_terms needs no fix the panel makes any more');
+  });
+
+  it('leaves out a key fix that rows block', async () => {
+    const { steps } = await planFixTables(rows(fakeShop({ zeroIds: 2, free: facts })), { domain: 'local.shop.com' });
+    expect(steps.map((x) => x.label)).not.toContain('Fix wp_posts: its primary key');
   });
 });

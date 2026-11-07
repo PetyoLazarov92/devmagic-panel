@@ -3,6 +3,7 @@ import { CalendarClock, LoaderCircle, Play, Search, Stethoscope, Trash2 } from '
 import { useState } from 'react';
 import { ScopeLabel } from '@/components/scope-label';
 import { StatusDot } from '@/components/site-bits';
+import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,13 +46,15 @@ export function CronTab({ site, report, onReload }: { site: Site; report: { data
   const [deleting, setDeleting] = useState<WpCronEvent | null>(null);
   const target = { ...siteTarget(site), ...(url ? { url } : {}) };
   const data = report.data;
+  const q = query.trim().toLowerCase();
+  const events = (data?.events ?? []).filter((e) => FILTERS.find((f) => f.value === filter)?.test(e) ?? true).filter((e) => !q || e.hook.toLowerCase().includes(q) || argsText(e.args).toLowerCase().includes(q));
+  // A site with many plugins schedules dozens: the first ones, more on Show more; the search looks at all.
+  const { shown, footer: more } = useShowMore(events, { reset: `${filter}\n${q}\n${url ?? ''}` });
 
   if (report.loading && !data) return <CardsSkeleton reading="Reading the site's scheduled events with WP-CLI..." cards={[6]} columns={1} />;
   if (report.error && !data) return <Notice>{report.error}</Notice>;
   if (!data) return null;
 
-  const q = query.trim().toLowerCase();
-  const events = data.events.filter((e) => FILTERS.find((f) => f.value === filter)?.test(e) ?? true).filter((e) => !q || e.hook.toLowerCase().includes(q) || argsText(e.args).toLowerCase().includes(q));
   const pick = (next: string) => {
     const value = next || undefined;
     setUrl(value);
@@ -104,7 +107,7 @@ export function CronTab({ site, report, onReload }: { site: Site; report: { data
           </p>
         )}
         <ul className="mt-3 divide-y border-t">
-          {events.map((e) => (
+          {shown.map((e) => (
             <li key={`${e.time}-${e.hook}-${e.sig}`} className="flex flex-wrap items-start gap-3 px-5 py-3 text-sm">
               <div className="grid min-w-0 flex-[1_1_18rem] gap-1">
                 <p className="flex flex-wrap items-center gap-2">
@@ -131,6 +134,7 @@ export function CronTab({ site, report, onReload }: { site: Site; report: { data
           ))}
           {events.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">{data.events.length === 0 ? 'No events are scheduled.' : 'No event matches.'}</li>}
         </ul>
+        <ShowMore {...more} noun={q || filter !== 'all' ? (events.length === 1 ? 'match' : 'matches') : 'events'} />
       </Card>
 
       <Card>

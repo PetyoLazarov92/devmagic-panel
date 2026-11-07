@@ -354,16 +354,17 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
       ...(heavy
         ? [
             { table: `${blogPrefix}options`, problem: 'engine' as const, text: 'It is MyISAM: no transactions, and a crash can damage it. WordPress makes InnoDB tables', fix: 'engine' as const },
+            { table: `${blogPrefix}options`, problem: 'utf8mb3' as const, text: 'It is utf8mb3_general_ci: emoji and some characters cannot be saved. utf8mb4 holds them all, and this change loses nothing', fix: 'charset' as const },
             { table: `${blogPrefix}postmeta`, problem: 'missingIndex' as const, text: 'Missing the index meta_key (meta_key): reads by it scan the whole table', fix: 'index' as const },
           ]
         : [{ table: `${blogPrefix}comments`, problem: 'utf8mb3' as const, text: 'It is utf8mb3_general_ci: emoji and some characters cannot be saved. utf8mb4 holds them all, and this change loses nothing', fix: 'charset' as const }]),
-    ].filter((i) => !fixedTables.has(`${site.db?.name}.${i.table}.${i.fix}`)),
+    ].filter((i) => !fixedTables.has(`${site.db?.name}.${i.table}.${i.fix}`) && !fixedTables.has(`${site.db?.name}.*.health`)),
     // Room a clean-up left in the big site's postmeta and comments, until they are optimized.
     ...(heavy ? { free: [{ table: `${blogPrefix}postmeta`, freeBytes: 48 * 1024 ** 2, bytes: 310 * 1024 ** 2 }, { table: `${blogPrefix}comments`, freeBytes: 21 * 1024 ** 2, bytes: 64 * 1024 ** 2 }].filter((f) => !fixedTables.has(`${site.db?.name}.${f.table}.optimize`)) } : {}),
   };
   // The same old move left the options and two tables of the theme and a plugin on MyISAM too, until Turn all into InnoDB.
   const myisam = (heavy ? [{ table: `${blogPrefix}brand_quotes`, bytes: 180_000 }, { table: `${blogPrefix}options`, bytes: 31 * 1024 ** 2 }, { table: `${blogPrefix}acme_slider_log`, bytes: 12 * 1024 ** 2 }] : []).filter(
-    (m) => !fixedTables.has(`${site.db?.name}.${m.table}.engine`) && !fixedTables.has(`${site.db?.name}.*.engine`),
+    (m) => !fixedTables.has(`${site.db?.name}.${m.table}.engine`) && !fixedTables.has(`${site.db?.name}.*.engine`) && !(m.table.endsWith('_options') && fixedTables.has(`${site.db?.name}.*.health`)),
   );
   if (myisam.length) healthIssues.myisam = myisam.sort((a, b) => a.bytes - b.bytes);
   const full: WpDbReport = {
@@ -452,6 +453,16 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
 export function mockDbQuery(database: string, query: DbQuery): DbQueryResult {
   const sql = query.sql.trim().replace(/;\s*$/, '');
   const kind = (/^[\s(]*([A-Za-z]+)/.exec(sql)?.[1] ?? '').toUpperCase();
+  // Explain on a statement that writes explains the SELECT that finds its rows, roughly as the server makes it.
+  if (query.explain && ['UPDATE', 'DELETE', 'INSERT', 'REPLACE'].includes(kind)) {
+    const ms = 3;
+    const select = /\bselect\b[\s\S]*/i.exec(sql)?.[0];
+    if ((kind === 'INSERT' || kind === 'REPLACE') && !select) {
+      return { statement: kind, explain: true, columns: [], rows: [], hasMore: false, ms: 0, note: `This ${kind} reads no table, it only writes the rows it lists: there is no plan to show. Its time goes to the indexes and triggers of the table it writes.` };
+    }
+    const explained = kind === 'UPDATE' ? sql.replace(/^\s*update\s+(\S+)\s+set\s+[\s\S]*?(\bwhere\b[\s\S]*)?$/i, (_, t: string, w?: string) => `SELECT * FROM ${t}${w ? ` ${w}` : ''}`) : kind === 'DELETE' ? sql.replace(/^\s*delete\s+[\s\S]*?\bfrom\b/i, 'SELECT * FROM') : (select as string);
+    return { statement: kind, explain: true, explained, columns: ['id', 'select_type', 'table', 'type', 'possible_keys', 'key', 'rows', 'Extra'], rows: [['1', 'SIMPLE', 'wp_options', 'ALL', null, null, '2380', 'Using where']], hasMore: false, ms };
+  }
   if (!['SELECT', 'WITH', 'SHOW', 'EXPLAIN', 'DESCRIBE', 'DESC', 'TABLE', 'VALUES'].includes(kind)) {
     throw new Error(`${kind || 'That'} changes or does not read: the SQL runner runs SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE and VALUES`);
   }
@@ -551,14 +562,14 @@ const cleanups: MockCleanup[] = [];
 
 /** A clean-up job of the mockup leaves its saved copy in the list, as the panel would once its job is done. */
 export function mockCleanupStarted(id: string, input: Record<string, unknown>): void {
-  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop', 'db.fixTable': 'fix', 'db.toInnodb': 'fix', 'db.autoloadOff': 'autoload', 'mysql.runSql': 'sql' };
+  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop', 'db.fixTable': 'fix', 'db.fixTables': 'fix', 'db.toInnodb': 'fix', 'db.autoloadOff': 'autoload', 'mysql.runSql': 'sql' };
   const kind = kinds[id];
   if (!kind) return;
   const site = input.domain ? `${String(input.domain)}${input.path ? String(input.path) : ''}` : undefined;
   const database = site ? sites.find((s) => `${s.domain}${s.path ?? ''}` === site)?.db?.name ?? '' : String(input.database);
   const prefix = Number(input.blog ?? 1) > 1 ? `wp_${String(input.blog)}_` : 'wp_';
   const written = kind === 'sql' ? mockCheckWrite(String(input.database), String(input.sql)) : null;
-  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}`, sql: `${written?.statement ?? 'SQL'} on ${written?.tables.map((t) => t.name).join(', ') || 'a new table'}`, fix: id === 'db.toInnodb' ? 'Turn the MyISAM tables into InnoDB' : `Fix ${String(input.table)}`, autoload: 'Turn off autoload for options of plugins that are off' }[kind];
+  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}`, sql: `${written?.statement ?? 'SQL'} on ${written?.tables.map((t) => t.name).join(', ') || 'a new table'}`, fix: id === 'db.toInnodb' ? 'Turn the MyISAM tables into InnoDB' : id === 'db.fixTables' ? 'Fix the problems Table health found' : `Fix ${String(input.table)}`, autoload: 'Turn off autoload for options of plugins that are off' }[kind];
   const tables = written ? written.tables.map((t) => ({ table: t.name, rows: 0 })) : kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : id === 'db.toInnodb' ? [`${prefix}brand_quotes`, `${prefix}acme_slider_log`, `${prefix}options`].map((table) => ({ table, rows: 0 })) : [{ table: String(input.table), rows: 0 }];
   const now = new Date();
   cleanups.unshift({ id: `20261107-${String(103000 + cleanups.length).padStart(6, '0')}-mockcl`, title, kind, tables, bytes: 3_400_000, savedAt: now.toISOString(), purgeAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(), database, ...(site ? { site } : {}) });
@@ -635,6 +646,22 @@ export function mockSlowQueries(database?: string): SlowQueryReport {
       text: 'SELECT * FROM `wp_users` WHERE `ID` = ? LIMIT ?',
       sample: 'SELECT * FROM wp_users WHERE ID = 1 LIMIT 1',
     },
+    {
+      id: 'e5a7', database: 'northwinddb', count: 640, totalMs: 7_040, avgMs: 11, maxMs: 180, rowsExamined: 1_520_000, rowsSent: 0, noIndex: 640, lastSeen: ago(3),
+      text: 'DELETE FROM `wp_options` WHERE `option_name` LIKE ? AND `option_value` < ?',
+      sample: "DELETE FROM wp_options WHERE option_name LIKE '\\_transient\\_timeout\\_%' AND option_value < 1794045600",
+    },
+    {
+      id: 'e9b1', database: 'northwinddb', count: 210, totalMs: 2_100, avgMs: 10, maxMs: 44, rowsExamined: 210, rowsSent: 0, noIndex: 0, lastSeen: ago(3),
+      text: 'INSERT INTO `wp_options` ( `option_name` , `option_value` , `autoload` ) VALUES (...) ON DUPLICATE KEY UPDATE `option_value` = VALUES ( `option_value` )',
+      sample: "INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('_transient_acme_feed', 'a:0:{}', 'off') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)",
+    },
+    // The quick reads of a busy site: enough of them that the list needs Show more.
+    ...Array.from({ length: 24 }, (_, i): SlowQuery => ({
+      id: `f${i.toString(16).padStart(3, '0')}`, database: i % 3 === 0 ? 'dailypostdb' : 'northwinddb', count: 900 - i * 30, totalMs: 1_200 - i * 40, avgMs: 1.2, maxMs: 9, rowsExamined: 900 - i * 30, rowsSent: 900 - i * 30, noIndex: 0, lastSeen: ago(5 + i),
+      text: `SELECT \`meta_value\` FROM \`wp_postmeta\` WHERE \`post_id\` = ? AND \`meta_key\` = ? /* acme_field_${i + 1} */`,
+      sample: `SELECT meta_value FROM wp_postmeta WHERE post_id = ${100 + i} AND meta_key = 'acme_field_${i + 1}'`,
+    })),
   ];
   const fresh = slowQueriesReset.at > 0;
   const queries = fresh ? [] : all.filter((q) => !database || q.database === database);

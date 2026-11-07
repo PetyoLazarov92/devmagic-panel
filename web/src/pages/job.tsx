@@ -9,12 +9,12 @@ export function JobPage({ id }: { id: string }) {
   // Opening a failed job is what the header badge asks for; it stops asking.
   useEffect(() => markJobSeen(id), [id]);
   return (
-    <div className="mx-auto grid w-full max-w-3xl gap-4 pt-4">
+    <div className="grid gap-4 pt-4">
       <Link href="/activity" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" />
         All jobs
       </Link>
-      <JobScreen jobId={id} />
+      <JobScreen jobId={id} wide />
     </div>
   );
 }

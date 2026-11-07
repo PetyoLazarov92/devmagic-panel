@@ -272,3 +272,15 @@ select.dmp-select option:disabled {
 @media (prefers-reduced-motion: reduce) {
   .login-shake { animation: none; }
 }
+
+/* A card a link scrolled to: a ring that fades over two seconds, so you see where you landed. */
+@keyframes card-flash {
+  0%, 35% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 55%, transparent), 0 0 0 8px color-mix(in oklab, var(--primary) 12%, transparent); }
+  100% { box-shadow: 0 0 0 3px transparent, 0 0 0 8px transparent; }
+}
+.card-flash { animation: card-flash 2s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .card-flash { animation: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 55%, transparent); }
+}
+/* Focus moves to the card for screen readers and the keyboard; the ring above shows it, not the outline. */
+.scroll-target:focus { outline: none; }

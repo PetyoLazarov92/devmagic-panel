@@ -292,6 +292,12 @@ const FIX_TITLE: Record<WpTableFix, (table: string) => string> = {
 
 const stamp = (d: Date) => d.toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
 
+/** The collation the site's other utf8mb4 tables have, so a converted table sorts like them. */
+async function siteCollation(browse: BrowseContext, database: string): Promise<string> {
+  const collations = await read(browse, `SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${textLiteral(database)} AND TABLE_COLLATION LIKE 'utf8mb4\\_%' GROUP BY TABLE_COLLATION ORDER BY COUNT(*) DESC LIMIT 1;\n`, { raw: false });
+  return collations[0] && COLLATION.test(collations[0]) ? collations[0] : 'utf8mb4_unicode_520_ci';
+}
+
 /** The job of a fix: check again, save the table whole, run the ALTER; Undo puts the table back as it was. */
 export async function planFixTable(ctx: RowsContext, { domain, path, blog = 1, table, fix }: ActionInput<'db.fixTable'>): Promise<{ title: string; steps: JobStep[] }> {
   const browse: BrowseContext = { config: ctx.config, exec: ctx.exec, mysql: ctx.mysql, kept: ctx.kept };
@@ -302,9 +308,7 @@ export async function planFixTable(ctx: RowsContext, { domain, path, blog = 1, t
   const issue = health.issues.find((i) => i.fix === fix && i.table === table);
   if (!issue) throw new MysqlRefused(`${table} needs no such fix any more`);
   if (issue.blocked) throw new MysqlRefused(`Not yet: ${issue.blocked}. Sort those rows out first, then fix it`);
-  // The collation the site's other utf8mb4 tables have, so a converted table sorts like them.
-  const collations = await read(browse, `SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA = ${textLiteral(t.database)} AND TABLE_COLLATION LIKE 'utf8mb4\\_%' GROUP BY TABLE_COLLATION ORDER BY COUNT(*) DESC LIMIT 1;\n`, { raw: false });
-  const collation = collations[0] && COLLATION.test(collations[0]) ? collations[0] : 'utf8mb4_unicode_520_ci';
+  const collation = await siteCollation(browse, t.database);
   const statement = await fixStatement(browse, t.database, table, entry.schema, fix, collation);
   const site = `${domain}${path ?? ''}`;
   const title = FIX_TITLE[fix](table);
@@ -418,3 +422,115 @@ export async function planToInnodb(ctx: RowsContext, { domain, path, blog = 1 }:
   ];
   return { title, steps };
 }
+
+/** The order a table's fixes run in: its key first, the indexes last, on the table as it is by then. */
+const FIX_ORDER: WpTableFix[] = ['keys', 'engine', 'charset', 'index'];
+
+/**
+ * Every problem Table health found that the panel fixes, in one job: a
+ * table a step, the smallest first, saved whole once and then fixed in turn
+ * (its key, InnoDB, utf8mb4, its indexes). What a person must sort out
+ * first (duplicate or zero IDs) is left out. Each fix is worked out again
+ * on the table as it is when its step runs, so a fix done meanwhile is
+ * skipped. Stop ends it between two tables; Undo puts back every table it
+ * changed.
+ */
+export async function planFixTables(ctx: RowsContext, { domain, path, blog = 1, tables: only }: ActionInput<'db.fixTables'>): Promise<{ title: string; steps: JobStep[] }> {
+  const browse: BrowseContext = { config: ctx.config, exec: ctx.exec, mysql: ctx.mysql, kept: ctx.kept };
+  const t = await wordpressTables(browse, domain, path, blog);
+  const health = await wordpressHealth(browse, t.database, t.names, t.prefix, t.blogPrefix, blog);
+  const fixes = new Map<string, WpTableFix[]>();
+  for (const issue of health.issues) if (issue.fix && !issue.blocked) fixes.set(issue.table, [...(fixes.get(issue.table) ?? []), issue.fix]);
+  // MyISAM of every kind, plugins' and themes' tables too.
+  for (const m of health.myisam ?? []) if (!fixes.get(m.table)?.includes('engine')) fixes.set(m.table, [...(fixes.get(m.table) ?? []), 'engine']);
+  if (only) {
+    for (const table of [...fixes.keys()]) if (!only.includes(table)) fixes.delete(table);
+    if (fixes.size === 0) throw new MysqlRefused(`${only.length === 1 ? only[0] : 'Those tables'} need${only.length === 1 ? 's' : ''} no fix the panel makes any more`);
+  }
+  if (fixes.size === 0) throw new MysqlRefused('Table health found nothing the panel fixes: what is left needs a person first');
+  const schemas = new Map(coreTables(t.names, t.prefix, t.blogPrefix, blog).map((c) => [c.table, c.schema]));
+  const sizes = new Map((await tableFacts(browse, t.database, [...fixes.keys()])).map((f) => [f.table, f.bytes]));
+  const tables = [...fixes.keys()].sort((a, b) => (sizes.get(a) ?? 0) - (sizes.get(b) ?? 0) || a.localeCompare(b));
+  const collation = await siteCollation(browse, t.database);
+  const count = [...fixes.values()].reduce((n, f) => n + f.length, 0);
+  const title = tables.length === 1 ? `Fix ${tables[0]}` : `Fix ${count} problems in ${tables.length} tables`;
+  const site = `${domain}${path ?? ''}`;
+  const database = t.database;
+  const now = ctx.now?.() ?? new Date();
+  const id = `${stamp(now)}-${randomBytes(4).toString('hex').slice(0, 6)}`;
+  const dir = join(cleanupsDir(ctx.config), id);
+  const saved: SavedCleanup = { title, kind: 'fix', database, site, parts: [], savedAt: now.toISOString() };
+  let undoing = false;
+  const steps: JobStep[] = [
+    {
+      id: 'room',
+      label: 'Check the disk has room',
+      run: async () => {
+        // The copies of them all, and MySQL's rebuild of the biggest next to the old one.
+        const all = tables.map((x) => sizes.get(x) ?? 0);
+        const need = all.reduce((n, b) => n + b, 0) + Math.max(0, ...all);
+        const free = freeSpace(existingFolder(cleanupsDir(ctx.config))).bytes;
+        if (need > free) throw new MysqlRefused(`Saving and rebuilding ${tables.length === 1 ? 'the table' : `${tables.length} tables`} needs up to ${formatBytes(need)}, and the disk has ${formatBytes(free)} free: make room, then try again`);
+        mkdirSync(cleanupsDir(ctx.config), { recursive: true, mode: 0o700 });
+        pruneCleanups(cleanupsDir(ctx.config), now.getTime());
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+        return { code: 0, stdout: `${formatBytes(need)} needed, ${formatBytes(free)} free`, stderr: '' };
+      },
+    },
+    ...tables.map((table, i): JobStep => {
+      const todo = FIX_ORDER.filter((f) => fixes.get(table)?.includes(f));
+      return {
+        id: `table-${i + 1}`,
+        label: `Fix ${table}: ${todo.map((f) => FIX_WORDS[f]).join(', ')}`,
+        weight: Math.max(1, Math.round((sizes.get(table) ?? 0) / (64 * 1024 * 1024))),
+        run: async (job): Promise<ExecResult> => {
+          const schema = schemas.get(table);
+          const file = `${String(i + 1).padStart(2, '0')}-${table}.sql.gz`;
+          let copied = false;
+          const done: string[] = [];
+          for (const fix of todo) {
+            let statement: string;
+            try {
+              if (fix === 'engine') {
+                // Any table of the site, so read again here: one converted meanwhile is left as it is.
+                const [engine = ''] = await adminSql(ctx, database, `SELECT COALESCE(ENGINE, '') FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${textLiteral(table)};\n`);
+                if (engine.toLowerCase() !== 'myisam') throw new MysqlRefused(`${table} is ${engine || 'gone'}`);
+                statement = `ALTER TABLE ${ident(table)} ENGINE=InnoDB`;
+              } else {
+                if (!schema) throw new MysqlRefused(`${table} is not one of WordPress's tables`);
+                statement = await fixStatement(browse, database, table, schema, fix, collation);
+              }
+            } catch (error) {
+              if (error instanceof MysqlRefused) {
+                done.push(`${FIX_WORDS[fix]}: not needed any more`);
+                continue;
+              }
+              throw error;
+            }
+            if (!copied) {
+              await dumpPart(ctx, database, { table, how: 'replace' }, undefined, join(dir, file), (b) => job.progress(0.3, `${formatBytes(b)} of SQL`));
+              saved.parts.push({ table, how: 'replace', rows: 0, file });
+              writeFileSync(join(dir, 'cleanup.json'), JSON.stringify(saved), { mode: 0o600 });
+              copied = true;
+              if (!undoing) {
+                undoing = true;
+                job.onUndo('Put the tables back as they were', () => undoCleanup(ctx, { database, cleanup: id }));
+              }
+            }
+            try {
+              await adminSql(ctx, database, `SET SESSION lock_wait_timeout = 60;\n${statement};\n`, 2 * 60 * 60_000);
+            } catch (error) {
+              return { code: 1, stdout: done.join('\n'), stderr: (error as Error).message };
+            }
+            done.push(`${statement}`);
+          }
+          return { code: 0, stdout: done.join('\n'), stderr: '' };
+        },
+      };
+    }),
+  ];
+  return { title, steps };
+}
+
+/** A fix in a step's label. */
+const FIX_WORDS: Record<WpTableFix, string> = { keys: 'its primary key', engine: 'InnoDB', charset: 'utf8mb4', index: 'its indexes' };

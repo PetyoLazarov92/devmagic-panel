@@ -22,6 +22,7 @@ import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { navigate, useQueryParam } from '@/lib/router';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
+import { databaseHref, databaseView, type DbView } from '@/lib/database-href';
 import { useAsync } from '@/lib/use-async';
 import { ViewBar } from '@/components/page';
 import { ReadingBlock } from '@/components/skeletons';
@@ -39,20 +40,7 @@ const KIND_OF: Partial<Record<string, JobKind>> = {
   'db.cleanCopy': 'clean', 'db.cleanCurrent': 'cleanCurrent', 'db.exportClean': 'export', 'db.restoreKept': 'restoreKept',
 };
 
-type DbView = 'tables' | 'wordpress' | 'sql' | 'tools';
-
-/** The Database tab's address: its view, in Tables the table and what of it shows, in WordPress the site of a network. */
-export function databaseHref(site: Pick<Site, 'domain' | 'path'>, view: DbView, location: DbLocation = { table: null, show: 'rows' }, blog = 1): string {
-  const q = new URLSearchParams({ tab: 'database' });
-  if (view !== 'tables') {
-    q.set('view', view);
-    if (view === 'wordpress' && blog !== 1) q.set('blog', String(blog));
-  } else if (location.table) {
-    q.set('table', location.table);
-    if (location.show === 'structure') q.set('show', 'structure');
-  }
-  return `${siteHref(site)}?${q.toString()}`;
-}
+export { databaseHref } from '@/lib/database-href';
 
 /**
  * A site's database: its tables to browse, read only, and the backups and
@@ -66,8 +54,8 @@ export function DatabaseTab({ site }: { site: Site }) {
   useEffect(() => {
     if (requested === 'queries') navigate(`${siteHref(site)}?tab=performance`, { replace: true, scroll: false });
   }, [requested, site]);
-  const view: DbView = requested === 'tools' || requested === 'sql' ? requested : requested === 'wordpress' && wordpress ? 'wordpress' : 'tables';
   const table = useQueryParam('table');
+  const view = databaseView(requested, table, wordpress);
   const show = useQueryParam('show') === 'structure' ? 'structure' : 'rows';
   const blogParam = Number(useQueryParam('blog'));
   const blog = Number.isInteger(blogParam) && blogParam > 1 ? blogParam : 1;
@@ -75,16 +63,17 @@ export function DatabaseTab({ site }: { site: Site }) {
     return <p className="rounded-xl border bg-card px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p>;
   }
   const go = (next: DbView, location?: DbLocation, nextBlog = 1) => navigate(databaseHref(site, next, location, nextBlog), { scroll: false });
-  const views: Array<[DbView, string]> = [['tables', 'Tables'], ...(wordpress ? [['wordpress', 'WordPress'] as [DbView, string]] : []), ['sql', 'SQL'], ['tools', 'Backups and tools']];
+  // What needs a look first, then the rows, then SQL on them, then upkeep.
+  const views: Array<[DbView, string]> = [...(wordpress ? [['overview', 'Overview'] as [DbView, string]] : []), ['tables', 'Tables'], ['sql', 'SQL'], ['tools', 'Backups and tools']];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <Segmented label="Database" value={view} onChange={(v) => go(v)} options={views} className="justify-self-start" />
       {view === 'tools' ? (
         <DatabaseTools site={site} />
       ) : view === 'sql' ? (
-        <SqlRunner key={site.db.name} database={site.db.name} canWrite initialSql={sqlSeed()} />
-      ) : view === 'wordpress' ? (
-        <WordpressDbView site={site} blog={blog} onBlog={(b) => go('wordpress', undefined, b)} onTable={(t, seed) => navigate(databaseHref(site, 'tables', { table: t, show: 'rows' }), { scroll: false, state: seed ? rowsSeedState({ ...seed, table: t }) : null })} />
+        <SqlRunner key={site.db.name} database={site.db.name} canWrite seed={sqlSeed()} />
+      ) : view === 'overview' ? (
+        <WordpressDbView site={site} blog={blog} onBlog={(b) => go('overview', undefined, b)} onTable={(t, seed) => navigate(databaseHref(site, 'tables', { table: t, show: 'rows' }), { scroll: false, state: seed ? rowsSeedState({ ...seed, table: t }) : null })} />
       ) : (
         <DatabaseBrowser key={site.db.name} database={site.db.name} location={{ table, show }} onNavigate={(location) => go('tables', location)} />
       )}

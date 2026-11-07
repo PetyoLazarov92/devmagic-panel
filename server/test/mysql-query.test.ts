@@ -98,6 +98,39 @@ describe('the SQL runner', () => {
     await expect(runQuery(ctxFor(fake), 'shop_com', { sql: 'SHOW TABLES', explain: true })).rejects.toMatchObject({ status: 400 });
   });
 
+  it('explains a statement that writes by the SELECT that finds its rows, still as the read-only account', async () => {
+    const fake = fakeRunner(() => ({ stdout: xmlRows(1) }));
+    const ctx = ctxFor(fake);
+    const del = await runQuery(ctx, 'shop_com', { sql: "DELETE FROM wp_options WHERE option_name LIKE '_transient_%'", explain: true });
+    expect(del).toMatchObject({ statement: 'DELETE', explain: true, explained: "SELECT * FROM wp_options WHERE option_name LIKE '_transient_%'" });
+    const call = fake.calls.at(-1) as FakeCall;
+    expect(call.input).toContain("\nEXPLAIN SELECT * FROM wp_options WHERE option_name LIKE '_transient_%'\n;\n");
+    expect(call.input).toContain('SET SESSION TRANSACTION READ ONLY;');
+    expect(call.args).toContain('devmagic_panel_ro');
+    expect(call.input).not.toContain('DELETE');
+
+    const up = await runQuery(ctx, 'shop_com', { sql: "UPDATE LOW_PRIORITY wp_postmeta pm JOIN wp_posts p ON p.ID = pm.post_id SET pm.meta_value = 'a, b' WHERE p.post_type = 'set' ORDER BY pm.meta_id LIMIT 5", explain: true });
+    expect(up.explained).toBe("SELECT * FROM wp_postmeta pm JOIN wp_posts p ON p.ID = pm.post_id WHERE p.post_type = 'set' ORDER BY pm.meta_id LIMIT 5");
+    const ins = await runQuery(ctx, 'shop_com', { sql: 'INSERT INTO acme_log (a, b) SELECT a, b FROM acme_queue q JOIN acme_items i ON i.id = q.id ON DUPLICATE KEY UPDATE b = VALUES(b)', explain: true });
+    expect(ins.explained).toBe('SELECT a, b FROM acme_queue q JOIN acme_items i ON i.id = q.id');
+    const many = await runQuery(ctx, 'shop_com', { sql: 'DELETE t1 FROM acme_a t1 JOIN acme_b t2 ON t1.id = t2.id', explain: true });
+    expect(many.explained).toBe('SELECT * FROM acme_a t1 JOIN acme_b t2 ON t1.id = t2.id');
+    const using = await runQuery(ctx, 'shop_com', { sql: 'DELETE FROM t1 USING acme_a AS t1 JOIN acme_b ON t1.id = acme_b.id', explain: true });
+    expect(using.explained).toBe('SELECT * FROM acme_a AS t1 JOIN acme_b ON t1.id = acme_b.id');
+  });
+
+  it('says an INSERT of listed rows has no plan, without asking MySQL, and still runs no write', async () => {
+    const fake = fakeRunner(() => ({ stdout: xmlRows(1) }));
+    const result = await runQuery(ctxFor(fake), 'shop_com', { sql: "INSERT INTO wp_options (option_name) VALUES ('select')", explain: true });
+    expect(result).toMatchObject({ statement: 'INSERT', explain: true, rows: [] });
+    expect(result.note).toMatch(/no plan/);
+    expect(fake.calls).toHaveLength(0);
+    // Without Explain a write is refused as before.
+    await expect(runQuery(ctxFor(fake), 'shop_com', { sql: 'DELETE FROM wp_options' })).rejects.toMatchObject({ status: 400 });
+    // A statement that writes but is no row change still is not explained.
+    await expect(runQuery(ctxFor(fake), 'shop_com', { sql: 'DROP TABLE wp_options', explain: true })).rejects.toMatchObject({ status: 400 });
+  });
+
   it("says MySQL's own error, without the preamble's line number", async () => {
     const fake = fakeRunner(() => ({ code: 1, stderr: "ERROR 1142 (42000) at line 4: UPDATE command denied to user 'devmagic_panel_ro'@'localhost' for table 'wp_options'\n" }));
     await expect(runQuery(ctxFor(fake), 'shop_com', { sql: 'WITH x AS (SELECT 1) UPDATE wp_options SET autoload = 1' })).rejects.toMatchObject({

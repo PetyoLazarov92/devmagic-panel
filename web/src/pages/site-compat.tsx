@@ -17,6 +17,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { CardsSkeleton } from '@/components/skeletons';
 import { Notice } from '@/components/page';
+import { scrollToCard } from '@/lib/scroll-to';
 
 const newer = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }) > 0;
 const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
@@ -123,7 +124,7 @@ function CompatView({ site, compat, current, ask, onChanged }: { site: Site; com
     setVersion(ask.version);
     if (compat.scans.some((s) => s.version === ask.version)) setShown(ask.version);
     if (ask.check && !busy && !blocked) start(ask.version);
-    card.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToCard(card.current);
   });
 
   const scan = compat.scans.find((s) => s.version === shown) ?? compat.scans[0];

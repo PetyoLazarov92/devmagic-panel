@@ -22,6 +22,7 @@ import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { cn } from '@/lib/utils';
 import { Notice, PageHeader } from '@/components/page';
 import { RemovedSites, removedMatches } from '@/pages/removed-sites';
+import { scrollToCard } from '@/lib/scroll-to';
 
 type Filter = 'all' | 'attention' | 'removed';
 
@@ -92,7 +93,7 @@ export function SitesPage() {
             {unfinished > 0 && (
               <>
                 {' · '}
-                <button type="button" className="font-medium text-primary hover:underline" onClick={() => document.getElementById('unfinished-installs')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                <button type="button" className="font-medium text-primary hover:underline" onClick={() => scrollToCard('unfinished-installs')}>
                   {unfinished} unfinished {unfinished === 1 ? 'install' : 'installs'}
                 </button>
               </>

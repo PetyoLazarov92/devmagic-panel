@@ -1,5 +1,17 @@
 # Changelog
 
+### v1.23.0 (2026-11-07)
+* **Databases:** slow queries, a database's tables and a site's scheduled events show their first 21, with Show more, Show all and Show fewer under the list
+* **Databases:** Explain in SQL on a slow query opens the SQL view with its plan already shown, and the editor loads while you read the list, so it never opens on a plain box
+* **Databases:** Explain takes an UPDATE, a DELETE, and an INSERT or REPLACE with a SELECT, by explaining the SELECT that finds the same rows, still as the read-only account; an INSERT that lists its rows says it has no plan
+* **Databases:** Slow queries is now Top queries, and says where its numbers come from: MySQL's statement statistics, always on, every query ranked by its time in all, with no need for the slow log. The slow log's limit suggests 1 second for local work
+* **Databases:** Table health is one list: each table that needs a fix once, WordPress's and plugins' or themes' alike, with its problems in a few words and Fix for that table; open a row to fix one problem, or Fix all for every table in one job, each saved first for Undo. Optimize is one line under it
+* **Databases:** the count of rows to clean up above the WordPress view is the clean-up card's own, caches, logs and repeated meta included
+* **Sites:** the Database tab opens on Overview, the WordPress view renamed, then Tables, SQL and Backups and tools; a site without WordPress opens on Tables, and old links to the WordPress view still work
+* **Panel:** a link to a card on the same page (what needs a look, PHP's sections, unfinished installs) rings the card for two seconds after the scroll, so you see where you landed
+* **Panel:** Activity's Jobs is a full-width table like Run history, with each job's site, its steps done and when it started, and a job's own page is as wide as a run's
+* An update installs this release from the panel as usual
+
 ### v1.22.0 (2026-11-07)
 * **Panel:** the menu comes in three groups, Work (Sites, Aura, Mail), Server (Services, WP Cores) and System (Activity, Updates, Settings), with every page still in view and a short hint or a live count on the right of each item: the sites there are, new mail, a newer release
 * **Panel:** Settings is a page of its own, with the panel password, the AI assistant, Claude Code's defaults and the constants new sites get

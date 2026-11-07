@@ -655,7 +655,7 @@ export const actions = {
   },
   'mysql.resetQueryStats': {
     title: 'Count the queries again from now',
-    description: "Empties MySQL's statement statistics (performance_schema) and the slow log table, the ones the server keeps, so the slow queries list counts from now: take it before you load a page to measure. Changes no data.",
+    description: "Empties MySQL's statement statistics (performance_schema) and the slow log table, the ones the server keeps, so Top queries counts from now: take it before you load a page to measure. Changes no data.",
     changesSystem: true,
     input: z.object({}),
   },
@@ -895,6 +895,13 @@ export const actions = {
       "Makes one of the site's WordPress tables as WordPress makes it: its primary key and AUTO_INCREMENT back (refused while duplicate or zero IDs are there), its missing indexes, InnoDB instead of MyISAM, or utf8mb4 instead of utf8. The table is saved whole first (14 days), so Undo puts it back. Starts a job.",
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath, blog: blogNumber, table: mysqlIdentifier, fix: z.enum(WP_TABLE_FIXES) }),
+  },
+  'db.fixTables': {
+    title: 'Fix every problem Table health found',
+    description:
+      "Fixes every problem Table health found that the panel fixes, in one job: in WordPress's tables a lost primary key or AUTO_INCREMENT, MyISAM, utf8 and missing indexes, and MyISAM in any table of the site (plugins' and themes' too), a table at a time, the smallest first; tables limits it to those. What needs a person first (duplicate or zero IDs) is left out. Each table is saved whole first (14 days); Stop ends it between two tables, and Undo puts back every table it changed. Starts a job.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, blog: blogNumber, tables: z.array(mysqlIdentifier).min(1).max(500).optional() }),
   },
   'db.toInnodb': {
     title: 'Turn every MyISAM table into InnoDB',

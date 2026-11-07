@@ -112,7 +112,7 @@ function MysqlDatabaseView({ database, onLoading }: { database: string; onLoadin
         <Segmented label="Database" value={sql ? 'sql' : 'tables'} onChange={(v) => navigate(mysqlDatabaseHref(database, undefined, v === 'sql'), { scroll: false })} options={[['tables', 'Tables'], ['sql', 'SQL']]} />
       </div>
       {sql ? (
-        <SqlRunner key={`${database}-${canWrite}`} database={database} placeholder="SELECT * FROM a_table LIMIT 50" canWrite={canWrite} initialSql={sqlSeed()} />
+        <SqlRunner key={`${database}-${canWrite}`} database={database} placeholder="SELECT * FROM a_table LIMIT 50" canWrite={canWrite} seed={sqlSeed()} />
       ) : (
         <DatabaseBrowser key={database} database={database} location={{ table, show }} onNavigate={(location) => navigate(mysqlDatabaseHref(database, location), { scroll: false })} />
       )}
@@ -267,9 +267,9 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
       <ProcessesCard refresh={refresh} />
 
       <Card>
-        <CardHeader><CardTitle>Slow queries</CardTitle><Gauge className="size-4 text-muted-foreground" /></CardHeader>
+        <CardHeader><CardTitle>Top queries</CardTitle><Gauge className="size-4 text-muted-foreground" /></CardHeader>
         <div className="p-5">
-          <SlowQueries inCard onExplain={(sql, database) => database && navigate(mysqlDatabaseHref(database, undefined, true), { state: sqlSeedState(sql) })} />
+          <SlowQueries inCard onExplain={(sql, database) => database && navigate(mysqlDatabaseHref(database, undefined, true), { state: sqlSeedState(sql, true) })} />
         </div>
       </Card>
 

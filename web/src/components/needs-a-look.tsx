@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { scrollToCard } from '@/lib/scroll-to';
 
 export interface Look {
   key: string;
@@ -26,7 +27,8 @@ export function NeedsALook({ items }: { items: Look[] }) {
           type="button"
           onClick={() => {
             f.before?.();
-            window.setTimeout(() => document.getElementById(f.card)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+            // After the filter it picks has drawn the list.
+            window.setTimeout(() => scrollToCard(f.card), 0);
           }}
           className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium hover:underline', f.tone === 'danger' ? 'bg-danger/12 text-danger' : 'bg-warning/15 text-warning')}
         >

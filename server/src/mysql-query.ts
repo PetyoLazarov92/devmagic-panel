@@ -2,6 +2,7 @@ import type { DbQueryResult } from '@devmagic-panel/shared';
 import { dbQuery } from '@devmagic-panel/shared';
 import { READ_ONLY_MYSQL_USER } from './mysql-admin.js';
 import { type BrowseContext, checkDatabase, flavor } from './mysql-browse.js';
+import { EXPLAINED_BY_SELECT, readingPart } from './mysql-explain.js';
 import { BrowseError, textLiteral } from './mysql-sql.js';
 
 /**
@@ -102,6 +103,9 @@ export function oneStatement(sql: string, reading = true): Statement {
   return { text, kind, code: code.trim() };
 }
 
+/** A statement's first word, upper case, before it is read in full. */
+const firstWord = (sql: string) => (/^[A-Za-z]+/.exec(stripLeading(sql))?.[0] ?? '').toUpperCase();
+
 /** The text after leading comments, spaces and opening parentheses, where the first word is. */
 function stripLeading(text: string): string {
   let rest = text;
@@ -166,9 +170,19 @@ export async function runQuery(ctx: BrowseContext, database: string, body: unkno
   const db = checkDatabase(database);
   const account = ctx.readOnly;
   if (!account) throw new BrowseError('The SQL runner reads with its own read-only MySQL account, which is not made yet', 409);
-  const statement = oneStatement(parsed.data.sql);
-  if (parsed.data.explain && !EXPLAINABLE.has(statement.kind)) throw new BrowseError('Explain works on SELECT, WITH, TABLE and VALUES');
-  const text = parsed.data.explain ? `EXPLAIN ${statement.text}` : statement.text;
+  const explain = Boolean(parsed.data.explain);
+  const asked = oneStatement(parsed.data.sql, !(explain && EXPLAINED_BY_SELECT.has(firstWord(parsed.data.sql))));
+  // A statement that writes is explained by the SELECT that finds its rows, which then reads like any other.
+  let statement = asked;
+  let explained: string | undefined;
+  if (explain && EXPLAINED_BY_SELECT.has(asked.kind)) {
+    const part = readingPart(asked.text, asked.kind);
+    if ('none' in part) return { statement: asked.kind, explain: true, columns: [], rows: [], hasMore: false, ms: 0, note: part.none };
+    explained = part.sql;
+    statement = oneStatement(part.sql);
+  }
+  if (explain && !EXPLAINABLE.has(statement.kind)) throw new BrowseError('Explain works on SELECT, WITH, TABLE and VALUES, and on the rows an UPDATE, DELETE, INSERT ... SELECT or REPLACE ... SELECT finds');
+  const text = explain ? `EXPLAIN ${statement.text}` : statement.text;
   const limit = (await flavor(ctx)) === 'mariadb' ? `SET SESSION max_statement_time = ${QUERY_LIMIT_MS / 1000};` : `SET SESSION max_execution_time = ${QUERY_LIMIT_MS};`;
   // The semicolon on a line of its own: a statement that ends in a -- comment would hide it.
   const input = `SET SESSION TRANSACTION READ ONLY;\n${limit}\nSET SESSION sql_select_limit = ${QUERY_ROWS + 1};\n${text}\n;\n`;
@@ -191,8 +205,9 @@ export async function runQuery(ctx: BrowseContext, database: string, body: unkno
   }
   const set = parseMysqlXml(r.stdout).at(-1) ?? { columns: [], rows: [] };
   return {
-    statement: statement.kind,
-    explain: Boolean(parsed.data.explain),
+    statement: asked.kind,
+    explain,
+    ...(explained ? { explained } : {}),
     columns: set.columns,
     rows: set.rows.slice(0, QUERY_ROWS),
     hasMore: set.rows.length > QUERY_ROWS,

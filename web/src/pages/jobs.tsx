@@ -5,14 +5,14 @@ import { timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
-import { ListSkeleton } from '@/components/skeletons';
+import { TableSkeleton } from '@/components/skeletons';
 import { EmptyState, Notice, PageHeader } from '@/components/page';
 
 /** Every job since the panel started: running and queued first, then the newest. Bare: inside Activity, without its own header. */
 export function JobsPage({ bare = false }: { bare?: boolean }) {
   const { data: jobs, error, loading } = useAsync(() => api.jobs(), []);
   return (
-    <div className={bare ? 'w-full max-w-3xl' : 'mx-auto w-full max-w-3xl pt-4'}>
+    <div className={bare ? '' : 'pt-4'}>
       {bare ? (
         <p className="mt-5 text-sm text-muted-foreground">Installs, imports, restores and other long actions since the panel last started. Older ones are in <Link href="/activity/runs" className="text-primary hover:underline">Run history</Link>.</p>
       ) : (
@@ -27,33 +27,57 @@ export function JobsPage({ bare = false }: { bare?: boolean }) {
           Installs, imports, restores and other long actions show here while they run, with their steps.
         </EmptyState>
       )}
-      {!jobs && loading && <ListSkeleton className="mt-6" rows={5} />}
+      {!jobs && loading && <TableSkeleton className="mt-6" columns={4} rows={5} />}
       {jobs && jobs.length > 0 && (
-        <ul className="mt-6 divide-y overflow-hidden rounded-xl border bg-card">
-          {jobs.map((j) => (
-            <li key={j.id}>
-              <Link href={`/jobs/${encodeURIComponent(j.id)}`} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/40">
-                {jobActive(j) ? (
-                  <LoaderCircle className="size-4 shrink-0 animate-spin text-primary" aria-label="Running" />
-                ) : j.status === 'failed' ? (
-                  <CircleX className="size-4 shrink-0 text-danger" aria-label="Failed" />
-                ) : j.status === 'undone' ? (
-                  <Undo2 className="size-4 shrink-0 text-muted-foreground" aria-label="Undone" />
-                ) : j.steps.some((s) => s.status === 'skipped') ? (
-                  <CircleAlert className="size-4 shrink-0 text-warning" aria-label="Done, with steps skipped" />
-                ) : (
-                  <CircleCheck className="size-4 shrink-0 text-success" aria-label="Done" />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{j.title}</span>
-                  <span className={cn('block truncate text-xs', j.status === 'failed' ? 'text-danger' : j.status === 'done' && j.steps.some((s) => s.status === 'skipped') ? 'text-warning' : 'text-muted-foreground')}>{jobState(j)}</span>
-                </span>
-                {jobActive(j) && j.status !== 'queued' && <span className="text-xs text-muted-foreground tabular-nums">{Math.round(j.progress * 100)}%</span>}
-                <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{timeAgo(j.startedAt)}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        // The same table as Run history, so the two tabs of Activity read alike.
+        <div className="mt-6 overflow-hidden rounded-xl border bg-card">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="w-8 px-4 py-2.5"><span className="sr-only">State</span></th>
+                <th className="px-2 py-2.5 font-medium">Job</th>
+                <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Site</th>
+                <th className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">Steps</th>
+                <th className="px-4 py-2.5 text-right font-medium">Started</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {jobs.map((j) => {
+                const skipped = j.steps.some((s) => s.status === 'skipped');
+                const finished = j.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
+                return (
+                  <tr key={j.id} className="relative hover:bg-muted/40">
+                    <td className="px-4 py-2.5">
+                      {jobActive(j) ? (
+                        <LoaderCircle className="size-4 animate-spin text-primary" aria-label="Running" />
+                      ) : j.status === 'failed' ? (
+                        <CircleX className="size-4 text-danger" aria-label="Failed" />
+                      ) : j.status === 'undone' ? (
+                        <Undo2 className="size-4 text-muted-foreground" aria-label="Undone" />
+                      ) : skipped ? (
+                        <CircleAlert className="size-4 text-warning" aria-label="Done, with steps skipped" />
+                      ) : (
+                        <CircleCheck className="size-4 text-success" aria-label="Done" />
+                      )}
+                    </td>
+                    <td className="min-w-0 px-2 py-2.5">
+                      {/* The whole row opens the job; the site link sits above that. */}
+                      <Link href={`/jobs/${encodeURIComponent(j.id)}`} className="font-medium after:absolute after:inset-0 focus-visible:outline-none">{j.title}</Link>
+                      <span className={cn('block text-xs', j.status === 'failed' ? 'text-danger' : j.status === 'done' && skipped ? 'text-warning' : 'text-muted-foreground')}>{jobState(j)}</span>
+                    </td>
+                    <td className="hidden px-3 py-2.5 sm:table-cell">
+                      {j.target && <Link href={`/sites/${encodeURIComponent(j.target)}`} className="relative z-10 font-mono text-[13px] hover:underline">{j.target}</Link>}
+                    </td>
+                    <td className="hidden px-3 py-2.5 text-right whitespace-nowrap text-muted-foreground tabular-nums sm:table-cell">
+                      {jobActive(j) && j.status !== 'queued' ? `${Math.round(j.progress * 100)}%` : j.steps.length ? `${finished} of ${j.steps.length}` : ''}
+                    </td>
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap text-muted-foreground">{timeAgo(j.startedAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

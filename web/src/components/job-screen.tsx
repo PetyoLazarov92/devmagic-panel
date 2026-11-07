@@ -23,7 +23,8 @@ const INSTALL_STEP_JOBS = ['org.readRepo', 'org.checkAccess', 'dump.download', '
  * progress, and retry or undo when it fails. Polls until the job settles; the
  * server keeps working if the page closes, so it can be opened again any time.
  */
-export function JobScreen({ jobId, wordpress }: { jobId: string; wordpress?: boolean }) {
+/** Wide: the page's whole width, on a job's own page like a run's; otherwise as wide as the wizard it follows. */
+export function JobScreen({ jobId, wordpress, wide = false }: { jobId: string; wordpress?: boolean; wide?: boolean }) {
   const [job, setJob] = useState<JobView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export function JobScreen({ jobId, wordpress }: { jobId: string; wordpress?: boo
   const percent = Math.round(job.progress * 100);
 
   return (
-    <div className="grid max-w-3xl gap-5">
+    <div className={cn('grid gap-5', !wide && 'max-w-3xl')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">

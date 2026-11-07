@@ -1,6 +1,6 @@
-import type { DbCleanupView, Site, WpDbPluginTable, WpDbBlog, WpDbList, WpDbReport, WpDbSection, WpPluginState, WpTableFix } from '@devmagic-panel/shared';
+import type { DbCleanupView, Site, WpDbHealthIssue, WpDbPluginTable, WpDbBlog, WpDbList, WpDbReport, WpDbSection, WpPluginState, WpTableFix } from '@devmagic-panel/shared';
 import { WP_DB_LIST_ROWS, WP_DB_ON_DEMAND, WP_DB_SECTIONS, WP_DB_SLOW_SECTIONS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS } from '@devmagic-panel/shared';
-import { ChevronDown, ChevronUp, Gauge, Hourglass, KeyRound, type LucideIcon, Puzzle, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, TrendingUp, Users, Wrench } from 'lucide-react';
+import { ChevronDown, ChevronUp, CircleAlert, Gauge, Info, TriangleAlert, Hourglass, KeyRound, type LucideIcon, Puzzle, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, TrendingUp, Users, Wrench } from 'lucide-react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import type { RowsSeed } from '@/components/db-browser';
@@ -17,7 +17,7 @@ import { bytes } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-import { wordpressFindings } from '@/lib/wp-findings';
+import { type HealthRow, healthRows, wordpressFindings } from '@/lib/wp-findings';
 import { NeedsALook } from '@/components/needs-a-look';
 import { Notice, ViewBar } from '@/components/page';
 
@@ -46,7 +46,7 @@ type Target = Pick<DbCleanupView, 'domain' | 'path' | 'blog'>;
 type Slot = 'health' | 'plugins' | 'transients' | 'content' | 'orphans';
 type Errors = WpDbReport['errors'];
 /** The card each clean-up's job shows in. */
-const SLOT_OF: Partial<Record<string, Slot>> = { 'db.fixTable': 'health', 'db.toInnodb': 'health', 'db.autoloadOff': 'plugins', 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'content' };
+const SLOT_OF: Partial<Record<string, Slot>> = { 'db.fixTable': 'health', 'db.fixTables': 'health', 'db.toInnodb': 'health', 'db.autoloadOff': 'plugins', 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'content' };
 
 const QUICK = WP_DB_SECTIONS.filter((s) => !WP_DB_SLOW_SECTIONS.includes(s) && !WP_DB_ON_DEMAND.includes(s));
 
@@ -142,7 +142,7 @@ function useWordpressReport(domain: string, path: string | undefined, blog: numb
   const reading = (section: WpDbSection) => state.reading.includes(section);
   return { ...state, errors, reading, loading: state.reading.length > 0, reload: load, readSizes: () => ask(['metaKeys'], true), readDuplicates: () => ask(['duplicates']) };
 }
-type Ask = { slot: Slot; action: 'db.fixTable' | 'db.toInnodb' | 'mysql.optimize' | 'mysql.dropTable' | 'db.autoloadOff' | 'db.cleanTransients' | 'db.cleanContent' | 'db.cleanOrphans'; input: Record<string, unknown>; title: string; description: string; button: string; typed?: string };
+type Ask = { slot: Slot; action: 'db.fixTable' | 'db.fixTables' | 'db.toInnodb' | 'mysql.optimize' | 'mysql.dropTable' | 'db.autoloadOff' | 'db.cleanTransients' | 'db.cleanContent' | 'db.cleanOrphans'; input: Record<string, unknown>; title: string; description: string; button: string; typed?: string };
 
 /**
  * A WordPress database as WordPress sees it: autoloaded options against Site
@@ -255,11 +255,14 @@ interface View {
 }
 
 /** A card's header: its title, and its icon, turning while the card reads again. */
-function Header({ title, icon: Icon, reading }: { title: string; icon: LucideIcon; reading: boolean }) {
+function Header({ title, icon: Icon, reading, badge }: { title: string; icon: LucideIcon; reading: boolean; badge?: ReactNode }) {
   return (
     <CardHeader>
       <CardTitle>{title}</CardTitle>
-      {reading ? <RefreshCw className="size-4 animate-spin text-muted-foreground" aria-label="Reading" /> : <Icon className="size-4 text-muted-foreground" />}
+      <span className="flex items-center gap-2">
+        {badge}
+        {reading ? <RefreshCw className="size-4 animate-spin text-muted-foreground" aria-label="Reading" /> : <Icon className="size-4 text-muted-foreground" />}
+      </span>
     </CardHeader>
   );
 }
@@ -500,122 +503,195 @@ const FIX_WORDS: Record<WpTableFix, { button: string; title: (t: string) => stri
   charset: { button: 'Turn into utf8mb4', title: (t) => `Turn ${t} into utf8mb4?`, what: 'Its text is converted to utf8mb4, which holds every character utf8 does and emoji too: nothing is lost.' },
 };
 
+/** A problem in a few words, for the table's row; the whole sentence shows when the row opens. */
+const PROBLEM_LABEL: Record<WpDbHealthIssue['problem'], string> = {
+  noPrimaryKey: 'lost key',
+  noAutoIncrement: 'lost AUTO_INCREMENT',
+  missingIndex: 'missing index',
+  notUnique: 'repeated values',
+  engine: 'MyISAM',
+  utf8mb3: 'utf8',
+  charset: 'old character set',
+};
+
 /**
- * The site's WordPress tables against how WordPress makes them: a lost primary
- * key or AUTO_INCREMENT (a bad import's mark), a missing index, MyISAM, an old
- * character set. Each fix is a job that saves the table whole first.
+ * The site's tables against how WordPress makes them, one row a table with
+ * everything wrong with it: a lost primary key or AUTO_INCREMENT (a bad
+ * import's mark), a missing index, an old character set in WordPress's
+ * tables, MyISAM in any table of the site. Fix on a row fixes that table,
+ * its opened row fixes one problem, Fix all every table; each fix is a job
+ * that saves the table whole first. Space to give back is a line of its
+ * own: upkeep, not a problem.
  */
 function HealthCard({ view, busy, onFix, footer }: { view: View; busy: boolean; onFix: (ask: Ask) => void; footer: ReactNode }) {
   const h = view.report.health;
-  const byTable = new Map<string, NonNullable<typeof h>['issues']>();
-  for (const issue of h?.issues ?? []) byTable.set(issue.table, [...(byTable.get(issue.table) ?? []), issue]);
-  const { shown, more } = useShowAll('health', [...byTable.entries()]);
+  const rows = h ? healthRows(h) : [];
+  const { shown, more } = useShowAll('health', rows);
+  const fixable = rows.filter((r) => r.fixes > 0);
+  const waitsForYou = rows.length - fixable.length + rows.filter((r) => r.fixes > 0 && r.fixes < r.issues.length).length;
+
+  /** One table: a single fix of WordPress's goes as itself (its own Undo), the rest as Fix all on that table. */
+  function fixTable(r: HealthRow) {
+    const issue = r.issues.find((i) => i.fix && !i.blocked);
+    if (r.fixes === 1 && r.wordpress && issue) return fixOne(r, issue);
+    onFix({
+      slot: 'health',
+      action: 'db.fixTables',
+      input: { tables: [r.table] },
+      title: `Fix ${r.table}?`,
+      description: `${r.issues.filter((i) => i.fix && !i.blocked).map((i) => FIX_WORDS[i.fix as WpTableFix].what).join(' ')} ${r.table} is saved whole first (14 days), so Undo puts it back.`,
+      button: r.fixes === 1 ? 'Fix it' : `Fix ${r.fixes}`,
+    });
+  }
+  function fixOne(r: HealthRow, issue: WpDbHealthIssue) {
+    const words = FIX_WORDS[issue.fix as WpTableFix];
+    const description = `${words.what} ${r.table} is saved whole first (14 days), so Undo puts it back.`;
+    // MyISAM in a plugin's or theme's table: only Fix all knows tables beyond WordPress's.
+    if (!r.wordpress) return onFix({ slot: 'health', action: 'db.fixTables', input: { tables: [r.table] }, title: words.title(r.table), description, button: words.button });
+    onFix({ slot: 'health', action: 'db.fixTable', input: { table: r.table, fix: issue.fix }, title: words.title(r.table), description, button: words.button });
+  }
+
   return (
     <Card>
-      <Header title="Table health" icon={ShieldCheck} reading={view.reading('health')} />
+      <Header
+        title="Table health"
+        icon={ShieldCheck}
+        reading={view.reading('health')}
+        badge={rows.length > 0 ? <Badge tone={rows.some((r) => r.danger) ? 'danger' : 'warning'}>{rows.length === 1 ? '1 table to fix' : `${number(rows.length)} tables to fix`}</Badge> : undefined}
+      />
       <SectionError text={view.errors.health} />
       {waiting(view, 'health') && <CardLinesSkeleton lines={3} />}
-      {h && h.issues.length === 0 && (
+      {h && rows.length === 0 && (
         <p className="flex items-start gap-2 px-5 py-4 text-sm text-muted-foreground">
           <Badge tone="success" className="shrink-0">Healthy</Badge>
-          {h.tables === 0 ? 'This site has no WordPress tables to check.' : `All ${h.tables} WordPress tables are as WordPress makes them: their keys, indexes, InnoDB and utf8mb4.`}
+          {h.tables === 0 ? 'This site has no WordPress tables to check.' : `All ${h.tables} WordPress tables are as WordPress makes them: their keys, indexes, InnoDB and utf8mb4, and no table of the site is MyISAM.`}
         </p>
       )}
-      {h && h.issues.length > 0 && (
+      {rows.length > 0 && (
         <ul className="divide-y">
-          {shown.map(([table, issues]) => (
-            <li key={table} className="grid gap-2 px-5 py-3 text-sm">
-              <span className="font-mono text-[13px] font-medium">{table}</span>
-              {issues.map((issue) => (
-                <div key={issue.problem} className="grid gap-1.5">
-                  <p className="text-muted-foreground">{issue.text}.</p>
-                  {issue.blocked ? (
-                    <p className="text-xs text-warning">Not yet: {issue.blocked}. Sort those rows out first (Tables, or SQL), then check again.</p>
-                  ) : issue.fix ? (
-                    <div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => {
-                          const words = FIX_WORDS[issue.fix as WpTableFix];
-                          onFix({ slot: 'health', action: 'db.fixTable', input: { table, fix: issue.fix }, title: words.title(table), description: `${words.what} ${table} is saved whole first (14 days), so Undo puts it back.`, button: words.button });
-                        }}
-                      >
-                        <Wrench />{FIX_WORDS[issue.fix].button}
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">The panel leaves this to a person.</p>
-                  )}
-                </div>
-              ))}
-            </li>
-          ))}
+          {shown.map((r) => <HealthTableRow key={r.table} row={r} busy={busy} onFixTable={() => fixTable(r)} onFixOne={(issue) => fixOne(r, issue)} />)}
         </ul>
       )}
       {more}
-      {h?.myisam && (h.myisam.length > 1 || !h.issues.some((i) => i.fix === 'engine' && i.table === h.myisam?.[0]?.table)) && (
-        <div className="grid gap-2 border-t px-5 py-3 text-sm">
-          <p className="text-muted-foreground">
-            {h.myisam.length === 1 ? 'One table is' : `${h.myisam.length} tables are`} MyISAM, with no transactions and no crash recovery: {h.myisam.map((m) => m.table).join(', ')}.
+      {fixable.length > 1 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t bg-muted/40 px-5 py-3 text-sm">
+          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+            {number(fixable.length)} tables in one job, the smallest first, each saved for Undo.{waitsForYou > 0 ? ` ${waitsForYou === 1 ? 'One problem needs' : `${number(waitsForYou)} problems need`} you first and ${waitsForYou === 1 ? 'is' : 'are'} left as ${waitsForYou === 1 ? 'it is' : 'they are'}.` : ''}
           </p>
-          <div>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                const list = h.myisam ?? [];
-                const total = list.reduce((n, m) => n + m.bytes, 0);
-                const one = list.length === 1;
-                onFix({
-                  slot: 'health',
-                  action: 'db.toInnodb',
-                  input: {},
-                  title: one ? `Turn ${list[0]?.table} into InnoDB?` : `Turn all ${list.length} tables into InnoDB?`,
-                  description: `${list.map((m) => `${m.table} (${bytes(m.bytes)})`).join(', ')}. MySQL rebuilds ${one ? 'it' : 'them one at a time, the smallest first'}; only how ${one ? 'it is' : 'they are'} stored changes, not what ${one ? 'it holds' : 'they hold'}. ${bytes(total)} in all, and a table is busy while it is rebuilt. ${one ? 'It is' : 'Each is'} saved whole first (14 days), so Undo puts ${one ? 'it' : 'them'} back.`,
-                  button: one ? 'Turn into InnoDB' : `Turn all ${list.length} into InnoDB`,
-                });
-              }}
-            >
-              <Wrench />{h.myisam.length === 1 ? 'Turn it into InnoDB' : `Turn all ${h.myisam.length} into InnoDB`}
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              onFix({
+                slot: 'health',
+                action: 'db.fixTables',
+                input: {},
+                title: `Fix ${number(fixable.length)} tables?`,
+                description: `${fixable.slice(0, 12).map((r) => r.table).join(', ')}${fixable.length > 12 ? ` and ${number(fixable.length - 12)} more` : ''}: MySQL rebuilds them one at a time, the smallest first, and a table is busy while it is rebuilt. Only how they are made changes, not what they hold. Each is saved whole first (14 days), so Undo puts them back.${waitsForYou > 0 ? ' What needs you first is left as it is.' : ''}`,
+                button: `Fix all ${number(fixable.length)}`,
+              })
+            }
+          >
+            <Wrench />Fix all {number(fixable.length)}
+          </Button>
         </div>
       )}
       {h?.free && h.free.length > 0 && (
-        <div className="grid gap-2 border-t px-5 py-3 text-sm">
-          <p className="text-muted-foreground">
-            Space a rebuild gives back to the disk, like after a clean-up: {h.free.map((f) => `${f.table} ${bytes(f.freeBytes)}`).join(', ')}.
-          </p>
-          <div>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                const total = h.free?.reduce((n, f) => n + f.freeBytes, 0) ?? 0;
-                const tables = h.free?.map((f) => f.table) ?? [];
-                onFix({
-                  slot: 'health',
-                  action: 'mysql.optimize',
-                  input: { database: view.report.database, tables },
-                  title: `Optimize ${tables.length === 1 ? tables[0] : `${tables.length} tables`}?`,
-                  description: `MySQL rebuilds ${tables.length === 1 ? 'it' : 'them'} one at a time, which gives about ${bytes(total)} back to the disk. Nothing in ${tables.length === 1 ? 'it' : 'them'} changes; a table is busy while it is rebuilt.`,
-                  button: 'Optimize',
-                });
-              }}
-            >
-              <Gauge />Optimize {h.free.length === 1 ? h.free[0]?.table : `${h.free.length} tables`}
-            </Button>
-          </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-5 py-2.5 text-xs text-muted-foreground">
+          <Gauge className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            {bytes(h.free.reduce((n, f) => n + f.freeBytes, 0))} to give back to the disk, like after a clean-up: {h.free.map((f) => f.table).join(', ')}.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              const total = h.free?.reduce((n, f) => n + f.freeBytes, 0) ?? 0;
+              const tables = h.free?.map((f) => f.table) ?? [];
+              onFix({
+                slot: 'health',
+                action: 'mysql.optimize',
+                input: { database: view.report.database, tables },
+                title: `Optimize ${tables.length === 1 ? tables[0] : `${tables.length} tables`}?`,
+                description: `MySQL rebuilds ${tables.length === 1 ? 'it' : 'them'} one at a time, which gives about ${bytes(total)} back to the disk. Nothing in ${tables.length === 1 ? 'it' : 'them'} changes; a table is busy while it is rebuilt.`,
+                button: 'Optimize',
+              });
+            }}
+          >
+            Optimize
+          </Button>
         </div>
       )}
       {footer}
     </Card>
   );
 }
+
+/** A table's row: its problems in a few words and Fix; opened, each problem in full with its own fix. */
+function HealthTableRow({ row: r, busy, onFixTable, onFixOne }: { row: HealthRow; busy: boolean; onFixTable: () => void; onFixOne: (issue: WpDbHealthIssue) => void }) {
+  const [open, setOpen] = useState(false);
+  const Icon = r.danger ? CircleAlert : r.fixes ? TriangleAlert : Info;
+  return (
+    <li className="text-sm">
+      <div className="flex items-center gap-3 px-5 py-2.5">
+        <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+          <Icon className={cn('size-4 shrink-0', r.danger ? 'text-danger' : r.fixes ? 'text-warning' : 'text-muted-foreground')} aria-hidden />
+          <span className="grid min-w-0 flex-1 gap-1">
+            <span className="font-mono text-[13px] font-medium break-all">{r.table}</span>
+            <span className="flex flex-wrap gap-1">
+              {r.issues.map((i) => (
+                <Badge key={i.problem} tone={i.fix && !i.blocked ? (KEYS.has(i.problem) ? 'danger' : 'warning') : 'neutral'}>
+                  {PROBLEM_LABEL[i.problem]}{i.blocked ? ': yours first' : !i.fix ? ': check by hand' : ''}
+                </Badge>
+              ))}
+              {!r.wordpress && <Badge>not WordPress&apos;s</Badge>}
+            </span>
+          </span>
+        </button>
+        {r.fixes > 0 ? (
+          <Button size="sm" variant="outline" disabled={busy} onClick={onFixTable} className="shrink-0">
+            <Wrench />{r.fixes === 1 ? 'Fix' : `Fix ${r.fixes}`}
+          </Button>
+        ) : (
+          <span className="shrink-0 text-xs text-muted-foreground">For a person</span>
+        )}
+        {/* Last, in a column of its own, so every row's chevron lines up at the edge. */}
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={open ? `Hide the problems of ${r.table}` : `Show the problems of ${r.table}`}
+          onClick={() => setOpen((o) => !o)}
+          className="-mr-1.5 grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} aria-hidden />
+        </button>
+      </div>
+      {open && (
+        <div className="mx-5 mb-3 grid gap-3 rounded-md bg-muted/50 p-3">
+          {r.issues.map((issue) => (
+            <div key={issue.problem} className="grid gap-1.5">
+              <p className="text-muted-foreground">{issue.text}.</p>
+              {issue.blocked ? (
+                <p className="text-xs text-warning">Not yet: {issue.blocked}. Sort those rows out first (Tables, or SQL), then check again.</p>
+              ) : issue.fix ? (
+                <div>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => onFixOne(issue)}>
+                    <Wrench />{FIX_WORDS[issue.fix].button}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">The panel leaves this to a person.</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </li>
+  );
+}
+
+const KEYS = new Set<WpDbHealthIssue['problem']>(['noPrimaryKey', 'noAutoIncrement']);
 
 /** The tables that grew most since the oldest size the panel noted: what keeps filling the disk. */
 function GrowthCard({ view, onTable }: { view: View; onTable: OnTable }) {

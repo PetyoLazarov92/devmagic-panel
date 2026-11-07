@@ -398,6 +398,10 @@ export interface DbQueryResult {
   rows: Array<Array<string | null>>;
   /** More rows than the 1,000 shown. */
   hasMore: boolean;
+  /** For a statement that writes: the SELECT that finds its rows, which Explain explained instead. */
+  explained?: string;
+  /** Why Explain has no plan to show, like an INSERT that lists its rows. */
+  note?: string;
   ms: number;
 }
 

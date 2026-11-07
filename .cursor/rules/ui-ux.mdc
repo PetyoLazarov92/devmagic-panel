@@ -69,7 +69,13 @@ globs: ["web/**"]
   which sends it on with its query, and test it in `web/test/moved.test.ts`.
 - **A long tool page starts with what needs a look** (`NeedsALook`): one link
   per card that found something, worst first, scrolling to that card, and
-  nothing when all is fine.
+  nothing when all is fine. Its numbers count what the card counts as it
+  opens (`cleanupRows` for the clean-up card), so the two never disagree.
+- **A link to a card on the same page goes through `scrollToCard`**
+  (`lib/scroll-to.ts`): smooth scroll (at once with reduced motion), a ring
+  on the card for two seconds, and focus on it. Never a bare
+  `scrollIntoView` for a link: without the ring you cannot tell which card
+  you landed on.
 - **Secrets use `SecretInput`, never a password field.** A sudo password, an
   API key, a site's or a database's password is text drawn as dots with every
   password manager's ignore marker (`web/src/lib/secret-field.ts`), so the
@@ -85,6 +91,13 @@ browser (`dmp-wpdb-show-all` in localStorage), so another site opens short. When
 clean-up kinds), the link says how many. A name or a count that has rows
 behind it opens them in Tables: plain filters or a clean-up's kind go in the
 history entry (`navigate(..., { state })`), never the address.
+
+A long list that is a card of its own (a database's tables, slow queries, a
+site's scheduled events) shows its first `LIST_STEP` (21) rows with
+`useShowMore` and `ShowMore` from `components/ui/show-more.tsx`: "21 of 60",
+**Show 21 more**, **Show all 60**, **Show fewer**. A search or a filter
+starts it short again (`reset`). Use it for a ranked list the browser already
+has; a list the server pages (a table's rows) keeps its pages.
 
 ## One layout per page type
 
@@ -108,7 +121,9 @@ Every page is made of the pieces in `web/src/components/page.tsx` and
   Aura): header, notices, a filter bar, then one card of rows. Loading is a
   list or table skeleton; nothing is an empty state.
 - **Detail pages** (a site, a job, a run): back link, title and facts,
-  actions, then tabs, Overview first.
+  actions, then tabs, Overview first. The page's whole width: their steps,
+  output and tables need it. A narrow column (`max-w-3xl`) is for forms and
+  reading: the new-site wizard, Updates and its release notes.
 - **Status pages** (Aura's Machine checks, Developer options, Updates, Services and its
   Apache, nginx and Cron tabs): header with Check again, notices, the summary
   first, then **pairs then full width**: short summary cards side by side,

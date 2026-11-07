@@ -35,14 +35,14 @@ export function PerformanceTab({ site }: { site: Site }) {
       {site.db && (
         <Card>
           <CardHeader>
-            <CardTitle>Slow queries</CardTitle>
+            <CardTitle>Top queries</CardTitle>
             <span className="flex items-center gap-2">
               <ScopeLabel>this site</ScopeLabel>
               <Gauge className="size-4 text-muted-foreground" />
             </span>
           </CardHeader>
           <div className="p-5">
-            <SlowQueries inCard database={site.db.name} onExplain={(sql) => navigate(databaseHref(site, 'sql'), { scroll: false, state: sqlSeedState(sql) })} />
+            <SlowQueries inCard database={site.db.name} onExplain={(sql) => navigate(databaseHref(site, 'sql'), { scroll: false, state: sqlSeedState(sql, true) })} />
           </div>
         </Card>
       )}

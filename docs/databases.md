@@ -2,61 +2,18 @@
 
 [Docs](README.md) › Databases
 
-A site's **Database** tab has four views: **Tables**, **WordPress**, **SQL**
-and **Backups and tools**. Every other database on the server opens from
+A site's **Database** tab has four views, in this order: **Overview** (what
+needs a look first), **Tables** (the rows), **SQL** (queries on them) and
+**Backups and tools** (upkeep). A WordPress site opens on Overview, any other
+on Tables; an old link to the WordPress view opens Overview. Every other database on the server opens from
 **Services → MySQL** with the same Tables and SQL views
 (`/services/mysql?db=<name>`). MySQL's own databases and the ones the panel
 keeps for a site are only read.
 
-## Tables
+## Overview
 
-- Every table with its engine, rows and size, with a filter for the site's
-  prefix and other prefixes, sorted by name or biggest first. The sort is
-  remembered with your other view choices, in every browser you sign in from.
-  The list shows the first 21 tables, with **Show 21 more** and **Show all**;
-  Find a table and the prefix filters search every table.
-- A table's rows a page at a time (25 to 250), sorted by any column, with
-  filters (is, contains, starts with, more or less than, NULL). With two or
-  more, pick **Match every filter** or **Match any filter**.
-- A row opens with all its values. Long ones load in full on request, and PHP
-  serialized values and JSON show as a tree.
-- **Structure**: the columns, indexes, `CREATE TABLE`, and what deserves a
-  look (no primary key, MyISAM, an old character set, free space).
-- **Export** the whole database (with its views, routines and events) or the
-  tables you tick as a `.sql.gz`, streamed from mysqldump with nothing left on
-  disk. It has no `CREATE DATABASE` or `USE`, so it imports into any database.
-- **Open in phpMyAdmin**, on a site Apache serves, when phpMyAdmin is
-  installed.
-
-### Changing rows
-
-**Edit**, **Duplicate** and **Delete** on a row, **Add a row to the table**,
-and tick rows on a page to delete them together.
-
-- Long values load in full before you edit them. NULL is a tick of its own.
-- A PHP serialized value whose string lengths no longer add up, or JSON that
-  no longer reads, is flagged, with **Count the lengths again**.
-- A value with NUL bytes or Windows line breaks opens in an editor that shows
-  them (`\0`, `\r`) and keeps them as they are; a plain text box would hide
-  the first and turn `\r\n` into `\n`. PHP keeps NUL bytes around the names of
-  an object's protected and private properties: when one is deleted, the
-  panel names the property and does not offer to count the lengths again,
-  which would quietly make it a public one.
-- A NUL byte cannot be typed: `\0` typed is a backslash and a zero. Type
-  `\0*\0name` or `\0Class\0name` in a property name and click **Turn \0 into
-  NUL bytes**: only those spots change, the lengths are counted again, and it
-  is offered only when the value then reads. A new value that starts like a
-  serialized array or object and does not read is flagged too.
-- A change applies only while the row still holds what you saw, so an edit
-  made since is never overwritten.
-- Each change saves the rows as they were first, and **Undo** (in the toast or
-  under **Changes you can undo**) puts them back for 14 days.
-- Views, tables without a primary key, binary and computed columns stay read
-  only, and a site's rows wait while a job works on it.
-
-## WordPress
-
-What WordPress keeps in its database, for each site of a network. The view
+What WordPress keeps in its database, for each site of a network: the first
+view of a WordPress site's Database tab. The view
 shows what the panel read last time at once ("Read 3 h ago" in its bar), reads
 the quick parts again, and the parts that read whole tables only on **Check
 again** or after a job changed the site; each of those fills its card in when
@@ -66,17 +23,19 @@ remembers per site: another site's lists open short. A name in a list (an option
 opens its table in Tables, filtered on it; the filter's value goes with the
 page's history, never its address.
 
-- **Table health**: the site's WordPress tables against how WordPress makes
-  them. A lost primary key or AUTO_INCREMENT (a bad import's mark: new posts
-  get ID 0), a missing index, MyISAM, or utf8 (utf8mb3) each get a fix that
-  saves the table whole first, so Undo puts it back. A key fix waits while
-  duplicate or zero IDs are there, and says how many. latin1 is only flagged:
-  its text may already hold UTF-8 bytes, which a conversion would garble.
-  Tables with room a rebuild gives back (like after a clean-up) get
-  **Optimize**. When the site has MyISAM tables of any kind (WordPress's,
-  plugins', themes'), **Turn all into InnoDB** converts them in one job, the
-  smallest first, each saved whole first: Stop ends it between two tables,
-  and Undo puts back every table it converted.
+- **Table health**: every table of the site that is not as it should be,
+  once, with its problems in a few words: in WordPress's tables a lost
+  primary key or AUTO_INCREMENT (a bad import's mark: new posts get ID 0), a
+  missing index, MyISAM, or utf8 (utf8mb3); in plugins' and themes' tables
+  MyISAM, marked not WordPress's. A lost key comes first. **Fix** on a row
+  fixes everything the panel can on that table; open the row for each
+  problem in full with its own fix. **Fix all** fixes every table in one
+  job, the smallest first. Every fix saves the table whole first, so Undo
+  puts it back; Stop ends Fix all between two tables. A key fix waits while
+  duplicate or zero IDs are there, and says how many; latin1 is only
+  flagged, since its text may already hold UTF-8 bytes a conversion would
+  garble. Room a rebuild gives back (like after a clean-up) is one line
+  under the list with **Optimize**: upkeep, not a problem.
 - **Autoloaded options** against Site Health's 800 KB limit, the biggest by
   name, and **Turn off** for a big one (written as the site's WordPress
   writes it: on and off, or yes and no before 6.6).
@@ -127,25 +86,77 @@ removed. It checks the disk has room for its copy first. A job keeps running
 when you leave the page: open the view again and it is back in its card, and
 a toast says when one you are not looking at ends.
 
-## Slow queries
+## Tables
+
+- Every table with its engine, rows and size, with a filter for the site's
+  prefix and other prefixes, sorted by name or biggest first. The sort is
+  remembered with your other view choices, in every browser you sign in from.
+  The list shows the first 21 tables, with **Show 21 more** and **Show all**;
+  Find a table and the prefix filters search every table.
+- A table's rows a page at a time (25 to 250), sorted by any column, with
+  filters (is, contains, starts with, more or less than, NULL). With two or
+  more, pick **Match every filter** or **Match any filter**.
+- A row opens with all its values. Long ones load in full on request, and PHP
+  serialized values and JSON show as a tree.
+- **Structure**: the columns, indexes, `CREATE TABLE`, and what deserves a
+  look (no primary key, MyISAM, an old character set, free space).
+- **Export** the whole database (with its views, routines and events) or the
+  tables you tick as a `.sql.gz`, streamed from mysqldump with nothing left on
+  disk. It has no `CREATE DATABASE` or `USE`, so it imports into any database.
+- **Open in phpMyAdmin**, on a site Apache serves, when phpMyAdmin is
+  installed.
+
+### Changing rows
+
+**Edit**, **Duplicate** and **Delete** on a row, **Add a row to the table**,
+and tick rows on a page to delete them together.
+
+- Long values load in full before you edit them. NULL is a tick of its own.
+- A PHP serialized value whose string lengths no longer add up, or JSON that
+  no longer reads, is flagged, with **Count the lengths again**.
+- A value with NUL bytes or Windows line breaks opens in an editor that shows
+  them (`\0`, `\r`) and keeps them as they are; a plain text box would hide
+  the first and turn `\r\n` into `\n`. PHP keeps NUL bytes around the names of
+  an object's protected and private properties: when one is deleted, the
+  panel names the property and does not offer to count the lengths again,
+  which would quietly make it a public one.
+- A NUL byte cannot be typed: `\0` typed is a backslash and a zero. Type
+  `\0*\0name` or `\0Class\0name` in a property name and click **Turn \0 into
+  NUL bytes**: only those spots change, the lengths are counted again, and it
+  is offered only when the value then reads. A new value that starts like a
+  serialized array or object and does not read is flagged too.
+- A change applies only while the row still holds what you saw, so an edit
+  made since is never overwritten.
+- Each change saves the rows as they were first, and **Undo** (in the toast or
+  under **Changes you can undo**) puts them back for 14 days.
+- Views, tables without a primary key, binary and computed columns stay read
+  only, and a site's rows wait while a job works on it.
+
+## Top queries
 
 On a site's **Performance** tab, next to its profiles; for every database at
 once, on Services, MySQL.
 
-The queries that cost the database the most time, the heaviest first: how many
-runs, the time in all and each, the slowest run, and rows read against rows
-sent, with **missing index?** where a query reads far more rows than it
-returns or ran without an index. A row opens the query whole, one real run of
-it with its values (shown on request: it can hold data, and it is never stored
-or sent to an AI), and **Open in SQL to EXPLAIN**.
+Every query the database ran, the most time in all first: a quick query that
+runs a thousand times on a page can cost more than one slow one, and only a
+ranking by total time shows it. Each row has how many runs, the time in all
+and each, the slowest run, and rows read against rows sent, with **missing
+index?** where a query reads far more rows than it returns or ran without an
+index. A row opens the query whole, one real run of it with its values (shown
+on request: it can hold data, and it is never stored or sent to an AI), and
+**Explain in SQL**, which opens the SQL view with that run and its plan. The
+list shows the first 21, with **Show more**.
 
 - On MySQL 8 the numbers come from MySQL's statement statistics
-  (`performance_schema`), which count every query and need nothing switched on.
+  (`performance_schema`): always on, every query, nothing to switch on. The
+  slow query log is separate and not needed; it can stay off.
 - On MariaDB, or where those are off, they come from the slow log: switching
   it on in Services, MySQL also sends it to its table (`log_output =
-  FILE,TABLE`), where the panel reads it.
+  FILE,TABLE`), where the panel reads it. Its limit is 10 seconds by
+  default; 1 second suits local work.
 - **Start counting again** empties both, so a page loaded after it shows only
-  its own queries. The panel's own reads are left out.
+  its own queries: Start counting again, load the slow page, Check again,
+  then Explain the top query. The panel's own reads are left out.
 
 ## SQL
 
@@ -157,7 +168,11 @@ suggested, the database's own tables as you type and a table's columns after
 - **Read only** (the default): SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE or
   VALUES, as the read-only MySQL account, up to 1,000 rows and 30 seconds.
   **Explain** shows how MySQL would run it, **CSV** downloads the result, and
-  the last 30 statements stay in this browser.
+  the last 30 statements stay in this browser. Explain also takes an UPDATE,
+  a DELETE, or an INSERT or REPLACE with a SELECT: MySQL explains those only
+  to an account that may run them, so the panel explains the SELECT that
+  finds the same rows (what makes them slow) and shows it above the plan. An
+  INSERT that lists its rows reads nothing, so it has no plan.
 - **Can write**: one statement that changes rows (INSERT, UPDATE, DELETE,
   REPLACE) or a table, an index or a view (ALTER, CREATE, DROP, RENAME,
   TRUNCATE). **Check and run** first shows the rows it changes (tried in a
@@ -194,7 +209,8 @@ The runner never touches another database, accounts, rights, routines or files.
   site's database user.
 - **Settings**: the buffer pool, the biggest packet, the redo log,
   connections, temp tables in memory, how often InnoDB writes to disk and the
-  slow query log (on, it goes to its table too, for Slow queries), with what
+  slow query log (on, it goes to its table too, for Top queries where MySQL
+  keeps no statement statistics; 1 second is a good limit for local work), with what
   each runs at now, what the panel keeps, what an
   import holds raised for its run, and a suggestion where the value is low
   (the buffer pool from your sites' InnoDB data). **Change** or a suggestion's
@@ -205,7 +221,7 @@ The runner never touches another database, accounts, rights, routines or files.
   one takes it out of the file. Undo puts the values from before back.
 - **Processes**: what MySQL runs now, the longest first, with **Stop** for a
   statement (never one of MySQL's own threads).
-- **Slow queries**: the same list as a site's, for every site's database at
+- **Top queries**: the same list as a site's, for every site's database at
   once.
 - **Import a dump** into a new database, or into one no site uses, which is
   saved to the MySQL backups first and emptied. The dump's own

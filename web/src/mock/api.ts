@@ -449,6 +449,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       ]),
     ),
     'db.autoloadOff': [{ id: 'save', label: 'Save the options for Undo' }, { id: 'remove', label: 'Turn off autoload' }],
+    'db.fixTables': [{ id: 'room', label: 'Check the disk has room' }, { id: 'tables', label: 'Fix the tables, the smallest first' }],
     'db.toInnodb': [{ id: 'room', label: 'Check the disk has room' }, { id: 'tables', label: 'Turn the MyISAM tables into InnoDB, the smallest first' }],
     'db.fixTable': [{ id: 'save', label: `Save ${String(input.table)} for Undo` }, { id: 'fix', label: { keys: `Give ${String(input.table)} its primary key back`, index: `Add the missing indexes to ${String(input.table)}`, engine: `Turn ${String(input.table)} into InnoDB`, charset: `Turn ${String(input.table)} into utf8mb4` }[String(input.fix)] ?? 'Fix the table' }],
     'db.snapshot': [{ id: 'snapshot', label: `Snapshot the database${input.label ? ` (${String(input.label)})` : ''}` }],
@@ -611,6 +612,21 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       }
     };
     converted();
+  }
+  if (id === 'db.fixTables') {
+    const asked = input.tables as string[] | undefined;
+    job.title = asked?.length === 1 ? `Fix ${asked[0]}` : 'Fix the problems Table health found';
+    job.undoable = ['Put the tables back as they were'];
+    job.stoppable = true;
+    const db = sites.find((x) => x.domain === domain && x.path === (input.path as string | undefined))?.db?.name ?? '';
+    const done = () => {
+      if (job.status === 'running' || job.status === 'queued') return void window.setTimeout(done, 400);
+      if (job.status !== 'done') return;
+      const only = input.tables as string[] | undefined;
+      if (!only) return void (mockTableFixed(db, '*', 'health'), mockTableFixed(db, '*', 'engine'));
+      for (const table of only) for (const fix of ['engine', 'charset', 'index', 'keys']) mockTableFixed(db, table, fix);
+    };
+    done();
   }
   if (id === 'db.fixTable') {
     job.title = job.steps.at(-1)?.label ?? job.title;

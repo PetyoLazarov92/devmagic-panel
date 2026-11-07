@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
+import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
@@ -42,8 +43,6 @@ interface Props {
 }
 
 const number = (n: number) => n.toLocaleString('en-US');
-/** How many tables the list shows before Show more, and how many each Show more adds. */
-const TABLE_ROWS = 21;
 
 /** phpMyAdmin opened on a database, or one of its tables. */
 function pmaHref(base: string, database: string, table?: string): string {
@@ -103,8 +102,6 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
   }, [job, reload]);
   const busy = job !== null && !settled(job);
   const prefix = overview?.sites[0]?.prefix;
-  // A big database (a network has a dozen tables a site) shows its first tables, and the rest on Show more; Find searches them all.
-  const [shownCount, setShownCount] = useState(TABLE_ROWS);
 
   const tables = useMemo(() => {
     const list = (overview?.tables ?? []).filter((t) => {
@@ -115,6 +112,8 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
     });
     return sort === 'size' ? [...list].sort((a, b) => b.dataBytes + b.indexBytes - (a.dataBytes + a.indexBytes)) : list;
   }, [overview, query, filter, prefix, sort]);
+  // A big database (a network has a dozen tables a site) shows its first tables, and the rest on Show more; Find searches them all.
+  const { shown, footer: more } = useShowMore(tables, { reset: `${query}\n${filter}\n${sort}` });
 
   if (loading && !overview) {
     return (
@@ -187,7 +186,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
         {number(overview.tables.length)} {overview.tables.length === 1 ? 'table' : 'tables'}, {bytes(overview.totalBytes)}, read {timeAgo(overview.checkedAt)}. Row counts of InnoDB tables are MySQL&apos;s estimate.
       </p>
       <ul className="mt-2 divide-y">
-        {tables.slice(0, shownCount).map((t) => (
+        {shown.map((t) => (
           <li key={t.name} className="flex items-center gap-3 px-5 py-2.5 text-sm">
             <button type="button" onClick={() => onNavigate({ table: t.name, show: 'rows' })} className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
               <span className="flex flex-wrap items-center gap-2">
@@ -219,27 +218,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
         ))}
         {tables.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">{overview.tables.length ? 'No table matches.' : 'This database has no tables.'}</li>}
       </ul>
-      {tables.length > TABLE_ROWS && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-5 py-2 text-xs">
-          <span className="text-muted-foreground tabular-nums">
-            {number(Math.min(shownCount, tables.length))} of {number(tables.length)} {query || filter !== 'all' ? (tables.length === 1 ? 'match' : 'matches') : 'tables'}
-          </span>
-          {shownCount < tables.length ? (
-            <>
-              <button type="button" className="flex items-center gap-1 font-medium text-primary hover:underline" onClick={() => setShownCount((n) => n + TABLE_ROWS)}>
-                <ChevronDown className="size-3.5" />Show {number(Math.min(TABLE_ROWS, tables.length - shownCount))} more
-              </button>
-              <button type="button" className="font-medium text-primary hover:underline" onClick={() => setShownCount(tables.length)}>
-                Show all {number(tables.length)}
-              </button>
-            </>
-          ) : (
-            <button type="button" className="flex items-center gap-1 font-medium text-primary hover:underline" onClick={() => setShownCount(TABLE_ROWS)}>
-              <ChevronUp className="size-3.5" />Show fewer
-            </button>
-          )}
-        </div>
-      )}
+      <ShowMore {...more} noun={query || filter !== 'all' ? (tables.length === 1 ? 'match' : 'matches') : 'tables'} />
       {exporting && <ExportDialog database={database} tables={overview.tables} onClose={() => setExporting(false)} />}
       {asking && (
         <ConfirmCleanup

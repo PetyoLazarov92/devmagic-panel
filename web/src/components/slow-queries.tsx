@@ -7,16 +7,18 @@ import { ListSkeleton, Reading } from '@/components/skeletons';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
+import { loadSqlEditor } from '@/lib/sql-editor-load';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 
 const SOURCE: Record<SlowQueryReport['source'], string> = {
-  statements: "From MySQL's statement statistics: every query, not only the slow ones.",
-  slowLog: "From MySQL's slow log.",
+  statements: "From MySQL's statement statistics, which are always on: nothing to switch on, and the slow log is separate.",
+  slowLog: "From MySQL's slow log: only the queries slower than its limit.",
   none: '',
 };
 
@@ -31,8 +33,8 @@ export function ms(n: number): string {
 const count = (n: number) => n.toLocaleString('en');
 
 /**
- * The queries that cost the most time, of one database (a site's Database
- * tab) or of every site's (Services, MySQL), the heaviest first. Start
+ * Top queries: every query, of one database (a site's Performance tab) or
+ * of every site's (Services, MySQL), the most time in all first. Start
  * counting again empties the numbers, so a page loaded after it shows only
  * its own queries.
  */
@@ -41,6 +43,11 @@ export function SlowQueries({ database, onExplain, inCard = false }: { database?
   const [resetting, setResetting] = useState(false);
   const [readAt, setReadAt] = useState<string | undefined>(undefined);
   const data = report.data;
+  const { shown, footer: more } = useShowMore(data?.queries ?? [], { reset: database });
+  // The SQL view's editor loads while you read, so Explain opens on it, not on a plain box.
+  useEffect(() => {
+    if (onExplain) void loadSqlEditor().catch(() => undefined);
+  }, [onExplain]);
   useEffect(() => {
     if (report.data && !report.loading) setReadAt(new Date().toISOString());
   }, [report.data, report.loading]);
@@ -75,7 +82,7 @@ export function SlowQueries({ database, onExplain, inCard = false }: { database?
           ) : null
         }
       >
-        <p className="text-sm text-muted-foreground">{database ? 'The queries that cost this database the most time.' : "The queries that cost every site's database the most time."}</p>
+        <p className="text-sm text-muted-foreground">{database ? 'Every query this database ran, the most time in all first: a quick one that runs a thousand times can cost more than one slow one.' : "Every query of every site's database, the most time in all first: a quick one that runs a thousand times can cost more than one slow one."}</p>
       </ViewBar>
       {report.error && <Notice>{report.error}</Notice>}
       {data?.note && data.source !== 'none' && <Notice tone="info">{data.note}</Notice>}
@@ -94,9 +101,10 @@ export function SlowQueries({ database, onExplain, inCard = false }: { database?
         </EmptyState>
       ) : data ? (
         <Card className={cn('divide-y', inCard && 'rounded-md shadow-none')}>
-          {data.queries.map((q) => (
+          {shown.map((q) => (
             <QueryRow key={`${q.database ?? ''}:${q.id}`} query={q} showDatabase={!database} total={data.queries[0]?.totalMs ?? 0} onExplain={onExplain} />
           ))}
+          <ShowMore {...more} noun="queries" />
         </Card>
       ) : null}
     </div>
@@ -155,7 +163,7 @@ function QueryRow({ query: q, showDatabase, total, onExplain }: { query: SlowQue
             {q.sample && onExplain && (
               <Button size="sm" variant="outline" onClick={() => onExplain(q.sample as string, q.database)}>
                 <ScanSearch />
-                Open in SQL to EXPLAIN
+                Explain in SQL
               </Button>
             )}
           </div>

@@ -66,8 +66,9 @@ off at install and the local helpers marked. Undo is in the toast.
 
 ### Database
 
-Tables, the WordPress view, the SQL runner, and backups and tools: see
-[Databases](databases.md). Slow queries are on the Performance tab.
+Overview (what needs a look, read from WordPress's tables), Tables, SQL,
+and backups and tools, in that order: see
+[Databases](databases.md). Top queries are on the Performance tab.
 
 ### Cron
 
@@ -100,8 +101,8 @@ Why a page is slow, in one place:
   the code that calls them most) and the slowest functions with their calls and
   callers. **Download** gives the file for KCachegrind or an IDE. Profiles are
   deleted after 3 days.
-- **Slow queries**: the queries that cost the site's database the most time
-  (see [Databases](databases.md#slow-queries)).
+- **Top queries**: every query of the site's database, the most time in all
+  first (see [Databases](databases.md#top-queries)).
 
 ### Domains and SSL
 

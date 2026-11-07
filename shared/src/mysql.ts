@@ -111,8 +111,8 @@ export const MYSQL_SETTINGS = [
   { name: 'max_connections', label: 'Connections', unit: 'count', min: 10, max: 2000, about: 'How many clients can connect at once.' },
   { name: 'tmp_table_size', label: 'Temp tables in memory', unit: 'bytes', min: MB, max: 4 * GB, about: 'How big a temporary table of a query can grow in memory before it goes to the disk. Sets max_heap_table_size too.' },
   { name: 'innodb_flush_log_at_trx_commit', label: 'Write to disk', unit: 'choice', min: 1, max: 2, about: 'Every commit to disk (1, safest), or once a second (2): much faster imports, and a crash of the computer can lose the last second.' },
-  { name: 'slow_query_log', label: 'Slow query log', unit: 'switch', min: 0, max: 1, about: 'Notes the queries slower than the time below in MySQL\'s slow log.' },
-  { name: 'long_query_time', label: 'Slow above', unit: 'seconds', min: 0, max: 60, about: 'How slow a query must be to go in the slow log.' },
+  { name: 'slow_query_log', label: 'Slow query log', unit: 'switch', min: 0, max: 1, about: 'Notes the queries slower than the time below in MySQL\'s slow log, a file. Top queries needs no log: it reads MySQL\'s statement statistics.' },
+  { name: 'long_query_time', label: 'Slow above', unit: 'seconds', min: 0, max: 60, about: 'How slow a query must be to go in the slow log. For local work, 1 second catches what matters.' },
 ] as const;
 
 export type MysqlSettingName = (typeof MYSQL_SETTINGS)[number]['name'] | 'max_heap_table_size';

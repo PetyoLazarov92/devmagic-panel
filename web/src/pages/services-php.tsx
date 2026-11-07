@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { SitesCompatCard } from '@/pages/php-compat-sites';
 import { CardsSkeleton, ReadingBlock } from '@/components/skeletons';
 import { Notice } from '@/components/page';
+import { scrollToCard } from '@/lib/scroll-to';
 
 const SAPI_LABEL = { apache2: 'Apache (mod_php)', fpm: 'PHP-FPM', cli: 'Command line' } as const;
 
@@ -95,7 +96,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
   useEffect(() => {
     if (!report || !section) return;
     // After the page settles: the sections above it load their own data and grow first.
-    const timer = window.setTimeout(() => document.getElementById(sectionId(section))?.scrollIntoView({ block: 'start' }), 600);
+    const timer = window.setTimeout(() => scrollToCard(sectionId(section)), 600);
     return () => window.clearTimeout(timer);
   }, [report, section, wanted]);
   const start = (at: 'machine' | 'version', id: 'php.install' | 'php.upgrade' | 'php.remove' | 'php.package' | 'php.switchToFpm' | 'php.switchToModPhp', input: Record<string, unknown>) => {
@@ -420,7 +421,7 @@ function VersionStrip({ report, picked, shown, onPick }: { report: PhpReport; pi
         ))}
         <span className="ml-auto flex flex-wrap gap-3 text-xs">
           {PHP_SECTIONS.map((sec) => (
-            <a key={sec} href={`#${sectionId(sec)}`} tabIndex={shown ? 0 : -1} className="text-muted-foreground hover:text-foreground hover:underline" onClick={(e) => { e.preventDefault(); document.getElementById(sectionId(sec))?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+            <a key={sec} href={`#${sectionId(sec)}`} tabIndex={shown ? 0 : -1} className="text-muted-foreground hover:text-foreground hover:underline" onClick={(e) => { e.preventDefault(); scrollToCard(sectionId(sec)); }}>
               {SECTION_LABEL[sec]}
             </a>
           ))}
