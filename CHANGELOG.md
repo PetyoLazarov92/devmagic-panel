@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.23.2 (2026-11-07)
+* **Sites:** the Profiles card has Check again even before the first profile, reads the list again when you come back to the panel's tab, and after Open and profile checks every few seconds until the new profile shows, for up to a minute
+* An update installs this release from the panel as usual
+
 ### v1.23.1 (2026-11-07)
 * **Sites:** the Performance tab lists the profiles Xdebug 3.5 writes: it names them with a dot in the time and the site's dots as _, which the panel did not read, so a profiled page never showed. Each is matched to its site by the longest known host, and the list shows the page without the trigger
 * **Services:** Xdebug's gcstats mode can be switched on with the others; its files go to the panel's profiles folder, and with traces they are deleted after 3 days

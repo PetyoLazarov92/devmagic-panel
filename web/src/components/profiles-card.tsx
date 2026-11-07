@@ -1,8 +1,8 @@
 import type { PhpXdebug, ProfileInfo, Site } from '@devmagic-panel/shared';
 import { PROFILE_KEEP_DAYS } from '@devmagic-panel/shared';
-import { ChevronDown, Download, ExternalLink, Gauge, LoaderCircle, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { CheckAgain, EmptyState, Notice } from '@/components/page';
+import { ChevronDown, Download, ExternalLink, Flame, Gauge, LoaderCircle, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { EmptyState, Notice, ViewBar } from '@/components/page';
 import { ScopeLabel } from '@/components/scope-label';
 import { siteUrl } from '@/components/site-bits';
 import { ReadingBlock } from '@/components/skeletons';
@@ -35,6 +35,24 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
   const [open, setOpen] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const profiles = list.data?.profiles ?? [];
+  // After Open and profile: read again every few seconds until the new profile is there, for up to a minute.
+  const [waitingSince, setWaitingSince] = useState<{ at: number; count: number } | null>(null);
+  const waiting = waitingSince !== null;
+  // The newest reload, without making the effects below again on every render.
+  const reloadRef = useRef(list.reload);
+  reloadRef.current = list.reload;
+  useEffect(() => {
+    if (!waitingSince) return;
+    if (profiles.length > waitingSince.count || Date.now() - waitingSince.at > 60_000) return void setWaitingSince(null);
+    const timer = window.setTimeout(() => reloadRef.current(), 3000);
+    return () => window.clearTimeout(timer);
+  }, [waitingSince, profiles.length, list.data]);
+  // Back from the page you profiled in another tab: what it wrote shows without a click.
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === 'visible' && reloadRef.current();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
   const toPanel = version !== undefined && (list.data?.versions ?? []).includes(version);
   const on = Boolean(xdebug?.enabled && xdebug.modes?.includes('profile') && toPanel);
 
@@ -55,7 +73,8 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
     const path = page.startsWith('/') ? page : `/${page}`;
     const url = `${base}${path}${path.includes('?') ? '&' : '?'}XDEBUG_PROFILE=1`;
     window.open(url, '_blank', 'noopener');
-    toast({ tone: 'info', title: 'Profiling the page', detail: 'It shows here once the page has loaded: Check again in a moment.', action: { label: 'Check again', run: list.reload } });
+    setWaitingSince({ at: Date.now(), count: profiles.length });
+    toast({ tone: 'info', title: 'Profiling the page', detail: 'It shows here on its own once the page has loaded.' });
   }
 
   async function remove(items: ProfileInfo[]) {
@@ -75,12 +94,18 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
     <Card>
       <CardHeader>
         <CardTitle>Profiles</CardTitle>
-        <ScopeLabel>{on || !version ? 'this site' : `PHP ${version}`}</ScopeLabel>
+        <span className="flex items-center gap-2">
+          <ScopeLabel>{on || !version ? 'this site' : `PHP ${version}`}</ScopeLabel>
+          <Flame className="size-4 text-muted-foreground" />
+        </span>
       </CardHeader>
       <div className="grid gap-4 p-5 text-sm">
-        <p className="text-muted-foreground">
-          Xdebug&apos;s profiler times every function PHP runs for one request, so you see which plugin, theme or query loop the time went to. Profiles are deleted after {PROFILE_KEEP_DAYS} days.
-        </p>
+        {/* Check again in the bar at the top, as Top queries has it: there before the first profile too. */}
+        <ViewBar onCheck={list.reload} loading={list.loading || waiting}>
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            Xdebug&apos;s profiler times every function PHP runs for one request, so you see which plugin, theme or query loop the time went to. Profiles are deleted after {PROFILE_KEEP_DAYS} days.
+          </p>
+        </ViewBar>
         {list.error && <Notice>{list.error}</Notice>}
         {!version ? null : !xdebug?.installed ? (
           <Notice tone="warning" action={<Link href={`/services/php/${version}`} className="font-medium text-primary hover:underline">PHP {version}</Link>}>
@@ -140,7 +165,6 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
                 {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
                 Delete all
               </Button>
-              <CheckAgain size="sm" onClick={list.reload} loading={list.loading} />
             </div>
             <div className="divide-y rounded-md border">
               {profiles.map((p) => (
