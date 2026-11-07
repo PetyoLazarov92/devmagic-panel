@@ -1,6 +1,6 @@
 import type { CheckFix, CheckGroup, CheckResult, EnvironmentReport } from '@devmagic-panel/shared';
 import { CHECK_GROUP_LABELS } from '@devmagic-panel/shared';
-import { ChevronRight, CircleAlert, CircleCheck, CircleX, LoaderCircle, RefreshCw, Wrench } from 'lucide-react';
+import { ChevronRight, CircleAlert, CircleCheck, CircleX, LoaderCircle, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { AssistantCard } from '@/components/assistant-card';
 import { PanelPasswordCard } from '@/components/panel-password-card';
@@ -14,6 +14,8 @@ import { api } from '@/lib/api';
 import { groupsOf, openAfterCheck, problemCount } from '@/lib/environment';
 import { navigate } from '@/lib/router';
 import { cn } from '@/lib/utils';
+import { CheckAgain, Notice, PageHeader } from '@/components/page';
+import { CardsSkeleton } from '@/components/skeletons';
 
 const statusIcon = {
   ok: <CircleCheck className="size-4.5 text-success" aria-label="OK" />,
@@ -103,12 +105,10 @@ export function EnvironmentPage({ tab }: { tab: EnvironmentTab }) {
 
   return (
     <div className="pt-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Environment</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {tab === 'checks'
-          ? 'What this machine needs for local WordPress sites, and one-click fixes where possible.'
-          : 'The AI assistant, and the defaults Claude Code uses for organization installs.'}
-      </p>
+      <PageHeader
+        title="Environment"
+        intro={tab === 'checks' ? 'What this machine needs for local WordPress sites, and one-click fixes where possible.' : 'The AI assistant, and the defaults Claude Code uses for organization installs.'}
+      />
 
       <Tabs
         className="mt-6"
@@ -148,24 +148,17 @@ export function EnvironmentPage({ tab }: { tab: EnvironmentTab }) {
                 <Button size="sm" variant="ghost" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</Button>
               </>
             )}
-            <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={cn(loading && 'animate-spin')} />
-              Check again
-            </Button>
+            <CheckAgain size="sm" onClick={() => void load()} loading={loading} />
           </div>
         </div>
       )}
 
       {tab === 'checks' && error && (
-        <p role="alert" className="mt-5 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">
-          {error}
-        </p>
+        <Notice className="mt-5">{error}</Notice>
       )}
 
       {tab === 'checks' && !report && loading && (
-        <div className="mt-10 flex items-center gap-2 text-sm text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" /> Checking this machine...
-        </div>
+        <CardsSkeleton className="mt-4" reading="Checking this machine..." columns={1} cards={[3, 4, 2, 3]} />
       )}
 
       {tab === 'checks' && (

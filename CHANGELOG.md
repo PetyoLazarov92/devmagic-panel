@@ -11,6 +11,10 @@
 * **Panel:** a job shows inside the card whose button started it, under a line, on every page: the WordPress view, the SQL runner and Backups and tools no longer put it in a box of its own between cards, so the cards around it stay where they are
 * **Databases:** Changes you can undo is the last card of the WordPress view at full width, as it already was under the tables, a table's rows and the SQL runner, and shows only while something can be undone
 * **Panel:** a card on a narrow window no longer grows past its column when it holds a long name, like a clean copy's file name on Backups and tools or the cards of Services, PHP on a phone
+* **Panel:** every page follows one layout for its kind (lists, a site or a job, status pages, tools, settings, data), with the same header, the same bar on a tab, the same notices and empty states, and **Check again** as the one button that reads a page again (it was Refresh on Mail and Read again on the WordPress view and MySQL processes)
+* **Panel:** Run history, the Archive, WordPress cores, Mail, Aura, Environment, Developer options, Updates, Services, a job and a run show the shape of what is coming while they load instead of a line of text, and so do the PHP settings, phpinfo and the clean-up preview inside their cards
+* **Databases:** Backups and tools has Check again for its snapshots, copies and kept databases, and the WordPress view says when it was read in the same bar
+* **Sites:** the Config tab's cards say they apply to this site, and Mail and WordPress cores list a domain once when a site under a path shares it
 * An update installs this release from the panel as usual
 
 ### v1.16.4 (2026-11-07)

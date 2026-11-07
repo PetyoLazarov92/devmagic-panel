@@ -1,5 +1,5 @@
 import { type DeveloperReport, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
-import { Activity, FileText, FolderTree, History, LoaderCircle, RefreshCw, ScrollText, Settings2, Trash2, Wrench } from 'lucide-react';
+import { Activity, FileText, FolderTree, History, LoaderCircle, ScrollText, Settings2, Trash2, Wrench } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { AnsiText } from '@/components/ansi-text';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,8 @@ import { runWithToast } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { CheckAgain, Notice, PageHeader } from '@/components/page';
+import { CardsSkeleton } from '@/components/skeletons';
 
 const UNINSTALL_TONE = { remove: 'neutral', ask: 'warning', keep: 'success' } as const;
 const UNINSTALL_LABEL = { remove: 'removed', ask: 'asks you', keep: 'kept' } as const;
@@ -33,25 +35,22 @@ export function DeveloperPage() {
 
   return (
     <div className="pt-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 flex-[1_1_20rem]">
-          <h1 className="text-2xl font-semibold tracking-tight">Developer options</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Versions, the installer's logs, and every file the panel put on this machine. For when something needs a closer look.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={reload} disabled={loading}>
-            <RefreshCw className={cn(loading && 'animate-spin')} />
-            Check again
-          </Button>
-          <span className="flex items-center gap-2 text-sm">
-            <Switch checked label="Developer options" onChange={(on) => !on && turnOff()} />
-            On
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        title="Developer options"
+        intro="Versions, the installer's logs, and every file the panel put on this machine. For when something needs a closer look."
+        actions={
+          <>
+            <span className="flex items-center gap-2 text-sm">
+              <Switch checked label="Developer options" onChange={(on) => !on && turnOff()} />
+              On
+            </span>
+            <CheckAgain onClick={reload} loading={loading} />
+          </>
+        }
+      />
 
-      {error && <p role="alert" className="mt-6 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{error}</p>}
-      {!report && loading && <p className="mt-10 flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading...</p>}
+      {error && <Notice className="mt-6">{error}</Notice>}
+      {!report && loading && <CardsSkeleton className="mt-6" reading="Reading the versions, settings and logs..." cards={[4, 4, 4, 5]} />}
 
       {report && (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">

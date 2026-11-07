@@ -4,7 +4,7 @@ import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCirc
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { JobFooter } from '@/components/job-box';
-import { settled, StepList, useJob } from '@/components/job-steps';
+import { settled, useJob } from '@/components/job-steps';
 import { SqlRunner } from '@/components/sql-runner';
 import { WordpressDbView } from '@/components/wordpress-db';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,8 @@ import { toast } from '@/lib/toast';
 import { navigate, useQueryParam } from '@/lib/router';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { useAsync } from '@/lib/use-async';
+import { ViewBar } from '@/components/page';
+import { ReadingBlock } from '@/components/skeletons';
 
 type JobKind = 'snapshot' | 'restore' | 'import' | 'preview' | 'replace' | 'clean' | 'cleanCurrent' | 'export' | 'restoreKept';
 
@@ -120,18 +122,33 @@ function DatabaseTools({ site }: { site: Site }) {
   // A job is the footer of the card that started it.
   const jobIn = (card: JobCardSlot) => (JOB_CARD[kind ?? 'replace'] === card ? <JobFooter job={runner.job} error={runner.error} onRetry={() => void runner.retry()} /> : null);
 
+  const reading = list.loading || copies.loading || kept.loading || preview.loading;
+  const readAgain = () => {
+    list.reload();
+    copies.reload();
+    kept.reload();
+    preview.reload();
+  };
+
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
-      <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
-        <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} footer={jobIn('snapshots')} />
-        <ImportCard site={site} busy={busy} start={start} footer={jobIn('import')} />
-        <PrepareCard site={site} busy={busy} start={start} footer={jobIn('prepare')} />
-        <CleanCurrentCard site={site} preview={preview.data} error={preview.error} busy={busy} start={start} footer={jobIn('cleanCurrent')} />
-      </div>
-      <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
-        <SearchReplaceCard site={site} busy={busy} start={start} preview={kind === 'preview' ? runner.job : null} footer={jobIn('replace')} />
-        <CleanCopiesCard site={site} copies={copies.data ?? []} loading={copies.loading} busy={busy} start={start} onDeleted={copies.reload} footer={jobIn('copies')} />
-        <KeptCard site={site} kept={kept.data ?? []} loading={kept.loading} busy={busy} start={start} onDeleted={kept.reload} footer={jobIn('kept')} />
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+      <ViewBar
+        onCheck={readAgain}
+        loading={reading}
+        note={<>Snapshots, imports and copies of <span className="font-mono">{site.db.name}</span>. Each job that changes it saves it first, so Undo or a snapshot puts it back.</>}
+      />
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+          <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} footer={jobIn('snapshots')} />
+          <ImportCard site={site} busy={busy} start={start} footer={jobIn('import')} />
+          <PrepareCard site={site} busy={busy} start={start} footer={jobIn('prepare')} />
+          <CleanCurrentCard site={site} preview={preview.data} error={preview.error} busy={busy} start={start} footer={jobIn('cleanCurrent')} />
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+          <SearchReplaceCard site={site} busy={busy} start={start} preview={kind === 'preview' ? runner.job : null} footer={jobIn('replace')} />
+          <CleanCopiesCard site={site} copies={copies.data ?? []} loading={copies.loading} busy={busy} start={start} onDeleted={copies.reload} footer={jobIn('copies')} />
+          <KeptCard site={site} kept={kept.data ?? []} loading={kept.loading} busy={busy} start={start} onDeleted={kept.reload} footer={jobIn('kept')} />
+        </div>
       </div>
     </div>
   );
@@ -151,11 +168,6 @@ function doneTitle(kind: JobKind | null): string {
   if (kind === 'export') return 'Clean copy saved';
   if (kind === 'restoreKept') return 'Tables put back';
   return 'Search and replace done';
-}
-
-function JobSteps({ job }: { job: NonNullable<ReturnType<typeof useJob>['job']> }) {
-  const [open, setOpen] = useState<string | null>(null);
-  return <StepList steps={job.steps} open={open} setOpen={setOpen} />;
 }
 
 type Start = (kind: JobKind, input: Record<string, unknown>) => void;
@@ -668,7 +680,7 @@ function CleanCurrentCard({ footer, site, preview, error, busy, start }: { foote
           Cleans the database the site has now, like a production database you imported, the way Prepare from production cleans a dump. It is copied beside the site and cleaned there while the site keeps working, then swapped in; your current tables are kept for 7 days. Mail plugins are turned off and one administrator stays, the author of every post. Addresses are not replaced.
         </p>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        {!preview && !error && <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading {db}...</p>}
+        {!preview && !error && <ReadingBlock lines={4}>Reading {db}...</ReadingBlock>}
         {preview?.blocked && <p role="alert" className="text-sm text-warning">{preview.blocked}</p>}
         {preview && !preview.blocked && (
           <>

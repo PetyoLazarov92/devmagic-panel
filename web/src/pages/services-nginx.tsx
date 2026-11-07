@@ -18,6 +18,7 @@ import { savePreferences, usePreferences } from '@/lib/preferences';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { CardsSkeleton, LogSkeleton } from '@/components/skeletons';
+import { Notice } from '@/components/page';
 
 type ConfigFilter = 'all' | 'enabled' | 'managed';
 const FILTERS: Array<{ value: ConfigFilter; label: string; test: (c: NginxConfig) => boolean }> = [
@@ -50,8 +51,8 @@ export function NginxTab({ refresh, onLoading }: { refresh: number; onLoading: (
   }, [job.job, report.reload]);
 
   const data = report.data;
-  if (report.loading && !data) return <CardsSkeleton reading="Reading nginx's setup and configs..." cards={[4, 4, 3, 3]} />;
-  if (report.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
+  if (report.loading && !data) return <CardsSkeleton reading="Reading nginx's setup and configs..." cards={[{ lines: 3, wide: true }, 4, 5, { lines: 6, wide: true }, { lines: 6, wide: true }]} />;
+  if (report.error) return <Notice>{report.error}</Notice>;
   if (!data) return null;
 
   const start = (id: 'nginx.setup' | 'nginx.teardown') => void job.follow(api.startJob(id, {}));

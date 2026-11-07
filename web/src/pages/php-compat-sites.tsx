@@ -17,6 +17,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { ListSkeleton } from '@/components/skeletons';
+import { Notice } from '@/components/page';
 
 const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
 type Row = VersionCompat['sites'][number];
@@ -87,10 +88,10 @@ export function SitesCompatCard({ version }: { version: string }) {
         {(job || runner.error) && (
           <div className="grid gap-3">
             {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
-            {runner.error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{runner.error}</p>}
+            {runner.error && <Notice>{runner.error}</Notice>}
           </div>
         )}
-        {report.error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>}
+        {report.error && <Notice>{report.error}</Notice>}
         {report.loading && !data && <ListSkeleton rows={3} />}
         {data && rows.length === 0 && <p className="text-xs text-muted-foreground">There is no WordPress site on this machine yet.</p>}
         {rows.length > 0 && (

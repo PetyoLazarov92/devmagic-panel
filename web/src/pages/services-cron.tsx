@@ -24,6 +24,7 @@ import { siteHref } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { CardsSkeleton } from '@/components/skeletons';
+import { Notice } from '@/components/page';
 
 /** What Undo runs for a change: by default the crontab as it was, from the copy saved before it. */
 export type UndoOf = (backup: string | undefined) => { id: ActionId; input: Record<string, unknown> } | null;
@@ -482,7 +483,7 @@ export function CronTab({ refresh, onLoading }: { refresh: number; onLoading: (l
   useEffect(() => onLoading(report.loading), [report.loading, onLoading]);
   const data = report.data;
   if (report.loading && !data) return <CardsSkeleton reading="Reading your crontab and system cron..." cards={[3, 4, 3]} columns={1} />;
-  if (report.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
+  if (report.error) return <Notice>{report.error}</Notice>;
   if (!data) return null;
   const daemon = DAEMON[data.daemon];
 

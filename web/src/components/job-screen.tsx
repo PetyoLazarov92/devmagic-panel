@@ -1,5 +1,5 @@
 import type { JobView } from '@devmagic-panel/shared';
-import { ArrowRight, CircleX, ExternalLink, LoaderCircle, LogIn, RotateCcw, SkipForward, Trash2 } from 'lucide-react';
+import { ArrowRight, CircleX, ExternalLink, LogIn, RotateCcw, SkipForward, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { settled, StepList } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ import { expectRestart } from '@/lib/session-watch';
 import { lastLine, openWpAdmin } from '@/lib/site-actions';
 import { loadThroughRestart } from '@/lib/startup';
 import { cn } from '@/lib/utils';
+import { Notice } from '@/components/page';
+import { Bar, ListSkeleton, Reading } from '@/components/skeletons';
 
 /** Jobs an install from an organization starts on its way: their target is the install draft. */
 const INSTALL_STEP_JOBS = ['org.readRepo', 'org.checkAccess', 'dump.download', 'dump.useDownloaded'];
@@ -61,14 +63,20 @@ export function JobScreen({ jobId, wordpress }: { jobId: string; wordpress?: boo
 
   if (!job) {
     return error ? (
-      <p role="alert" className="text-sm text-danger">
+      <Notice tone={error === 'unknown job' ? 'info' : 'danger'}>
         {error === 'unknown job' ? (
           <>The panel no longer holds this job: it restarted since, or the job is older than the last 20. Its output is in <Link href="/runs" className="underline">Run history</Link>.</>
         ) : (
           error
         )}
-      </p>
-    ) : <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading the job...</p>;
+      </Notice>
+    ) : (
+      <div className="grid gap-4" aria-busy="true">
+        <Bar className="h-7 w-80 max-w-full" />
+        <Reading>Reading the job...</Reading>
+        <ListSkeleton rows={4} />
+      </div>
+    );
   }
 
   const install = job.kind === 'site.create';

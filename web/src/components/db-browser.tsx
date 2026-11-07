@@ -22,6 +22,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { CardSkeleton, Reading, TableSkeleton } from '@/components/skeletons';
+import { Notice } from '@/components/page';
 
 export type DbShow = 'rows' | 'structure';
 
@@ -119,7 +120,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
       </div>
     );
   }
-  if (error && !overview) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{error}</p>;
+  if (error && !overview) return <Notice>{error}</Notice>;
   if (!overview) return null;
   const others = prefix ? overview.tables.filter((t) => !t.name.startsWith(prefix)).length : 0;
 
@@ -477,7 +478,7 @@ function RowsView({ database, table, editable }: { database: string; table: stri
           </div>
         </div>
       </form>
-      {rows.error && <p role="alert" className="mx-4 mt-3 rounded-lg border border-danger/30 bg-danger/8 px-4 py-2.5 text-sm text-danger">{rows.error}</p>}
+      {rows.error && <Notice className="mx-4 mt-3">{rows.error}</Notice>}
       {data && <RowsGrid page={data} sort={sort} onSort={toggleSort} onOpen={setOpen} {...(canChange ? { selected, onSelect: setSelected } : {})} />}
       {!data && rows.loading && <TableSkeleton className="rounded-none border-0 shadow-none" columns={5} rows={8} />}
       {data && (
@@ -849,7 +850,7 @@ function StructureView({ database, table }: { database: string; table: string })
       </div>
     );
   }
-  if (structure.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{structure.error}</p>;
+  if (structure.error) return <Notice>{structure.error}</Notice>;
   if (!s) return null;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">

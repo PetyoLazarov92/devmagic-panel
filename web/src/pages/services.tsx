@@ -13,12 +13,13 @@ import { Link, navigate } from '@/lib/router';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
-import { cn } from '@/lib/utils';
 import { ApacheTab } from '@/pages/services-apache';
 import { CronTab } from '@/pages/services-cron';
 import { MysqlTab } from '@/pages/services-mysql';
 import { NginxTab } from '@/pages/services-nginx';
 import { PHP_SECTIONS, type PhpSection, PhpTab } from '@/pages/services-php';
+import { CheckAgain, Notice, PageHeader } from '@/components/page';
+import { CardsSkeleton } from '@/components/skeletons';
 
 const STATE_DOT = { running: 'ok', stopped: 'fail', missing: 'warn' } as const;
 
@@ -40,16 +41,7 @@ export function ServicesPage({ tab = 'overview', phpVersion, phpSection }: { tab
   const onLoading = useCallback((value: boolean) => setLoading(value), []);
   return (
     <div className="pt-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 flex-[1_1_20rem]">
-          <h1 className="text-2xl font-semibold tracking-tight">Services</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{TAB_INTRO[tab]}</p>
-        </div>
-        <Button variant="outline" onClick={() => setRefresh((n) => n + 1)} disabled={loading}>
-          <RefreshCw className={cn(loading && 'animate-spin')} />
-          Check again
-        </Button>
-      </div>
+      <PageHeader title="Services" intro={TAB_INTRO[tab]} actions={<CheckAgain onClick={() => setRefresh((n) => n + 1)} loading={loading} />} />
 
       <Tabs
         className="mt-6"
@@ -90,8 +82,8 @@ function ServicesOverview({ refresh, onLoading }: { refresh: number; onLoading: 
 
   return (
     <div>
-      {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{error}</p>}
-      {!report && loading && <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Checking services...</p>}
+      {error && <Notice>{error}</Notice>}
+      {!report && loading && <CardsSkeleton reading="Checking services..." cards={[3, 3, 3, 3, 3, 3]} />}
 
       {report && (
         <div className="grid gap-4 sm:grid-cols-2">

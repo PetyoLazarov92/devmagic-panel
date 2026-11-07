@@ -19,6 +19,7 @@ import { useAsync } from '@/lib/use-async';
 import { asideUploads, type RepoProgress, switchOrg, switchRepo } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './new-site';
+import { Notice } from '@/components/page';
 
 /** Installing from an organization: the repo picked, what Claude Code read, the links it checked and the dump. */
 export interface OrgState {
@@ -844,14 +845,6 @@ function PrefillSummary({ prefill, upload, onChange }: { prefill: Prefill; uploa
     </div>
     <DumpFactsCard facts={upload.facts} />
     </div>
-  );
-}
-
-function Notice({ tone, children }: { tone: 'warning' | 'danger'; children: React.ReactNode }) {
-  return (
-    <p role="status" className={cn('rounded-lg border px-4 py-3 text-sm', tone === 'warning' ? 'border-warning/40 bg-warning/8' : 'border-danger/30 bg-danger/8 text-danger')}>
-      {children}
-    </p>
   );
 }
 

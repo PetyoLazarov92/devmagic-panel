@@ -1,5 +1,5 @@
 import type { CheckFix, AuraItem } from '@devmagic-panel/shared';
-import { CircleCheck, LoaderCircle, RefreshCw, Sparkles, Wrench } from 'lucide-react';
+import { CircleCheck, LoaderCircle, Sparkles, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { IssueRow } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,8 @@ import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { siteHref } from '@/lib/site-ref';
 import { useAsync } from '@/lib/use-async';
-import { cn } from '@/lib/utils';
+import { CheckAgain, Notice, PageHeader } from '@/components/page';
+import { CardSkeleton, Reading } from '@/components/skeletons';
 
 const MACHINE = 'This machine';
 
@@ -61,26 +62,21 @@ export function AuraPage() {
 
   return (
     <div className="pt-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 flex-[1_1_20rem]">
-          <h1 className="text-2xl font-semibold tracking-tight">Aura</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            The health of your sites and this machine: every problem in one list, with a one-click fix where the panel can make one.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {fixes.length > 1 && (
-            <Button onClick={() => void fixAll()} disabled={fixing !== null || loading}>
-              {fixing ? <LoaderCircle className="animate-spin" /> : <Wrench />}
-              {fixing ? `Fixing ${fixing.done + 1} of ${fixing.total}` : `Fix all ${fixes.length}`}
-            </Button>
-          )}
-          <Button variant="outline" onClick={reload} disabled={loading || fixing !== null}>
-            <RefreshCw className={cn(loading && 'animate-spin')} />
-            Check again
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Aura"
+        intro="The health of your sites and this machine: every problem in one list, with a one-click fix where the panel can make one."
+        actions={
+          <>
+            {fixes.length > 1 && (
+              <Button onClick={() => void fixAll()} disabled={fixing !== null || loading}>
+                {fixing ? <LoaderCircle className="animate-spin" /> : <Wrench />}
+                {fixing ? `Fixing ${fixing.done + 1} of ${fixing.total}` : `Fix all ${fixes.length}`}
+              </Button>
+            )}
+            <CheckAgain onClick={reload} loading={loading} disabled={fixing !== null} />
+          </>
+        }
+      />
 
       {report && (
         <div className="mt-6 flex flex-wrap items-center gap-2 text-sm">
@@ -98,14 +94,15 @@ export function AuraPage() {
       )}
 
       {error && (
-        <p role="alert" className="mt-6 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">
-          {error}
-        </p>
+        <Notice className="mt-6">{error}</Notice>
       )}
 
       {!report && loading && (
-        <div className="mt-10 flex items-center gap-2 text-sm text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" /> Checking every site...
+        <div className="mt-6 grid gap-4" aria-busy="true">
+          <Reading>Checking every site and this machine...</Reading>
+          <CardSkeleton lines={3} />
+          <CardSkeleton lines={4} />
+          <CardSkeleton lines={2} />
         </div>
       )}
 

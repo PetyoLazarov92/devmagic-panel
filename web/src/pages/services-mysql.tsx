@@ -1,5 +1,5 @@
 import type { ActionId, MysqlBackup, MysqlProcess, UploadResult, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
-import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, OctagonX, RefreshCw, RotateCcw, Table2, Trash2, Upload, Users, Wand2 } from 'lucide-react';
+import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, OctagonX, RotateCcw, Table2, Trash2, Upload, Users, Wand2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { SqlRunner } from '@/components/sql-runner';
@@ -23,6 +23,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { CardSkeleton, Reading, TableSkeleton } from '@/components/skeletons';
+import { CheckAgain, Notice } from '@/components/page';
 
 const DB_KIND: Record<MysqlDatabaseKind, { label: string; tone: 'neutral' | 'primary' | 'success' | 'warning' }> = {
   site: { label: 'Site', tone: 'success' },
@@ -164,14 +165,14 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
       </div>
     );
   }
-  if (report.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
+  if (report.error) return <Notice>{report.error}</Notice>;
   if (!data) return null;
   if (!data.server) {
     return (
       <div className="grid gap-4">
-        <p role="alert" className="rounded-lg border border-warning/30 bg-warning/8 px-4 py-3 text-sm">
-          {data.error ?? 'MySQL cannot be read.'} <Link href="/environment" className="font-medium hover:underline">Environment</Link>
-        </p>
+        <Notice tone="warning" action={<Link href="/environment" className="font-medium hover:underline">Environment</Link>}>
+          {data.error ?? 'MySQL cannot be read.'}
+        </Notice>
         {data.backups.length > 0 && <BackupsCard backups={data.backups} dir={data.backupsDir} onDeleted={report.reload} />}
       </div>
     );
@@ -545,9 +546,7 @@ function ProcessesCard({ refresh }: { refresh: number }) {
       <CardHeader>
         <CardTitle>Processes</CardTitle>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="outline" onClick={() => setTick((n) => n + 1)} disabled={list.loading}>
-            <RefreshCw className={cn(list.loading && 'animate-spin')} />Read again
-          </Button>
+          <CheckAgain size="sm" onClick={() => setTick((n) => n + 1)} loading={list.loading} />
         </div>
       </CardHeader>
       {list.error && <p role="alert" className="mx-5 mt-4 text-sm text-danger">{list.error}</p>}

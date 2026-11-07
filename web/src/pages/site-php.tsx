@@ -1,6 +1,6 @@
 import type { PhpIniKey, Site, SitePhp } from '@devmagic-panel/shared';
 import { PHP_INI_KEYS, PHP_INI_SETTINGS, phpIniValueError } from '@devmagic-panel/shared';
-import { ChevronRight, Info, LoaderCircle, TriangleAlert } from 'lucide-react';
+import { ChevronRight, Info, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
@@ -17,9 +17,10 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { changedCount } from '@/pages/services-php';
 import { type CompatAsk, CompatCard, CompatHint, useSiteCompat } from '@/pages/site-compat';
-import { CardsSkeleton } from '@/components/skeletons';
+import { CardsSkeleton, ReadingBlock } from '@/components/skeletons';
+import { Notice } from '@/components/page';
 
-const errorBox = (text: string) => <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{text}</p>;
+const errorBox = (text: string) => <Notice>{text}</Notice>;
 const older = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true }) < 0;
 const GROUPS = ['Limits', 'Errors', 'OPcache', 'Other'] as const;
 
@@ -197,7 +198,7 @@ function SiteInfoView({ site, marked }: { site: Site; marked: Set<string> }) {
   const target = siteTarget(site);
   const { data, error, loading } = useAsync(() => api.sitePhpInfo(target.domain, target.path), [site.domain, site.path]);
   const [filter, setFilter] = useState('');
-  if (loading && !data) return <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Asking PHP...</p>;
+  if (loading && !data) return <ReadingBlock lines={6}>Asking PHP...</ReadingBlock>;
   if (error) return errorBox(error);
   if (!data) return null;
   return <InfoTables info={data} filter={filter} onFilter={setFilter} marked={marked} />;

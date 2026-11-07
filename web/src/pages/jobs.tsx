@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, CircleX, LoaderCircle, Undo2 } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleX, Layers, LoaderCircle, Undo2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { jobActive, jobState } from '@/lib/jobs';
 import { timeAgo } from '@/lib/format';
@@ -6,18 +6,23 @@ import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { ListSkeleton } from '@/components/skeletons';
+import { EmptyState, Notice, PageHeader } from '@/components/page';
 
 /** Every job since the panel started: running and queued first, then the newest. */
 export function JobsPage() {
   const { data: jobs, error, loading } = useAsync(() => api.jobs(), []);
   return (
     <div className="mx-auto w-full max-w-3xl pt-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Jobs</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Installs, imports, restores and other long actions since the panel last started. Older ones are in <Link href="/runs" className="text-primary hover:underline">Run history</Link>.
-      </p>
-      {error && <p role="alert" className="mt-6 text-sm text-danger">{error}</p>}
-      {jobs && jobs.length === 0 && <p className="mt-6 text-sm text-muted-foreground">No jobs since the panel started.</p>}
+      <PageHeader
+        title="Jobs"
+        intro={<>Installs, imports, restores and other long actions since the panel last started. Older ones are in <Link href="/runs" className="text-primary hover:underline">Run history</Link>.</>}
+      />
+      {error && <Notice className="mt-6">{error}</Notice>}
+      {jobs && jobs.length === 0 && (
+        <EmptyState className="mt-6" icon={Layers} title="No jobs since the panel started">
+          Installs, imports, restores and other long actions show here while they run, with their steps.
+        </EmptyState>
+      )}
       {!jobs && loading && <ListSkeleton className="mt-6" rows={5} />}
       {jobs && jobs.length > 0 && (
         <ul className="mt-6 divide-y overflow-hidden rounded-xl border bg-card">

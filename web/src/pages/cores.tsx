@@ -1,6 +1,6 @@
 import type { CoreSecurity, CoresReport } from '@devmagic-panel/shared';
 import { coreVersion } from '@devmagic-panel/shared';
-import { Download, Layers, LoaderCircle, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Download, Layers, LoaderCircle, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,8 @@ import { lastLine, runWithToast } from '@/lib/site-actions';
 import { siteFromName, siteHref as siteRefHref, siteTarget } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
-import { cn } from '@/lib/utils';
+import { CheckAgain, Notice, PageHeader } from '@/components/page';
+import { CardSkeleton, ListSkeleton, Reading } from '@/components/skeletons';
 
 const STATUS: Record<CoreSecurity, { label: string; tone: 'success' | 'warning' | 'danger' }> = {
   latest: { label: 'latest', tone: 'success' },
@@ -78,21 +79,18 @@ export function CoresPage() {
 
   return (
     <div className="pt-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 flex-[1_1_20rem]">
-          <h1 className="text-2xl font-semibold tracking-tight">WordPress cores</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Shared WordPress releases{report?.coresDir ? <> in <span className="font-mono">{report.coresDir}</span></> : ''}, linked into sites by wpcore. Status comes from WordPress.org.
-          </p>
-        </div>
-        <Button variant="outline" onClick={checkAgain} disabled={loading}>
-          <RefreshCw className={cn(loading && 'animate-spin')} />
-          Check again
-        </Button>
-      </div>
+      <PageHeader title="WordPress cores" intro={<>Shared WordPress releases{report?.coresDir ? <> in <span className="font-mono">{report.coresDir}</span></> : ''}, linked into sites by wpcore. Status comes from WordPress.org.</>} actions={<CheckAgain onClick={checkAgain} loading={loading} />} />
 
-      {error && <p role="alert" className="mt-6 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{error}</p>}
-      {!report && loading && <p className="mt-10 flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the cores folder...</p>}
+      {error && <Notice className="mt-6">{error}</Notice>}
+      {!report && loading && (
+        <div className="mt-6 grid gap-3" aria-busy="true">
+          <Reading>Reading the cores folder...</Reading>
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[1fr_22rem]">
+            <ListSkeleton rows={4} />
+            <CardSkeleton lines={3} />
+          </div>
+        </div>
+      )}
 
       {report && (
         <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_22rem]">
@@ -122,7 +120,7 @@ export function CoresPage() {
                       </div>
                       {core.sites.length > 0 && (
                         <ul className="grid gap-1.5 pl-1">
-                          {core.sites.map((domain) => (
+                          {[...new Set(core.sites)].map((domain) => (
                             <li key={domain} className="flex flex-wrap items-center gap-2">
                               <Link href={siteHref(domain)} className="font-mono text-[13px] hover:underline">{domain}</Link>
                               {best && best !== core.version && core.status !== 'latest' && (
@@ -145,7 +143,7 @@ export function CoresPage() {
               <Card>
                 <CardHeader><CardTitle>Sites with their own copy</CardTitle></CardHeader>
                 <ul className="divide-y">
-                  {report.standalone.map((s) => (
+                  {report.standalone.filter((s, i, all) => all.findIndex((o) => o.domain === s.domain) === i).map((s) => (
                     <li key={s.domain} className="flex flex-wrap items-center gap-2 px-5 py-3 text-sm">
                       <Link href={siteHref(s.domain)} className="font-mono text-[13px] hover:underline">{s.domain}</Link>
                       <span className="font-mono text-[13px] text-muted-foreground">{s.version}</span>

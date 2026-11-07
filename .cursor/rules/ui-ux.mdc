@@ -66,3 +66,42 @@ globs: ["web/**"]
   password manager's ignore marker (`web/src/lib/secret-field.ts`), so the
   browser never offers to save it. Only the panel login and the panel
   password use `PasswordInput`; `web/test/secret-field.test.ts` keeps it so.
+
+## One layout per page type
+
+Every page is made of the pieces in `web/src/components/page.tsx` and
+`web/src/components/skeletons.tsx`, and follows the layout of its type.
+
+- **The pieces.** `PageHeader` (title and intro left, actions right, Check
+  again last) tops a page; `ViewBar` (a picker or filters left, Check again
+  right, "Read 2 min ago" and a short note under it) tops a tab or a view.
+  The button that reads a page again is always `CheckAgain`: never Refresh or
+  Read again. Something the whole page or view should know is a `Notice` right
+  under its header or bar (danger, warning, info); a field's own error stays
+  next to the field. Nothing yet is an `EmptyState`: what would be here and
+  the way to get it.
+- **Loading shows the page's shape**, never a blank box or a "Reading..." line
+  alone: a skeleton of the real layout with a `Reading` line that says what is
+  read (`CardsSkeleton`, `ListSkeleton`, `TableSkeleton`, `LogSkeleton`, and
+  `ReadingBlock` inside a card). A part read after the page (a tile, a card)
+  keeps its place and fills in.
+- **List pages** (Sites, Jobs, Run history, Archive, WordPress cores, Mail,
+  Aura): header, notices, a filter bar, then one card of rows. Loading is a
+  list or table skeleton; nothing is an empty state.
+- **Detail pages** (a site, a job, a run): back link, title and facts,
+  actions, then tabs, Overview first.
+- **Status pages** (Environment, Developer options, Updates, Services and its
+  Apache, nginx and Cron tabs): header with Check again, notices, the summary
+  first, then **pairs then full width**: short summary cards side by side,
+  long lists and logs across the whole width at the bottom.
+- **Tool pages** (a site's Database: WordPress, Backups and tools; Services,
+  MySQL): a `ViewBar`, then **two independent columns** of cards, each card one
+  task with its job as its footer, and Changes you can undo last at full
+  width.
+- **Settings pages** (a site's PHP and Config, Services, PHP per version, cron
+  tasks): one column of cards, each with its `ScopeLabel`, a `SaveBar` while
+  there are changes, a job in the card it changes.
+- **Data pages** (Tables, a table's rows and structure, SQL): a bar, one large
+  card with the table and its paging, then Undo last.
+- **Flows** (New site and its steps, login, an update's install) keep their
+  own step layout.

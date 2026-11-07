@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { duration } from '@/lib/format';
@@ -6,6 +6,8 @@ import { stepsSkipped } from '@/lib/jobs';
 import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { RunStatus } from '@/pages/runs';
+import { Notice } from '@/components/page';
+import { Bar, LogSkeleton, Reading } from '@/components/skeletons';
 
 /** One run: what it was given (passwords already hidden when stored) and everything it printed. */
 export function RunPage({ id }: { id: number }) {
@@ -16,8 +18,17 @@ export function RunPage({ id }: { id: number }) {
         <ArrowLeft className="size-4" />
         Run history
       </Link>
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {!run && loading && <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading the run...</p>}
+      {error && <Notice>{error}</Notice>}
+      {!run && loading && (
+        <div className="grid gap-4" aria-busy="true">
+          <div className="grid gap-2">
+            <Bar className="h-7 w-80 max-w-full" />
+            <Bar className="h-3.5 w-64 max-w-full" />
+          </div>
+          <Reading>Reading the run...</Reading>
+          <LogSkeleton lines={12} />
+        </div>
+      )}
       {run && (
         <>
           <div className="flex flex-wrap items-start justify-between gap-3">

@@ -24,7 +24,8 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { SitesCompatCard } from '@/pages/php-compat-sites';
-import { CardsSkeleton } from '@/components/skeletons';
+import { CardsSkeleton, ReadingBlock } from '@/components/skeletons';
+import { Notice } from '@/components/page';
 
 const SAPI_LABEL = { apache2: 'Apache (mod_php)', fpm: 'PHP-FPM', cli: 'Command line' } as const;
 
@@ -48,7 +49,7 @@ const MODE_HINT: Record<Mode, string> = {
   coverage: 'Code coverage for tests',
 };
 
-const errorBox = (text: string) => <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{text}</p>;
+const errorBox = (text: string) => <Notice>{text}</Notice>;
 
 /** The sections of one version, in page order; /services/php/8.3/modules opens the version scrolled to one. */
 export const PHP_SECTIONS = ['settings', 'modules', 'sites', 'xdebug', 'ini', 'info'] as const;
@@ -782,7 +783,7 @@ function IniChangesCard({ version, onMoved }: { version: string; onMoved: () => 
     <Card className="lg:col-span-2">
       <CardHeader><CardTitle>php.ini changes</CardTitle><FileDiff className="size-4 text-muted-foreground" /></CardHeader>
       <div className="grid gap-5 p-5 text-sm">
-        {loading && !data && <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Comparing with the packaged php.ini...</p>}
+        {loading && !data && <ReadingBlock lines={5}>Comparing with the packaged php.ini...</ReadingBlock>}
         {error && errorBox(error)}
         {data?.sapis.length === 0 && <p className="text-muted-foreground">PHP {version} has no php.ini to compare.</p>}
         {data?.sapis.map((d) => <IniDiff key={d.sapi} diff={d} />)}
@@ -823,7 +824,7 @@ function SettingsCard({ version }: { version: PhpVersion }) {
     <Card className="lg:col-span-2">
       <CardHeader><CardTitle>Settings</CardTitle><ScopeLabel>{`PHP ${version.version}`}</ScopeLabel></CardHeader>
       <div className="grid gap-4 p-5 text-sm">
-        {loading && !data && <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the settings...</p>}
+        {loading && !data && <ReadingBlock fields={4}>Reading the settings...</ReadingBlock>}
         {error && errorBox(error)}
         {data && data.scopes.length === 0 && <p className="text-muted-foreground">PHP {version.version} has no part to set.</p>}
         {data && current && (
@@ -991,7 +992,7 @@ function InfoSection({ version }: { version: PhpVersion }) {
 function InfoView({ version, sapi }: { version: string; sapi: 'web' | 'cli' }) {
   const { data, error, loading } = useAsync(() => api.phpInfo(version, sapi), [version, sapi]);
   const [filter, setFilter] = useState('');
-  if (loading && !data) return <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Asking PHP...</p>;
+  if (loading && !data) return <ReadingBlock lines={6}>Asking PHP...</ReadingBlock>;
   if (error) return errorBox(error);
   if (!data) return null;
   return <InfoTables info={data} filter={filter} onFilter={setFilter} />;
@@ -1009,7 +1010,7 @@ function XdebugInfoSection({ version }: { version: PhpVersion }) {
 function XdebugInfoView({ version }: { version: PhpVersion }) {
   const { data, error, loading } = useAsync(() => (version.xdebug.installed ? api.phpInfo(version.version, 'web') : Promise.resolve(undefined)), [version.version]);
   if (!version.xdebug.installed) return <p className="text-muted-foreground">{version.xdebug.reason}</p>;
-  if (loading && !data) return <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Asking PHP...</p>;
+  if (loading && !data) return <ReadingBlock lines={6}>Asking PHP...</ReadingBlock>;
   if (error) return errorBox(error);
   if (!data) return null;
   if (!data.xdebug) return <p className="text-muted-foreground">Xdebug is installed for PHP {version.version} but not loaded on the web: turn it on in the Xdebug card.</p>;
@@ -1064,7 +1065,7 @@ function FpmCheckView() {
     done.current = job.id;
     reload();
   }, [job, reload]);
-  if (loading && !data) return <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Checking your sites and Apache config...</p>;
+  if (loading && !data) return <ReadingBlock lines={4}>Checking your sites and Apache config...</ReadingBlock>;
   if (error) return errorBox(error);
   if (!data) return null;
   const mismatched = [...new Set(data.filter((f) => f.status === 'warn' && f.version).map((f) => f.version as string))];

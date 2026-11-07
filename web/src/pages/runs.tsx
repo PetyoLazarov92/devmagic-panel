@@ -7,6 +7,8 @@ import { duration, timeAgo } from '@/lib/format';
 import { stepsSkipped } from '@/lib/jobs';
 import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
+import { EmptyState, Notice, PageHeader } from '@/components/page';
+import { Reading, TableSkeleton } from '@/components/skeletons';
 
 /** The page in the address, so a page can be reloaded or linked: /runs?page=3. */
 function pageFromUrl(): number {
@@ -45,22 +47,26 @@ export function RunsPage() {
 
   return (
     <div className="pt-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Run history</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Every action the panel ran, with its result and output. Open a run to read what it printed. Runs are kept {RUN_KEEP_DAYS} days, at most {RUN_KEEP_MAX.toLocaleString()};
-        clear them sooner from the Developer options.
-      </p>
-      {error && <p role="alert" className="mt-6 text-sm text-danger">{error}</p>}
-      {!data && loading && <p className="mt-10 flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the run history...</p>}
-      {data?.total === 0 && (
-        <div className="mt-6 grid justify-items-center gap-2 rounded-xl border border-dashed bg-card px-6 py-12 text-center">
-          <History className="size-8 text-muted-foreground" />
-          <p className="font-medium">No runs yet</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            Every action you run here, like an install, a cache clear or a snapshot, shows up with its result and what it printed.
-          </p>
-          <Link href="/sites" className="mt-2 text-sm font-medium text-primary hover:underline">Go to your sites</Link>
+      <PageHeader
+        title="Run history"
+        intro={
+          <>
+            Every action the panel ran, with its result and output. Open a run to read what it printed. Runs are kept {RUN_KEEP_DAYS} days, at most {RUN_KEEP_MAX.toLocaleString()};
+            clear them sooner from the Developer options.
+          </>
+        }
+      />
+      {error && <Notice className="mt-6">{error}</Notice>}
+      {!data && loading && (
+        <div className="mt-6 grid gap-3" aria-busy="true">
+          <Reading>Reading the run history...</Reading>
+          <TableSkeleton columns={4} rows={10} />
         </div>
+      )}
+      {data?.total === 0 && (
+        <EmptyState className="mt-6" icon={History} title="No runs yet" action={<Link href="/sites" className="text-sm font-medium text-primary hover:underline">Go to your sites</Link>}>
+          Every action you run here, like an install, a cache clear or a snapshot, shows up with its result and what it printed.
+        </EmptyState>
       )}
       {data && data.total > 0 && runs.length === 0 && (
         <p className="mt-6 rounded-lg border bg-card px-4 py-3 text-sm">

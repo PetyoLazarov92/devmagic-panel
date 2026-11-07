@@ -12,10 +12,11 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
 import { Bar, CardLinesSkeleton, CardSkeleton, Reading } from '@/components/skeletons';
 import { api } from '@/lib/api';
-import { bytes, timeAgo } from '@/lib/format';
+import { bytes } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { Notice, ViewBar } from '@/components/page';
 
 const number = (n: number) => n.toLocaleString('en-US');
 
@@ -52,7 +53,7 @@ const FRESH: ReportState = { report: null, reading: [...WP_DB_SECTIONS], failed:
  * The report read in parts, so the page shows in a moment on a big database:
  * the quick parts in one request, and each part that reads whole tables
  * (posts, every meta table) in its own, filling its card in when it answers.
- * Read again keeps what is shown until the new answer replaces it.
+ * Check again keeps what is shown until the new answer replaces it.
  */
 function useWordpressReport(domain: string, path: string | undefined, blog: number) {
   const [state, setState] = useState<ReportState>(FRESH);
@@ -149,12 +150,17 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
   const footerFor = (...slots: Slot[]) => (slot && slots.includes(slot) ? <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} /> : null);
   const r = report.report;
   if (!r && report.loading) return <WordpressDbSkeleton />;
-  if (!r) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{Object.values(report.errors)[0] ?? 'The panel could not read this database'}</p>;
+  if (!r) return <Notice>{Object.values(report.errors)[0] ?? 'The panel could not read this database'}</Notice>;
   const view: View = { report: r, errors: report.errors, reading: report.reading };
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <ViewBar
+        onCheck={report.reload}
+        loading={report.loading}
+        checkedAt={r.checkedAt}
+        note={<>Tables starting <span className="font-mono">{r.blogPrefix}</span> in <span className="font-mono">{r.database}</span>. Each clean-up saves what it removes first, so Undo puts it back for 14 days.</>}
+      >
         {r.network && (
           <label className="grid w-full gap-1 text-sm sm:flex sm:w-auto sm:items-center sm:gap-2">
             <span className="shrink-0 text-muted-foreground">Site of the network</span>
@@ -167,17 +173,11 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
             </Select>
           </label>
         )}
-        <Button size="sm" variant="outline" className="ml-auto" onClick={report.reload} disabled={report.loading}>
-          <RefreshCw className={cn(report.loading && 'animate-spin')} />Read again
-        </Button>
-      </div>
-      <p className="-mt-2 text-xs text-muted-foreground">
-        Tables starting <span className="font-mono">{r.blogPrefix}</span> in <span className="font-mono">{r.database}</span>, read {timeAgo(r.checkedAt)}. Each clean-up saves what it removes first, so Undo puts it back for 14 days.
-      </p>
+      </ViewBar>
       {r.missingTables.length > 0 && (
-        <p className="rounded-lg border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
+        <Notice tone="info">
           Tables WordPress makes that this database lacks: <span className="font-mono">{r.missingTables.join(', ')}</span>. Older WordPress versions had no termmeta table.
-        </p>
+        </Notice>
       )}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">

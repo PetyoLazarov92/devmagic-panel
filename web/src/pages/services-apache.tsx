@@ -15,6 +15,7 @@ import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { runRestarting } from '@/lib/restarting';
 import { CardsSkeleton, LogSkeleton } from '@/components/skeletons';
+import { Notice } from '@/components/page';
 
 type VhostFilter = 'all' | 'enabled' | 'disabled' | 'managed';
 const FILTERS: Array<{ value: VhostFilter; label: string; test: (v: ApacheVhost) => boolean }> = [
@@ -44,8 +45,8 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
   useEffect(() => onLoading(report.loading), [report.loading, onLoading]);
 
   const data = report.data;
-  if (report.loading && !data) return <CardsSkeleton reading="Reading Apache's configuration and vhosts..." cards={[4, 4, 5, 3]} />;
-  if (report.error) return <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{report.error}</p>;
+  if (report.loading && !data) return <CardsSkeleton reading="Reading Apache's configuration and vhosts..." cards={[4, 5, { lines: 8, wide: true }, { lines: 6, wide: true }]} />;
+  if (report.error) return <Notice>{report.error}</Notice>;
   if (!data) return null;
 
   const shown = data.vhosts.filter(FILTERS.find((f) => f.value === filter)?.test ?? (() => true));

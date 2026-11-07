@@ -13,6 +13,7 @@ import { api } from '@/lib/api';
 import { runWithToast } from '@/lib/site-actions';
 import { siteTarget } from '@/lib/site-ref';
 import { useAsync } from '@/lib/use-async';
+import { ScopeLabel } from '@/components/scope-label';
 
 type Kind = 'boolean' | 'number' | 'text';
 type Setter = (name: string, value: ConstantValue | null) => Promise<boolean>;
@@ -263,7 +264,10 @@ export function ConfigTab({ site, onChanged }: { site: Site; onChanged: () => vo
         <Card>
           <CardHeader>
             <CardTitle>Local constants</CardTitle>
-            <Badge tone="warning">{missing.length === 1 ? '1 to set' : `${missing.length} to set`}</Badge>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Badge tone="warning">{missing.length === 1 ? '1 to set' : `${missing.length} to set`}</Badge>
+              <ScopeLabel>this site</ScopeLabel>
+            </div>
           </CardHeader>
           <div className="grid gap-3 p-5">
             <p className="text-xs text-muted-foreground">The constants every local site should have, from Settings. New installs get them.</p>
@@ -274,7 +278,10 @@ export function ConfigTab({ site, onChanged }: { site: Site; onChanged: () => vo
       <Card>
         <CardHeader>
           <CardTitle>wp-config.php</CardTitle>
-          <span className="text-xs text-muted-foreground">{constants.length === 1 ? '1 constant' : `${constants.length} constants`}</span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="text-xs text-muted-foreground">{constants.length === 1 ? '1 constant' : `${constants.length} constants`}</span>
+            <ScopeLabel>this site</ScopeLabel>
+          </div>
         </CardHeader>
         <p className="border-b px-5 py-3 text-xs text-muted-foreground">
           Changes go through wp config set, which changes a constant where it is, inside an if too, or adds it. Secrets stay hidden, and the database settings, keys and a network's layout are left to the install.

@@ -20,6 +20,7 @@ import { useReloadWhileBusy } from '@/lib/jobs';
 import { useAsync } from '@/lib/use-async';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { cn } from '@/lib/utils';
+import { Notice, PageHeader } from '@/components/page';
 
 type Filter = 'all' | 'attention';
 
@@ -65,10 +66,10 @@ export function SitesPage() {
 
   return (
     <div className="pt-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 flex-[1_1_20rem]">
-          <h1 className="text-2xl font-semibold tracking-tight">Sites</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <PageHeader
+        title="Sites"
+        intro={
+          <>
             {sites ? `${sites.length} local sites` : 'Loading sites'}
             {attention > 0 && (
               <>
@@ -86,13 +87,15 @@ export function SitesPage() {
                 </button>
               </>
             )}
-          </p>
-        </div>
-        <Button onClick={() => navigate('/sites/new')}>
-          <Plus />
-          New site
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={() => navigate('/sites/new')}>
+            <Plus />
+            New site
+          </Button>
+        }
+      />
 
       <UnfinishedInstalls drafts={drafts.data ?? []} onChanged={drafts.reload} className="mt-6" />
 
@@ -164,7 +167,7 @@ export function SitesPage() {
         </div>
       </div>
 
-      {error && <p role="alert" className="mt-6 text-sm text-danger">{error}</p>}
+      {error && <Notice className="mt-6">{error}</Notice>}
 
       {loading && !sites && <SitesSkeleton view={view} className="mt-5" />}
       {sites && shown.length === 0 && (

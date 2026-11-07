@@ -1,6 +1,6 @@
 import type { MailMessage, MailSummary } from '@devmagic-panel/shared';
 import { MAILPIT_WEB, textLinks } from '@devmagic-panel/shared';
-import { ExternalLink, LoaderCircle, Mail, RefreshCw, Trash2 } from 'lucide-react';
+import { ExternalLink, Mail, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { MailpitInstall } from '@/components/mailpit-install';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,8 @@ import { timeAgo } from '@/lib/format';
 import { runWithToast } from '@/lib/site-actions';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { CheckAgain, PageHeader } from '@/components/page';
+import { CardSkeleton, ListSkeleton, Reading } from '@/components/skeletons';
 
 /** The site filter starts from ?site= so a site page can link straight to its mail. */
 const initialSite = () => new URLSearchParams(window.location.search).get('site') ?? '';
@@ -58,26 +60,27 @@ export function MailPage() {
     }
   }
 
-  const localModeSites = (sites.data ?? []).filter((s) => s.localMode?.enabled);
+  // Mail is caught per domain: a site under a path of another shares its domain, so each domain is listed once.
+  const localModeSites = (sites.data ?? []).filter((s, i, all) => s.localMode?.enabled && all.findIndex((o) => o.domain === s.domain && o.localMode?.enabled) === i);
   return (
     <div className="pt-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 flex-[1_1_20rem]">
-          <h1 className="text-2xl font-semibold tracking-tight">Mail</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Everything your local sites sent, caught by Mailpit so it never reaches real people.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-64">
-            <Select aria-label="Site" value={site} onChange={(e) => { setSite(e.target.value); setSelected(null); }}>
-              <option value="">All sites</option>
-              {localModeSites.map((s) => <option key={s.domain} value={s.domain}>{s.domain}</option>)}
-            </Select>
-          </div>
-          <Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={cn(loading && 'animate-spin')} />Refresh</Button>
-          <ButtonLink variant="outline" href={MAILPIT_WEB} target="_blank" rel="noopener noreferrer"><ExternalLink />Mailpit</ButtonLink>
-          {page && page.total > 0 && <Button variant="outline" onClick={() => void clear()}><Trash2 />{site ? 'Delete this site\'s mail' : 'Delete all'}</Button>}
-        </div>
-      </div>
+      <PageHeader
+        title="Mail"
+        intro="Everything your local sites sent, caught by Mailpit so it never reaches real people."
+        actions={
+          <>
+            <div className="w-64">
+              <Select aria-label="Site" value={site} onChange={(e) => { setSite(e.target.value); setSelected(null); }}>
+                <option value="">All sites</option>
+                {localModeSites.map((s) => <option key={s.domain} value={s.domain}>{s.domain}</option>)}
+              </Select>
+            </div>
+            <ButtonLink variant="outline" href={MAILPIT_WEB} target="_blank" rel="noopener noreferrer"><ExternalLink />Mailpit</ButtonLink>
+            {page && page.total > 0 && <Button variant="outline" onClick={() => void clear()}><Trash2 />{site ? 'Delete this site\'s mail' : 'Delete all'}</Button>}
+            <CheckAgain onClick={load} loading={loading} />
+          </>
+        }
+      />
 
       {error && (
         <Card className="mt-6 grid gap-3 p-5 text-sm">
@@ -88,6 +91,15 @@ export function MailPage() {
         </Card>
       )}
 
+      {!page && !error && loading && (
+        <div className="mt-6 grid gap-3" aria-busy="true">
+          <Reading>Reading the mail Mailpit caught...</Reading>
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            <ListSkeleton rows={6} />
+            <CardSkeleton lines={8} values={false} className="h-fit" />
+          </div>
+        </div>
+      )}
       {page && !error && (
         <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <Card className="h-fit overflow-hidden">
@@ -122,7 +134,7 @@ function MessageView({ id }: { id: string }) {
   // Opening it marks it read in Mailpit; the sidebar's count follows.
   const { data: message, error, loading } = useAsync<MailMessage>(() => api.mailMessage(id).then((m) => (mailRead(), m)), [id]);
   const [plain, setPlain] = useState(false);
-  if (loading && !message) return <Card className="flex h-fit items-center gap-2 p-5 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading...</Card>;
+  if (loading && !message) return <CardSkeleton lines={8} values={false} className="h-fit" />;
   if (error || !message) return <Card className="h-fit p-5 text-sm text-danger">{error ?? 'Message not found'}</Card>;
   const html = message.html && !plain;
   return (

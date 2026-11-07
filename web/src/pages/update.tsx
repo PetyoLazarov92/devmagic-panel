@@ -1,6 +1,6 @@
 import type { ChangelogSection, InstalledRelease, UpdateStatus, UpdateWay } from '@devmagic-panel/shared';
 import { UPDATE_WAY_LABELS, UPDATE_WAYS } from '@devmagic-panel/shared';
-import { Check, ChevronRight, CircleArrowUp, Copy, History, Info, LoaderCircle, RefreshCw, X } from 'lucide-react';
+import { Check, ChevronRight, CircleArrowUp, Copy, History, Info, LoaderCircle, X } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,8 @@ import { navigate } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { InstallForm, InstallProgress, LastInstall } from '@/pages/update-install';
+import { CheckAgain, Notice, PageHeader } from '@/components/page';
+import { CardsSkeleton } from '@/components/skeletons';
 
 /** The installer's command, for a terminal instead of the password field: folded, as the way most people never need. */
 function TerminalWay({ command }: { command: string }) {
@@ -99,27 +101,19 @@ export function UpdatePage() {
 
   return (
     <div className="mx-auto max-w-3xl pt-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        {/* A fixed basis: the text wraps its own lines, so the buttons stay beside it whatever it says. */}
-        <div className="min-w-0 flex-[1_1_20rem]">
-          <h1 className="text-2xl font-semibold tracking-tight">Updates</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <PageHeader
+        title="Updates"
+        intro={
+          <>
             New releases of the panel, from its GitHub repository.
             {status && <> You run v{status.current}{status.release && status.release !== `v${status.current}` ? ` (${status.release})` : ''}; checked {timeAgo(status.checkedAt)}.</>}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => setRefresh((n) => n + 1)}
-          disabled={loading}
-        >
-          <RefreshCw className={cn(loading && 'animate-spin')} />
-          Check again
-        </Button>
-      </div>
+          </>
+        }
+        actions={<CheckAgain onClick={() => setRefresh((n) => n + 1)} loading={loading} />}
+      />
 
-      {error && <p role="alert" className="mt-6 text-sm text-danger">{error}</p>}
-      {!status && loading && <p className="mt-8 flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Looking for releases...</p>}
+      {error && <Notice className="mt-6">{error}</Notice>}
+      {!status && loading && <CardsSkeleton className="mt-6" reading="Looking for releases..." columns={1} cards={[4, 3]} />}
 
       {status?.latest && (
         <Dialog
@@ -202,7 +196,7 @@ export function UpdatePage() {
             setTick((n) => n + 1);
           }} />}
           {!installing && status.install && <LastInstall install={status.install} onAgain={setAsking} onRefresh={() => setTick((n) => n + 1)} />}
-          {status.error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{status.error}</p>}
+          {status.error && <Notice>{status.error}</Notice>}
           {status.notice && (
             <p className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/8 px-4 py-3 text-sm">
               <Info className="size-4 shrink-0 text-warning" />

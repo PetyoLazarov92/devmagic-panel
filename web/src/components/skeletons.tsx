@@ -165,13 +165,19 @@ export function LogSkeleton({ lines = 10, className }: { lines?: number; classNa
   );
 }
 
-/** A page of cards while it reads: what is read, then cards in one or two columns. */
-export function CardsSkeleton({ reading, cards = [4, 3, 5, 3], columns = 2, className }: { reading: ReactNode; cards?: number[]; columns?: 1 | 2; className?: string }) {
+/** A card of a skeleton page: its number of lines, and whether it spans both columns (a list, a log). */
+export type CardShape = number | { lines: number; wide?: boolean };
+
+/** A page of cards while it reads: what is read, then cards in one or two columns, wide ones across both. */
+export function CardsSkeleton({ reading, cards = [4, 3, 5, 3], columns = 2, className }: { reading: ReactNode; cards?: CardShape[]; columns?: 1 | 2; className?: string }) {
   return (
     <div className={cn('grid gap-4', className)} aria-busy="true">
       <Reading>{reading}</Reading>
       <div className={cn('grid grid-cols-[minmax(0,1fr)] gap-4', columns === 2 && 'lg:grid-cols-2')}>
-        {cards.map((lines, i) => <CardSkeleton key={i} lines={lines} />)}
+        {cards.map((card, i) => {
+          const { lines, wide } = typeof card === 'number' ? { lines: card, wide: false } : card;
+          return <CardSkeleton key={i} lines={lines} className={cn(wide && 'lg:col-span-2')} />;
+        })}
       </div>
     </div>
   );
@@ -205,6 +211,16 @@ export function FieldsSkeleton({ fields = 4, className }: { fields?: number; cla
           <Bar className={cn('w-full rounded-md', i % 3 === 2 ? 'h-20' : 'h-9')} />
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Inside a card that is still reading: what is read, then lines (or form fields) in the card's own padding. */
+export function ReadingBlock({ children, lines = 4, fields }: { children: ReactNode; lines?: number; fields?: number }) {
+  return (
+    <div className="grid gap-3" aria-busy="true">
+      <Reading>{children}</Reading>
+      {fields ? <FieldsSkeleton fields={fields} /> : <CardLinesSkeleton lines={lines} className="px-0 py-1" />}
     </div>
   );
 }

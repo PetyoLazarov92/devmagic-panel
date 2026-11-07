@@ -1,5 +1,5 @@
 import type { ArchiveReason, TrashEntry } from '@devmagic-panel/shared';
-import { ArchiveRestore, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, LoaderCircle, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { installLabel } from '@/components/site-bits';
@@ -16,6 +16,8 @@ import { toast } from '@/lib/toast';
 import { useReloadWhileBusy } from '@/lib/jobs';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { CheckAgain, EmptyState, Notice, PageHeader } from '@/components/page';
+import { CardSkeleton, Reading } from '@/components/skeletons';
 
 const daysLeft = (e: TrashEntry) => Math.max(0, Math.ceil((new Date(e.purgeAt).getTime() - Date.now()) / 86_400_000));
 
@@ -45,19 +47,21 @@ export function TrashPage() {
 
   return (
     <div className="pt-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 flex-[1_1_20rem]">
-          <h1 className="text-2xl font-semibold tracking-tight">Archive</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Removed sites, and sites a reinstall or a restore replaced, are kept here for 14 days with their folder, vhost, certificate and database, then deleted for good.
-          </p>
-        </div>
-        <Button variant="outline" onClick={reload} disabled={loading}><RefreshCw className={cn(loading && 'animate-spin')} />Check again</Button>
-      </div>
+      <PageHeader title="Archive" intro="Removed sites, and sites a reinstall or a restore replaced, are kept here for 14 days with their folder, vhost, certificate and database, then deleted for good." actions={<CheckAgain onClick={reload} loading={loading} />} />
 
-      {error && <p role="alert" className="mt-6 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">{error}</p>}
-      {!entries && loading && <p className="mt-10 flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the archive...</p>}
-      {entries && entries.length === 0 && <Card className="mt-6 p-5 text-sm text-muted-foreground">Nothing archived. A site you remove, reinstall or restore over shows up here, ready to put back.</Card>}
+      {error && <Notice className="mt-6">{error}</Notice>}
+      {!entries && loading && (
+        <div className="mt-6 grid gap-3" aria-busy="true">
+          <Reading>Reading the archive...</Reading>
+          <CardSkeleton lines={3} />
+          <CardSkeleton lines={2} />
+        </div>
+      )}
+      {entries && entries.length === 0 && (
+        <EmptyState className="mt-6" icon={Archive} title="Nothing archived">
+          A site you remove, reinstall or restore over shows up here for 14 days, ready to put back.
+        </EmptyState>
+      )}
       <div className="mt-6 grid gap-4">
         {groups.map((list) => (
           <Card key={list[0]?.domain}>
