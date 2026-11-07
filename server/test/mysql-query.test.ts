@@ -16,7 +16,9 @@ const readOnly = { user: 'devmagic_panel_ro', host: 'localhost', password: 'ropw
 
 describe('one statement that reads', () => {
   it('finds the statement and its kind past comments, parentheses and a final semicolon', () => {
-    expect(oneStatement('  -- the biggest\n/* note */ (SELECT 1) ;  ')).toEqual({ text: '-- the biggest\n/* note */ (SELECT 1)', kind: 'SELECT' });
+    expect(oneStatement('  -- the biggest\n/* note */ (SELECT 1) ;  ')).toEqual({ text: '-- the biggest\n/* note */ (SELECT 1)', kind: 'SELECT', code: '(SELECT 1)' });
+    // Strings are emptied in code, backticked names kept: what MySQL reads as names.
+    expect(oneStatement("UPDATE `shop`.wp_options SET v = 'other_db.x' -- old.y", false).code).toBe("UPDATE `shop`.wp_options SET v = ''");
     expect(oneStatement('with x as (select 1) select * from x').kind).toBe('WITH');
     expect(oneStatement('show tables').kind).toBe('SHOW');
     expect(oneStatement("# hash comment\nDESC wp_options").kind).toBe('DESC');

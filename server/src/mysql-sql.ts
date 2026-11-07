@@ -129,8 +129,11 @@ function condition(columns: readonly ColumnMeta[], filter: DbFilter): string {
   }
 }
 
-export function whereSql(columns: readonly ColumnMeta[], filters: readonly DbFilter[]): string {
-  return filters.length ? ` WHERE ${filters.map((f) => condition(columns, f)).join(' AND ')}` : '';
+/** Filters as a WHERE clause: every one (AND), or any one (OR), each in its own parentheses. */
+export function whereSql(columns: readonly ColumnMeta[], filters: readonly DbFilter[], match: 'all' | 'any' = 'all'): string {
+  if (!filters.length) return '';
+  const parts = filters.map((f) => condition(columns, f));
+  return ` WHERE ${parts.length === 1 ? parts[0] : parts.map((p) => `(${p})`).join(match === 'any' ? ' OR ' : ' AND ')}`;
 }
 
 const tableRef = (database: string, table: string) => `${ident(database)}.${ident(table)}`;
@@ -154,7 +157,7 @@ export type RowsRequest = DbRowsRequest;
  * match, as its own statement.
  */
 export function rowsSql(database: string, table: string, columns: readonly ColumnMeta[], primaryKey: readonly ColumnMeta[], request: RowsRequest): { rows: string; count: string } {
-  const where = whereSql(columns, request.filters);
+  const where = whereSql(columns, request.filters, request.match);
   const order: string[] = [];
   if (request.sort) order.push(`${ident(columnNamed(columns, request.sort.column).name)} ${request.sort.dir === 'desc' ? 'DESC' : 'ASC'}`);
   // The primary key keeps pages in a stable order when the sort has ties.

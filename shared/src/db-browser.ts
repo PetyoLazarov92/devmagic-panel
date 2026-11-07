@@ -37,6 +37,8 @@ export const dbRowsQuery = z.object({
   pageSize: z.union([z.literal(25), z.literal(50), z.literal(100), z.literal(250)]).default(50),
   sort: z.object({ column: mysqlIdentifier, dir: z.enum(['asc', 'desc']) }).optional(),
   filters: z.array(dbFilter).max(10).default([]),
+  /** all: a row matches every filter (AND); any: at least one (OR). */
+  match: z.enum(['all', 'any']).default('all'),
 });
 export type DbRowsQuery = z.input<typeof dbRowsQuery>;
 /** A rows query once the server filled in its defaults. */
@@ -257,7 +259,7 @@ export interface DbSchema {
 export interface CleanupInfo {
   id: string;
   title: string;
-  kind: 'transients' | 'content' | 'orphans' | 'empty' | 'drop';
+  kind: 'transients' | 'content' | 'orphans' | 'empty' | 'drop' | 'sql';
   tables: Array<{ table: string; rows: number }>;
   /** The copy's size, gzipped. */
   bytes: number;
@@ -267,3 +269,34 @@ export interface CleanupInfo {
 
 export const WP_CONTENT_KINDS = ['revisions', 'autoDrafts', 'trashedPosts', 'spamComments', 'trashedComments'] as const;
 export const WP_ORPHAN_KINDS = ['postmeta', 'commentmeta', 'termmeta', 'termRelationships', 'usermeta'] as const;
+
+/** One statement that writes, for the SQL runner's check before it runs. */
+export const dbWrite = z.object({ sql: z.string().min(1).max(100_000, 'A statement under 100,000 characters') });
+
+/** What a statement that writes would do, read before it runs. */
+export interface WriteCheck {
+  /** Its first word, like UPDATE. */
+  statement: string;
+  /** Rows it changes, tried in a transaction that was rolled back; null when it could not be tried. */
+  rows: number | null;
+  /** Why it was not tried first. */
+  why?: string;
+  /** The tables saved first, whole, for Undo. */
+  tables: Array<{ name: string; bytes: number; view?: true }>;
+  bytes: number;
+  freeBytes: number;
+}
+
+/** A statement MySQL runs now, for the process list. */
+export interface MysqlProcess {
+  id: number;
+  user: string;
+  host: string;
+  db?: string;
+  /** Query, Sleep, Connect, Daemon and the like. */
+  command: string;
+  seconds: number;
+  state?: string;
+  /** The statement, cut at 300 characters. */
+  info?: string;
+}

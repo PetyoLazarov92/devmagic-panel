@@ -273,13 +273,15 @@ function RowsView({ database, table, editable }: { database: string; table: stri
   const [sort, setSort] = useState<Sort>(undefined);
   const [filters, setFilters] = useState<DbFilter[]>([]);
   const [drafts, setDrafts] = useState<DbFilter[]>([]);
+  const [match, setMatch] = useState<'all' | 'any'>('all');
+  const [draftMatch, setDraftMatch] = useState<'all' | 'any'>('all');
   const [open, setOpen] = useState<DbRow | null>(null);
   const [editor, setEditor] = useState<{ mode: EditorMode; row: DbRow | null } | null>(null);
   const [deleting, setDeleting] = useState<DbRow[] | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [changes, setChanges] = useState(0);
-  const query = useMemo(() => ({ page, pageSize, ...(sort ? { sort } : {}), filters }), [page, pageSize, sort, filters]);
+  const query = useMemo(() => ({ page, pageSize, ...(sort ? { sort } : {}), filters, match }), [page, pageSize, sort, filters, match]);
   const rows = useAsync(() => api.dbRows(database, table, query), [database, table, query]);
   const data = rows.data;
   // The columns stay known while the next page loads, for the filter bar.
@@ -327,17 +329,20 @@ function RowsView({ database, table, editable }: { database: string; table: stri
     e?.preventDefault();
     setPage(1);
     setFilters(drafts.filter((f) => !needsValue(f.op) || (f.value ?? '') !== ''));
+    setMatch(draftMatch);
   }
 
   function clear() {
     setDrafts([]);
     setFilters([]);
+    setDraftMatch('all');
+    setMatch('all');
     setPage(1);
   }
 
   // A new filter starts on the first text column: most searches are for a name or a value.
   const first = (columns.find((c) => !c.numeric && !c.binary) ?? columns[0])?.name;
-  const draftsChanged = JSON.stringify(drafts) !== JSON.stringify(filters);
+  const draftsChanged = JSON.stringify(drafts) !== JSON.stringify(filters) || draftMatch !== match;
   const picked = data?.rows.filter((r) => selected.has(keyOf(r))) ?? [];
 
   return (
@@ -360,24 +365,36 @@ function RowsView({ database, table, editable }: { database: string; table: stri
             </Button>
           </div>
         ))}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" disabled={!first || drafts.length >= 10} onClick={() => first && setDrafts((d) => [...d, { column: first, op: 'contains', value: '' }])}>
-            {drafts.length ? <Plus /> : <Filter />}
-            {drafts.length ? 'Add a filter' : 'Filter'}
-          </Button>
-          {drafts.length > 0 && <Button size="sm" type="submit" disabled={!draftsChanged}>Apply</Button>}
-          {(drafts.length > 0 || filters.length > 0) && <Button size="sm" variant="outline" onClick={clear}>Clear</Button>}
-          {canChange && <Button size="sm" variant="outline" onClick={() => setEditor({ mode: 'add', row: null })}><Plus />Add a row</Button>}
-          {canChange && picked.length > 0 && (
-            <Button size="sm" variant="outline" className="text-danger" onClick={() => setDeleting(picked)}><Trash2 />Delete {picked.length === 1 ? 'the row' : `${picked.length} rows`}</Button>
-          )}
-          <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-            {rows.loading && <LoaderCircle className="size-4 animate-spin" aria-label="Reading rows" />}
-            <label htmlFor={`${table}-page-size`}>Rows a page</label>
+        {/* Two groups: what filters the rows on the left, what changes them on the right. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div role="group" aria-label="Filters" className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" disabled={!first || drafts.length >= 10} onClick={() => first && setDrafts((d) => [...d, { column: first, op: 'contains', value: '' }])}>
+              <Filter />
+              {drafts.length ? 'Add a filter' : 'Filter'}
+            </Button>
+            {drafts.length > 1 && (
+              <Segmented label="Rows that match" value={draftMatch} onChange={setDraftMatch} options={[['all', 'Match every filter'], ['any', 'Match any filter']]} className="text-xs" />
+            )}
+            {drafts.length > 0 && <Button size="sm" type="submit" disabled={!draftsChanged}>Apply</Button>}
+            {(drafts.length > 0 || filters.length > 0) && <Button size="sm" variant="outline" onClick={clear}>Clear</Button>}
+          </div>
+          <div role="group" aria-label="Rows" className="ml-auto flex flex-wrap items-center gap-2">
+            {rows.loading && <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-label="Reading rows" />}
+            {canChange && picked.length > 0 && (
+              <Button size="sm" variant="outline" className="text-danger" onClick={() => setDeleting(picked)}><Trash2 />Delete {picked.length === 1 ? 'the ticked row' : `the ${picked.length} ticked rows`}</Button>
+            )}
+            {canChange && (
+              <Button size="sm" variant="outline" className="max-w-full" title={`Add a row to ${table}`} onClick={() => setEditor({ mode: 'add', row: null })}>
+                <Plus />
+                <span className="truncate">Add a row to <span className="font-mono">{table}</span></span>
+              </Button>
+            )}
+            {canChange && <span aria-hidden className="mx-1 h-5 w-px bg-border" />}
+            <label htmlFor={`${table}-page-size`} className="text-xs text-muted-foreground">Rows a page</label>
             <Select id={`${table}-page-size`} value={pageSize} onChange={(e) => (setPageSize(Number(e.target.value) as (typeof DB_PAGE_SIZES)[number]), setPage(1))} className="h-8 py-0 text-xs">
               {DB_PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
             </Select>
-          </span>
+          </div>
         </div>
       </form>
       {rows.error && <p role="alert" className="mx-4 mt-3 rounded-lg border border-danger/30 bg-danger/8 px-4 py-2.5 text-sm text-danger">{rows.error}</p>}
@@ -433,16 +450,17 @@ function RowsGrid({ page, sort, onSort, onOpen, selected, onSelect }: {
   onOpen: (row: DbRow) => void;
   /** Rows ticked to delete together, by key; no tick column without it. */
   selected?: Set<string>;
-  onSelect?: (next: Set<string>) => void;
+  /** Takes an update of the ticked rows, so quick ticks build on each other. */
+  onSelect?: (update: (current: Set<string>) => Set<string>) => void;
 }) {
   const all = page.rows.length > 0 && page.rows.every((r) => selected?.has(keyOf(r)));
-  const toggle = (row: DbRow) => {
-    if (!selected || !onSelect) return;
-    const next = new Set(selected);
-    if (next.has(keyOf(row))) next.delete(keyOf(row));
-    else next.add(keyOf(row));
-    onSelect(next);
-  };
+  const toggle = (row: DbRow) =>
+    onSelect?.((current) => {
+      const next = new Set(current);
+      if (next.has(keyOf(row))) next.delete(keyOf(row));
+      else next.add(keyOf(row));
+      return next;
+    });
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-left text-[13px]">
@@ -450,7 +468,7 @@ function RowsGrid({ page, sort, onSort, onOpen, selected, onSelect }: {
           <tr className="border-b bg-muted/50">
             {onSelect && (
               <th scope="col" className="w-8 px-3 py-2">
-                <input type="checkbox" aria-label="Tick every row on this page" checked={all} onChange={() => onSelect(all ? new Set() : new Set(page.rows.map(keyOf)))} />
+                <input type="checkbox" aria-label="Tick every row on this page" checked={all} onChange={() => onSelect(() => (all ? new Set() : new Set(page.rows.map(keyOf))))} />
               </th>
             )}
             {page.columns.map((c) => {

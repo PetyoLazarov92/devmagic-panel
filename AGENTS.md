@@ -84,7 +84,7 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    Passwords go to MySQL through `MYSQL_PWD` or stdin, and to WP-CLI through
    stdin (`--prompt`), never argv. Run history stores any input field called
    `password`, and a row's values and keys (`rowKey`, `rowKeys`, `rowValues`,
-   `rowWas`), as `(hidden)`. Never log them or send them to an AI.
+   `rowWas`) and SQL that writes (`sql`), as `(hidden)`. Never log them or send them to an AI.
    The panel password changes in the panel (the current one first) and resets
    on the login page with the computer password: `sudo -k -S -v` on stdin,
    offered only where sudo asks this account for a password, behind a global

@@ -3,7 +3,7 @@ import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCleanups, mockCleanupStarted, mockDbSchema, mockRowAction, mockUndoCleanup, mockRowChanges, mockWordpressDb } from './db-browser';
+import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockRowAction, mockUndoCleanup, mockRowChanges, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
@@ -400,6 +400,12 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     'mysql.dropDatabase': [{ id: 'export', label: `Export ${String(input.database)} to the MySQL backups` }, { id: 'drop', label: `Delete database ${String(input.database)}` }],
     'mysql.dropUsers': [{ id: 'save', label: `Save ${accounts.length === 1 ? accounts[0] : `${accounts.length} accounts`} and their rights` }, { id: 'drop', label: `Delete ${accounts.join(', ')}` }],
     'mysql.optimize': [{ id: 'optimize', label: `Optimize the tables of ${String(input.database)}` }],
+    ...(id === 'mysql.runSql'
+      ? (() => {
+          const c = mockCheckWrite(String(input.database), String(input.sql));
+          return { 'mysql.runSql': [{ id: 'save', label: c.tables.length ? `Save ${c.tables.map((t) => t.name).join(', ')} for Undo` : 'Note the tables there are, for Undo' }, { id: 'run', label: `${c.statement} on ${c.tables.map((t) => t.name).join(', ') || 'a new table'}` }] };
+        })()
+      : {}),
     ...Object.fromEntries(
       (['db.cleanTransients', 'db.cleanContent', 'db.cleanOrphans', 'mysql.emptyTable', 'mysql.dropTable'] as const).map((k) => [
         k,
@@ -534,7 +540,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     };
     done();
   }
-  if (id === 'mysql.emptyTable' || id === 'mysql.dropTable' || id.startsWith('db.clean')) {
+  if (id === 'mysql.emptyTable' || id === 'mysql.dropTable' || id === 'mysql.runSql' || id.startsWith('db.clean')) {
     job.title = (job.steps.at(-1)?.label ?? job.title);
     job.undoable = ['Put back what it removed'];
   } else if (id.startsWith('mysql.')) {
@@ -840,6 +846,10 @@ export const mockApi: Api = {
     if (row) return row;
     const undone = mockUndoCleanup(id, input);
     if (undone) return undone;
+    if (id === 'mysql.killQuery') {
+      killedProcesses.add(Number(input.id));
+      return { runId: 42, ok: true, exitCode: 0, output: `stopped the statement ${String(input.id)} ran for northwinddb` };
+    }
     if (id === 'git.pull') {
       // As git answers with color.ui = always: a diffstat with its colors.
       const g = '\u001b[32m', r = '\u001b[31m', x = '\u001b[m';
@@ -1144,6 +1154,14 @@ export const mockApi: Api = {
   dbRows: async (database, table, query) => {
     await wait(250);
     return mockDbRows(database, table, query);
+  },
+  checkWrite: async (database, sql) => {
+    await wait(400);
+    return mockCheckWrite(database, sql);
+  },
+  mysqlProcesses: async () => {
+    await wait(200);
+    return mockProcesses();
   },
   cleanups: async (database, site) => {
     await wait(150);

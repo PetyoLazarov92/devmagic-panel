@@ -1,4 +1,4 @@
-import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, RowChangeInfo, WpDbReport, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, RowChangeInfo, WriteCheck, WpDbReport, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -78,6 +78,10 @@ export interface Api {
   dbStructure: (database: string, table: string) => Promise<DbStructure>;
   dbRows: (database: string, table: string, query: DbRowsQuery) => Promise<DbRowsPage>;
   dbCell: (database: string, table: string, query: DbCellQuery) => Promise<DbCellValue>;
+  /** What SQL that writes would change, before it runs. */
+  checkWrite: (database: string, sql: string) => Promise<WriteCheck>;
+  /** What MySQL runs now. */
+  mysqlProcesses: () => Promise<MysqlProcess[]>;
   /** The clean-ups saved for Undo on a database, or one site of it (local.shop.com/learn). */
   cleanups: (database: string, site?: string) => Promise<CleanupInfo[]>;
   /** Table and column names, for the SQL editor's suggestions. */
@@ -267,6 +271,8 @@ const realApi: Api = {
   // POSTs: a filter's value or a row's key is data, and stays out of URLs and Apache's log.
   dbRows: (database, table, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/rows`, query),
   dbCell: (database, table, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/cell`, query),
+  checkWrite: (database, sql) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/check-write`, { sql }),
+  mysqlProcesses: () => request('GET', '/api/mysql/processes'),
   cleanups: (database, site) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/cleanups${site ? `?site=${encodeURIComponent(site)}` : ''}`),
   dbSchema: (database) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/schema`),
   rowChanges: (database, table) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/row-changes?table=${encodeURIComponent(table)}`),

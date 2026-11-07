@@ -28,6 +28,8 @@ export interface Statement {
   text: string;
   /** Its first word, upper case, like SELECT. */
   kind: string;
+  /** The statement with every string emptied and every comment a space: what MySQL reads as names and keywords. */
+  code: string;
 }
 
 /**
@@ -36,15 +38,17 @@ export interface Statement {
  * count. Refuses a second statement, a /*! comment MySQL would run, and a
  * backslash outside a string (the mysql client's own commands).
  */
-export function oneStatement(sql: string): Statement {
+export function oneStatement(sql: string, reading = true): Statement {
   let i = 0;
   let end = -1;
+  let code = '';
   const n = sql.length;
   const at = (k: number) => sql[k] ?? '';
   while (i < n) {
     const c = at(i);
     if (c === "'" || c === '"' || c === '`') {
       const quote = c;
+      const start = i;
       i++;
       while (i < n) {
         if (at(i) === '\\' && quote !== '`') {
@@ -62,10 +66,13 @@ export function oneStatement(sql: string): Statement {
       }
       if (i >= n) throw new BrowseError(`A ${quote === '`' ? 'backtick' : 'quote'} is not closed`);
       i++;
+      // A backticked name stays a name; a string's words are data, not names.
+      if (end < 0) code += quote === '`' ? sql.slice(start, i) : "''";
       continue;
     }
     if (c === '#' || (c === '-' && at(i + 1) === '-' && (i + 2 >= n || /\s/.test(at(i + 2))))) {
       while (i < n && at(i) !== '\n') i++;
+      if (end < 0) code += ' ';
       continue;
     }
     if (c === '/' && at(i + 1) === '*') {
@@ -73,6 +80,7 @@ export function oneStatement(sql: string): Statement {
       const close = sql.indexOf('*/', i + 2);
       if (close < 0) throw new BrowseError('A /* comment is not closed');
       i = close + 2;
+      if (end < 0) code += ' ';
       continue;
     }
     if (c === '\\') throw new BrowseError('A backslash outside a string is a command of the mysql client, not SQL');
@@ -83,14 +91,15 @@ export function oneStatement(sql: string): Statement {
       continue;
     }
     if (end >= 0 && !/\s/.test(c)) throw new BrowseError('One statement at a time');
+    if (end < 0) code += c;
     i++;
   }
   const text = (end >= 0 ? sql.slice(0, end) : sql).trim();
   const words = stripLeading(text);
   const kind = (/^[A-Za-z]+/.exec(words)?.[0] ?? '').toUpperCase();
   if (!text || !kind) throw new BrowseError('Write a statement, like SELECT * FROM wp_options LIMIT 10');
-  if (!READING.has(kind)) throw new BrowseError(`${kind} changes or does not read: the SQL runner runs SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE and VALUES`);
-  return { text, kind };
+  if (reading && !READING.has(kind)) throw new BrowseError(`${kind} changes or does not read: the SQL runner runs SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE and VALUES`);
+  return { text, kind, code: code.trim() };
 }
 
 /** The text after leading comments, spaces and opening parentheses, where the first word is. */

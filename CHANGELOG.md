@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.14.0 (2026-11-07)
+* **Sites:** the SQL runner has Can write next to Read only: one statement that changes rows (INSERT, UPDATE, DELETE, REPLACE) or a table, an index or a view (ALTER, CREATE, DROP, RENAME, TRUNCATE). Check and run first shows what it would change: the rows a change of rows changes, tried in a transaction that is rolled back (only on tables that can roll back), the tables saved first with their size and the disk's free room. With the database's name typed, a job saves those tables whole and runs it, a change of rows in one transaction. Undo, on the job and under Changes you can undo, puts the tables back as they were and deletes a table or view it made
+* **Databases:** SQL that writes saves the tables it names, and any a foreign key cascades into, so a change to one table never copies the whole database. It refuses another database, accounts and rights, databases, files, routines and a second statement, and MySQL's own and kept databases stay read only
+* **Services:** the MySQL tab has Processes: what MySQL runs now, the longest first, with idle connections and MySQL's own a tick away, and Stop for a statement (KILL QUERY), never one of MySQL's own threads
+* **Sites:** with two filters or more on a table's rows, pick Match every filter (AND, as before) or Match any filter (OR). The bar over a table's rows has the filters on the left and what changes rows on the right (Delete the ticked rows, Add a row to wp_options with the table's own name), so adding a row no longer reads as adding a filter. Clean-ups you can undo is now Changes you can undo, with SQL that wrote in it too
+* **Panel:** run history keeps no SQL that writes: it can hold data, so it is hidden like a password, and the job is named by its kind and tables
+
 ### v1.13.0 (2026-11-07)
 * **Sites:** the Database tab's WordPress view cleans up: Delete expired transients or all of them, Turn off autoload for a big option (written as the site's WordPress writes it, on and off or yes and no), and tick revisions, auto-drafts, posts and comments in the trash, spam, and meta or terms left behind by something deleted, then Delete the ticked. A post goes with its meta, terms and comments, as WordPress deletes it; a link's terms stay. On a network each site's own tables are cleaned, and the network's transients and user meta with the first site
 * **Databases:** a table's menu has Empty and Delete, with its name typed to confirm. Not for MySQL's own databases, the ones kept for a site, or views

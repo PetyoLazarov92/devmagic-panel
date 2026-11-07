@@ -37,7 +37,8 @@ export interface CleanupPart {
   table: string;
   /** Which rows; none for a whole table. */
   where?: string;
-  how: 'delete' | 'empty' | 'drop';
+  /** replace: saved whole with its DROP and CREATE, so Undo puts the table back as it was (SQL that writes). */
+  how: 'delete' | 'empty' | 'drop' | 'replace';
   /** A one-column numeric key: the delete stops at the highest one the copy saw. */
   key?: string;
 }
@@ -49,13 +50,15 @@ interface SavedPart {
   file: string;
 }
 
-interface SavedCleanup {
+export interface SavedCleanup {
   title: string;
   kind: CleanupInfo['kind'];
   database: string;
   /** The site key it was for, local.shop.com or local.shop.com/learn. */
   site?: string;
   parts: SavedPart[];
+  /** Tables and views the change made, which Undo deletes again. */
+  created?: Array<{ name: string; view: boolean }>;
   savedAt: string;
 }
 
@@ -70,7 +73,7 @@ const base = (mysql: MysqlAccount) => ['--user', mysql.user, '--host', mysql.hos
 const firstError = (r: ExecResult) => (r.stderr.trim().split('\n').find((l) => l.startsWith('ERROR')) ?? r.stderr.trim().split('\n')[0] ?? `exit ${r.code}`).replace(/ at line \d+/, '');
 
 /** Statements on stdin with the admin account in the database, as SQL only; the lines they printed. */
-async function sql(ctx: RowsContext, database: string, statements: string, timeoutMs = 60 * 60_000): Promise<string[]> {
+export async function adminSql(ctx: RowsContext, database: string, statements: string, timeoutMs = 60 * 60_000): Promise<string[]> {
   const mysql = account(ctx);
   const r = await ctx.exec('mysql', ['--batch', '--skip-column-names', '--binary-mode', '--default-character-set=utf8mb4', ...base(mysql), `--database=${database}`], {
     env: { MYSQL_PWD: mysql.password },
@@ -100,7 +103,7 @@ export function pruneCleanups(dir: string, now = Date.now()): string[] {
   return gone;
 }
 
-function readCleanup(config: SystemConfig, id: string): SavedCleanup {
+export function readCleanup(config: SystemConfig, id: string): SavedCleanup {
   if (!cleanupId.safeParse(id).success) throw new MysqlRefused('A clean-up like 20261107-101500-a1b2c3');
   const file = join(cleanupsDir(config), id, 'cleanup.json');
   if (!existsSync(file)) throw new MysqlRefused('That clean-up is not saved any more: copies go after 14 days, and after their Undo');
@@ -135,7 +138,7 @@ export function listCleanups(config: SystemConfig, database: string, site?: stri
 }
 
 /** Streams one table's rows (or all of it) into a gzipped file, 0600. */
-async function dumpPart(ctx: RowsContext, database: string, part: CleanupPart, where: string | undefined, file: string, note: (bytes: number) => void): Promise<void> {
+export async function dumpPart(ctx: RowsContext, database: string, part: CleanupPart, where: string | undefined, file: string, note: (bytes: number) => void): Promise<void> {
   const mysql = account(ctx);
   const out = new PassThrough();
   let bytes = 0;
@@ -149,9 +152,12 @@ async function dumpPart(ctx: RowsContext, database: string, part: CleanupPart, w
     'mysqldump',
     [
       ...base(mysql),
-      '--single-transaction', '--quick', '--skip-lock-tables', '--no-tablespaces', '--skip-triggers', '--hex-blob', '--default-character-set=utf8mb4', '--max-allowed-packet=1G', '--insert-ignore',
-      // A deleted table keeps its CREATE TABLE, and never a DROP: Undo must not replace a table made again since.
-      ...(part.how === 'drop' ? ['--skip-add-drop-table'] : ['--no-create-info']),
+      '--single-transaction', '--quick', '--skip-lock-tables', '--no-tablespaces', '--skip-triggers', '--hex-blob', '--default-character-set=utf8mb4', '--max-allowed-packet=1G',
+      // Removed rows come back with INSERT IGNORE, next to rows made since. A deleted table keeps its
+      // CREATE TABLE and never a DROP: Undo must not replace a table made again since. A table SQL
+      // changed is saved whole with its DROP: Undo puts it back exactly as it was.
+      ...(part.how === 'replace' ? [] : ['--insert-ignore']),
+      ...(part.how === 'drop' ? ['--skip-add-drop-table'] : part.how === 'replace' ? [] : ['--no-create-info']),
       ...(where ? [`--where=${where}`] : []),
       '--', database, part.table,
     ],
@@ -174,7 +180,7 @@ export async function undoCleanup(ctx: RowsContext, { database, cleanup }: Actio
   const mysql = account(ctx);
   for (const part of [...saved.parts].reverse()) {
     if (part.how === 'drop') {
-      const there = await sql(ctx, database, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${textLiteral(part.table)};\n`);
+      const there = await adminSql(ctx, database, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${textLiteral(part.table)};\n`);
       if (there[0] !== '0') throw new MysqlRefused(`A table called ${part.table} is there again: delete or rename it first. The copy stays`);
     }
     const file = join(dir, part.file);
@@ -188,7 +194,10 @@ export async function undoCleanup(ctx: RowsContext, { database, cleanup }: Actio
     });
     if (r.code !== 0) throw new MysqlRefused(`MySQL refused to put ${part.table} back: ${firstError(r)}`);
   }
+  // What the change made goes again: a table or view that did not exist before it.
+  for (const made of saved.created ?? []) await adminSql(ctx, database, `DROP ${made.view ? 'VIEW' : 'TABLE'} IF EXISTS ${ident(made.name)};\n`);
   rmSync(dir, { recursive: true, force: true });
+  if (saved.kind === 'sql') return { code: 0, stdout: `undid "${saved.title}": ${saved.parts.map((p) => p.table).join(', ') || 'nothing'} as before${saved.created?.length ? `, ${saved.created.map((c) => c.name).join(', ')} deleted again` : ''}`, stderr: '' };
   const rows = saved.parts.reduce((n, p) => n + p.rows, 0);
   const what = saved.parts.length === 1 && saved.parts[0]?.how === 'drop' ? `table ${saved.parts[0].table}` : `${rows.toLocaleString('en-US')} ${rows === 1 ? 'row' : 'rows'}`;
   return { code: 0, stdout: `undid "${saved.title}": put back ${what}`, stderr: '' };
@@ -210,7 +219,7 @@ export function planCleanup(ctx: RowsContext, database: string, kind: CleanupInf
         const now = ctx.now?.() ?? new Date();
         id = `${stamp(now)}-${randomBytes(4).toString('hex').slice(0, 6)}`;
         // Count first, with the highest key seen, so the delete removes exactly what the copy holds.
-        const counts = await sql(
+        const counts = await adminSql(
           ctx,
           database,
           parts
@@ -250,10 +259,10 @@ export function planCleanup(ctx: RowsContext, database: string, kind: CleanupInf
         if (todo.length === 0) return { code: 0, stdout: 'nothing to remove', stderr: '' };
         const deletes = todo.filter((p) => p.how === 'delete');
         const lines = deletes.length
-          ? await sql(ctx, database, `START TRANSACTION;\n${deletes.map((p) => `DELETE FROM ${ident(p.table)} WHERE ${p.bounded};\nSELECT ROW_COUNT();\n`).join('')}COMMIT;\n`)
+          ? await adminSql(ctx, database, `START TRANSACTION;\n${deletes.map((p) => `DELETE FROM ${ident(p.table)} WHERE ${p.bounded};\nSELECT ROW_COUNT();\n`).join('')}COMMIT;\n`)
           : [];
         const whole = todo.filter((p) => p.how !== 'delete');
-        if (whole.length) await sql(ctx, database, whole.map((p) => `${p.how === 'drop' ? 'DROP TABLE' : 'TRUNCATE TABLE'} ${ident(p.table)};\n`).join(''));
+        if (whole.length) await adminSql(ctx, database, whole.map((p) => `${p.how === 'drop' ? 'DROP TABLE' : 'TRUNCATE TABLE'} ${ident(p.table)};\n`).join(''));
         job.onUndo(`Put back what ${title.toLowerCase()} removed`, () => undoCleanup(ctx, { database, cleanup: id }));
         const said = [
           ...deletes.map((p, i) => `${p.table}: ${Number(lines[i] ?? 0).toLocaleString('en-US')} rows`),
@@ -399,7 +408,7 @@ export async function setAutoload(ctx: RowsContext, { domain, path, blog = 1, op
   const t = await siteTablesFor(ctx, domain, path, blog);
   const table = `${t.blogPrefix}options`;
   if (!t.names.has(table)) throw new MysqlRefused(`${table} is not in ${t.database}`);
-  const lines = await sql(ctx, t.database, `SELECT option_id, autoload FROM ${ident(table)} WHERE option_name = ${textLiteral(option)};\n`);
+  const lines = await adminSql(ctx, t.database, `SELECT option_id, autoload FROM ${ident(table)} WHERE option_name = ${textLiteral(option)};\n`);
   const [id, current = ''] = (lines[0] ?? '').split('\t');
   if (!id) throw new MysqlRefused(`${table} has no option called ${option}`);
   const legacy = current === 'yes' || current === 'no';

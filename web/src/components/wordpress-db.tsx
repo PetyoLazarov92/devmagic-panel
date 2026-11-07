@@ -129,7 +129,7 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
   );
 }
 
-const SAVED = 'What it removes is saved first (14 days), so Undo on the job, or under Clean-ups you can undo, puts it back.';
+const SAVED = 'What it removes is saved first (14 days), so Undo on the job, or under Changes you can undo, puts it back.';
 
 function transientsAsk(r: WpDbReport, scope: 'expired' | 'all'): Ask {
   const t = r.transients;

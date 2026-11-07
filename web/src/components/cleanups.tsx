@@ -15,6 +15,7 @@ const number = (n: number) => n.toLocaleString('en-US');
 
 /** What a clean-up removed, in a few words: "18,451 rows of wp_posts, 940 of wp_postmeta". */
 export function removed(c: Pick<CleanupInfo, 'kind' | 'tables'>): string {
+  if (c.kind === 'sql') return c.tables.length ? `saved ${c.tables.map((t) => t.table).join(', ')}` : 'saved what was there';
   if (c.kind === 'drop') return `table ${c.tables[0]?.table ?? ''}`;
   if (c.kind === 'empty') return `every row of ${c.tables[0]?.table ?? ''}`;
   return c.tables.map((t, i) => `${number(t.rows)} ${i === 0 ? (t.rows === 1 ? 'row of ' : 'rows of ') : 'of '}${t.table}`).join(', ');
@@ -46,10 +47,10 @@ export function CleanupsCard({ database, site, refresh, onUndone }: { database: 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Clean-ups you can undo</CardTitle>
+        <CardTitle>Changes you can undo</CardTitle>
         <History className="size-4 text-muted-foreground" />
       </CardHeader>
-      <p className="px-5 pt-3 text-xs text-muted-foreground">Undo puts back what was removed; a row made again since stays as it is.</p>
+      <p className="px-5 pt-3 text-xs text-muted-foreground">Clean-ups and SQL that wrote, saved first. Undo puts back what a clean-up removed, next to rows made since, and puts back the tables SQL changed as they were before it.</p>
       <ul className="mt-2 divide-y">
         {items.map((c) => (
           <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5 text-sm">

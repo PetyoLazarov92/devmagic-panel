@@ -1,5 +1,5 @@
-import type { ActionId, MysqlBackup, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
-import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, RotateCcw, Table2, Trash2, Users, Wand2 } from 'lucide-react';
+import type { ActionId, MysqlBackup, MysqlProcess, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
+import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, OctagonX, RefreshCw, RotateCcw, Table2, Trash2, Users, Wand2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { SqlRunner } from '@/components/sql-runner';
@@ -91,6 +91,9 @@ function MysqlDatabaseView({ database, onLoading }: { database: string; onLoadin
   const table = useQueryParam('table');
   const show = useQueryParam('show') === 'structure' ? 'structure' : 'rows';
   const sql = useQueryParam('view') === 'sql';
+  // MySQL's own databases and the ones kept for a site are only read.
+  const overview = useAsync(() => api.dbOverview(database), [database]);
+  const canWrite = Boolean(overview.data && overview.data.kind !== 'system' && overview.data.kind !== 'kept');
   useEffect(() => onLoading(false), [onLoading]);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
@@ -101,7 +104,7 @@ function MysqlDatabaseView({ database, onLoading }: { database: string; onLoadin
         <Segmented label="Database" value={sql ? 'sql' : 'tables'} onChange={(v) => navigate(mysqlDatabaseHref(database, undefined, v === 'sql'), { scroll: false })} options={[['tables', 'Tables'], ['sql', 'SQL']]} />
       </div>
       {sql ? (
-        <SqlRunner key={database} database={database} placeholder="SELECT * FROM a_table LIMIT 50" />
+        <SqlRunner key={`${database}-${canWrite}`} database={database} placeholder="SELECT * FROM a_table LIMIT 50" canWrite={canWrite} />
       ) : (
         <DatabaseBrowser key={database} database={database} location={{ table, show }} onNavigate={(location) => navigate(mysqlDatabaseHref(database, location), { scroll: false })} />
       )}
@@ -235,6 +238,8 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
           </Button>
         </div>
       </Card>
+
+      <ProcessesCard refresh={refresh} />
 
       <Card>
         <CardHeader><CardTitle>Databases</CardTitle><Database className="size-4 text-muted-foreground" /></CardHeader>
@@ -500,3 +505,70 @@ function ResetUserDialog({ user, onClose, onDone }: { user: MysqlUser | null; on
   );
 }
 
+
+/**
+ * What MySQL runs now, the longest first, without idle connections unless
+ * asked; Stop ends one statement (KILL QUERY) and leaves its connection.
+ */
+function ProcessesCard({ refresh }: { refresh: number }) {
+  const [tick, setTick] = useState(0);
+  const list = useAsync(() => api.mysqlProcesses(), [refresh, tick]);
+  const [idle, setIdle] = useState(false);
+  const [stopping, setStopping] = useState<MysqlProcess | null>(null);
+  const all = list.data ?? [];
+  const shown = all.filter((p) => idle || (p.command !== 'Sleep' && p.command !== 'Daemon'));
+  const hidden = all.length - shown.length;
+  const own = (p: MysqlProcess) => p.user === 'system user' || p.user === 'event_scheduler' || p.command === 'Daemon';
+
+  async function stop(p: MysqlProcess) {
+    setStopping(null);
+    await runWithToast('mysql.killQuery', { id: p.id }, `Statement ${p.id} stopped`);
+    setTick((n) => n + 1);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Processes</CardTitle>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="outline" onClick={() => setTick((n) => n + 1)} disabled={list.loading}>
+            <RefreshCw className={cn(list.loading && 'animate-spin')} />Read again
+          </Button>
+        </div>
+      </CardHeader>
+      {list.error && <p role="alert" className="mx-5 mt-4 text-sm text-danger">{list.error}</p>}
+      <div className="flex flex-wrap items-center gap-3 px-5 pt-3 text-xs text-muted-foreground">
+        <span className="flex-1">{shown.length ? 'What MySQL runs now, the longest first.' : 'MySQL runs no statement now.'}</span>
+        {(hidden > 0 || idle) && (
+          <label className="flex items-center gap-1.5">
+            <input type="checkbox" checked={idle} onChange={(e) => setIdle(e.target.checked)} />
+            Show idle connections and MySQL&apos;s own{hidden > 0 ? ` (${hidden})` : ''}
+          </label>
+        )}
+      </div>
+      <ul className={cn('mt-2 divide-y', !shown.length && 'pb-2')}>
+        {shown.map((p) => (
+          <li key={p.id} className="grid gap-1 px-5 py-2.5 text-sm">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-mono text-xs text-muted-foreground">{p.id}</span>
+              <span className="font-medium">{p.user}</span>
+              {p.db && <span className="font-mono text-[13px] text-muted-foreground">{p.db}</span>}
+              <Badge tone={p.command === 'Query' && p.seconds >= 10 ? 'warning' : 'neutral'}>{p.command} · {p.seconds >= 60 ? `${Math.floor(p.seconds / 60)} min ${p.seconds % 60} s` : `${p.seconds} s`}</Badge>
+              {p.state && <span className="text-xs text-muted-foreground">{p.state}</span>}
+              {p.command === 'Query' && !own(p) && (
+                <Button size="sm" variant="outline" className="ml-auto" onClick={() => setStopping(p)}><OctagonX />Stop</Button>
+              )}
+            </div>
+            {p.info && <p className="truncate font-mono text-xs text-muted-foreground" title={p.info}>{p.info}</p>}
+          </li>
+        ))}
+      </ul>
+      <Dialog open={stopping !== null} onClose={() => setStopping(null)} title={`Stop statement ${stopping?.id ?? ''}?`} description="MySQL ends the statement; a change it was making is rolled back on InnoDB tables, and its connection stays. The page or job that ran it gets an error.">
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setStopping(null)}>Cancel</Button>
+          <Button variant="danger" onClick={() => stopping && void stop(stopping)}><OctagonX />Stop the statement</Button>
+        </div>
+      </Dialog>
+    </Card>
+  );
+}

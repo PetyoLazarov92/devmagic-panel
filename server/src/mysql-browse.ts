@@ -63,11 +63,11 @@ export async function flavor(ctx: BrowseContext): Promise<'mysql' | 'mariadb'> {
  * lines they printed. raw: lines as MySQL wrote them, for JSON_ARRAY output,
  * which escapes its own control characters.
  */
-export async function read(ctx: BrowseContext, sql: string, { limitMs = READ_LIMIT_MS, maxBytes = 8 * 1024 * 1024, raw = true } = {}): Promise<string[]> {
+export async function read(ctx: BrowseContext, sql: string, { limitMs = READ_LIMIT_MS, maxBytes = 8 * 1024 * 1024, raw = true, database = '' } = {}): Promise<string[]> {
   const mysql = account(ctx);
   const limit = (await flavor(ctx)) === 'mariadb' ? `SET SESSION max_statement_time = ${limitMs / 1000};` : `SET SESSION max_execution_time = ${limitMs};`;
   const input = `SET SESSION TRANSACTION READ ONLY;\n${limit}\n${sql}`;
-  const r = await ctx.exec('mysql', [...baseArgs(mysql), ...(raw ? ['--raw'] : [])], {
+  const r = await ctx.exec('mysql', [...baseArgs(mysql), ...(raw ? ['--raw'] : []), ...(database ? [`--database=${checkDatabase(database)}`] : [])], {
     env: { MYSQL_PWD: mysql.password },
     input,
     timeoutMs: limitMs + 10_000,

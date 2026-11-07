@@ -1,4 +1,4 @@
-import type { CleanupInfo, DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport } from '@devmagic-panel/shared';
+import type { MysqlProcess, WriteCheck, CleanupInfo, DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport } from '@devmagic-panel/shared';
 import { DB_CELL_HEAD, isSystemDatabase, WP_AUTOLOAD_LIMIT } from '@devmagic-panel/shared';
 import { sites } from './fixtures';
 
@@ -224,7 +224,8 @@ export function mockDbRows(database: string, table: string, query: DbRowsQuery):
     if (i < 0) throw new Error(`No column called ${name} in this table`);
     return i;
   };
-  let rows = t.rows.filter((r) => filters.every((f) => matches(r[index(f.column)] ?? null, f, Boolean(t.columns[index(f.column)]?.numeric))));
+  const test = (r: Array<string | null>, f: DbFilter) => matches(r[index(f.column)] ?? null, f, Boolean(t.columns[index(f.column)]?.numeric));
+  let rows = t.rows.filter((r) => !filters.length || (query.match === 'any' ? filters.some((f) => test(r, f)) : filters.every((f) => test(r, f))));
   if (query.sort) {
     const i = index(query.sort.column);
     const numeric = t.columns[i]?.numeric;
@@ -431,14 +432,15 @@ const cleanups: MockCleanup[] = [];
 
 /** A clean-up job of the mockup leaves its saved copy in the list, as the panel would once its job is done. */
 export function mockCleanupStarted(id: string, input: Record<string, unknown>): void {
-  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop' };
+  const kinds: Record<string, CleanupInfo['kind']> = { 'db.cleanTransients': 'transients', 'db.cleanContent': 'content', 'db.cleanOrphans': 'orphans', 'mysql.emptyTable': 'empty', 'mysql.dropTable': 'drop', 'mysql.runSql': 'sql' };
   const kind = kinds[id];
   if (!kind) return;
   const site = input.domain ? `${String(input.domain)}${input.path ? String(input.path) : ''}` : undefined;
   const database = site ? sites.find((s) => `${s.domain}${s.path ?? ''}` === site)?.db?.name ?? '' : String(input.database);
   const prefix = Number(input.blog ?? 1) > 1 ? `wp_${String(input.blog)}_` : 'wp_';
-  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}` }[kind];
-  const tables = kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : [{ table: String(input.table), rows: 0 }];
+  const written = kind === 'sql' ? mockCheckWrite(String(input.database), String(input.sql)) : null;
+  const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}`, sql: `${written?.statement ?? 'SQL'} on ${written?.tables.map((t) => t.name).join(', ') || 'a new table'}` }[kind];
+  const tables = written ? written.tables.map((t) => ({ table: t.name, rows: 0 })) : kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : [{ table: String(input.table), rows: 0 }];
   const now = new Date();
   cleanups.unshift({ id: `20261107-${String(103000 + cleanups.length).padStart(6, '0')}-mockcl`, title, kind, tables, bytes: 3_400_000, savedAt: now.toISOString(), purgeAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(), database, ...(site ? { site } : {}) });
 }
@@ -453,4 +455,37 @@ export function mockUndoCleanup(id: string, input: Record<string, unknown>): Act
   if (at < 0) return { runId: 42, ok: false, exitCode: 1, output: 'That clean-up is not saved any more: copies go after 14 days, and after their Undo' };
   const [c] = cleanups.splice(at, 1);
   return { runId: 42, ok: true, exitCode: 0, output: `undid "${c?.title}": put back ${c?.tables.reduce((n, t) => n + t.rows, 0).toLocaleString('en-US')} rows` };
+}
+
+/** The mockup's check of SQL that writes: the tables of the mock database it names, and a count for a change of rows. */
+export function mockCheckWrite(database: string, sql: string): WriteCheck {
+  const text = sql.trim().replace(/;\s*$/, '');
+  const kind = (/^[\s(]*([A-Za-z]+)/.exec(text)?.[1] ?? '').toUpperCase();
+  const rows = ['INSERT', 'UPDATE', 'DELETE', 'REPLACE'].includes(kind);
+  const structure = /^(ALTER\s+TABLE|CREATE\s+(TABLE|INDEX|UNIQUE|VIEW)|DROP\s+(TABLE|INDEX|VIEW)|RENAME\s+TABLE|TRUNCATE)\b/i.test(text);
+  if (!rows && !structure) throw new Error(`The SQL runner writes with INSERT, UPDATE, DELETE and REPLACE, and changes tables, indexes and views with ALTER, CREATE, DROP, RENAME and TRUNCATE; not ${text.split(/\s+/).slice(0, 2).join(' ')}`);
+  if (text.includes(';')) throw new Error('One statement at a time');
+  const tables = mockDbOverview(database).tables.filter((t) => new RegExp(`\\b${t.name}\\b`).test(text));
+  if (rows && tables.length === 0) throw new Error(`The statement names no table of ${database}`);
+  const myisam = tables.filter((t) => t.engine === 'MyISAM');
+  return {
+    statement: kind,
+    rows: rows && !myisam.length ? 3 : null,
+    ...(rows ? (myisam.length ? { why: `${myisam.map((t) => `${t.name} (MyISAM)`).join(', ')} cannot roll back, so it is not tried first.` } : {}) : { why: 'A change to a table, an index or a view cannot be tried first: MySQL commits it at once.' }),
+    tables: tables.map((t) => ({ name: t.name, bytes: t.dataBytes + t.indexBytes, ...(t.view ? { view: true as const } : {}) })),
+    bytes: tables.reduce((n, t) => n + t.dataBytes + t.indexBytes, 0),
+    freeBytes: 182_000_000_000,
+  };
+}
+
+export const killedProcesses = new Set<number>();
+
+export function mockProcesses(): MysqlProcess[] {
+  const all: MysqlProcess[] = [
+    { id: 318, user: 'northwinddb', host: 'localhost', db: 'northwinddb', command: 'Query', seconds: 42, state: 'Sending data', info: "SELECT p.ID, m.meta_value FROM wp_posts p JOIN wp_postmeta m ON m.post_id = p.ID WHERE m.meta_key = '_acme_builder_data'" },
+    { id: 322, user: 'dailypostdb', host: 'localhost', db: 'dailypostdb', command: 'Query', seconds: 3, state: 'executing', info: "UPDATE wp_options SET option_value = '...' WHERE option_name = 'cron'" },
+    { id: 290, user: 'northwinddb', host: 'localhost', db: 'northwinddb', command: 'Sleep', seconds: 118 },
+    { id: 5, user: 'event_scheduler', host: 'localhost', command: 'Daemon', seconds: 259_200, state: 'Waiting on empty queue' },
+  ];
+  return all.filter((p) => !killedProcesses.has(p.id));
 }

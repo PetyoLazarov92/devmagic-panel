@@ -613,6 +613,21 @@ export const actions = {
     changesSystem: true,
     input: z.object({ database: mysqlDatabaseName, table: mysqlIdentifier, confirm: z.string() }).refine(confirmTable, { path: ['confirm'], message: 'Type the table name to confirm' }),
   },
+  'mysql.runSql': {
+    title: 'Run SQL that writes',
+    description:
+      "Runs one statement that changes rows (INSERT, UPDATE, DELETE, REPLACE) or a table, an index or a view (ALTER, CREATE, DROP, RENAME, TRUNCATE) on one database, after saving the tables it names whole (14 days); a change of rows runs in a transaction. Undo puts those tables back as they were and deletes what it made. Not for MySQL's own databases or the ones kept for a site; never accounts, rights, databases or files. Starts a job.",
+    changesSystem: true,
+    input: z
+      .object({ database: mysqlDatabaseName, sql: z.string().min(1).max(100_000), confirm: z.string() })
+      .refine((v) => v.confirm.trim() === v.database, { path: ['confirm'], message: 'Type the database name to confirm' }),
+  },
+  'mysql.killQuery': {
+    title: 'Stop a MySQL statement',
+    description: "Stops one statement MySQL is running (KILL QUERY), like a slow query a page left behind; its connection stays. Never one of MySQL's own threads.",
+    changesSystem: true,
+    input: z.object({ id: z.number().int().min(1).max(2 ** 53 - 1) }),
+  },
   'mysql.undoCleanup': {
     title: 'Undo a clean-up',
     description: 'Puts back the rows or the table a clean-up removed, from the copy it saved first; a row made again since stays as it is.',

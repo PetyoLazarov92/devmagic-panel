@@ -16,6 +16,7 @@ import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
 import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
 import { planContent, planDropTable, planEmptyTable, planOrphans, planTransients, setAutoload, undoCleanup } from './mysql-cleanup.js';
 import { deleteRows, insertRow, type RowsContext, undoRowChange, updateRow } from './mysql-rows.js';
+import { killQuery, planWrite } from './mysql-write.js';
 import { CoreRefused, planAddCore, removeCore } from './sites/cores.js';
 import { CreateRefused, planCreate } from './sites/create.js';
 import { planCleanCopy } from './sites/clean.js';
@@ -320,6 +321,12 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'mysql.emptyTable': async (ctx, input) => startJob(ctx, await planEmptyTable(rowsCtx(ctx), input), `Empty ${input.table}`, `database ${input.database}`),
   'mysql.dropTable': async (ctx, input) => startJob(ctx, await planDropTable(rowsCtx(ctx), input), `Delete table ${input.table}`, `database ${input.database}`),
   'mysql.undoCleanup': async (ctx, input) => [await undoCleanup(rowsCtx(ctx), input)],
+  // The job's title names the statement's kind and tables, never its text: run history keeps titles.
+  'mysql.runSql': async (ctx, input) => {
+    const { title, steps } = await planWrite(rowsCtx(ctx), input);
+    return startJob(ctx, steps, title, `database ${input.database}`);
+  },
+  'mysql.killQuery': async (ctx, input) => [await killQuery(rowsCtx(ctx), input)],
   'mysql.deleteBackup': async (ctx, input) => [deleteMysqlBackup(mysqlBackupsDir(ctx.uploadsDir), input)],
   'php.setXdebug': (ctx, input) => setXdebug(ctx.config, ctx.exec, ctx.dmpRoot, input),
   'php.setModule': (ctx, input) => setPhpModule(ctx.config, ctx.exec, ctx.dmpRoot, input),
@@ -630,8 +637,8 @@ export function lockKey(id: ActionId, input: unknown): string | undefined {
   return undefined;
 }
 
-/** Inputs run history never keeps: passwords, and a row's values and key (data from a database). */
-const HIDDEN_INPUTS = new Set(['password', 'rowKey', 'rowKeys', 'rowValues', 'rowWas']);
+/** Inputs run history never keeps: passwords, and a row's values and key or SQL that writes (data from a database). */
+const HIDDEN_INPUTS = new Set(['password', 'rowKey', 'rowKeys', 'rowValues', 'rowWas', 'sql']);
 
 /** The input as run history keeps it: any field called password, or holding a row's data, is blanked out. */
 export function withoutPasswords(value: unknown): unknown {

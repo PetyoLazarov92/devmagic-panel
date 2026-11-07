@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, DbStructure, RowChangeInfo, WpDbReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -26,6 +26,7 @@ import { nginxPhpVersion } from './sites/server-switch.js';
 import { type BrowseContext, dbCell, dbOverview, dbRows, dbSchema, dbStructure } from './mysql-browse.js';
 import { runQuery } from './mysql-query.js';
 import { listCleanups } from './mysql-cleanup.js';
+import { checkWrite, mysqlProcesses } from './mysql-write.js';
 import { listRowChanges } from './mysql-rows.js';
 import { databaseSummary, wordpressReport } from './mysql-wordpress.js';
 import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
@@ -383,6 +384,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       if (!mysqlDatabaseName.safeParse(database).success) return reply.code(400).send({ error: 'A database like acme_com' });
       return listCleanups(deps.config, database, request.query.site);
     });
+    // What SQL that writes would do, before it runs: its tables, the room for their copy, and the rows it changes, tried and rolled back.
+    api.post<{ Params: { database: string } }>('/api/mysql/databases/:database/check-write', async (request, reply): Promise<WriteCheck | undefined> =>
+      browsing(reply, () => checkWrite({ ...browse(), siteBusy: () => false }, request.params.database, request.body)));
+    // What MySQL runs now, for the MySQL tab's Processes.
+    api.get('/api/mysql/processes', async (_request, reply): Promise<MysqlProcess[] | undefined> => browsing(reply, () => mysqlProcesses(browse())));
     // Table and column names, for the SQL editor's suggestions.
     api.get<{ Params: { database: string } }>('/api/mysql/databases/:database/schema', async (request, reply): Promise<DbSchema | undefined> =>
       browsing(reply, () => dbSchema(browse(), request.params.database)));

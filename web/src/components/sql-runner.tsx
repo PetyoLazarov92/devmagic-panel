@@ -1,7 +1,11 @@
-import type { DbQueryResult } from '@devmagic-panel/shared';
+import type { DbQueryResult, WriteCheck } from '@devmagic-panel/shared';
 import { Download, History, KeyRound, LoaderCircle, Play, ScanSearch, ShieldCheck, Trash2 } from 'lucide-react';
 import { Component, type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
+import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { ValueView } from '@/components/db-browser';
+import { JobBox } from '@/components/job-box';
+import { settled, useJob } from '@/components/job-steps';
+import { Segmented } from '@/components/ui/segmented';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +15,8 @@ import { Menu } from '@/components/ui/menu';
 import { api, ApiError } from '@/lib/api';
 import { runWithToast } from '@/lib/site-actions';
 import { addHistory, clearHistory, readHistory, toCsv } from '@/lib/sql-history';
+import { bytes } from '@/lib/format';
+import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 
@@ -79,12 +85,22 @@ const number = (n: number) => n.toLocaleString('en-US');
 const CELL_SHOWN = 200;
 
 /**
- * Runs one statement that reads against a database, as the read-only MySQL
- * account: SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE or VALUES. Up to
- * 1,000 rows come back, as a grid and as CSV; the last 30 statements stay in
- * this browser.
+ * Runs one statement against a database. Read only by default, as the
+ * read-only MySQL account: SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE or
+ * VALUES, up to 1,000 rows as a grid and as CSV. Where the database may
+ * change, Can write runs one statement that writes as a job, after a check
+ * of what it changes and with the tables it names saved first for Undo. The
+ * last 30 statements stay in this browser.
  */
-export function SqlRunner({ database, placeholder }: { database: string; placeholder?: string }) {
+export function SqlRunner({ database, placeholder, canWrite = false }: { database: string; placeholder?: string; canWrite?: boolean }) {
+  const [mode, setMode] = useState<'read' | 'write'>('read');
+  const writing = canWrite && mode === 'write';
+  const [checked, setChecked] = useState<WriteCheck | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const runner = useJob();
+  const done = useRef<string | null>(null);
+  const { job } = runner;
   const [sql, setSql] = useState('');
   const [result, setResult] = useState<DbQueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +110,14 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
   const [open, setOpen] = useState<number | null>(null);
   // Table and column names for the suggestions; without them the editor still suggests keywords.
   const schema = useAsync(() => api.dbSchema(database), [database]);
+  // A statement that wrote may have changed the tables: the suggestions and the list of what to undo read again.
+  useEffect(() => {
+    if (!job || !settled(job) || done.current === job.id) return;
+    done.current = job.id;
+    schema.reload();
+    setRefresh((n) => n + 1);
+    if (job.status === 'done') toast({ tone: 'success', title: `${job.title}: done` });
+  }, [job, schema]);
   const hint = placeholder ?? "SELECT * FROM wp_options WHERE autoload = 'on' LIMIT 50";
   const plain = (
     <Textarea
@@ -134,10 +158,33 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
     }
   }
 
+  /** What a statement that writes would change, asked before it runs; the answer opens the confirm. */
+  async function check() {
+    if (!sql.trim() || checking) return;
+    setChecking(true);
+    setError(null);
+    try {
+      setChecked(await api.checkWrite(database, sql));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  function startWrite(confirm: string) {
+    setChecked(null);
+    setResult(null);
+    setHistory(addHistory(database, sql));
+    void runner.follow(api.startJob('mysql.runSql', { database, sql, confirm }));
+  }
+
+  const go = () => void (writing ? check() : run());
+
   function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      void run();
+      go();
     }
   }
 
@@ -158,7 +205,11 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
           <CardTitle className="flex min-w-0 items-center gap-2">
             <span className="truncate">SQL on <span className="font-mono text-[13px]">{database}</span></span>
           </CardTitle>
-          <Badge tone="success" className="shrink-0"><ShieldCheck className="size-3" />Read only</Badge>
+          {canWrite ? (
+            <Segmented label="Mode" value={mode} onChange={(m) => (setMode(m), setError(null))} options={[['read', 'Read only'], ['write', 'Can write']]} />
+          ) : (
+            <Badge tone="success" className="shrink-0"><ShieldCheck className="size-3" />Read only</Badge>
+          )}
         </CardHeader>
         <div className="grid gap-3 p-5">
           <label htmlFor={`sql-${database}`} className="sr-only">Statement</label>
@@ -167,17 +218,30 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
           <ResizableBox>
             <EditorBoundary fallback={plain}>
               <Suspense fallback={plain}>
-                <SqlEditor value={sql} onChange={setSql} onRun={() => void run()} {...(schema.data ? { schema: schema.data.tables } : {})} label={`SQL on ${database}`} placeholder={hint} />
+                <SqlEditor value={sql} onChange={setSql} onRun={go} {...(schema.data ? { schema: schema.data.tables } : {})} label={`SQL on ${database}`} placeholder={writing ? "UPDATE wp_options SET autoload = 'off' WHERE option_name = 'acme_cache'" : hint} />
               </Suspense>
             </EditorBoundary>
           </ResizableBox>
+          {writing && (
+            <p className="rounded-lg border border-warning/30 bg-warning/8 px-4 py-2.5 text-sm">
+              One statement that changes rows (INSERT, UPDATE, DELETE, REPLACE) or a table, an index or a view (ALTER, CREATE, DROP, RENAME, TRUNCATE). The panel shows what it would change first, saves the tables it names, and Undo puts them back for 14 days.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => void run()} disabled={!sql.trim() || running !== null}>
-              {running === 'run' ? <LoaderCircle className="animate-spin" /> : <Play />}Run
-            </Button>
-            <Button variant="outline" onClick={() => void run(true)} disabled={!sql.trim() || running !== null} title="How MySQL would run it: the indexes it uses and the rows it reads">
-              {running === 'explain' ? <LoaderCircle className="animate-spin" /> : <ScanSearch />}Explain
-            </Button>
+            {writing ? (
+              <Button onClick={() => void check()} disabled={!sql.trim() || checking || (job !== null && !settled(job))}>
+                {checking ? <LoaderCircle className="animate-spin" /> : <Play />}Check and run...
+              </Button>
+            ) : (
+              <>
+                <Button onClick={() => void run()} disabled={!sql.trim() || running !== null}>
+                  {running === 'run' ? <LoaderCircle className="animate-spin" /> : <Play />}Run
+                </Button>
+                <Button variant="outline" onClick={() => void run(true)} disabled={!sql.trim() || running !== null} title="How MySQL would run it: the indexes it uses and the rows it reads">
+                  {running === 'explain' ? <LoaderCircle className="animate-spin" /> : <ScanSearch />}Explain
+                </Button>
+              </>
+            )}
             {history.length > 0 && (
               <Menu
                 label="Earlier statements"
@@ -188,7 +252,9 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
                 ]}
               />
             )}
-            <span className="ml-auto text-xs text-muted-foreground">Ctrl+Enter runs, Tab takes a suggestion. One statement that reads, up to 1,000 rows and 30 seconds.</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {writing ? 'Ctrl+Enter checks it first, Tab takes a suggestion.' : 'Ctrl+Enter runs, Tab takes a suggestion. One statement that reads, up to 1,000 rows and 30 seconds.'}
+            </span>
           </div>
           {error && (
             <div role="alert" className="grid gap-2 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">
@@ -203,7 +269,20 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
           )}
         </div>
       </Card>
+      {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+      {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
       {result && <ResultCard result={result} onOpen={setOpen} onCsv={download} />}
+      {canWrite && <CleanupsCard database={database} refresh={refresh} onUndone={() => schema.reload()} />}
+      {checked && (
+        <ConfirmCleanup
+          title={`Run this ${checked.statement} on ${database}?`}
+          description={<WriteSummary check={checked} />}
+          action="Save the tables and run it"
+          typed={database}
+          onClose={() => setChecked(null)}
+          onConfirm={startWrite}
+        />
+      )}
       <Dialog open={open !== null} onClose={() => setOpen(null)} title="A row of the result" className="w-[min(48rem,calc(100vw-2rem))]">
         {open !== null && result && (
           <div className="mt-3 grid max-h-[70vh] gap-3 overflow-y-auto pr-1">
@@ -219,6 +298,28 @@ export function SqlRunner({ database, placeholder }: { database: string; placeho
           <Button variant="outline" onClick={() => setOpen(null)}>Close</Button>
         </div>
       </Dialog>
+    </div>
+  );
+}
+
+/** What a check found, for the confirm: the rows it changes, the tables saved first, and what Undo does. */
+function WriteSummary({ check }: { check: WriteCheck }) {
+  return (
+    <div className="grid gap-2">
+      <p>
+        {check.rows !== null ? (
+          <>It changes <strong className="text-foreground">{number(check.rows)} {check.rows === 1 ? 'row' : 'rows'}</strong>: tried in a transaction that was rolled back.</>
+        ) : (
+          check.why
+        )}
+      </p>
+      {check.tables.length > 0 ? (
+        <p>
+          Saved first, whole: {check.tables.map((t) => `${t.name} (${bytes(t.bytes)})`).join(', ')}. The disk has {bytes(check.freeBytes)} free. Undo puts {check.tables.length === 1 ? 'it' : 'them'} back as before, losing what changed in {check.tables.length === 1 ? 'it' : 'them'} since.
+        </p>
+      ) : (
+        <p>It names no table that is there yet: Undo deletes what it makes.</p>
+      )}
     </div>
   );
 }

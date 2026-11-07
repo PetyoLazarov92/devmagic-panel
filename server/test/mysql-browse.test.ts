@@ -49,16 +49,17 @@ describe('the browser SQL', () => {
   it('casts numbers to text to search in them, and compares binary columns as bytes', () => {
     expect(whereSql(OPTIONS, [{ column: 'option_id', op: 'startsWith', value: '12' }])).toBe(` WHERE CAST(\`option_id\` AS CHAR) LIKE _utf8mb4 X'${hex('12%')}'`);
     expect(whereSql([col('data', 'blob')], [{ column: 'data', op: 'eq', value: 'ab' }])).toBe(` WHERE \`data\` = X'${hex('ab')}'`);
-    expect(whereSql(OPTIONS, [{ column: 'autoload', op: 'isNull' }, { column: 'autoload', op: 'notNull' }])).toBe(' WHERE `autoload` IS NULL AND `autoload` IS NOT NULL');
+    expect(whereSql(OPTIONS, [{ column: 'autoload', op: 'isNull' }, { column: 'autoload', op: 'notNull' }])).toBe(' WHERE (`autoload` IS NULL) AND (`autoload` IS NOT NULL)');
+    expect(whereSql(OPTIONS, [{ column: 'autoload', op: 'isNull' }, { column: 'option_id', op: 'gt', value: '9' }], 'any')).toBe(' WHERE (`autoload` IS NULL) OR (`option_id` > 9)');
   });
 
   it('refuses a column the table does not have', () => {
     expect(() => whereSql(OPTIONS, [{ column: 'option_id`; DROP TABLE x; --', op: 'eq', value: '1' }])).toThrow(/No column called/);
-    expect(() => rowsSql('shop_com', 'wp_options', OPTIONS, PK, { page: 1, pageSize: 25, filters: [], sort: { column: 'nope', dir: 'asc' } })).toThrow(/No column called nope/);
+    expect(() => rowsSql('shop_com', 'wp_options', OPTIONS, PK, { page: 1, pageSize: 25, filters: [], match: 'all', sort: { column: 'nope', dir: 'asc' } })).toThrow(/No column called nope/);
   });
 
   it('reads one more row than the page, sorted, with the primary key breaking ties', () => {
-    const sql = rowsSql('shop_com', 'wp_options', OPTIONS, PK, { page: 3, pageSize: 50, filters: [], sort: { column: 'option_name', dir: 'desc' } });
+    const sql = rowsSql('shop_com', 'wp_options', OPTIONS, PK, { page: 3, pageSize: 50, filters: [], match: 'all', sort: { column: 'option_name', dir: 'desc' } });
     expect(sql.rows).toContain('FROM `shop_com`.`wp_options` ORDER BY `option_name` DESC, `option_id` ASC LIMIT 51 OFFSET 100;');
     expect(sql.rows).toContain('LEFT(CAST(`option_value` AS CHAR), 300), CHAR_LENGTH(CAST(`option_value` AS CHAR))');
     expect(sql.rows).toMatch(/CAST\(`option_id` AS CHAR\)\) FROM/);
@@ -67,7 +68,7 @@ describe('the browser SQL', () => {
 
   it('doubles a backtick in a name MySQL listed', () => {
     const odd = [col('a`b', 'int')];
-    expect(rowsSql('shop_com', 'odd`table', odd, [], { page: 1, pageSize: 25, filters: [] }).rows).toContain('FROM `shop_com`.`odd``table` LIMIT 26 OFFSET 0;');
+    expect(rowsSql('shop_com', 'odd`table', odd, [], { page: 1, pageSize: 25, filters: [], match: 'all' }).rows).toContain('FROM `shop_com`.`odd``table` LIMIT 26 OFFSET 0;');
   });
 
   it('finds one value by its primary key, and refuses without one', () => {

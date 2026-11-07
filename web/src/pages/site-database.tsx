@@ -69,7 +69,7 @@ export function DatabaseTab({ site }: { site: Site }) {
       {view === 'tools' ? (
         <DatabaseTools site={site} />
       ) : view === 'sql' ? (
-        <SqlRunner key={site.db.name} database={site.db.name} />
+        <SqlRunner key={site.db.name} database={site.db.name} canWrite />
       ) : view === 'wordpress' ? (
         <WordpressDbView site={site} blog={blog} onBlog={(b) => go('wordpress', undefined, b)} onTable={(t) => go('tables', { table: t, show: 'rows' })} />
       ) : (
