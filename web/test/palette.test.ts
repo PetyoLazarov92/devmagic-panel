@@ -44,4 +44,20 @@ describe('paletteRuns', () => {
     expect(mysql).toMatchObject({ id: 'service.restart', input: { service: 'mysql' } });
     expect(mysql?.entry.confirm).toBeTruthy();
   });
+
+  it('offers a move to the other web server only to a site that can move there as it is', () => {
+    const movable = { move: { ignored: [] } };
+    const list = [
+      site('local.acme.com', { server: 'apache', ...movable }),
+      site('local.shop.com', { server: 'nginx', ...movable }),
+      site('local.blog.com', { server: 'apache', move: { refusal: 'Set nginx up first', ignored: [] } }),
+      site('local.forum.com', { server: 'apache', move: { ignored: ['RewriteRule ^old/ /new/ [R=301]'] } }),
+      site('local.acme.com', { path: '/learn', server: 'apache', ...movable }),
+    ];
+    const moves = paletteRuns(list, null).filter((r) => r.id === 'site.setServer').map((r) => [r.label, r.input]);
+    expect(moves).toEqual([
+      ['Move to nginx on local.acme.com', { domain: 'local.acme.com', server: 'nginx' }],
+      ['Move to Apache on local.shop.com', { domain: 'local.shop.com', server: 'apache' }],
+    ]);
+  });
 });

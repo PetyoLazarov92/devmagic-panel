@@ -76,8 +76,19 @@ A WordPress site's WP-Cron events with Run now and Delete (Undo puts one back),
 its intervals, **Check WP-Cron**, its cron tasks, and the switch that runs its
 WP-Cron from cron instead of page loads.
 
-### PHP
+### Server and PHP
 
+How the site is served, in one tab (named Server for a site without
+WordPress). The Overview's Server and PHP tile shows both, like
+"Apache · PHP 8.3".
+
+- **Web server**: the server the site runs on, and **Move to nginx** or
+  **Move to Apache**. A job writes the other server's config and the hosts
+  line, checks the site answers, then the old config goes; Undo moves it back.
+  The `.htaccess` rules nginx would leave out are listed to tick first, and the
+  card says why a site stays on Apache when it must. A site under a path runs
+  on its domain's server and links to it. The command palette (Ctrl+K) has
+  Move to nginx and Move to Apache for every site that can move as it is.
 - The site's own PHP version and settings, through its own PHP-FPM pool,
   checked against what its `composer.json`, plugins and themes ask for.
   WP-CLI the panel runs for it follows the same version.
@@ -106,11 +117,6 @@ Why a page is slow, in one place:
 
 ### Domains and SSL
 
-- **Web server**: the server the site runs on, and **Move to nginx** or
-  **Move to Apache**. A job writes the other server's config and the hosts
-  line, checks the site answers, then the old config goes; Undo moves it back.
-  The `.htaccess` rules nginx would leave out are listed to tick first, and the
-  card says why a site stays on Apache when it must.
 - The site's domains, certificate and hosts lines.
 
 ### Quick actions

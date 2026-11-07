@@ -25,9 +25,16 @@ export function currentSite(path: string): { domain: string; path?: string } | n
   return site?.domain && site.domain !== 'new' ? { domain: site.domain } : null;
 }
 
-/** Whether a palette entry fits a site: git ones need a repository at its root, domain ones a site that is not under a path. */
+/**
+ * Whether a palette entry fits a site: git ones need a repository at its
+ * root, domain ones a site that is not under a path, and a move to a web
+ * server a site on the other one that can move there as it is (one whose
+ * .htaccess nginx would leave out needs the Server tab, which asks).
+ */
 export function entryFits(entry: PaletteEntry, site: Site): boolean {
   if (entry.scope === 'git') return !site.path && Boolean(site.git);
+  const server = entry.input?.server;
+  if (server !== undefined) return !site.path && site.server !== server && site.move !== undefined && !site.move.refusal && site.move.ignored.length === 0;
   if (entry.scope === 'domain') return !site.path;
   return entry.scope === 'site';
 }

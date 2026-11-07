@@ -132,7 +132,7 @@ function SetupCard({ report, busy, onStart, children }: { report: NginxReport; b
 
         {report.setUp && (
           <p>
-            nginx answers on <code className="font-mono">{nginx}</code> and Apache on <code className="font-mono">{apache}</code>, both on ports 80 and 443. A site moves to nginx, and back, on its Domains and SSL tab. Turning nginx off, once every site is back on Apache, puts Apache back on every address and stops nginx; it stays installed.
+            nginx answers on <code className="font-mono">{nginx}</code> and Apache on <code className="font-mono">{apache}</code>, both on ports 80 and 443. A site moves to nginx, and back, on its Server and PHP tab. Turning nginx off, once every site is back on Apache, puts Apache back on every address and stops nginx; it stays installed.
           </p>
         )}
 
@@ -365,14 +365,14 @@ function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: 'apache
             Move every site to Apache
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">One site moves at a time, on its Domains and SSL tab.</p>
+        <p className="text-xs text-muted-foreground">One site moves at a time, on its Server and PHP tab.</p>
       </div>
 
       <Dialog
         open={confirm !== null}
         onClose={() => setConfirm(null)}
         title={confirm === 'nginx' ? 'Move every site to nginx?' : 'Move every site to Apache?'}
-        description="Each site moves as it does from its Domains and SSL tab, one after the other, and is checked before the next. Undo on the job moves every site back."
+        description="Each site moves as it does from its Server and PHP tab, one after the other, and is checked before the next. Undo on the job moves every site back."
       >
         {current && (
           <div className="grid gap-3 text-sm">

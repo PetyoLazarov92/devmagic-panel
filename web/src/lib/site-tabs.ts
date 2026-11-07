@@ -32,7 +32,8 @@ export function siteTabItems(site: Site, counts: TabCounts = NO_COUNTS): TabItem
       wordpress && { value: 'cron', label: 'Cron', ...badge(counts.cron, 'warning') },
       site.constants ? { value: 'config', label: 'Config', ...badge(counts.config, 'warning') } : false,
     ],
-    [wordpress && { value: 'php', label: 'PHP' }, !site.path && { value: 'domains', label: 'Domains and SSL', ...badge(counts.domains, 'warning') }],
+    // The web server and PHP in one tab: moving to nginx changes how PHP runs, so they are read together.
+    [(wordpress || !site.path) && { value: 'php', label: wordpress ? 'Server and PHP' : 'Server' }, !site.path && { value: 'domains', label: 'Domains and SSL', ...badge(counts.domains, 'warning') }],
   ];
   return groups
     .map((group) => group.filter((item): item is TabItem<Tab> => Boolean(item)))

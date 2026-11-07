@@ -26,6 +26,8 @@ setup() {
   export DMP_INSTALL_CONFIG_DIR="$BATS_TEST_TMPDIR/etc"
   export DMP_INSTALL_DATA_DIR="$BATS_TEST_TMPDIR/data"
   export DMP_INSTALL_STATE_DIR="$BATS_TEST_TMPDIR/state"
+  # nginx as a machine without it set up, whatever this one has.
+  export DMP_INSTALL_NGINX_DIR="$BATS_TEST_TMPDIR/nginx"
   DATA="$DMP_INSTALL_DATA_DIR"
   # A home folder that is not encrypted, whatever this machine has.
   export DMP_INSTALL_MOUNTS="$BATS_TEST_TMPDIR/mounts"

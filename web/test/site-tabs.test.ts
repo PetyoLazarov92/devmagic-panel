@@ -47,9 +47,12 @@ describe('siteTabItems', () => {
 
   it('keeps the order of the rest when a site lacks tabs', () => {
     const empty = site({ core: { kind: 'none' }, db: undefined, constants: undefined });
-    expect(values(empty)).toEqual(['overview', 'logs', 'domains']);
-    expect(siteTabItems(empty).find((t) => t.value === 'domains')?.startsGroup).toBe(true);
+    // Without WordPress the web server still has its tab, named Server: PHP is shown only for WordPress.
+    expect(values(empty)).toEqual(['overview', 'logs', 'php', 'domains']);
+    expect(siteTabItems(empty).find((t) => t.value === 'php')).toMatchObject({ label: 'Server', startsGroup: true });
+    expect(siteTabItems(site()).find((t) => t.value === 'php')?.label).toBe('Server and PHP');
     expect(values(site({ path: '/learn' }))).not.toContain('domains');
+    expect(values(site({ path: '/learn', core: { kind: 'none' } } as never))).not.toContain('php');
   });
 
   it('counts only what needs a look, colored by how bad it is', () => {

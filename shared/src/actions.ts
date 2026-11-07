@@ -523,6 +523,10 @@ export const actions = {
   },
   'site.setServer': {
     title: 'Move a site between Apache and nginx',
+    palette: [
+      { scope: 'domain', label: 'Move to nginx', input: { server: 'nginx' }, confirm: 'The site moves to nginx and is checked that it answers; Undo moves it back.' },
+      { scope: 'domain', label: 'Move to Apache', input: { server: 'apache' }, confirm: 'The site moves back to Apache and is checked that it answers; Undo moves it to nginx again.' },
+    ],
     description:
       "Moves a site to nginx or back to Apache. Both servers answer on ports 80 and 443, each on its own address, and a site goes to the one its hosts line points at. To nginx: writes the site's nginx file (WordPress's rules for a single site or its kind of network, the uploads redirect, PHP through its own PHP-FPM pool or the default version's), points the hosts line at nginx, checks the site answers, then removes the Apache vhost. Back to Apache: the other way round. Its folder, database and certificate stay. Only for a site the panel made the vhost of, in the usual folder, without sites under paths, once nginx is set up; nginx reads no .htaccess, so a site whose .htaccess has rules beyond WordPress's needs acceptIgnored. On nginx already, writes its nginx file again (after it became a network). Starts a job; Undo moves it back.",
     changesSystem: true,

@@ -1389,7 +1389,7 @@ function DomainsStep({ state, set, nginx, errors, sites, underError, underFolder
   );
 }
 
-/** Apache or nginx for the new site, once nginx runs next to Apache; a site can move later on its Domains and SSL tab. */
+/** Apache or nginx for the new site, once nginx runs next to Apache; a site can move later on its Server and PHP tab. */
 function ServerChoice({ state, set, php }: { state: WizardState; set: Setter; php: string | undefined }) {
   const choices = [
     { value: 'apache', label: 'Apache', hint: 'Reads .htaccess, as most WordPress hosts run it' },
@@ -1409,7 +1409,7 @@ function ServerChoice({ state, set, php }: { state: WizardState; set: Setter; ph
           </label>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">The site can move to the other one later, on its Domains and SSL tab.</p>
+      <p className="text-xs text-muted-foreground">The site can move to the other one later, on its Server and PHP tab.</p>
     </fieldset>
   );
 }

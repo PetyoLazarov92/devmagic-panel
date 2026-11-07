@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.23.3 (2026-11-07)
+* **Sites:** the PHP tab is now Server and PHP, with the web server first and Move to nginx or Apache there, out of Domains and SSL; a site without WordPress gets it as Server, and a site under a path says which server its domain runs on, with a link to change it
+* **Sites:** the Overview's Server and PHP tile shows both, like Apache · PHP 8.3, and the command palette has Move to nginx and Move to Apache for every site that can move as it is
+* **Install:** the installer's tests no longer read whether this machine has nginx set up (the installer takes its nginx folder from DMP_INSTALL_NGINX_DIR in tests). Nothing changes when it runs, so the Updates page's note to run the installer again can be skipped for this release
+* An update installs this release from the panel as usual
+
 ### v1.23.2 (2026-11-07)
 * **Sites:** the Profiles card has Check again even before the first profile, reads the list again when you come back to the panel's tab, and after Open and profile checks every few seconds until the new profile shows, for up to a minute
 * An update installs this release from the panel as usual

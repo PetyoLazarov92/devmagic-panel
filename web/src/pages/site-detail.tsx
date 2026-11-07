@@ -193,7 +193,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         {tab === 'logs' && <LogsTab site={site} onChanged={reload} />}
         {tab === 'network' && <NetworkCard site={site} />}
         {tab === 'plugins' && <PluginsTab site={site} />}
-        {tab === 'php' && <PhpTab site={site} />}
+        {tab === 'php' && <ServerAndPhpTab site={site} onChanged={reload} />}
         {tab === 'cron' && <CronTab site={site} report={wpCron} onReload={reloadCron} />}
         {tab === 'database' && <DatabaseTab site={site} />}
         {tab === 'performance' && <PerformanceTab site={site} />}
@@ -356,8 +356,16 @@ function SiteTiles({ site, cron, logErrors, onOpen }: { site: Site; cron: AsyncS
     // The Cron tab is only there for WordPress, so no answer yet means it is still being read.
     tiles.push({ key: 'cron', label: 'WP-Cron', onOpen: () => onOpen('cron'), ...(cron.error && !cron.loading ? { value: 'Not read', detail: 'WP-CLI could not list it', tone: 'warning' as const } : { loading: 'value' as const }) });
   }
-  if (tabs.has('php') && site.php) {
-    tiles.push({ key: 'php', label: 'PHP', value: site.php.version, detail: site.php.own ? 'Its own version' : 'The default version', onOpen: () => onOpen('php') });
+  if (tabs.has('php')) {
+    // The web server and PHP together, as their tab has them: the first thing to check when a site behaves differently.
+    const server = SERVER_NAME[site.server];
+    tiles.push({
+      key: 'php',
+      label: site.php ? 'Server and PHP' : 'Server',
+      value: site.php ? `${server} · PHP ${site.php.version}` : server,
+      detail: site.php ? (site.php.own ? 'Its own PHP version' : 'The default PHP version') : 'The web server it runs on',
+      onOpen: () => onOpen('php'),
+    });
   }
   if (tabs.has('domains')) {
     tiles.push({
@@ -1145,6 +1153,29 @@ function LogsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
   );
 }
 
+const SERVER_NAME: Record<Site['server'], string> = { apache: 'Apache', nginx: 'nginx' };
+
+/**
+ * How the site is served: its web server first (Apache or nginx, and moving
+ * it), then its PHP. A site under a path runs on its domain's server, so it
+ * names it and links to where it changes.
+ */
+function ServerAndPhpTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
+  return (
+    <div className="grid gap-4">
+      {site.path ? (
+        <p className="rounded-xl border bg-card px-5 py-3.5 text-sm text-muted-foreground">
+          Runs on <span className="font-medium text-foreground">{SERVER_NAME[site.server]}</span> with {site.domain}, like every site under it.{' '}
+          <Link href={`${siteHref({ domain: site.domain })}?tab=php`} className="font-medium text-primary hover:underline">Change it on {site.domain}</Link>
+        </p>
+      ) : (
+        <ServerCard site={site} onChanged={onChanged} />
+      )}
+      {site.core.kind !== 'none' && <PhpTab site={site} />}
+    </div>
+  );
+}
+
 function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
   const names = [site.domain, ...site.aliases];
   const inCert = new Set(site.cert?.names ?? []);
@@ -1161,7 +1192,6 @@ function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) 
 
   return (
     <div className="grid gap-4">
-      {!site.path && <ServerCard site={site} onChanged={onChanged} />}
       <Card>
         <CardHeader>
           <CardTitle>Certificate</CardTitle>

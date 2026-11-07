@@ -420,8 +420,9 @@ detect_settings() {
   UPDATE_REPO=""
   UPDATE_GIT_URL=""
   # nginx next to Apache, each on its own address (scripts/lib/nginx.sh).
-  NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"
-  NGINX_SITES_ENABLED="/etc/nginx/sites-enabled"
+  # Overridable like STATE_DIR, so the tests never read whether this machine has nginx set up.
+  NGINX_SITES_AVAILABLE="${DMP_INSTALL_NGINX_DIR:-/etc/nginx}/sites-available"
+  NGINX_SITES_ENABLED="${DMP_INSTALL_NGINX_DIR:-/etc/nginx}/sites-enabled"
   NGINX_LOG_DIR="/var/log/nginx"
   NGINX_ADDRESS="127.0.0.2"
   APACHE_ADDRESS="127.0.0.1"

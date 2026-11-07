@@ -555,7 +555,7 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
         id: 'nginx.htaccess',
         status: 'warn',
         text: `nginx does not read .htaccess, so these rules do nothing: ${ignored.join(', ')}`,
-        hint: 'Move the site back to Apache on its Domains and SSL tab when it needs them.',
+        hint: 'Move the site back to Apache on its Server and PHP tab when it needs them.',
       });
     }
     if (!mount && siteKind(wp) !== (vhost.kind ?? 'single')) {

@@ -178,7 +178,7 @@ export function planNginxSetup(ctx: SitePhpContext): JobStep[] {
 export function planNginxTeardown(ctx: SitePhpContext): JobStep[] {
   if (!nginxSetUp(ctx.config)) throw new SiteActionRefused('nginx is not set up next to Apache.');
   const onNginx = readSiteVhosts(ctx.config).filter((v) => v.server === 'nginx').map((v) => v.names[0] as string);
-  if (onNginx.length) throw new SiteActionRefused(`${onNginx.join(', ')} ${onNginx.length === 1 ? 'runs' : 'run'} on nginx: move ${onNginx.length === 1 ? 'it' : 'them'} to Apache on the Domains and SSL tab first.`);
+  if (onNginx.length) throw new SiteActionRefused(`${onNginx.join(', ')} ${onNginx.length === 1 ? 'runs' : 'run'} on nginx: move ${onNginx.length === 1 ? 'it' : 'them'} to Apache on the Server and PHP tab first.`);
   return [
     {
       id: 'teardown',

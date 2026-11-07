@@ -501,7 +501,7 @@ function AddVersion({ report, busy, onInstall }: { report: PhpReport; busy: bool
                 Install PHP {v}
               </Button>
             ))}
-            <p className="w-full text-xs text-muted-foreground">With PHP-FPM, the command line and the common modules. No site changes until you give one this version on its PHP tab.</p>
+            <p className="w-full text-xs text-muted-foreground">With PHP-FPM, the command line and the common modules. No site changes until you give one this version on its Server and PHP tab.</p>
           </div>
         )}
         {!report.sources.php && (
@@ -834,7 +834,7 @@ function SettingsCard({ version }: { version: PhpVersion }) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="min-w-0 flex-[1_1_20rem] text-xs text-muted-foreground">
                 {current.scope === 'web'
-                  ? `For every site on PHP ${version.version}, in the panel's own 99-devmagic-panel.ini (php.ini is never changed). A site can override some of them on its PHP tab.`
+                  ? `For every site on PHP ${version.version}, in the panel's own 99-devmagic-panel.ini (php.ini is never changed). A site can override some of them on its Server and PHP tab.`
                   : `For WP-CLI, Composer and anything you run with php${version.version}, in the command line's own 99-devmagic-panel.ini.`}{' '}
                 An empty field inherits: it shows the value PHP then uses and where it comes from.
               </p>

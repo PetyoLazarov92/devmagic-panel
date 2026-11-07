@@ -48,7 +48,7 @@ EOF
   export HOME="$BATS_TEST_TMPDIR/home" XDG_STATE_HOME="$BATS_TEST_TMPDIR/xdg"
   mkdir -p "$HOME/.config/devmagic-panel"
   printf '{}\n' > "$HOME/.config/devmagic-panel/secrets.json"
-  export DMP_INSTALL_CONFIG_DIR="$BATS_TEST_TMPDIR/etc" DMP_INSTALL_DATA_DIR="$BATS_TEST_TMPDIR/data" DMP_INSTALL_STATE_DIR="$BATS_TEST_TMPDIR/state"
+  export DMP_INSTALL_CONFIG_DIR="$BATS_TEST_TMPDIR/etc" DMP_INSTALL_DATA_DIR="$BATS_TEST_TMPDIR/data" DMP_INSTALL_STATE_DIR="$BATS_TEST_TMPDIR/state" DMP_INSTALL_NGINX_DIR="$BATS_TEST_TMPDIR/nginx"
   export DMP_INSTALL_OS_RELEASE="$BATS_TEST_TMPDIR/os-release" DMP_INSTALL_MOUNTS="$BATS_TEST_TMPDIR/mounts"
   printf 'ID=ubuntu\nID_LIKE=debian\nPRETTY_NAME="Ubuntu 24.04 LTS"\n' > "$DMP_INSTALL_OS_RELEASE"
   printf '/dev/sda1 / ext4 rw 0 0\n' > "$DMP_INSTALL_MOUNTS"

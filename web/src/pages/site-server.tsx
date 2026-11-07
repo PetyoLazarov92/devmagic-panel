@@ -15,7 +15,7 @@ import { toast } from '@/lib/toast';
 const LABEL = { apache: 'Apache', nginx: 'nginx' } as const;
 
 /**
- * The web server a site runs on, on its Domains and SSL tab, and the move to
+ * The web server a site runs on, first on its Server and PHP tab, and the move to
  * the other one (site.setServer). Both answer on ports 80 and 443, each on
  * its own address; the hosts line decides, so nothing is proxied.
  */

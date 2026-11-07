@@ -52,7 +52,7 @@ new version. When a step fails, everything is put back (the old root scripts,
    - **Required**, after one question (`--yes` installs them): Apache with PHP
      and the WordPress modules (on a new machine through PHP-FPM, with the
      panel's handler sending every site's PHP to it and Apache on mpm_event; a
-     machine with mod_php keeps it until you switch on the PHP tab), MySQL
+     machine with mod_php keeps it until you switch on the Server and PHP tab), MySQL
      (MariaDB on Debian; one already there stays), OpenSSL, `libnss3-tools`,
      curl, git, unzip, WP-CLI and Node.js 22.13+. Without Node, it offers the
      official Node.js 22 build from nodejs.org, checked against its checksums,
