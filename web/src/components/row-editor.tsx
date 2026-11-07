@@ -1,17 +1,21 @@
 import type { ActionId, DbCell, DbColumnHead, DbRow, RowChangeInfo } from '@devmagic-panel/shared';
 import { History, LoaderCircle, RotateCcw, TriangleAlert, Wand2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { EditorBoundary } from '@/components/editor-boundary';
 import { Dialog } from '@/components/ui/dialog';
 import { Input, Textarea } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { shortDate, timeAgo } from '@/lib/format';
-import { fixSerializedLengths, parseJsonValue, parsePhpSerialized } from '@/lib/php-serialized';
+import { fixSerializedLengths, lostPropertyMarks, needsExactEditor, parseJsonValue, parsePhpSerialized, type PropertyName } from '@/lib/php-serialized';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+
+// Loaded only when a value with control characters is edited.
+const ValueEditor = lazy(() => import('@/components/value-editor'));
 
 /** Runs a row action; an answer the server refused comes back as a message, never thrown. */
 async function runRow(id: ActionId, input: Record<string, unknown>): Promise<{ ok: true; change?: string; output: string } | { ok: false; error: string }> {
@@ -190,6 +194,8 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
   );
 }
 
+const lostName = (p: PropertyName) => (p.visibility === 'private' ? `${p.name} (private to ${p.owner})` : `${p.name} (protected)`);
+
 function FieldRow({ column, field, original, locked, mode, onChange }: { column: DbColumnHead; field: Field; original: string | null; locked: string | null; mode: EditorMode; onChange: (next: Partial<Field>) => void }) {
   const id = `field-${column.name}`;
   // A value that was PHP serialized or JSON and no longer reads would reach WordPress as plain text.
@@ -199,6 +205,10 @@ function FieldRow({ column, field, original, locked, mode, onChange }: { column:
     if (parseJsonValue(original) !== undefined && parseJsonValue(field.value) === undefined) return 'json';
     return null;
   }, [field, original]);
+  // Protected and private properties keep NUL bytes around their names; one deleted makes a new public property.
+  const lost = useMemo(() => (field.isNull || original === null || field.value === original || !parsePhpSerialized(original) ? [] : lostPropertyMarks(original, field.value)), [field, original]);
+  // A plain text box hides NUL bytes and turns \r\n into \n: such a value is edited where both show and stay.
+  const exact = !column.numeric && (needsExactEditor(original ?? '') || needsExactEditor(field.value));
   const lines = Math.min(10, Math.max(1, field.value.split('\n').length, Math.ceil(field.value.length / 90)));
   return (
     <div className="grid gap-1">
@@ -212,7 +222,13 @@ function FieldRow({ column, field, original, locked, mode, onChange }: { column:
         <p className="rounded-md bg-muted/60 px-3 py-2 font-mono text-[13px] break-all text-muted-foreground">{original === null ? (mode === 'edit' ? 'NULL' : ' ') : original}</p>
       ) : (
         <div className="flex items-start gap-2">
-          {column.numeric ? (
+          {exact && !field.isNull ? (
+            <EditorBoundary fallback={<p className="flex-1 rounded-md bg-muted/60 px-3 py-2 text-sm text-muted-foreground">This value has characters a plain text box would change, and its editor did not load. Reload the page, or change it in phpMyAdmin.</p>}>
+              <Suspense fallback={<div className="h-20 flex-1 animate-pulse rounded-md bg-muted" />}>
+                <ValueEditor id={id} value={field.value} onChange={(value) => onChange({ value })} />
+              </Suspense>
+            </EditorBoundary>
+          ) : column.numeric ? (
             <Input id={id} value={field.isNull ? '' : field.value} disabled={field.isNull} inputMode="decimal" onChange={(e) => onChange({ value: e.target.value })} className="font-mono text-[13px]" />
           ) : (
             <Textarea id={id} value={field.isNull ? '' : field.value} disabled={field.isNull} rows={lines} spellCheck={false} onChange={(e) => onChange({ value: e.target.value })} className="min-h-9 font-mono text-[13px]" />
@@ -225,11 +241,25 @@ function FieldRow({ column, field, original, locked, mode, onChange }: { column:
           )}
         </div>
       )}
+      {exact && !field.isNull && field.value.includes('\0') && (
+        <p className="text-xs text-muted-foreground">
+          <code className="rounded-sm bg-foreground/10 px-0.5">\0</code> is a NUL byte. PHP keeps them around the names of protected and private properties: leave them where they are.
+        </p>
+      )}
+      {lost.length > 0 && (
+        <p role="alert" className="flex items-start gap-2 text-xs text-warning">
+          <TriangleAlert className="mt-px size-3.5 shrink-0" aria-label="Warning" />
+          <span>
+            No longer protected or private: {lost.map(lostName).join(', ')}. A NUL byte around the name was deleted, or the property taken out, so PHP would read a new public property. Put the <code className="rounded-sm bg-foreground/10 px-0.5">\0</code> back, or Cancel.
+          </span>
+        </p>
+      )}
       {broken && (
         <p className="flex flex-wrap items-center gap-2 text-xs text-warning">
           <TriangleAlert className="size-3.5" aria-label="Warning" />
           {broken === 'serialized' ? 'No longer a whole PHP serialized value (a string length does not add up): WordPress would read it as plain text.' : 'No longer valid JSON.'}
-          {broken === 'serialized' && fixSerializedLengths(field.value) && (
+          {/* Counting again would make a property that lost its NUL bytes a public one without a word: not offered then. */}
+          {broken === 'serialized' && lost.length === 0 && fixSerializedLengths(field.value) && (
             <Button size="sm" variant="outline" onClick={() => onChange({ value: fixSerializedLengths(field.value) as string })}><Wand2 />Count the lengths again</Button>
           )}
         </p>

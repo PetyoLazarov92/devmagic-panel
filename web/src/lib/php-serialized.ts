@@ -188,3 +188,32 @@ export function controlRuns(text: string): TextRun[] {
   if (last < text.length) out.push({ text: text.slice(last) });
   return out;
 }
+
+/**
+ * Text a plain text box would change or hide: control characters, and a
+ * carriage return, which a text area turns into a plain line break.
+ */
+export function needsExactEditor(text: string): boolean {
+  return /[\x00-\x08\x0B-\x1F\x7F]/.test(text);
+}
+
+// A property key with NUL bytes, as it sits in a serialized object, read even when lengths do not add up.
+const MARKED_KEY = /:"\0(\*|[^\0"]+)\0([^\0"]*)";/g;
+
+/**
+ * The protected and private properties of the original that the edited text
+ * no longer has as such: a NUL byte around the name deleted (which makes it
+ * a new public property) or the property taken out. Counted, so one of two
+ * properties of the same name is noticed too.
+ */
+export function lostPropertyMarks(original: string, edited: string): PropertyName[] {
+  const keys = (text: string) => [...text.matchAll(MARKED_KEY)].map((m) => `\0${m[1] ?? ''}\0${m[2] ?? ''}`);
+  const left = keys(edited);
+  const lost: PropertyName[] = [];
+  for (const key of keys(original)) {
+    const at = left.indexOf(key);
+    if (at === -1) lost.push(propertyName(key));
+    else left.splice(at, 1);
+  }
+  return lost;
+}

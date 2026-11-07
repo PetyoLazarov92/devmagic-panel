@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.16.2 (2026-11-07)
+* **Databases:** Change a row and Add a copy edit a value with NUL bytes or Windows line breaks in an editor that shows them as `\0` and `\r` and keeps them as they are. The plain text box hid NUL bytes and turned every `\r\n` into `\n` once you typed, which changed the value and broke a serialized one
+* **Databases:** when a protected or private property of a serialized object loses a NUL byte around its name, the row editor names it and no longer offers Count the lengths again, which would have made it a new public property without a word
+* An update installs this release from the panel as usual
+
 ### v1.16.1 (2026-11-07)
 * **Databases:** a PHP serialized object's protected and private properties show by name with a protected or private tag, instead of the NUL bytes PHP keeps around them drawn as boxes, and the Text view writes those bytes and other control characters as `\0` and `\x1F`. Copy gives the real bytes, and so does text you select by hand: a browser drops NUL bytes from a selection, which broke the lengths of a pasted serialized value
 * An update installs this release from the panel as usual

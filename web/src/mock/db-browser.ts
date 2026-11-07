@@ -39,6 +39,8 @@ function options(domain: string): MockTable {
     ['9', 'acme_empty', null, 'off'],
     ['10', 'cron', 'a:2:{i:1767225600;a:1:{s:16:"wp_version_check";a:0:{}}s:7:"version";i:2;}', 'on'],
     // An object with protected and private properties: PHP keeps NUL bytes around their names.
+    // Windows line breaks: a plain text box would turn them into \n.
+    ['134', 'acme_footer_note', 'a:1:{s:4:"text";s:18:"Line one\r\nLine two";}', 'off'],
     ['133', 'acme_task_schedule', 'O:18:"Acme_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:25:"\0Acme_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}', 'off'],
   ];
   for (let i = 11; i <= 132; i++) rows.push([String(i), i % 3 ? `_transient_acme_feed_${i}` : `_transient_timeout_acme_feed_${i}`, i % 3 ? `a:1:{s:4:"item";s:${String(i).length}:"${i}";}` : String(1_767_225_600 + i), 'off']);

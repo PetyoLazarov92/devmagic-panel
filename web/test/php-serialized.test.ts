@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { controlRuns, fixSerializedLengths, parseJsonValue, parsePhpSerialized, propertyName } from '../src/lib/php-serialized';
+import { controlRuns, fixSerializedLengths, lostPropertyMarks, needsExactEditor, parseJsonValue, parsePhpSerialized, propertyName } from '../src/lib/php-serialized';
 
 describe('PHP serialized values', () => {
   it('reads nested arrays with every scalar type', () => {
@@ -83,5 +83,34 @@ describe('protected and private properties', () => {
     expect(controlRuns('')).toEqual([]);
     // Put back together, the runs are the text, byte for byte.
     expect(controlRuns('\0*\0recurs').map((r) => r.text).join('')).toBe('\0*\0recurs');
+  });
+});
+
+describe('editing values with NUL bytes', () => {
+  const original = 'O:18:"Acme_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:25:"\0Acme_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}';
+
+  it('picks the exact editor for control characters and carriage returns, not for tabs and line breaks', () => {
+    expect(needsExactEditor(original)).toBe(true);
+    expect(needsExactEditor('one\r\ntwo')).toBe(true);
+    expect(needsExactEditor('one\ttwo\nthree')).toBe(false);
+    expect(needsExactEditor('a:1:{s:4:"cart";a:0:{}}')).toBe(false);
+  });
+
+  it('finds nothing lost when the marks stay, whatever else changed', () => {
+    expect(lostPropertyMarks(original, original.replace('i:86400', 'i:3600'))).toEqual([]);
+    expect(lostPropertyMarks(original, original.replace('s:5:"daily"', 's:6:"weekly"'))).toEqual([]);
+  });
+
+  it('names a property whose NUL byte was deleted, even once the lengths are counted again', () => {
+    const deleted = original.replace('\0*\0recurs', '*\0recurs');
+    expect(lostPropertyMarks(original, deleted)).toEqual([{ name: 'recurs', visibility: 'protected' }]);
+    const recounted = fixSerializedLengths(deleted);
+    expect(recounted).not.toBeNull();
+    expect(lostPropertyMarks(original, recounted as string)).toEqual([{ name: 'recurs', visibility: 'protected' }]);
+  });
+
+  it('names a private property taken out, with the class it belongs to', () => {
+    const taken = original.replace('s:25:"\0Acme_Task_Schedule\0start";i:1780000000;', '').replace(':3:{', ':2:{');
+    expect(lostPropertyMarks(original, taken)).toEqual([{ name: 'start', visibility: 'private', owner: 'Acme_Task_Schedule' }]);
   });
 });

@@ -1,8 +1,9 @@
 import type { DbQueryResult, WriteCheck } from '@devmagic-panel/shared';
 import { Download, History, KeyRound, LoaderCircle, Play, ScanSearch, ShieldCheck, Trash2 } from 'lucide-react';
-import { Component, type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { ValueView } from '@/components/db-browser';
+import { EditorBoundary } from '@/components/editor-boundary';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
 import { Segmented } from '@/components/ui/segmented';
@@ -67,17 +68,6 @@ function ResizableBox({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
-}
-
-/** The plain text area when the editor's code cannot load (after an update, or offline): the runner still works. */
-class EditorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
-  override state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  override render() {
-    return this.state.failed ? this.props.fallback : this.props.children;
-  }
 }
 
 const number = (n: number) => n.toLocaleString('en-US');

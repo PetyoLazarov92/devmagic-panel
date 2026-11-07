@@ -33,6 +33,12 @@ and tick rows on a page to delete them together.
 - Long values load in full before you edit them. NULL is a tick of its own.
 - A PHP serialized value whose string lengths no longer add up, or JSON that
   no longer reads, is flagged, with **Count the lengths again**.
+- A value with NUL bytes or Windows line breaks opens in an editor that shows
+  them (`\0`, `\r`) and keeps them as they are; a plain text box would hide
+  the first and turn `\r\n` into `\n`. PHP keeps NUL bytes around the names of
+  an object's protected and private properties: when one is deleted, the
+  panel names the property and does not offer to count the lengths again,
+  which would quietly make it a public one.
 - A change applies only while the row still holds what you saw, so an edit
   made since is never overwritten.
 - Each change saves the rows as they were first, and **Undo** (in the toast or
