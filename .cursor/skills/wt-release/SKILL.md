@@ -12,7 +12,7 @@ Run this after the code change is complete. Work through the checklist in order.
 - [ ] 2. Root package.json "version"
 - [ ] 3. README.md badge on line 3
 - [ ] 4. CHANGELOG.md entry at the top
-- [ ] 5. Docs: README sections, AGENTS.md, rules, if the change affects them
+- [ ] 5. Docs: the `docs/` page, README sections, AGENTS.md, rules, if the change affects them. A README feature line stays under 25 words; detail goes to the docs page and the CHANGELOG
 - [ ] 6. Tests cover the change (logic and refusals)
 - [ ] 7. Verify
 - [ ] 8. Names review

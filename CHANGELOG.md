@@ -1,5 +1,8 @@
 # Changelog
 
+### v1.15.1 (2026-11-07)
+* **Docs:** the README is a short tour again, a line per feature and a sentence per page, and the detail lives in `docs/`: installation and uninstall, your existing setup, sites, new sites, databases, services, the other pages, the AI assistant, undo and backups, updates, safety and troubleshooting, each linked from the README
+
 ### v1.15.0 (2026-11-07)
 * **Databases:** Export over a database's tables downloads it as a .sql.gz, whole (with its views, routines and events) or the tables you tick, and a table's menu exports that table. mysqldump streams it straight to the browser, nothing is left on disk, and it has no CREATE DATABASE or USE, so it imports into any database
 * **Services:** the MySQL tab has Import a dump: a .sql, .sql.gz or .zip into a new database, or into one no site uses, which is saved to the MySQL backups first (14 days) and emptied; Undo on the job deletes what it made or puts the old one back. The dump's own CREATE DATABASE, DROP DATABASE and USE lines are left out, so a dump made with --databases lands in the database you picked and changes no other

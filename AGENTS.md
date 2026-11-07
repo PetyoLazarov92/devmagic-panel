@@ -98,7 +98,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
 9. **No em dashes anywhere**: UI copy, docs, comments, commit messages. Use a
    comma, a colon, or two sentences.
 10. **Bump the version on every change**, once per session: `package.json`,
-    the README badge and `CHANGELOG.md`.
+    the README badge and `CHANGELOG.md`. The README is the short tour and
+    `docs/` holds the detail: a README feature line stays under 25 words, and
+    the detail goes to the docs page and the CHANGELOG.
 11. **No new runtime dependencies without a reason.** Run history uses
     `node:sqlite` on purpose. The SQL runner's editor is CodeMirror 6, in the
     web app only and loaded with the SQL view: a code editor with
