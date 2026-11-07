@@ -79,7 +79,7 @@ export function CoresPage() {
 
   return (
     <div className="pt-4">
-      <PageHeader title="WordPress cores" intro={<>Shared WordPress releases{report?.coresDir ? <> in <span className="font-mono">{report.coresDir}</span></> : ''}, linked into sites by wpcore. Status comes from WordPress.org.</>} actions={<CheckAgain onClick={checkAgain} loading={loading} />} />
+      <PageHeader title="WP Cores" intro={<>Shared WordPress releases{report?.coresDir ? <> in <span className="font-mono">{report.coresDir}</span></> : ''}, linked into sites by wpcore. Status comes from WordPress.org.</>} actions={<CheckAgain onClick={checkAgain} loading={loading} />} />
 
       {error && <Notice className="mt-6">{error}</Notice>}
       {!report && loading && (

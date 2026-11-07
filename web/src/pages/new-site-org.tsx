@@ -942,7 +942,7 @@ function DefaultsHelp() {
       </button>
       {open && (
         <div role="dialog" aria-label="About your defaults" className="absolute right-0 bottom-full z-30 mb-2 grid w-64 gap-2 rounded-lg border bg-card p-3 text-xs text-muted-foreground shadow-lg">
-          <p><span className="font-medium text-foreground">Your defaults</span> are the model, effort and spending cap for each Claude Code step. They are under <Link href="/environment/settings" className="font-medium text-primary hover:underline">Environment, Settings</Link>, and kept in <code className="font-mono text-[11px] break-all">~/.config/devmagic-panel/organizations.json</code>.</p>
+          <p><span className="font-medium text-foreground">Your defaults</span> are the model, effort and spending cap for each Claude Code step. They are under <Link href="/settings" className="font-medium text-primary hover:underline">Settings</Link>, and kept in <code className="font-mono text-[11px] break-all">~/.config/devmagic-panel/organizations.json</code>.</p>
           <p>They apply to the next Claude Code step of every install that has not changed its own here, this one included.</p>
           <p><span className="font-medium text-foreground">Use as my defaults</span> saves what this card shows as your defaults. <span className="font-medium text-foreground">Back to my defaults</span> drops this install's own values.</p>
         </div>

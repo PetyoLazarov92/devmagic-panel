@@ -7,6 +7,7 @@ import { SessionDialog } from '@/components/session-dialog';
 import { StartingScreen } from '@/components/starting-screen';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { movedTo } from '@/lib/moved';
 import { notePanelVersion } from '@/lib/restart';
 import { match, navigate, usePath } from '@/lib/router';
 import { isSessionLost, listenToOtherTabs, onSessionChange, sessionBack, sessionLost, startSessionWatch, tellOtherTabs } from '@/lib/session-watch';
@@ -24,6 +25,7 @@ import { NewSitePage } from '@/pages/new-site';
 import { RunPage } from '@/pages/run';
 import { RunsPage } from '@/pages/runs';
 import { phpSectionOf, ServicesPage } from '@/pages/services';
+import { SettingsPage } from '@/pages/settings';
 import { SiteDetailPage } from '@/pages/site-detail';
 import { SitesPage } from '@/pages/sites';
 import { TrashPage } from '@/pages/trash';
@@ -54,8 +56,8 @@ function Routes({ path }: { path: string }) {
   if (path === '/services/apache') return <ServicesPage tab="apache" />;
   if (path === '/services/nginx') return <ServicesPage tab="nginx" />;
   if (path === '/services/cron') return <ServicesPage tab="cron" />;
-  if (path === '/environment') return <EnvironmentPage tab="checks" />;
-  if (path === '/environment/settings') return <EnvironmentPage tab="settings" />;
+  if (path === '/environment') return <EnvironmentPage />;
+  if (path === '/settings') return <SettingsPage />;
   if (path === '/runs') return <RunsPage />;
   const run = match('/runs/:id', path);
   if (run?.id && /^\d+$/.test(run.id)) return <RunPage key={run.id} id={Number(run.id)} />;
@@ -123,7 +125,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const known = path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/environment' || path === '/environment/settings' || path === '/runs' || path === '/mail' || path === '/trash' || path === '/jobs' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
+    // A page that moved: its old address goes on to the new one, the query kept.
+    const moved = movedTo(path, window.location.search);
+    if (moved) {
+      navigate(moved, { replace: true });
+      return;
+    }
+    const known = path === '/settings' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/environment' || path === '/runs' || path === '/mail' || path === '/trash' || path === '/jobs' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
     // The password reset has its own address, but only while signed out (the effect below sends a signed-in browser on).
     if (!known && path !== RESET_PATH) navigate('/sites');
   }, [path]);
@@ -171,9 +179,8 @@ export function App() {
   }
 
   return (
-    <AppShell path={path} user={session.user ?? ''} version={session.version} onLogout={() => void logout()}>
+    <SignedIn path={path} user={session.user ?? ''} version={session.version} onLogout={() => void logout()}>
       <Routes path={path} />
-      <Palette />
       {lost && (
         <SessionDialog
           onLogin={() => {
@@ -182,11 +189,17 @@ export function App() {
           }}
         />
       )}
-    </AppShell>
+    </SignedIn>
   );
 }
 
-function Palette() {
+/** The shell and the command palette, with the sites read once for both: the palette's commands and the menu's count. */
+function SignedIn({ children, ...shell }: Omit<Parameters<typeof AppShell>[0], 'siteCount'>) {
   const { data } = useAsync(() => api.sites().catch(() => []), []);
-  return <CommandPalette sites={data ?? []} />;
+  return (
+    <AppShell {...shell} {...(data ? { siteCount: data.length } : {})}>
+      {children}
+      <CommandPalette sites={data ?? []} />
+    </AppShell>
+  );
 }

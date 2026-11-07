@@ -2,17 +2,11 @@ import type { CheckFix, CheckGroup, CheckResult, EnvironmentReport } from '@devm
 import { CHECK_GROUP_LABELS } from '@devmagic-panel/shared';
 import { ChevronRight, CircleAlert, CircleCheck, CircleX, LoaderCircle, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { AssistantCard } from '@/components/assistant-card';
-import { PanelPasswordCard } from '@/components/panel-password-card';
-import { ClaudeDefaultsCard } from '@/components/claude-defaults-card';
-import { LocalConstantsCard } from '@/components/local-constants-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Tabs } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
-import { groupsOf, openAfterCheck, problemCount } from '@/lib/environment';
-import { navigate } from '@/lib/router';
+import { groupsOf, openAfterCheck } from '@/lib/environment';
 import { cn } from '@/lib/utils';
 import { CheckAgain, Notice, PageHeader } from '@/components/page';
 import { CardsSkeleton } from '@/components/skeletons';
@@ -29,8 +23,6 @@ interface FixState {
   output?: string;
 }
 
-export type EnvironmentTab = 'checks' | 'settings';
-
 /** What a closed group says beside its title. */
 function summaryOf(checks: CheckResult[]): string {
   const warn = checks.filter((c) => c.status === 'warn').length;
@@ -39,12 +31,9 @@ function summaryOf(checks: CheckResult[]): string {
   return [fail ? `${fail} failing` : '', warn ? (warn === 1 ? '1 warning' : `${warn} warnings`) : ''].filter(Boolean).join(', ');
 }
 
-/**
- * The machine's checks, with groups that all pass closed, and on their own
- * tab (/environment/settings) the panel's settings, so they never move while
- * the checks run.
- */
-export function EnvironmentPage({ tab }: { tab: EnvironmentTab }) {
+/** The machine's checks, with groups that all pass closed; the panel's settings are on their own page (/settings). */
+export function EnvironmentPage() {
+  const tab = 'checks' as const;
   const [report, setReport] = useState<EnvironmentReport | null>(null);
   const [open, setOpen] = useState<ReadonlySet<CheckGroup>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +81,6 @@ export function EnvironmentPage({ tab }: { tab: EnvironmentTab }) {
   const counts = { ok: 0, warn: 0, fail: 0 };
   report?.checks.forEach((c) => counts[c.status]++);
 
-  const problems = report ? problemCount(report) : null;
   const groups = report ? groupsOf(report) : [];
   function toggle(group: CheckGroup) {
     setOpen((prev) => {
@@ -107,27 +95,8 @@ export function EnvironmentPage({ tab }: { tab: EnvironmentTab }) {
     <div className="pt-4">
       <PageHeader
         title="Environment"
-        intro={tab === 'checks' ? 'What this machine needs for local WordPress sites, and one-click fixes where possible.' : 'The AI assistant, and the defaults Claude Code uses for organization installs.'}
+        intro="What this machine needs for local WordPress sites, and one-click fixes where possible."
       />
-
-      <Tabs
-        className="mt-6"
-        value={tab}
-        onChange={(t) => navigate(t === 'settings' ? '/environment/settings' : '/environment')}
-        items={[
-          { value: 'checks', label: 'Checks', ...(problems?.count ? { count: problems.count, tone: problems.tone } : {}) },
-          { value: 'settings', label: 'Settings' },
-        ]}
-      />
-
-      {tab === 'settings' && (
-        <div className="mt-5 grid gap-4">
-          <PanelPasswordCard />
-          <AssistantCard />
-          <ClaudeDefaultsCard />
-          <LocalConstantsCard />
-        </div>
-      )}
 
       {tab === 'checks' && (report || error) && (
         <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
