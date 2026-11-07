@@ -14,6 +14,10 @@ hand included, and each site has a page of its own with tabs.
   [New site](new-site.md#install-drafts)).
 - A site under a path of another site shows on its own, next to its parent
   (see [Sites under a path](#sites-under-a-path)).
+- **Removed**: removed sites, and sites a reinstall or a restore replaced,
+  kept 14 days to restore, as a filter of their own (`/sites?show=removed`).
+  They never mix with live sites: one line under the list says how many there
+  are, or how many match what you typed (see [Removed sites](pages.md#removed-sites)).
 
 ## A site's page
 
@@ -22,8 +26,8 @@ reload or a link opens the same one. The tabs come in a fixed order, in three
 groups:
 
 1. **Overview** and **Logs**
-2. WordPress and its data: **Network** (on a multisite), **Plugins**,
-   **Database**, **Cron**, **Config**
+2. WordPress, its data and its speed: **Network** (on a multisite),
+   **Plugins**, **Database**, **Performance**, **Cron**, **Config**
 3. The server: **PHP**, **Domains and SSL**
 
 A tab a site lacks leaves the others where they are. A tab's badge counts only
@@ -62,8 +66,8 @@ off at install and the local helpers marked. Undo is in the toast.
 
 ### Database
 
-Tables, the WordPress view, slow queries, the SQL runner, and backups and
-tools: see [Databases](databases.md).
+Tables, the WordPress view, the SQL runner, and backups and tools: see
+[Databases](databases.md). Slow queries are on the Performance tab.
 
 ### Cron
 
@@ -82,6 +86,11 @@ WP-Cron from cron instead of page loads.
   before you switch: PHPCompatibilityWP, fetched once with Composer into the
   panel's data folder. It is a hint and never blocks the switch.
 - PHP info from the PHP that serves the site.
+
+### Performance
+
+Why a page is slow, in one place:
+
 - **Profiles**: Xdebug's profiler for the site. **Turn on profiling** adds the
   `profile` mode to the PHP version the site runs (trigger only, so a page is
   profiled only when it asks), and Xdebug then writes to the panel's folder,
@@ -91,6 +100,8 @@ WP-Cron from cron instead of page loads.
   the code that calls them most) and the slowest functions with their calls and
   callers. **Download** gives the file for KCachegrind or an IDE. Profiles are
   deleted after 3 days.
+- **Slow queries**: the queries that cost the site's database the most time
+  (see [Databases](databases.md#slow-queries)).
 
 ### Domains and SSL
 
@@ -110,7 +121,7 @@ WP-Cron from cron instead of page loads.
 - Switch the shared WordPress core.
 - Local mode with blocked hosts, and where missing uploads load from.
 - Fix health issues in one click.
-- Move the site to the Archive (any site in the usual layout; see
+- Archive and remove the site, kept 14 days under Removed (any site in the usual layout; see
   [Undo and backups](undo-and-backups.md)).
 
 ## Sites under a path

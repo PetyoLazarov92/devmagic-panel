@@ -246,7 +246,7 @@ Full conventions live in `.cursor/rules/`, readable by any agent:
 Workflows live in `.cursor/skills/` as `SKILL.md` files (also linked from
 `.claude/skills/`): `wt-commit-message`, `wt-release`, `wt-new-action` for
 adding an action end to end, `wt-script-change` for changing `dmp-root` or
-its libraries, `wt-env-check` for adding an Environment page check.
+its libraries, `wt-env-check` for adding a machine check (Aura's Machine checks tab).
 
 `scripts/bin/wpcore` is a verbatim copy of the WordPress multi-core manager;
 it is linted at error level only. The original devmagic scripts are not

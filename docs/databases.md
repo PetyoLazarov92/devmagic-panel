@@ -129,6 +129,9 @@ a toast says when one you are not looking at ends.
 
 ## Slow queries
 
+On a site's **Performance** tab, next to its profiles; for every database at
+once, on Services, MySQL.
+
 The queries that cost the database the most time, the heaviest first: how many
 runs, the time in all and each, the slowest run, and rows read against rows
 sent, with **missing index?** where a query reads far more rows than it
@@ -226,7 +229,7 @@ toast, and under **Changes you can undo**.
 
 - The browser reads in a read-only transaction with a time limit. The SQL
   runner reads as `devmagic_panel_ro`, an account with SELECT and SHOW VIEW
-  only, made by setup or from the Environment page.
+  only, made by setup or from Aura's Machine checks.
 - Values reach MySQL as hex literals in the column's collation, and names only
   once MySQL listed them. A filter's value never reaches a URL.
 - Every import runs `mysql --binary-mode`, so a client command like `\!` in a

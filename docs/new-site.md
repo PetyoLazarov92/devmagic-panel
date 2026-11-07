@@ -125,11 +125,11 @@ linked tasks and files.
 Steps 2 and 3 run as jobs: leave the page and they keep going, show in the jobs
 list, and the wizard picks up their answer when you come back. A card beside
 them sets the model, effort and spending cap for the next Claude Code step of
-that install. The defaults per step live under **Environment → Settings**
+that install. The defaults per step live under **Settings**
 (Read the repo: Sonnet, medium effort; Links and dump: Sonnet, low effort;
 $0.50 per run), with **Check connectors** to see that Asana and Google are
 reachable. Runs have only read-only tools.
 
 The panel stores no token for any of this: Claude Code, `gh` and rclone keep
 their own sign-ins, and the panel runs them as you without reading them. The
-Environment page shows whether each is set up and signed in.
+Machine checks in Aura show whether each is set up and signed in.

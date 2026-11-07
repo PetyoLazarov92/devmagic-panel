@@ -88,7 +88,7 @@ new version. When a step fails, everything is put back (the old root scripts,
    (Chrome and Edge share one store).
 8. Offers to reissue the certs of existing sites from the new CA, covering
    every name in each vhost. The old devmagic `LocalhostCA` stays trusted until
-   you remove it from the Environment page.
+   you remove it from Aura's Machine checks.
 9. Sets up `https://local.devmagic` and asks for a panel password and your
    MySQL admin account. When no account you have signs in (on a new MySQL or
    MariaDB, root signs in only through sudo), it can make one for the panel,
@@ -111,8 +111,8 @@ new version. When a step fails, everything is put back (the old root scripts,
     eCryptfs, which unlocks only when you log in, systemd cannot start your
     user services at boot or login, so it also writes
     `~/.config/autostart/devmagic-panel.desktop`: your desktop then starts the
-    panel and Mailpit once you log in. The Environment page checks for it and
-    adds it in one click.
+    panel and Mailpit once you log in. Aura's Machine checks look for it and
+    add it in one click.
 12. Writes the list of everything it put on the machine to
     `/var/lib/devmagic-panel/installed-files` (root-owned, readable by all):
     each path, what it is, and whether an uninstall removes it, asks, or keeps

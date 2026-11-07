@@ -32,7 +32,7 @@ again.
 | What | Saved first | Undo |
 | --- | --- | --- |
 | Installs and most jobs | As each step goes | **Undo** on the job's page |
-| A removed or replaced site | The **Archive**, 14 days | **Restore** on the Archive page |
+| A removed or replaced site | **Removed** on the Sites page, 14 days | **Restore** on it |
 | A change to your crontab, a deleted WP-Cron event | `~/devmagic-panel-backups/` | **Undo** in the notice |
 | A row changed, added or deleted | `~/devmagic-panel-backups/row-changes/`, 14 days | In the notice and under **Changes you can undo**, while the row still holds what the change left |
 | A clean-up, an emptied or deleted table | `~/devmagic-panel-backups/cleanups/`, 14 days | On the job and under **Changes you can undo**; a row made again since stays as it is |

@@ -1,5 +1,14 @@
 # Changelog
 
+### v1.22.0 (2026-11-07)
+* **Panel:** the menu comes in three groups, Work (Sites, Aura, Mail), Server (Services, WP Cores) and System (Activity, Updates, Settings), with every page still in view and a short hint or a live count on the right of each item: the sites there are, new mail, a newer release
+* **Panel:** Settings is a page of its own, with the panel password, the AI assistant, Claude Code's defaults and the constants new sites get
+* **Panel:** Activity holds Jobs and Run history as two tabs; Aura holds the machine checks of the old Environment page as its Machine checks tab; WordPress cores is now WP Cores. Old addresses go on to the new pages, so bookmarks and links still work
+* **Sites:** removed sites are a Removed filter on the Sites page instead of the Archive page, never mixed with live sites: one line under the list says how many are kept, or how many match what you typed, with Show them
+* **Sites:** a Performance tab holds a site's Xdebug profiles and its slow queries together, moved from the PHP and Database tabs
+* **Databases:** the WordPress view and the MySQL page start with what needs a look, one link per card that found something, worst first: table problems, autoload over its limit, expired transients, plugin leftovers, rows to clean up, databases no site uses and users left behind
+* An update installs this release from the panel as usual
+
 ### v1.21.0 (2026-11-07)
 * **Databases:** Table health has Turn all into InnoDB for a site's MyISAM tables of every kind, WordPress's, plugins' and themes': one job, the smallest table first, each saved whole first, with Stop between two tables and one Undo for them all
 * **Databases:** What plugins and themes keep (it was What plugins keep) looks for a table no name explains in the site's code, so a theme's own table, a must-use plugin's or a plugin's by another name gets its owner, and Delete is no longer offered for a table the theme in use or a must-use plugin makes. A table nothing in the code names says so

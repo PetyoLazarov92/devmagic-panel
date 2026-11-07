@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.21.0-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.22.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -50,15 +50,15 @@ listens on localhost.
 - ✅ **SSL from a local CA**: one certificate covers every domain of a site, trusted in the system, Chrome, Edge and Firefox. [More](docs/sites.md#domains-and-ssl)
 - ✅ **Apache and hosts**: vhosts with the panel's marker and one marked block in `/etc/hosts`; what you made by hand stays. [More](docs/existing-setup.md)
 - ✅ **nginx next to Apache**: each on its own loopback address; move sites between them in one job, with Undo. [More](docs/services.md#nginx-servicesnginx)
-- ✅ **Shared WordPress cores** through `wpcore`: add a release, switch sites to it, remove unused ones. [More](docs/pages.md#wordpress)
+- ✅ **Shared WordPress cores** through `wpcore`: add a release, switch sites to it, remove unused ones. [More](docs/pages.md#wp-cores)
 - ✅ **Local mode**: mail goes to Mailpit, search engines are told not to index, logins work from this computer only. [More](docs/existing-setup.md#the-two-files-the-panel-adds-to-a-site)
 - ✅ **One click**: wp-admin login, caches, rewrite rules, debug constants, `debug.log`, VS Code, branches and pull. [More](docs/sites.md#quick-actions)
 - ✅ **Databases**: browse and edit rows, run SQL, clean up WordPress, snapshot, import and export, each change saved first for Undo. [More](docs/databases.md)
-- ✅ **Profiling**: Xdebug profiles of a page by plugin and function, and the slow queries of each database. [More](docs/sites.md#php)
+- ✅ **Performance**: a tab per site with Xdebug profiles by plugin and function, and the slow queries of its database. [More](docs/sites.md#performance)
 - ✅ **Command palette**: Ctrl+K jumps to any site or page and runs its quick actions. [More](docs/pages.md#command-palette)
 - ✅ **Cron**: your crontab's tasks and each site's WP-Cron events, with history and Undo; only the panel's block is written. [More](docs/services.md#cron-servicescron)
 - ✅ **Aura**: every problem on your sites and this machine in one list, with one-click fixes and Fix all. [More](docs/pages.md#aura)
-- ✅ **Undo and the Archive**: removed or replaced sites are kept 14 days, installs can be undone, system files are backed up first. [More](docs/undo-and-backups.md)
+- ✅ **Undo and removed sites**: removed or replaced sites are kept 14 days, installs can be undone, system files are backed up first. [More](docs/undo-and-backups.md)
 - ✅ **Updates without a token**: through public HTTPS, the GitHub CLI or git over SSH, whichever reaches the repository. [More](docs/updates.md)
 - ✅ **Optional AI assistant**: a briefing, a chat and an MCP server for Claude Code; every change comes back as a card you run. [More](docs/ai-assistant.md)
 - ✅ **Light and dark themes**, a phone-friendly layout, localhost only
@@ -96,18 +96,18 @@ listens on localhost.
   <img src="assets/screenshots/site-light.png" alt="A site's page: WordPress core, debug constants, quick actions, Local mode and uploads">
 </picture>
 
-**Archive**: copies by site and date, to restore or delete
+**Removed sites**: copies by site and date, to restore or delete
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/archive-dark.png">
-  <img src="assets/screenshots/archive-light.png" alt="The Archive: copies of removed or replaced sites by date, each with Restore and Delete now">
+  <img src="assets/screenshots/archive-light.png" alt="Removed sites: copies of removed or replaced sites by date, each with Restore and Delete now">
 </picture>
 
-**Environment**: the checks behind it all
+**Machine checks**: the checks behind it all, in Aura
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/environment-dark.png">
-  <img src="assets/screenshots/environment-light.png" alt="The Environment page: checks for Apache, certificates, hosts, MySQL, PHP, tools and access">
+  <img src="assets/screenshots/environment-light.png" alt="Aura's Machine checks: Apache, certificates, hosts, MySQL, PHP, tools and access">
 </picture>
 
 </details>
@@ -159,8 +159,8 @@ rest first and installs what is missing after asking:
 | For GitLab groups | GitLab CLI (`glab` 1.36 or newer) | reported only: `sudo apt install glab` where apt has it (Ubuntu 24.04 and later, Debian 13), GitLab's install page elsewhere |
 
 Without Node.js, the installer offers the official Node.js 22 build from
-nodejs.org, checked against its checksums, for the panel only. The Environment
-page checks the same parts later and marks each as required, recommended or
+nodejs.org, checked against its checksums, for the panel only. Aura's Machine
+checks look at the same parts later and marks each as required, recommended or
 optional.
 
 [⬆️ Back to top](#-table-of-contents)
@@ -225,7 +225,7 @@ done. Restart your browsers after the first install so they load the new CA.
    its output, and you can leave and come back while it runs.
 
 Change the panel password from the key button next to Log out, or on
-Environment → Settings: it asks for the current one, and every other browser
+Settings: it asks for the current one, and every other browser
 is signed out. Forgot it? **Forgot your password?** on the login page resets it
 with the password you log in to this computer with (sudo checks it; the panel
 never keeps it, and 5 wrong tries lock it for an hour), or set one in a
@@ -248,15 +248,15 @@ When the installer put Node.js in place for the panel, use
 
 | Page | What it does |
 | --- | --- |
-| [Aura](docs/pages.md#aura) | Every problem on your sites and this machine in one list, with one-click fixes and Fix all |
-| [WordPress](docs/pages.md#wordpress) | The shared wpcore cores with their WordPress.org status and the sites on each |
+| [Aura](docs/pages.md#aura) | Every problem on your sites and this machine in one list, with one-click fixes and Fix all, and every machine check |
+| [WP Cores](docs/pages.md#wp-cores) | The shared wpcore cores with their WordPress.org status and the sites on each |
 | [Services](docs/services.md) | PHP, MySQL, Apache, nginx, Mailpit and cron, each on a tab of its own |
 | [Mail](docs/pages.md#mail) | The mail your local sites sent, caught by Mailpit |
-| [Environment](docs/pages.md#environment) | Checks for everything the panel needs, with one-click fixes, and the panel's settings |
+| [Settings](docs/pages.md#settings) | The panel password, the AI assistant, Claude Code's defaults and the constants new sites get |
 | [Sites](docs/sites.md) | Your local sites, and a page per site with tabs for logs, plugins, the database, cron, PHP and domains |
 | [New site](docs/new-site.md) | A wizard for a site from a repo and a dump, a fresh WordPress, an empty site or your organization |
-| [Run history](docs/pages.md#run-history) | Every action the panel ran, with its result, kept 90 days |
-| [Archive](docs/pages.md#archive) | Copies of removed or replaced sites from the last 14 days, to restore or delete |
+| [Activity](docs/pages.md#activity) | The jobs since the panel started, and every action it ran with its result, kept 90 days |
+| [Removed sites](docs/pages.md#removed-sites) | A filter of Sites: copies of removed or replaced sites from the last 14 days, to restore or delete |
 
 The database tools (tables, rows, SQL, table health, clean-ups, plugin leftovers, MySQL settings, imports and exports) are in
 [Databases](docs/databases.md).
@@ -277,7 +277,7 @@ what is its own:
 - **Two must-use plugins** (the login helper and Local mode) are all it adds to
   a site, kept out of git locally.
 - **Your crontab keeps its lines**; the panel writes only its own block.
-- **Removed and replaced sites go to the Archive** first, for 14 days.
+- **Removed and replaced sites are kept** first, for 14 days, under Removed on the Sites page.
 
 📖 The details: [Living with your existing setup](docs/existing-setup.md).
 
@@ -300,7 +300,7 @@ and rclone keep their own sign-ins.
 ## 🤖 AI assistant
 
 Optional and off by default; every page works without it. Turn it on under
-**AI assistant** under Environment, Settings, with your own Anthropic API key.
+**AI assistant** in Settings, with your own Anthropic API key.
 It gives a briefing on the Sites page, a chat, and help filling in the new site
 wizard. The panel is also an MCP server for Claude Code and Claude Desktop.
 Anything Claude wants to change comes back as a card you run yourself, and
@@ -322,7 +322,7 @@ sudo /usr/local/lib/devmagic-panel/bin/dmp-restore          # newest backup
 ```
 
 Inside the panel, installs and most jobs have **Undo**, removed or replaced
-sites wait in the **Archive** for 14 days, and every database change is saved
+sites wait under **Removed** on the Sites page for 14 days, and every database change is saved
 first.
 
 📖 What is saved where, and for how long: [Undo and backups](docs/undo-and-backups.md).

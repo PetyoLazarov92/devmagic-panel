@@ -61,6 +61,15 @@ globs: ["web/**"]
 - **Confirm dialogs**: the title asks the question, the description says
   what happens and what Undo does, Cancel on the left, the action named for
   what it does on the right.
+- **The menu is three groups** (Work, Server, System, in
+  `components/app-shell.tsx`), every page visible, each with a short hint or
+  a live count on the right. Group by what a page is for, not by technology:
+  a site's Performance tab holds its profiles and slow queries together.
+- **A page that moves keeps its old address**: add it to `lib/moved.ts`,
+  which sends it on with its query, and test it in `web/test/moved.test.ts`.
+- **A long tool page starts with what needs a look** (`NeedsALook`): one link
+  per card that found something, worst first, scrolling to that card, and
+  nothing when all is fine.
 - **Secrets use `SecretInput`, never a password field.** A sudo password, an
   API key, a site's or a database's password is text drawn as dots with every
   password manager's ignore marker (`web/src/lib/secret-field.ts`), so the
@@ -95,12 +104,12 @@ Every page is made of the pieces in `web/src/components/page.tsx` and
   read (`CardsSkeleton`, `ListSkeleton`, `TableSkeleton`, `LogSkeleton`, and
   `ReadingBlock` inside a card). A part read after the page (a tile, a card)
   keeps its place and fills in.
-- **List pages** (Sites, Jobs, Run history, Archive, WordPress cores, Mail,
+- **List pages** (Sites and its Removed filter, Activity's Jobs and Run history, WP Cores, Mail,
   Aura): header, notices, a filter bar, then one card of rows. Loading is a
   list or table skeleton; nothing is an empty state.
 - **Detail pages** (a site, a job, a run): back link, title and facts,
   actions, then tabs, Overview first.
-- **Status pages** (Environment, Developer options, Updates, Services and its
+- **Status pages** (Aura's Machine checks, Developer options, Updates, Services and its
   Apache, nginx and Cron tabs): header with Check again, notices, the summary
   first, then **pairs then full width**: short summary cards side by side,
   long lists and logs across the whole width at the bottom.

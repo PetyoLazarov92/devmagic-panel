@@ -20,8 +20,8 @@ The [README](../README.md) is the short tour. These pages hold the detail.
 - [Databases](databases.md): tables and rows, WordPress clean-ups, the SQL
   runner, exports and imports, and what each change saves first.
 - [Services](services.md): PHP, MySQL, Apache, nginx and cron.
-- [Other pages](pages.md): Aura, WordPress, Mail, Environment, Run history,
-  Archive and Developer options.
+- [Other pages](pages.md): the menu, Aura and its machine checks, WP Cores,
+  Mail, Settings, Activity, removed sites and Developer options.
 - [AI assistant](ai-assistant.md): the briefing, the chat, the wizard's
   helper and the MCP server.
 

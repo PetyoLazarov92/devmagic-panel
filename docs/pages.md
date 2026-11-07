@@ -13,10 +13,25 @@ there too; restarting MySQL, Apache or nginx and clearing Mail ask first. The
 outcome is a toast, with the job one click away. The actions it offers are
 the registry's (`palette` on an action in `shared/src/actions.ts`).
 
+## The menu
+
+Three groups, every page visible, with a short hint or a live count on the
+right of each item:
+
+- **Work**: Sites (with the count), Aura, Mail (new messages).
+- **Server**: Services, WP Cores.
+- **System**: Activity, Updates (a newer release), Settings.
+
+Pages that moved keep working at their old address: `/environment` opens
+Aura's Machine checks, `/environment/settings` Settings, `/jobs` and `/runs`
+Activity, and `/trash` the Sites page's Removed filter.
+
 ## Aura
 
-The health of your sites and this machine, every problem in one list, with
-one-click fixes and **Fix all**:
+Everything that needs fixing, on two tabs.
+
+**Problems** (`/aura`): the health of your sites and this machine, every
+problem in one list, with one-click fixes and **Fix all**:
 
 - Certificates missing names, expiring, or from the old CA.
 - Missing or leftover hosts lines, and names served on port 80 or 443 only.
@@ -27,7 +42,17 @@ one-click fixes and **Fix all**:
 - On nginx: a hosts line pointing at the other server, `.htaccess` rules nginx
   ignores, and nginx rules of another kind after a site became a network.
 
-## WordPress
+**Machine checks** (`/aura/machine`): every check of this machine, passing or
+not. The panel's own installation (files, root scripts, build), Apache,
+nginx once it is installed (set up, running, `nginx -t`, each server on its own
+address, configs made by hand that take Apache's ports), certificates, hosts
+entries, MySQL (with the read-only account the SQL runner uses, and whether
+its memory for InnoDB data fits the sites: a buffer pool far smaller than
+them gets a fix that sets it, as the MySQL page's Settings do), PHP, tools and
+access. Each check is marked required, recommended or optional, most have a
+one-click fix, and groups that all pass start closed.
+
+## WP Cores
 
 The shared wpcore cores with their WordPress.org status and the sites on each:
 
@@ -42,32 +67,40 @@ The mail your local sites sent, caught by Mailpit: all sites or one, HTML
 shown in a sandbox, and delete a site's mail. Installs Mailpit in one click
 when it is missing.
 
-## Environment
+## Settings
 
-Checks the panel's own installation (files, root scripts, build), Apache,
-nginx once it is installed (set up, running, `nginx -t`, each server on its own
-address, configs made by hand that take Apache's ports), certificates, hosts
-entries, MySQL (with the read-only account the SQL runner uses, and whether
-its memory for InnoDB data fits the sites: a buffer pool far smaller than
-them gets a fix that sets it, as the MySQL page's Settings do), PHP, tools and access. Each check is marked required, recommended or optional, most have a
-one-click fix, and groups that all pass start closed.
+The panel password, the AI assistant, the Claude Code defaults for installs
+from an organization, and the constants new sites get (`/settings`).
 
-Its **Settings** tab (`/environment/settings`) holds the panel password, the
-AI assistant and the Claude Code defaults for installs from an organization.
+## Activity
 
-## Run history
+What the panel did, on two tabs.
 
-Every action the panel ran, with its result, in numbered pages. An install
-that went on without a step shows a warning and how many it skipped, as on the
-Jobs page. Runs are kept 90 days (at most 2000). Row values and SQL that writes
-are never kept, like passwords.
+- **Jobs** (`/activity`): installs, imports, restores and other long actions
+  since the panel last started, running ones first. A job's own page is
+  `/jobs/<id>`.
+- **Run history** (`/activity/runs`): every action the panel ran, with its
+  result, in numbered pages. An install that went on without a step shows a
+  warning and how many it skipped. Runs are kept 90 days (at most 2000). Row
+  values and SQL that writes are never kept, like passwords.
 
-## Archive
+## Removed sites
 
-Copies of sites from the last 14 days, by site and date: removed, or replaced
-by a reinstall or a restore, each with its folder, vhost, certificate and
-database. **Restore** one (over the current site, after it is archived too), or
-delete it for good. See [Undo and backups](undo-and-backups.md).
+Removed sites are a filter of the Sites page (`/sites?show=removed`), never
+mixed into the list of live ones: while some are kept, one line under the list
+says how many, with **Show them**. Each is a copy from the last 14 days, by
+site and date: removed, or replaced by a reinstall or a restore, with its
+folder, vhost, certificate and database. **Restore** one (over the current
+site, after it is archived too), or delete it for good. See
+[Undo and backups](undo-and-backups.md).
+
+## Long tool pages
+
+The WordPress view of a site's database and the MySQL page start with what
+needs a look, when anything does: one link per card that found something
+(table problems, autoload over its limit, expired transients, leftovers of
+plugins that are gone, rows to clean up; databases no site uses, users left
+behind), worst first, which scrolls to the card.
 
 ## Developer options
 

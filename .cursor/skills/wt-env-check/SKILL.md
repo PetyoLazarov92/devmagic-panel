@@ -1,6 +1,6 @@
 ---
 name: wt-env-check
-description: Add a check to the devmagic-panel Environment page, with a clear ok, warn or fail result, an optional one-click fix through a registry action, and Vitest coverage using the fake executor. Use when the panel should detect a missing package, module, setting or drift on the machine.
+description: Add a check to the devmagic-panel machine checks (Aura's Machine checks tab, once the Environment page), with a clear ok, warn or fail result, an optional one-click fix through a registry action, and Vitest coverage using the fake executor. Use when the panel should detect a missing package, module, setting or drift on the machine.
 ---
 
 # WT Env Check

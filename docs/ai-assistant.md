@@ -6,7 +6,7 @@ Optional and off by default; every page works without it.
 
 ## Turning it on
 
-Turn it on under **AI assistant** under Environment, Settings, pick a model and
+Turn it on under **AI assistant** in Settings, pick a model and
 save your own Anthropic API key (or rely on `ANTHROPIC_API_KEY` or
 `ant auth login`). The key stays in the panel's secrets file and never goes
 back to the browser.

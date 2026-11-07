@@ -5,7 +5,7 @@
 ## The browser says the certificate is not trusted
 
 Close and reopen the browser once after the first install, so it loads the new
-CA. The Environment page's Certificates group shows whether the system and each
+CA. The Certificates group of Aura's Machine checks shows whether the system and each
 browser store trust it; running
 `~/.local/share/devmagic-panel/current/install.sh` again adds it to browser
 profiles made since.
@@ -30,8 +30,8 @@ waiting, check the service as above, or start it with
 ## Another web server holds ports 80 and 443
 
 The installer warns when nginx is installed. Stop the other server or move it
-to other ports, then restart Apache from the Services page; the Environment
-page checks that both ports answer.
+to other ports, then restart Apache from the Services page; Aura's Machine
+checks show that both ports answer.
 
 ## MySQL admin account: not configured or cannot connect
 
@@ -60,6 +60,6 @@ place with your password. Run the command the Updates page shows.
 ## Where are the logs?
 
 Installs and updates log to `~/.local/state/devmagic-panel/logs/`; every
-action the panel ran is in Run history; the
+action the panel ran is in Activity, Run history; the
 [Developer options](pages.md#developer-options) page shows the service's
 startup log.

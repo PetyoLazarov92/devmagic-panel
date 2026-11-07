@@ -1347,7 +1347,7 @@ install_autostart() {
   home_encrypted || return 0
   dmp_step "Starting the panel after login (your home folder is encrypted, so systemd cannot start it at boot)"
   as_user "$NODE_BIN" --disable-warning=ExperimentalWarning "$RUN_DIR/server/dist/cli.js" write-autostart \
-    || dmp_warn "the login entry was not written: add it from the panel's machine checks in Aura"
+    || dmp_warn "the login entry was not written: add it from the panel's Environment page"
   record file "$AUTOSTART_FILE" remove "starts the panel and Mailpit after login, on an encrypted home folder"
 }
 
