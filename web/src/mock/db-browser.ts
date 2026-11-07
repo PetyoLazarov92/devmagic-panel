@@ -111,7 +111,25 @@ function makeTables(database: string, domain: string): Map<string, MockTable> {
     [`${p}users`, users()],
     [`acme_sessions`, sessions()],
     ...(database.endsWith('db') ? [[`old_${p}options`, { ...options(domain), estimate: 380 }] as [string, MockTable]] : []),
+    // A network: wp_blogs and wp_sitemeta, and each further site's own tables with its prefix (wp_2_, wp_3_).
+    ...networkTables(database, domain),
   ]);
+}
+
+function networkTables(database: string, domain: string): Array<[string, MockTable]> {
+  const blogs = siteOf(database)?.network?.sites ?? [];
+  if (!blogs.length) return [];
+  const big = (estimate: number): MockTable => ({ columns: [num('meta_id', 'bigint unsigned', { key: 'PRI' }), num('post_id', 'bigint unsigned', { key: 'MUL' }), text('meta_key', 'varchar(255)', { key: 'MUL' }), text('meta_value', 'longtext')], rows: [], estimate });
+  const own = ['commentmeta', 'comments', 'links', 'termmeta', 'term_taxonomy', 'term_relationships', 'terms', 'postmeta'];
+  return [
+    ['wp_blogs', big(blogs.length)],
+    ['wp_sitemeta', big(140)],
+    ...blogs.filter((b) => b.id > 1).flatMap((b) => [
+      [`wp_${b.id}_options`, options(domain)] as [string, MockTable],
+      [`wp_${b.id}_posts`, posts()] as [string, MockTable],
+      ...own.map((n) => [`wp_${b.id}_${n}`, big(n === 'postmeta' ? 64_000 : 300)] as [string, MockTable]),
+    ]),
+  ];
 }
 
 function rowCount(t: MockTable): number {

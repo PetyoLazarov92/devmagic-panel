@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.19.2 (2026-11-07)
+* **Databases:** the Tables list shows its first 21 tables, with Show 21 more and Show all under it; Find a table and the prefix filters still search every table, and say how many match
+* An update installs this release from the panel as usual
+
 ### v1.19.1 (2026-11-07)
 * **Databases:** Show all in the WordPress view is remembered per site (and site of a network) in this browser, so another site's cards open short instead of taking the last site's choice
 * An update installs this release from the panel as usual

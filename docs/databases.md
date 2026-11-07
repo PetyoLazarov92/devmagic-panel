@@ -13,6 +13,8 @@ keeps for a site are only read.
 - Every table with its engine, rows and size, with a filter for the site's
   prefix and other prefixes, sorted by name or biggest first. The sort is
   remembered with your other view choices, in every browser you sign in from.
+  The list shows the first 21 tables, with **Show 21 more** and **Show all**;
+  Find a table and the prefix filters search every table.
 - A table's rows a page at a time (25 to 250), sorted by any column, with
   filters (is, contains, starts with, more or less than, NULL). With two or
   more, pick **Match every filter** or **Match any filter**.

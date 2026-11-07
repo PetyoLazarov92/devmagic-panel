@@ -1,6 +1,6 @@
 import type { DbCell, DbCleanupView, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable, Preferences } from '@devmagic-panel/shared';
 import { DB_FILTER_LABELS, DB_FILTER_OPS, DB_PAGE_SIZES } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, Download, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
 import { type ClipboardEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { JobBox } from '@/components/job-box';
@@ -42,6 +42,8 @@ interface Props {
 }
 
 const number = (n: number) => n.toLocaleString('en-US');
+/** How many tables the list shows before Show more, and how many each Show more adds. */
+const TABLE_ROWS = 21;
 
 /** phpMyAdmin opened on a database, or one of its tables. */
 function pmaHref(base: string, database: string, table?: string): string {
@@ -101,6 +103,8 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
   }, [job, reload]);
   const busy = job !== null && !settled(job);
   const prefix = overview?.sites[0]?.prefix;
+  // A big database (a network has a dozen tables a site) shows its first tables, and the rest on Show more; Find searches them all.
+  const [shownCount, setShownCount] = useState(TABLE_ROWS);
 
   const tables = useMemo(() => {
     const list = (overview?.tables ?? []).filter((t) => {
@@ -183,7 +187,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
         {number(overview.tables.length)} {overview.tables.length === 1 ? 'table' : 'tables'}, {bytes(overview.totalBytes)}, read {timeAgo(overview.checkedAt)}. Row counts of InnoDB tables are MySQL&apos;s estimate.
       </p>
       <ul className="mt-2 divide-y">
-        {tables.map((t) => (
+        {tables.slice(0, shownCount).map((t) => (
           <li key={t.name} className="flex items-center gap-3 px-5 py-2.5 text-sm">
             <button type="button" onClick={() => onNavigate({ table: t.name, show: 'rows' })} className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
               <span className="flex flex-wrap items-center gap-2">
@@ -215,6 +219,27 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
         ))}
         {tables.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">{overview.tables.length ? 'No table matches.' : 'This database has no tables.'}</li>}
       </ul>
+      {tables.length > TABLE_ROWS && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-5 py-2 text-xs">
+          <span className="text-muted-foreground tabular-nums">
+            {number(Math.min(shownCount, tables.length))} of {number(tables.length)} {query || filter !== 'all' ? (tables.length === 1 ? 'match' : 'matches') : 'tables'}
+          </span>
+          {shownCount < tables.length ? (
+            <>
+              <button type="button" className="flex items-center gap-1 font-medium text-primary hover:underline" onClick={() => setShownCount((n) => n + TABLE_ROWS)}>
+                <ChevronDown className="size-3.5" />Show {number(Math.min(TABLE_ROWS, tables.length - shownCount))} more
+              </button>
+              <button type="button" className="font-medium text-primary hover:underline" onClick={() => setShownCount(tables.length)}>
+                Show all {number(tables.length)}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="flex items-center gap-1 font-medium text-primary hover:underline" onClick={() => setShownCount(TABLE_ROWS)}>
+              <ChevronUp className="size-3.5" />Show fewer
+            </button>
+          )}
+        </div>
+      )}
       {exporting && <ExportDialog database={database} tables={overview.tables} onClose={() => setExporting(false)} />}
       {asking && (
         <ConfirmCleanup

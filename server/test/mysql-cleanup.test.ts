@@ -347,6 +347,31 @@ describe("a clean-up's rows in the Tables view", () => {
     expect(cleanupViewWhere(t, view('sessionTokens'), 'wp_usermeta')).toBe("meta_key = 'session_tokens'");
   });
 
+  it("on a network's second site uses its own tables, and leaves the network's shared ones and sitemeta to the first", () => {
+    const names = new Set([...NETWORK]);
+    const second: WordpressTables = { database: 'shop_com', prefix: 'wp_', blog: 2, blogPrefix: 'wp_2_', names, network: [] };
+    const first: WordpressTables = { ...second, blog: 1, blogPrefix: 'wp_' };
+    expect(cleanupViewWhere(second, view('revisions'), 'wp_2_posts')).toBe("post_type = 'revision'");
+    expect(() => cleanupViewWhere(second, view('revisions'), 'wp_posts')).toThrow(/does not count rows of wp_posts/);
+    expect(cleanupViewWhere(second, view('postmeta'), 'wp_2_postmeta')).toBe('NOT EXISTS (SELECT 1 FROM `wp_2_posts` p WHERE p.ID = `wp_2_postmeta`.post_id)');
+    expect(cleanupViewWhere(second, view('transients'), 'wp_2_options')).toContain("option_name LIKE '\\_transient\\_%'");
+    // Users and their meta are the network's: only the first site shows or cleans them.
+    expect(() => cleanupViewWhere(second, view('usermeta'), 'wp_usermeta')).toThrow(/does not count rows/);
+    expect(() => cleanupViewWhere(second, view('sessionTokens'), 'wp_usermeta')).toThrow(/does not count rows/);
+    expect(cleanupViewWhere(first, view('usermeta'), 'wp_usermeta')).toContain('`wp_users`');
+    // The network's own transients live in sitemeta, deleted with the first site's; its rows show the options part.
+    expect(cleanupViewWhere(first, view('transients'), 'wp_options')).toContain('option_name');
+    expect(() => cleanupViewWhere(first, view('transients'), 'wp_sitemeta')).toThrow(/does not count rows/);
+  });
+
+  it('deletes content and leftovers of a network\'s second site in its own tables, in one job', async () => {
+    const tree = wpSiteTree({ multisite: true });
+    const fake = fakeDb(NETWORK);
+    await run(await planContent(ctxFor(fake, tree.config), { domain: 'local.shop.com', blog: 2, kinds: ['revisions'], orphans: ['postmeta', 'usermeta'] }));
+    expect(dumps(fake).map((c) => c.args.at(-1))).toEqual(['wp_2_commentmeta', 'wp_2_comments', 'wp_2_postmeta', 'wp_2_term_relationships', 'wp_2_posts', 'wp_2_postmeta']);
+    expect(deletes(fake)).not.toContain('`wp_usermeta`');
+  });
+
   it('refuses a table the kind does not count', () => {
     expect(() => cleanupViewWhere(t, view('revisions'), 'wp_postmeta')).toThrow('That clean-up does not count rows of wp_postmeta');
     expect(() => cleanupViewWhere(t, view('wcSessions'), 'wp_options')).toThrow(/does not count rows/);
