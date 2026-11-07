@@ -12,16 +12,20 @@ export const SITES_SORT_LABELS: Record<(typeof SITES_SORTS)[number], string> = {
   'name-desc': 'Name Z to A',
 };
 
+/** How a database's tables list: by name, or biggest first. */
+export const TABLE_SORTS = ['name', 'size'] as const;
+
 /** The web server a new site of its own gets, once nginx runs next to Apache. */
 export const SITE_SERVERS = ['apache', 'nginx'] as const;
 
-const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), newSiteServer: z.enum(SITE_SERVERS) };
+const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS) };
 
 export const preferences = z.object({
   theme: fields.theme.default('system'),
   sitesView: fields.sitesView.default('grid'),
   sitesSort: fields.sitesSort.default('name'),
   newSiteServer: fields.newSiteServer.default('apache'),
+  tablesSort: fields.tablesSort.default('name'),
 });
 
 export type Preferences = z.infer<typeof preferences>;

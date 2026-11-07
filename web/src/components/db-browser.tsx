@@ -1,4 +1,4 @@
-import type { DbCell, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable } from '@devmagic-panel/shared';
+import type { DbCell, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable, Preferences } from '@devmagic-panel/shared';
 import { DB_FILTER_LABELS, DB_FILTER_OPS, DB_PAGE_SIZES } from '@devmagic-panel/shared';
 import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, Download, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
 import { type ClipboardEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,6 +17,7 @@ import { Segmented } from '@/components/ui/segmented';
 import { api, dbExportUrl, isMockup } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { controlRuns, parseJsonValue, parsePhpSerialized, propertyName, type PhpValue } from '@/lib/php-serialized';
+import { savePreferences, usePreferences } from '@/lib/preferences';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
@@ -66,7 +67,7 @@ export function DatabaseBrowser({ database, location, onNavigate, header }: Prop
 }
 
 type TableFilter = 'all' | 'site' | 'other';
-type TableSort = 'name' | 'size';
+type TableSort = Preferences['tablesSort'];
 
 function TablesList({ database, overview, loading, error, reload, onNavigate, header }: {
   database: string;
@@ -79,7 +80,9 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<TableFilter>('all');
-  const [sort, setSort] = useState<TableSort>('name');
+  // Remembered with the panel's other view choices, so the list keeps it after a table and back.
+  const { tablesSort: sort } = usePreferences();
+  const setSort = (tablesSort: TableSort) => savePreferences({ tablesSort });
   const [asking, setAsking] = useState<{ table: string; how: 'empty' | 'drop' } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [refresh, setRefresh] = useState(0);

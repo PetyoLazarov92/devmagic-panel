@@ -734,9 +734,9 @@ let mockLocalConstants: LocalConstant[] = [{ name: 'WP_ENVIRONMENT_TYPE', value:
 // Kept for the browser session, as the panel keeps them in its database.
 const mockPreferences: Preferences = (() => {
   try {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
   } catch {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache' };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name' };
   }
 })();
 

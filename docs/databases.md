@@ -11,7 +11,8 @@ keeps for a site are only read.
 ## Tables
 
 - Every table with its engine, rows and size, with a filter for the site's
-  prefix and other prefixes.
+  prefix and other prefixes, sorted by name or biggest first. The sort is
+  remembered with your other view choices, in every browser you sign in from.
 - A table's rows a page at a time (25 to 250), sorted by any column, with
   filters (is, contains, starts with, more or less than, NULL). With two or
   more, pick **Match every filter** or **Match any filter**.

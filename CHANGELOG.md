@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.16.4 (2026-11-07)
+* **Databases:** the tables list remembers Sort by name or size, after opening a table and going back, after a reload and in every browser you sign in from, kept with the panel's other view choices
+* An update installs this release from the panel as usual
+
 ### v1.16.3 (2026-11-07)
 * **Databases:** a serialized object with protected or private properties can be typed in Add a row, Duplicate or Change a row: type `\0*\0name` or `\0Class\0name` and **Turn \0 into NUL bytes** puts the NUL bytes PHP writes there in place of the typed backslash and zero, counts the lengths again, and is offered only when the value then reads
 * **Databases:** Add a row flags a value that starts like a serialized array or object and does not read, as Change a row already did
