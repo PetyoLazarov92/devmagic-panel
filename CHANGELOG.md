@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.15.0 (2026-11-07)
+* **Databases:** Export over a database's tables downloads it as a .sql.gz, whole (with its views, routines and events) or the tables you tick, and a table's menu exports that table. mysqldump streams it straight to the browser, nothing is left on disk, and it has no CREATE DATABASE or USE, so it imports into any database
+* **Services:** the MySQL tab has Import a dump: a .sql, .sql.gz or .zip into a new database, or into one no site uses, which is saved to the MySQL backups first (14 days) and emptied; Undo on the job deletes what it made or puts the old one back. The dump's own CREATE DATABASE, DROP DATABASE and USE lines are left out, so a dump made with --databases lands in the database you picked and changes no other
+* **Databases:** every import runs mysql with --binary-mode, a site's Import a dump too: a line like `\!` in a dump fails as SQL instead of running as a command of the mysql client
+
 ### v1.14.0 (2026-11-07)
 * **Sites:** the SQL runner has Can write next to Read only: one statement that changes rows (INSERT, UPDATE, DELETE, REPLACE) or a table, an index or a view (ALTER, CREATE, DROP, RENAME, TRUNCATE). Check and run first shows what it would change: the rows a change of rows changes, tried in a transaction that is rolled back (only on tables that can roll back), the tables saved first with their size and the disk's free room. With the database's name typed, a job saves those tables whole and runs it, a change of rows in one transaction. Undo, on the job and under Changes you can undo, puts the tables back as they were and deletes a table or view it made
 * **Databases:** SQL that writes saves the tables it names, and any a foreign key cascades into, so a change to one table never copies the whole database. It refuses another database, accounts and rights, databases, files, routines and a second statement, and MySQL's own and kept databases stay read only

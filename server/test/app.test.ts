@@ -341,6 +341,8 @@ describe('services tabs', () => {
     expect((await app.inject({ method: 'GET', url: '/api/sites/local.shop.com/db/wordpress?blog=two', headers: { host: HOST, cookie } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'GET', url: '/api/sites/example.com/db/wordpress', headers: { host: HOST, cookie } })).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/api/sites/local.shop.com/db/wordpress', headers: { host: HOST } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/api/mysql/databases/shop_com/export', headers: { host: HOST } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/api/mysql/databases/shop_com/export?table=a%60b', headers: { host: HOST, cookie } })).statusCode).toBe(400);
     await app.close();
   });
 });

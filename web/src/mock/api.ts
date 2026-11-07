@@ -400,6 +400,11 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     'mysql.dropDatabase': [{ id: 'export', label: `Export ${String(input.database)} to the MySQL backups` }, { id: 'drop', label: `Delete database ${String(input.database)}` }],
     'mysql.dropUsers': [{ id: 'save', label: `Save ${accounts.length === 1 ? accounts[0] : `${accounts.length} accounts`} and their rights` }, { id: 'drop', label: `Delete ${accounts.join(', ')}` }],
     'mysql.optimize': [{ id: 'optimize', label: `Optimize the tables of ${String(input.database)}` }],
+    'mysql.importDump': [
+      ...(input.mode === 'replace' ? [{ id: 'save', label: `Save ${String(input.database)} to the MySQL backups` }] : []),
+      { id: 'make', label: input.mode === 'replace' ? `Empty ${String(input.database)}` : `Make database ${String(input.database)}` },
+      { id: 'import', label: 'Import the dump' },
+    ],
     ...(id === 'mysql.runSql'
       ? (() => {
           const c = mockCheckWrite(String(input.database), String(input.sql));
@@ -540,7 +545,13 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     };
     done();
   }
-  if (id === 'mysql.emptyTable' || id === 'mysql.dropTable' || id === 'mysql.runSql' || id.startsWith('db.clean')) {
+  if (id === 'mysql.importDump') {
+    job.title = input.mode === 'replace' ? `Replace ${String(input.database)} with a dump` : `Import a dump into a new database ${String(input.database)}`;
+    job.undoable = [input.mode === 'replace' ? `Put ${String(input.database)} back from the MySQL backups` : `Delete database ${String(input.database)}`];
+    if (input.mode === 'new' && !mockMysqlExtra.databases.some((d) => d.name === input.database)) {
+      mockMysqlExtra.databases.push({ name: String(input.database), sizeBytes: 4_200_000, tables: 12, kind: 'unused' as const });
+    }
+  } else if (id === 'mysql.emptyTable' || id === 'mysql.dropTable' || id === 'mysql.runSql' || id.startsWith('db.clean')) {
     job.title = (job.steps.at(-1)?.label ?? job.title);
     job.undoable = ['Put back what it removed'];
   } else if (id.startsWith('mysql.')) {

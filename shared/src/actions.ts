@@ -628,6 +628,15 @@ export const actions = {
     changesSystem: true,
     input: z.object({ id: z.number().int().min(1).max(2 ** 53 - 1) }),
   },
+  'mysql.importDump': {
+    title: 'Import a dump into a database',
+    description:
+      "Imports an uploaded .sql, .sql.gz or .zip dump into a new database, or into one no site uses after saving it to the MySQL backups (14 days) and emptying it. The dump's own CREATE DATABASE, DROP DATABASE and USE lines are left out, so it changes no other database. Undo deletes what it made and puts a replaced database back. A site's database imports on its Database tab instead. Starts a job.",
+    changesSystem: true,
+    input: z
+      .object({ database: mysqlDatabaseName, uploadId: z.string().regex(/^[0-9a-f-]{36}$/), mode: z.enum(['new', 'replace']), confirm: z.string().optional() })
+      .refine((v) => v.mode === 'new' || v.confirm?.trim() === v.database, { path: ['confirm'], message: 'Type the database name to confirm' }),
+  },
   'mysql.undoCleanup': {
     title: 'Undo a clean-up',
     description: 'Puts back the rows or the table a clean-up removed, from the copy it saved first; a row made again since stays as it is.',

@@ -67,6 +67,14 @@ alwaysApply: true
   a transaction it rolls back, only when every table it names is InnoDB.
   Needs the database's name typed; run history hides `sql`; never offered to
   the assistant. `mysql.killQuery` stops a statement, never MySQL's own.
+- Importing a dump (`mysql.importDump` in `server/src/mysql-transfer.ts`,
+  and a site's `db.import`) runs mysql with `--binary-mode`, so a client
+  command in a dump fails as SQL. An import into a new or unused database
+  drops the dump's own CREATE DATABASE, DROP DATABASE and USE lines
+  (`OwnDatabaseOnly`), never imports into a site's, MySQL's own or a kept
+  database, and saves a database it replaces to the MySQL backups first.
+  Exports (`/api/mysql/databases/:db/export`) stream mysqldump without
+  `--databases`, tables only once the database listed them.
 - The SQL runner (`server/src/mysql-query.ts`) takes one statement of a kind
   that reads, refuses a second statement, a `/*!` comment and a backslash
   outside a string, and runs it as `devmagic_panel_ro` (SELECT and SHOW VIEW

@@ -1,5 +1,5 @@
-import type { ActionId, MysqlBackup, MysqlProcess, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
-import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, OctagonX, RefreshCw, RotateCcw, Table2, Trash2, Users, Wand2 } from 'lucide-react';
+import type { ActionId, MysqlBackup, MysqlProcess, UploadResult, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
+import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, OctagonX, RefreshCw, RotateCcw, Table2, Trash2, Upload, Users, Wand2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { SqlRunner } from '@/components/sql-runner';
@@ -9,6 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
+import { Field, Select } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { JobBox } from '@/components/job-box';
 import { Dialog } from '@/components/ui/dialog';
 import { Menu, type MenuItem } from '@/components/ui/menu';
 import { api } from '@/lib/api';
@@ -276,6 +279,8 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
           {databases.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">No databases here.</li>}
         </ul>
       </Card>
+
+      <ImportDumpCard databases={data.databases} onDone={report.reload} />
 
       <Card>
         <CardHeader><CardTitle>Users</CardTitle><Users className="size-4 text-muted-foreground" /></CardHeader>
@@ -570,5 +575,109 @@ function ProcessesCard({ refresh }: { refresh: number }) {
         </div>
       </Dialog>
     </Card>
+  );
+}
+
+const NAME = /^[A-Za-z0-9_$-]{1,64}$/;
+
+/**
+ * An uploaded dump into a new database, or into one no site uses after it is
+ * saved to the MySQL backups. A site's database imports on its own Database
+ * tab, where the panel also replaces production addresses.
+ */
+function ImportDumpCard({ databases, onDone }: { databases: MysqlDatabase[]; onDone: () => void }) {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [upload, setUpload] = useState<UploadResult | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'new' | 'replace'>('new');
+  const [name, setName] = useState('');
+  const unused = databases.filter((d) => d.kind === 'unused');
+  const [target, setTarget] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const runner = useJob();
+  const { job } = runner;
+  const done = useRef<string | null>(null);
+  useEffect(() => {
+    if (!job || !settled(job) || done.current === job.id) return;
+    done.current = job.id;
+    onDone();
+    if (job.status === 'done') toast({ tone: 'success', title: `${job.title}: done` });
+  }, [job, onDone]);
+  const busy = job !== null && !settled(job);
+  const database = mode === 'new' ? name.trim() : target;
+  const taken = mode === 'new' && databases.some((d) => d.name === database);
+  const ready = Boolean(upload) && NAME.test(database) && !taken && (mode === 'new' || confirm === database) && !busy;
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setProgress(0);
+    try {
+      const result = await api.upload(file, setProgress);
+      setUpload(result);
+      if (!name) setName(file.name.replace(/\.(sql|gz|zip)$/gi, '').replace(/\.(sql|gz)$/gi, '').replace(/[^A-Za-z0-9_$-]+/g, '_').slice(0, 64));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setProgress(null);
+    }
+  }
+
+  function start() {
+    if (!upload) return;
+    void runner.follow(api.startJob('mysql.importDump', { database, uploadId: upload.id, mode, ...(mode === 'replace' ? { confirm } : {}) }));
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader><CardTitle>Import a dump</CardTitle><Upload className="size-4 text-muted-foreground" /></CardHeader>
+        <div className="grid gap-4 p-5">
+          <p className="text-sm text-muted-foreground">
+            A .sql, .sql.gz or .zip into a new database, or into one no site uses. Its own CREATE DATABASE and USE lines are left out, so it changes no other database. For a site, use Import a dump on the site&apos;s Database tab, which also replaces production addresses.
+          </p>
+          <input ref={fileInput} id="mysql-import-file" type="file" accept=".sql,.gz,.zip" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" disabled={busy || progress !== null} onClick={() => fileInput.current?.click()}>
+              {progress !== null ? <LoaderCircle className="animate-spin" /> : <Upload />}
+              {progress !== null ? `Uploading ${Math.round(progress * 100)}%` : upload ? 'Choose another dump' : 'Choose a dump'}
+            </Button>
+            {upload && <span className="text-sm">{upload.name} · {bytes(upload.size)}</span>}
+          </div>
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          {upload && (
+            <>
+              <Segmented label="Into" value={mode} onChange={(m) => (setMode(m), setConfirm(''))} options={[['new', 'A new database'], ['replace', 'A database no site uses']]} className="justify-self-start" />
+              {mode === 'new' ? (
+                <Field label="Name of the new database" htmlFor="mysql-import-name" hint={taken ? `${database} is there already: pick A database no site uses to replace it` : 'Letters, digits, underscores, dollar signs and hyphens, up to 64 characters'}>
+                  <Input id="mysql-import-name" value={name} onChange={(e) => setName(e.target.value)} className="font-mono" aria-invalid={taken || (name !== '' && !NAME.test(name.trim()))} />
+                </Field>
+              ) : unused.length ? (
+                <div className="grid gap-3">
+                  <Field label="Database to replace" htmlFor="mysql-import-target" hint="Saved to the MySQL backups first (14 days), then emptied; Undo on the job puts it back.">
+                    <Select id="mysql-import-target" value={target} onChange={(e) => (setTarget(e.target.value), setConfirm(''))}>
+                      <option value="">Pick one</option>
+                      {unused.map((d) => <option key={d.name} value={d.name}>{d.name} ({bytes(d.sizeBytes)})</option>)}
+                    </Select>
+                  </Field>
+                  {target && <ConfirmField id="mysql-import-confirm" expected={target} value={confirm} onChange={setConfirm} />}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No database here is free of sites to replace: import into a new one.</p>
+              )}
+              <div>
+                <Button disabled={!ready} onClick={start}>
+                  {busy ? <LoaderCircle className="animate-spin" /> : <Upload />}
+                  {mode === 'replace' ? `Save ${target || 'it'} and import` : `Import into ${database || 'the new database'}`}
+                </Button>
+              </div>
+            </>
+          )}
+          {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+          {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
+        </div>
+      </Card>
+    </>
   );
 }

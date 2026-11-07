@@ -27,6 +27,7 @@ import { type BrowseContext, dbCell, dbOverview, dbRows, dbSchema, dbStructure }
 import { runQuery } from './mysql-query.js';
 import { listCleanups } from './mysql-cleanup.js';
 import { checkWrite, mysqlProcesses } from './mysql-write.js';
+import { exportDatabase } from './mysql-transfer.js';
 import { listRowChanges } from './mysql-rows.js';
 import { databaseSummary, wordpressReport } from './mysql-wordpress.js';
 import { mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
@@ -387,6 +388,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // What SQL that writes would do, before it runs: its tables, the room for their copy, and the rows it changes, tried and rolled back.
     api.post<{ Params: { database: string } }>('/api/mysql/databases/:database/check-write', async (request, reply): Promise<WriteCheck | undefined> =>
       browsing(reply, () => checkWrite({ ...browse(), siteBusy: () => false }, request.params.database, request.body)));
+    // A database, or the tables named (?table=a&table=b), as a gzipped dump to download, streamed from mysqldump.
+    api.get<{ Params: { database: string }; Querystring: { table?: string | string[] } }>('/api/mysql/databases/:database/export', async (request, reply) =>
+      browsing(reply, async () => {
+        const asked = request.query.table;
+        const tables = (asked === undefined ? [] : Array.isArray(asked) ? asked : [asked]).slice(0, 2000);
+        if (tables.some((t) => !mysqlIdentifier.safeParse(t).success)) throw new BrowseError('A table name like wp_options');
+        const { filename, stream } = await exportDatabase(browse(), request.params.database, tables);
+        return reply.header('content-type', 'application/gzip').header('content-disposition', `attachment; filename="${filename}"`).send(stream);
+      }));
     // What MySQL runs now, for the MySQL tab's Processes.
     api.get('/api/mysql/processes', async (_request, reply): Promise<MysqlProcess[] | undefined> => browsing(reply, () => mysqlProcesses(browse())));
     // Table and column names, for the SQL editor's suggestions.

@@ -118,7 +118,8 @@ export async function importSql(exec: Executor, docroot: string, domain: string,
     const { user, host, password } = target.mysql;
     return exec(
       'mysql',
-      ['--user', user, '--host', host, `--default-character-set=${wp?.dbCharset ?? 'utf8mb4'}`, '--max-allowed-packet=1G', '--no-auto-rehash', database],
+      // --binary-mode: a line like \! or source in a dump is SQL that fails, never a command of the mysql client.
+      ['--user', user, '--host', host, `--default-character-set=${wp?.dbCharset ?? 'utf8mb4'}`, '--max-allowed-packet=1G', '--no-auto-rehash', '--binary-mode', database],
       { ...streamed, env: { MYSQL_PWD: password } },
     );
   };

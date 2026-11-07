@@ -1,6 +1,6 @@
 import type { DbCell, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable } from '@devmagic-panel/shared';
 import { DB_FILTER_LABELS, DB_FILTER_OPS, DB_PAGE_SIZES } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, Download, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { JobBox } from '@/components/job-box';
@@ -14,7 +14,7 @@ import { Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
 import { Segmented } from '@/components/ui/segmented';
-import { api } from '@/lib/api';
+import { api, dbExportUrl, isMockup } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { parseJsonValue, parsePhpSerialized, type PhpValue } from '@/lib/php-serialized';
 import { toast } from '@/lib/toast';
@@ -81,6 +81,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
   const [filter, setFilter] = useState<TableFilter>('all');
   const [sort, setSort] = useState<TableSort>('name');
   const [asking, setAsking] = useState<{ table: string; how: 'empty' | 'drop' } | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const runner = useJob();
   const done = useRef<string | null>(null);
@@ -119,6 +120,11 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
           <span className="truncate">Tables of <span className="font-mono text-[13px]">{database}</span></span>
         </CardTitle>
         <div className="flex items-center gap-1">
+          {exportable(overview) && (
+            <Button size="sm" variant="outline" onClick={() => setExporting(true)}>
+              <Download />Export
+            </Button>
+          )}
           {overview.phpMyAdmin && (
             <ButtonLink size="sm" variant="outline" href={pmaHref(overview.phpMyAdmin, database)} target="_blank" rel="noreferrer">
               <ExternalLink />phpMyAdmin
@@ -183,6 +189,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
               items={[
                 { label: 'Browse rows', icon: <Rows3 />, onSelect: () => onNavigate({ table: t.name, show: 'rows' }) },
                 { label: 'Structure', icon: <KeyRound />, onSelect: () => onNavigate({ table: t.name, show: 'structure' }) },
+                ...(exportable(overview) ? [{ label: 'Export', icon: <Download />, onSelect: () => download(database, [t.name]) }] : []),
                 ...(overview.phpMyAdmin ? [{ label: 'Open in phpMyAdmin', icon: <ExternalLink />, onSelect: () => void window.open(pmaHref(overview.phpMyAdmin as string, database, t.name), '_blank', 'noreferrer') }] : []),
                 ...(editableIn(overview, t.name)
                   ? [
@@ -196,6 +203,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
         ))}
         {tables.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">{overview.tables.length ? 'No table matches.' : 'This database has no tables.'}</li>}
       </ul>
+      {exporting && <ExportDialog database={database} tables={overview.tables} onClose={() => setExporting(false)} />}
       {asking && (
         <ConfirmCleanup
           title={asking.how === 'drop' ? `Delete table ${asking.table}?` : `Empty ${asking.table}?`}
@@ -222,6 +230,67 @@ function tableMeta(t: DbTable): string {
   const parts = [`about ${number(t.rows)} ${t.rows === 1 ? 'row' : 'rows'}`, bytes(t.dataBytes + t.indexBytes)];
   if (t.freeBytes > 10 * 1024 ** 2) parts.push(`${bytes(t.freeBytes)} free`);
   return parts.join(' · ');
+}
+
+/** information_schema and performance_schema are MySQL's views of the server: there is nothing to dump. */
+const exportable = (o: DbOverview) => !['information_schema', 'performance_schema'].includes(o.database.toLowerCase());
+
+/** Starts a download of a dump: the server streams it, so the page stays where it is. */
+function download(database: string, tables: readonly string[] = []) {
+  if (isMockup) {
+    toast({ tone: 'info', title: 'The mockup has no database to download', detail: 'The panel streams a .sql.gz from mysqldump here.' });
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = dbExportUrl(database, tables);
+  a.click();
+}
+
+/** A whole database, or the tables ticked, as a .sql.gz to download. */
+function ExportDialog({ database, tables, onClose }: { database: string; tables: DbTable[]; onClose: () => void }) {
+  const [what, setWhat] = useState<'all' | 'some'>('all');
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState('');
+  const list = tables.filter((t) => !query || t.name.toLowerCase().includes(query.toLowerCase()));
+  const size = (names: Iterable<string>) => [...names].reduce((n, name) => n + ((tables.find((t) => t.name === name)?.dataBytes ?? 0)), 0);
+  const chosen = what === 'all' ? tables.map((t) => t.name) : [...ticked];
+  return (
+    <Dialog open onClose={onClose} title={`Export ${database}`} description="A .sql.gz the browser downloads: the tables with their rows, and for a whole database its views, routines and events. It has no CREATE DATABASE or USE, so it imports into any database." className="w-[min(36rem,calc(100vw-2rem))]">
+      <div className="mt-4 grid gap-3">
+        <Segmented label="What" value={what} onChange={setWhat} options={[['all', 'The whole database'], ['some', 'Tables I pick']]} className="justify-self-start" />
+        {what === 'some' && (
+          <div className="grid gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input aria-label="Find a table" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a table" className="h-8 min-w-40 flex-1 text-sm" />
+              <Button size="sm" variant="outline" onClick={() => setTicked(new Set([...ticked, ...list.map((t) => t.name)]))}>Tick these</Button>
+              <Button size="sm" variant="outline" onClick={() => setTicked(new Set())} disabled={!ticked.size}>None</Button>
+            </div>
+            <ul className="grid max-h-64 gap-0.5 overflow-y-auto rounded-md border p-2 text-sm">
+              {list.map((t) => (
+                <li key={t.name}>
+                  <label className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded px-1 py-0.5 hover:bg-muted">
+                    <input type="checkbox" checked={ticked.has(t.name)} onChange={(e) => setTicked((s) => { const n = new Set(s); if (e.target.checked) n.add(t.name); else n.delete(t.name); return n; })} />
+                    <span className="truncate font-mono text-[13px]">{t.name}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{t.view ? 'view' : bytes(t.dataBytes)}</span>
+                  </label>
+                </li>
+              ))}
+              {list.length === 0 && <li className="px-1 text-muted-foreground">No table matches.</li>}
+            </ul>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {chosen.length} {chosen.length === 1 ? 'table' : 'tables'}, about {bytes(size(chosen))} of data before it is compressed.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button disabled={what === 'some' && ticked.size === 0} onClick={() => (download(database, what === 'all' ? [] : [...ticked]), onClose())}>
+            <Download />Download .sql.gz
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
 }
 
 /** The list of clean-ups reads again whenever the tables were read again. */

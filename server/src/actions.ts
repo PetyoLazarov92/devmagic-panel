@@ -17,6 +17,7 @@ import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
 import { planContent, planDropTable, planEmptyTable, planOrphans, planTransients, setAutoload, undoCleanup } from './mysql-cleanup.js';
 import { deleteRows, insertRow, type RowsContext, undoRowChange, updateRow } from './mysql-rows.js';
 import { killQuery, planWrite } from './mysql-write.js';
+import { planImportDump } from './mysql-transfer.js';
 import { CoreRefused, planAddCore, removeCore } from './sites/cores.js';
 import { CreateRefused, planCreate } from './sites/create.js';
 import { planCleanCopy } from './sites/clean.js';
@@ -327,6 +328,14 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     return startJob(ctx, steps, title, `database ${input.database}`);
   },
   'mysql.killQuery': async (ctx, input) => [await killQuery(rowsCtx(ctx), input)],
+  'mysql.importDump': async (ctx, input) =>
+    startJob(
+      ctx,
+      await planImportDump({ config: ctx.config, exec: ctx.exec, mysql: ctx.secrets?.mysql, kept: () => ctx.store.keptDatabases(), uploadsDir: ctx.uploadsDir, backupsDir: mysqlBackupsDir(ctx.uploadsDir) }, input),
+      input.mode === 'replace' ? `Replace ${input.database} with a dump` : `Import a dump into a new database ${input.database}`,
+      `database ${input.database}`,
+      { upload: input.uploadId },
+    ),
   'mysql.deleteBackup': async (ctx, input) => [deleteMysqlBackup(mysqlBackupsDir(ctx.uploadsDir), input)],
   'php.setXdebug': (ctx, input) => setXdebug(ctx.config, ctx.exec, ctx.dmpRoot, input),
   'php.setModule': (ctx, input) => setPhpModule(ctx.config, ctx.exec, ctx.dmpRoot, input),

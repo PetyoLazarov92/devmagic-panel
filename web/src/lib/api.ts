@@ -385,6 +385,14 @@ export const cleanCopyUrl = (domain: string, name: string, path?: string) =>
 export const snapshotUrl = (domain: string, name: string, path?: string) =>
   `/api/sites/${encodeURIComponent(domain)}/snapshots/${encodeURIComponent(name)}${atPath(path, '?')}`;
 
+/** A database, or the tables named, as a gzipped dump to download (the server streams it from mysqldump). */
+export const dbExportUrl = (database: string, tables: readonly string[] = []) => {
+  const q = new URLSearchParams();
+  for (const t of tables) q.append('table', t);
+  const query = q.toString();
+  return `/api/mysql/databases/${encodeURIComponent(database)}/export${query ? `?${query}` : ''}`;
+};
+
 /** `npm run mockup` serves the UI on sample data, with no server behind it. */
 export const isMockup = import.meta.env.VITE_MOCK === '1';
 
