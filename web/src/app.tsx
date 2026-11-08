@@ -6,7 +6,7 @@ import { CommandPalette } from '@/components/command-palette';
 import { SessionDialog } from '@/components/session-dialog';
 import { StartingScreen } from '@/components/starting-screen';
 import { Button } from '@/components/ui/button';
-import { api } from '@/lib/api';
+import { api, isMockup } from '@/lib/api';
 import { movedTo } from '@/lib/moved';
 import { notePanelVersion } from '@/lib/restart';
 import { match, navigate, usePath } from '@/lib/router';
@@ -20,6 +20,7 @@ import { DeveloperPage } from '@/pages/developer';
 import { JobPage } from '@/pages/job';
 import { LoginPage, RESET_PATH } from '@/pages/login';
 import { MailPage } from '@/pages/mail';
+import { MockupPage } from '@/pages/mockup';
 import { NewSitePage } from '@/pages/new-site';
 import { RunPage } from '@/pages/run';
 import { phpSectionOf, ServicesPage } from '@/pages/services';
@@ -62,6 +63,7 @@ function Routes({ path }: { path: string }) {
   if (path === '/developer') return <DeveloperPage />;
   if (path === '/update') return <UpdatePage />;
   if (path === '/mail') return <MailPage />;
+  if (path === '/mockup' && isMockup) return <MockupPage />;
   const job = match('/jobs/:id', path);
   if (job?.id) return <JobPage key={job.id} id={job.id} />;
   return <SitesPage />;
@@ -127,7 +129,7 @@ export function App() {
       navigate(moved, { replace: true });
       return;
     }
-    const known = path === '/settings' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/aura/machine' || path === '/mail' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
+    const known = (path === '/mockup' && isMockup) || path === '/settings' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/aura/machine' || path === '/mail' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
     // The password reset has its own address, but only while signed out (the effect below sends a signed-in browser on).
     if (!known && path !== RESET_PATH) navigate('/sites');
   }, [path]);

@@ -1,4 +1,4 @@
-import { CircleArrowUp, Globe, KeyRound, Layers, ListChecks, LogOut, Mail, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
+import { CircleArrowUp, FlaskConical, Globe, KeyRound, Layers, ListChecks, LogOut, Mail, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { ChangePasswordDialog } from '@/components/panel-password';
@@ -102,6 +102,20 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
           <Logo className="size-7" />
           <span className="font-semibold tracking-tight whitespace-nowrap">devmagic-panel</span>
         </div>
+        {/* Only in the mockup: first, on its own, so it is the first thing you see. */}
+        {isMockup && (
+          <div className="px-3 pb-1 md:pb-0">
+            <Link
+              href="/mockup"
+              aria-current={path === '/mockup' ? 'page' : undefined}
+              className={cn('flex items-center gap-2.5 rounded-md bg-warning/12 px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-warning transition-colors hover:bg-warning/20', path === '/mockup' && 'bg-warning/20')}
+            >
+              <FlaskConical className="size-4" />
+              Mockup
+              <span className="ml-auto pl-2 text-[11px] font-normal">sample data</span>
+            </Link>
+          </div>
+        )}
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:gap-0 md:overflow-y-auto md:pb-0" aria-label="Main">
           {groups.map(({ group, items }) => (
             <div key={group} role="group" aria-label={group} className="flex gap-1 md:flex-col md:gap-0.5">
@@ -152,13 +166,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Lined up with the page below: the search centered over it while the indicators on the right leave room, else just left of them. */}
         <header className="mx-auto flex w-full max-w-7xl items-center gap-2 px-6 pt-4 md:px-10">
-          <div className="hidden min-w-0 flex-1 basis-0 sm:block">
-            {isMockup && (
-              <span className="rounded-md bg-warning/15 px-2 py-1 text-xs font-medium text-warning" title="Sample data, nothing changes on this machine">
-                Mockup: sample data
-              </span>
-            )}
-          </div>
+          <div className="hidden min-w-0 flex-1 basis-0 sm:block" />
           <button
             type="button"
             onClick={openPalette}
