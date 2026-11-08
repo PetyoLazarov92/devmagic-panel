@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ExecResult, Executor } from '../exec.js';
 import { excludeLocally } from './mu-plugins.js';
@@ -103,3 +103,82 @@ export const readHtaccess = (docroot: string): string | null => {
   const file = join(docroot, '.htaccess');
   return existsSync(file) ? readFileSync(file, 'utf8') : null;
 };
+
+/** Folders the scan for .htaccess files never goes into: dependencies and git, never served as a site's own rules. */
+const SKIP_FOLDERS = new Set(['node_modules', 'vendor', '.git', '.svn', 'bower_components']);
+/** Where the scan stops, so a site with a deep uploads tree is read in a moment. */
+const SCAN_DEPTH = 8;
+const SCAN_FOLDERS = 5000;
+
+/**
+ * The site's folders, below its own, that have an .htaccess of their own,
+ * like /wp-content/uploads/wc-logs: with nginx in front of Apache they always
+ * go to Apache, so their rules run for every file in them. Links are not
+ * followed, and only names dmp-root takes (letters, digits, . _ -) count.
+ */
+export function htaccessFolders(docroot: string): string[] {
+  const found: string[] = [];
+  let seen = 0;
+  const walk = (dir: string, at: string, depth: number) => {
+    if (depth > SCAN_DEPTH || seen >= SCAN_FOLDERS) return;
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    seen++;
+    if (at && entries.some((e) => e.isFile() && e.name === '.htaccess')) found.push(at);
+    for (const e of entries) {
+      if (!e.isDirectory() || SKIP_FOLDERS.has(e.name) || !/^[A-Za-z0-9._-]+$/.test(e.name) || e.name === '.' || e.name === '..') continue;
+      walk(join(dir, e.name), `${at}/${e.name}`, depth + 1);
+    }
+  };
+  walk(docroot, '', 0);
+  // A folder under another one that goes to Apache goes with it.
+  return found.sort().filter((p, i, all) => !all.slice(0, i).some((q) => p.startsWith(`${q}/`)));
+}
+
+/** Files nginx serves itself in front of Apache (DMP_NGINX_STATIC_EXT in scripts/lib/nginx.sh). */
+const STATIC_EXT = /\\\.\S*\b(css|js|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf)\b/i;
+const STATIC_WORDS = /\b(css|js|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf)\b|image\/|font\/|text\/css|javascript/i;
+
+/**
+ * Rules of an .htaccess that are about images, CSS, JS or fonts: headers,
+ * expiry and compression, and rewrites or access rules of those files. They
+ * do not run for the files nginx serves itself in front of Apache.
+ * WordPress's own section is left out. Each comes back as its first words.
+ */
+export function staticRules(text: string): string[] {
+  const out: string[] = [];
+  let section: string | null = null;
+  let files: boolean | null = null;
+  const add = (line: string) => {
+    const words = line.replace(/^<|>$/g, '').split(/\s+/).slice(0, 3).join(' ');
+    if (!out.includes(words)) out.push(words);
+  };
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    const begin = /^#\s*BEGIN\s+(.+)$/.exec(line)?.[1]?.trim();
+    if (begin) section = begin;
+    if (/^#\s*END\b/.test(line)) section = null;
+    if (!line || line.startsWith('#') || (section && /^WordPress\b/i.test(section))) continue;
+    const opening = /^<(Files|FilesMatch)\s+(.+)>$/i.exec(line);
+    if (opening) {
+      files = STATIC_WORDS.test(opening[2] as string);
+      if (files) add(line);
+      continue;
+    }
+    if (/^<\/Files(Match)?>/i.test(line)) {
+      files = null;
+      continue;
+    }
+    if (files) continue;
+    if (/^(Header|ExpiresActive|ExpiresByType|ExpiresDefault|AddOutputFilterByType|SetOutputFilter|FileETag|AddType|AddEncoding|AddCharset)\b/i.test(line)) {
+      add(line);
+      continue;
+    }
+    if (/^(RewriteRule|RewriteCond|RedirectMatch)\b/i.test(line) && STATIC_EXT.test(line)) add(line);
+  }
+  return out.slice(0, 8);
+}

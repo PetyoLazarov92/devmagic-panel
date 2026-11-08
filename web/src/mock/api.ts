@@ -1595,11 +1595,15 @@ export const mockApi: Api = {
     if (id === 'nginx.setup' || id === 'nginx.teardown') window.setTimeout(() => (mockNginxSetUp = id === 'nginx.setup'), 3500);
     mockCleanupStarted(id, input);
     if (id === 'sites.setServerAll') {
-      for (const s of sites) if (!s.path && !s.move?.refusal) s.server = input.server === 'nginx' ? 'nginx' : 'apache';
+      const to = input.server as Site['server'];
+      for (const s of sites) if (!s.path && !s.move?.refusals[to]) s.server = to;
     }
     if (id === 'site.setServer') {
       const moved = sites.find((s) => s.domain === input.domain && !s.path);
-      if (moved) moved.server = input.server === 'nginx' ? 'nginx' : 'apache';
+      if (moved) {
+        moved.server = input.server as Site['server'];
+        if (moved.move) moved.move.front.static = input.static !== false;
+      }
     }
     return mockDbJob(id, input);
   },

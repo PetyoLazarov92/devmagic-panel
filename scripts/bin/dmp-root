@@ -35,6 +35,11 @@ Usage: dmp-root <command> [args]
                                       its PHP through PHP-FPM; kind picks WordPress's rules;
                                       --mount serves the folder WEB_DIR/<folder> at /path;
                                       nginx -t, then reload; hosts-add then points it there
+  nginx-site-write <domain> --upstream apache [--static on|off] [--apache-path /path]... [alias...]
+                                      nginx in front of the site's Apache vhost (NGINX_ADDRESS),
+                                      which reads .htaccess and runs its PHP; with --static on
+                                      nginx serves images, CSS, JS and fonts, but in the folders
+                                      of --apache-path (each with an .htaccess of its own)
   nginx-site-remove <domain>          take a site off nginx
   hosts-add <domain> [alias...]       add or replace the site's /etc/hosts line
   hosts-remove <domain>               remove the site's /etc/hosts line
@@ -162,15 +167,26 @@ vhost_write() {
 }
 
 # nginx-site-write <domain> [--kind ...] [--uploads-proxy <host>] [--mount /path=folder]... [alias...]
+# nginx-site-write <domain> --upstream apache [--static on|off] [--apache-path /path]... [alias...]
 nginx_site_write() {
   (( $# >= 1 )) || dmp_usage_error "a domain is required"
-  local domain="$1" kind=single proxy="" name at folder
+  local domain="$1" kind=single proxy="" name at folder upstream="" static=on php_opts=0
   shift
   while [[ "${1:-}" == --* ]]; do
     (( $# >= 2 )) || dmp_usage_error "$1 needs a value"
     case "$1" in
-      --kind) dmp_in_list "$2" "${DMP_NGINX_KINDS[@]}" || dmp_usage_error "--kind takes ${DMP_NGINX_KINDS[*]}, not: $2"; kind="$2" ;;
-      --uploads-proxy) dmp_require_hostname "$2"; proxy="$2" ;;
+      --kind) dmp_in_list "$2" "${DMP_NGINX_KINDS[@]}" || dmp_usage_error "--kind takes ${DMP_NGINX_KINDS[*]}, not: $2"; kind="$2"; php_opts=1 ;;
+      --uploads-proxy) dmp_require_hostname "$2"; proxy="$2"; php_opts=1 ;;
+      # nginx in front of the site's Apache vhost, which reads .htaccess and runs its PHP.
+      --upstream) [[ "$2" == apache ]] || dmp_usage_error "--upstream takes apache, not: $2"; upstream=apache ;;
+      --static) [[ "$2" == on || "$2" == off ]] || dmp_usage_error "--static takes on or off, not: $2"; static="$2" ;;
+      # A folder of the site with an .htaccess of its own, which always goes to Apache.
+      --apache-path)
+        dmp_require_mount_path "$2"
+        dmp_require_local_name "$domain"
+        dmp_nginx_apache_path_ok "$domain" "$2" || dmp_die "no folder $WEB_DIR/$domain$2 with an .htaccess of its own"
+        DMP_NGINX_APACHE_PATHS+=("$2")
+        ;;
       # As vhost-write's: a path of letters, digits, . _ - and a folder in WEB_DIR that exists.
       --mount)
         [[ "$2" == /*=* ]] || dmp_usage_error "--mount needs /path=folder"
@@ -181,6 +197,7 @@ nginx_site_write() {
         [[ "$folder" != "$domain" ]] || dmp_usage_error "a site cannot be mounted into itself"
         [[ -d "$WEB_DIR/$folder" && ! -L "$WEB_DIR/$folder" ]] || dmp_die "no folder $WEB_DIR/$folder"
         DMP_NGINX_MOUNTS+=("$at=$folder")
+        php_opts=1
         ;;
       *) dmp_usage_error "unknown option: $1" ;;
     esac
@@ -189,6 +206,13 @@ nginx_site_write() {
   for name in "$domain" "$@"; do
     dmp_require_local_name "$name"
   done
+  if [[ -n "$upstream" ]]; then
+    # Apache's vhost has the WordPress rules, the uploads redirect and the sites under paths.
+    (( php_opts == 0 )) || dmp_usage_error "--kind, --uploads-proxy and --mount are for a site on nginx's own PHP, not in front of Apache"
+    dmp_nginx_front_write "$domain" "$static" "$@"
+    return
+  fi
+  [[ "$static" == on && ${#DMP_NGINX_APACHE_PATHS[@]} -eq 0 ]] || dmp_usage_error "--static and --apache-path need --upstream apache"
   dmp_nginx_site_write "$domain" "$kind" "$proxy" "$@"
 }
 

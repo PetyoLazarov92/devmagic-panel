@@ -74,10 +74,10 @@ server its hosts line points at, with nothing proxied.
 - **Write settings again**, **Turn nginx off**, `nginx -t` and **Reload**.
 - Every config in `sites-available`, with whether it is enabled, whose it is
   and whether it takes Apache's ports, and nginx's own error log.
-- Once nginx is set up, a **Sites** card shows how many sites run on each
-  server, sets the web server the new site wizard picks, and moves every site
-  to nginx or to Apache in one job: each site checked as it moves, the ones
-  that stay listed with why, and Undo moves them all back.
+- Once nginx is set up, a **Sites** card shows how many sites run on Apache,
+  nginx + Apache and nginx, sets the web server the new site wizard picks,
+  and moves every site to one of them in one job: each site checked as it
+  moves, the ones that stay listed with why, and Undo moves them all back.
 
 ## Cron (`/services/cron`)
 

@@ -1,5 +1,13 @@
 # Changelog
 
+### v1.25.0 (2026-11-08)
+* **Sites:** a third web server for a site, nginx + Apache: nginx answers with the site's certificate and passes requests to its Apache vhost over HTTPS, so Apache still reads every `.htaccess` and runs its PHP, as hosts that put nginx in front of Apache do. No PHP-FPM needed, and the sites under its paths go along
+* **Sites:** nginx serves images, CSS, JS and fonts that exist itself, but folders with an `.htaccess` of their own always go to Apache; a tick sends every request through Apache. The dialog lists the `.htaccess` rules about those files, which would not run otherwise
+* **Sites:** the Web server card has one Change dialog with the three servers side by side, what each means, which hosts it is like and why a site cannot run on one. The wizard, the nginx tab's Sites card, the command palette and the sites list know all three
+* **Aura:** a site with nginx in front of Apache gets an issue for `.htaccess` rules about files nginx serves (Send everything through Apache) and for a folder that got an `.htaccess` of its own (Write its nginx rules again)
+* **Apache:** with the first site behind nginx, Apache sees the visitor's address through `mod_remoteip`, trusted from nginx's address only; turning nginx off takes it out again
+* The root scripts change, so the update finishes with its installer, which asks for your password
+
 ### v1.24.2 (2026-11-08)
 * **Mockup:** a public demo builds from it with `npm run build:demo`: static files with a banner that says it is sample data and links to the real panel, and an `.htaccess` with a strict CSP and noindex; `npm run demo:serve` serves the build the same way to check it
 * **Mockup:** it shows the panel's own version, with two newer releases to update to, and `?proposals=none` starts with nothing suggested

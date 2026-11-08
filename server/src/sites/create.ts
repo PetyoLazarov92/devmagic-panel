@@ -25,7 +25,7 @@ import { currentUpload, readUpload } from './uploads.js';
 import { findVhost } from './discover.js';
 import { siteHost, siteWriteArgs } from './site-actions.js';
 import { nginxSetUp } from '../nginx.js';
-import { nginxPhpVersion } from './server-switch.js';
+import { frontArgs, nginxPhpVersion } from './server-switch.js';
 import { engineHint, nodeEnv, nodeFor, type NodeOptions } from './node.js';
 import { readSiteVhosts } from './vhost.js';
 import { mysqlPassword } from './mysql-password.js';
@@ -60,8 +60,10 @@ const secret = () => randomBytes(18).toString('base64url');
 export async function precheck(ctx: CreateContext, input: CreateInput): Promise<{ facts?: DumpFacts; dumpFile?: string }> {
   const vhosts = readSiteVhosts(ctx.config);
   const taken = new Set(vhosts.flatMap((v) => v.names));
+  if (input.server !== 'apache' && !input.path && !nginxSetUp(ctx.config)) {
+    throw new CreateRefused('nginx is not set up next to Apache: set it up on Services, nginx, or install the site on Apache');
+  }
   if (input.server === 'nginx' && !input.path) {
-    if (!nginxSetUp(ctx.config)) throw new CreateRefused('nginx is not set up next to Apache: set it up on Services, nginx, or install the site on Apache');
     if (!nginxPhpVersion(ctx.config, input.domain)) throw new CreateRefused('nginx runs PHP through PHP-FPM only, and the default PHP version has none: install PHP-FPM for it on Services, PHP');
   }
   if (input.path) {
@@ -327,6 +329,14 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
         if (r.code === 0) job.onUndo('Remove the vhost', () => root('vhost-remove', domain));
         return r;
       });
+      if (input.server === 'nginx-apache') {
+        // nginx answers in front of the vhost; folders with an .htaccess of their own show up on Aura later.
+        add('front', 'Put nginx in front of the Apache vhost and reload', async (job) => {
+          const r = await root(...frontArgs(domain, true, [], input.aliases));
+          if (r.code === 0) job.onUndo('Take nginx out', () => root('nginx-site-remove', domain));
+          return r;
+        });
+      }
     }
     add('hosts', 'Add the /etc/hosts entry', async (job) => {
       const r = await root('hosts-add', ...names);

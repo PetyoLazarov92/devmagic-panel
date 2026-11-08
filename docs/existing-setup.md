@@ -22,6 +22,11 @@ phpMyAdmin stay on Apache.
   with the panel's marker and its PHP through PHP-FPM; nginx reads no
   `.htaccess`. Sites under its paths go along, each from its own folder with
   its own PHP.
+- A site with nginx in front of Apache keeps its Apache vhost and gets the
+  same `<domain>.conf`, which passes requests to Apache on `127.0.0.1` over
+  HTTPS. The first one adds `conf-available/devmagic-panel-remoteip.conf`
+  (Apache sees the visitor's address from nginx, and from nginx only) and
+  turns `mod_remoteip` on; turning nginx off takes both out again.
 - Vhosts made by hand and names in hosts lines outside the panel's block keep
   their sites on Apache.
 - nginx configs you wrote stay as they are. One that listens on port 80 or 443

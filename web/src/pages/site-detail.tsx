@@ -1,5 +1,5 @@
 import type { ActionId, JobView, Site, SiteGit, SiteLocalMode, WpCronReport, WpDebugConstant } from '@devmagic-panel/shared';
-import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, sameRepo, siteRepos, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
+import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, sameRepo, SITE_SERVER_LABEL, siteRepos, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import {
   ArrowDownToLine, ArrowLeft, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LoaderCircle, LogIn, Network, RefreshCw,
   ShieldCheck, SkipForward, SquareTerminal, Trash2, Wrench, X,
@@ -1153,7 +1153,7 @@ function LogsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
   );
 }
 
-const SERVER_NAME: Record<Site['server'], string> = { apache: 'Apache', nginx: 'nginx' };
+const SERVER_NAME = SITE_SERVER_LABEL;
 
 /**
  * How the site is served: its web server first (Apache or nginx, and moving

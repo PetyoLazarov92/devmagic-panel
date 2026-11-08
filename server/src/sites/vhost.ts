@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { isLocalName } from '@devmagic-panel/shared';
+import { isLocalName, onNginxAddress, type SiteServer } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { SiteKind } from './htaccess.js';
 import { hostsBlockAddress, readHosts } from './hosts-block.js';
@@ -27,6 +27,19 @@ export interface VhostInfo {
   uploadsProxy: string | null;
   /** For a site on nginx: the WordPress rules its file was written with (the "# kind:" line). */
   kind?: SiteKind;
+  /** For the panel's nginx file of a site with nginx in front of Apache: "# mode: apache". */
+  mode?: 'apache';
+  /** For an Apache vhost with nginx in front of it: the panel's nginx file and how it was written. */
+  front?: NginxFront;
+}
+
+/** nginx in front of an Apache vhost (scripts/lib/nginx.sh dmp_nginx_front_render). */
+export interface NginxFront {
+  file: string;
+  /** nginx serves images, CSS, JS and fonts that exist itself ("# static: on"). */
+  static: boolean;
+  /** Folders with an .htaccess of their own that go to Apache ("# apache-path:" lines). */
+  apachePaths: string[];
 }
 
 const directive = (line: string, name: string) => new RegExp(`^\\s*${name}\\s+(.+?)\\s*$`, 'i').exec(line)?.[1];
@@ -103,6 +116,7 @@ export function parseNginxSite(text: string, file: string): VhostInfo {
     for (const n of (m[1] as string).toLowerCase().split(/\s+/)) if (n && n !== '_' && !names.includes(n)) names.push(n);
   }
   const kind = /^# kind: (single|subdirectory|subdomain)$/m.exec(text)?.[1] as SiteKind | undefined;
+  const front = /^# mode: apache$/m.test(text);
   const docroot = value('root');
   // Sites under its paths: "# mount: /learn=local.learn.shop.com", a folder next to the site's own.
   const mounts = docroot
@@ -120,6 +134,16 @@ export function parseNginxSite(text: string, file: string): VhostInfo {
     mounts,
     uploadsProxy: /^\s*return 302 https:\/\/([a-z0-9.-]+)\$request_uri;\s*$/m.exec(text)?.[1] ?? null,
     ...(kind ? { kind } : {}),
+    ...(front ? { mode: 'apache' as const } : {}),
+  };
+}
+
+/** How a front file was written: what nginx serves itself, and the folders it leaves to Apache. */
+export function parseNginxFront(text: string, file: string): NginxFront {
+  return {
+    file,
+    static: !/^# static: off$/m.test(text),
+    apachePaths: [...text.matchAll(/^# apache-path: (\/[A-Za-z0-9._/-]+)$/gm)].map((m) => m[1] as string),
   };
 }
 
@@ -147,8 +171,13 @@ function readNginxSites(config: SystemConfig): VhostInfo[] {
   return out;
 }
 
-/** The address a site answers on: nginx's for a site on nginx, else Apache's. */
-export const siteAddress = (config: SystemConfig, vhost: Pick<VhostInfo, 'server'> | undefined) => (vhost?.server === 'nginx' ? config.NGINX_ADDRESS : config.APACHE_ADDRESS);
+/** The web server that has a site: Apache, nginx in front of its Apache vhost, or nginx with PHP-FPM. */
+export const siteServer = (vhost: Pick<VhostInfo, 'server' | 'front' | 'mode'>): SiteServer =>
+  vhost.front || vhost.mode === 'apache' ? 'nginx-apache' : vhost.server;
+
+/** The address a site answers on: nginx's for a site on nginx or with nginx in front, else Apache's. */
+export const siteAddress = (config: SystemConfig, vhost: Pick<VhostInfo, 'server' | 'front' | 'mode'> | undefined) =>
+  vhost && onNginxAddress(siteServer(vhost)) ? config.NGINX_ADDRESS : config.APACHE_ADDRESS;
 
 /**
  * Every enabled vhost that serves a local site from the web root, and the
@@ -158,7 +187,15 @@ export const siteAddress = (config: SystemConfig, vhost: Pick<VhostInfo, 'server
  */
 export function readSiteVhosts(config: SystemConfig): VhostInfo[] {
   const apache = readApacheVhosts(config);
-  const nginx = readNginxSites(config);
+  const all = readNginxSites(config);
+  if (all.length === 0) return apache;
+  // nginx in front of an Apache vhost: the site is the vhost, with the front file noted on it.
+  const nginx: VhostInfo[] = [];
+  for (const n of all) {
+    const vhost = n.mode === 'apache' ? apache.find((a) => a.names[0] === n.names[0]) : undefined;
+    if (vhost) vhost.front = parseNginxFront(readFileSync(n.file, 'utf8'), n.file);
+    else nginx.push(n);
+  }
   if (nginx.length === 0) return apache;
   const hosts = readHosts(config);
   const onNginx = new Set(nginx.map((n) => n.names[0] as string).filter((d) => !apache.some((a) => a.names[0] === d) || hostsBlockAddress(hosts, d) === config.NGINX_ADDRESS));

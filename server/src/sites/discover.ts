@@ -1,7 +1,7 @@
 import { type Dirent, existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, type Stats, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { Site, SiteCert, SiteConstant, SiteGit, SiteIssue, SiteNetwork, SiteRepo, SiteRepoKind } from '@devmagic-panel/shared';
-import { isLocalName, isSecretConstant, MEDIA_PLUGIN, MEDIA_PLUGIN_URL, networkType, SYSTEM_DATABASES, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
+import { isLocalName, isSecretConstant, onNginxAddress, SITE_SERVER_LABEL, MEDIA_PLUGIN, MEDIA_PLUGIN_URL, networkType, SYSTEM_DATABASES, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import { latestOf, type CoreStatusMap } from '../core-status.js';
 import { hostsNames } from '../environment.js';
@@ -11,15 +11,15 @@ import { poolFolder, readPools } from '../php/pools.js';
 import { apachePhpVersion, fpmDefaultVersion, installedVersions } from '../php/versions.js';
 import type { Secrets } from '../secrets.js';
 import { installedCores, readWpcoreConfig } from '../wpcore.js';
-import { hasNetworkRules, htaccessIgnored, readHtaccess, siteKind } from './htaccess.js';
+import { hasNetworkRules, htaccessIgnored, readHtaccess, siteKind, staticRules } from './htaccess.js';
 import { hostsBlockAddress } from './hosts-block.js';
 import { readLocalMode } from './local-mode.js';
 import { parseDebugLog, tailFile } from './logs.js';
-import { readSiteVhosts, siteAddress, type VhostInfo } from './vhost.js';
+import { readSiteVhosts, siteAddress, siteServer, type VhostInfo } from './vhost.js';
 import { saltStatus } from './salts.js';
 import { parseWpConfig, parseWpVersion, type WpConfig } from './wpconfig.js';
 import { removalRefusal } from './remove.js';
-import { moveFacts } from './server-switch.js';
+import { apachePaths, moveFacts } from './server-switch.js';
 
 export interface DiscoverContext {
   config: SystemConfig;
@@ -477,11 +477,11 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
   // The panel's hosts line goes where the site runs: another address sends it to the other server.
   const lineAddress = mount ? undefined : hostsBlockAddress(shared.hostsText, domain);
   const wanted = siteAddress(ctx.config, vhost);
-  if (lineAddress && lineAddress !== wanted && (vhost.server === 'nginx' || lineAddress === ctx.config.NGINX_ADDRESS)) {
+  if (lineAddress && lineAddress !== wanted && (onNginxAddress(siteServer(vhost)) || lineAddress === ctx.config.NGINX_ADDRESS)) {
     issues.push({
       id: 'hosts.server',
       status: 'fail',
-      text: `/etc/hosts sends ${domain} to ${lineAddress}, but it runs on ${vhost.server === 'nginx' ? 'nginx' : 'Apache'} at ${wanted}`,
+      text: `/etc/hosts sends ${domain} to ${lineAddress}, but it runs on ${SITE_SERVER_LABEL[siteServer(vhost)]} at ${wanted}`,
       fix: { action: 'hosts.add', input: { domain, aliases: names.slice(1) }, label: 'Point it there' },
     });
   }
@@ -585,6 +585,29 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
     }
   }
 
+  if (wp && vhost.front?.static && !mount) {
+    // nginx in front of Apache serves images, CSS, JS and fonts itself: rules about them in .htaccess do not run.
+    const front = vhost.front;
+    const rules = staticRules(readHtaccess(docroot) ?? '');
+    if (rules.length) {
+      issues.push({
+        id: 'nginx.static',
+        status: 'warn',
+        text: `nginx serves images, CSS, JS and fonts itself, so these .htaccess rules do not run for them: ${rules.join(', ')}`,
+        fix: { action: 'site.setServer', input: { domain, server: 'nginx-apache', static: false }, label: 'Send everything through Apache' },
+      });
+    }
+    const added = apachePaths(docroot).filter((p) => !front.apachePaths.includes(p));
+    if (added.length) {
+      issues.push({
+        id: 'nginx.folders',
+        status: 'warn',
+        text: `${added.join(', ')} ${added.length === 1 ? 'has an .htaccess of its' : 'have an .htaccess of their'} own now, but nginx serves the files there itself`,
+        fix: { action: 'site.setServer', input: { domain, server: 'nginx-apache', static: true }, label: 'Write its nginx rules again' },
+      });
+    }
+  }
+
   if (localMode && !localMode.enabled) {
     issues.push({
       id: 'local.off',
@@ -652,7 +675,7 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
     aliases: mount ? [] : names.slice(1),
     docroot,
     vhostManaged: vhost.managed,
-    server: vhost.server,
+    server: siteServer(vhost),
     ...(mount ? {} : { move: moveFacts(ctx.config, vhost, domain) }),
     // A site under a path goes with its parent; the panel does not remove one on its own.
     removable: !mount && removalRefusal(ctx.config, domain, docroot, vhost.file) === null,

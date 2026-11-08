@@ -4,6 +4,20 @@
  * a site is served by the server its line in the hosts file points at.
  */
 
+/**
+ * The web servers a site can run on: Apache, nginx in front of Apache (nginx
+ * answers and passes requests to the site's Apache vhost, which reads
+ * .htaccess and runs its PHP), or nginx with PHP-FPM.
+ */
+export const SITE_SERVERS = ['apache', 'nginx-apache', 'nginx'] as const;
+export type SiteServer = (typeof SITE_SERVERS)[number];
+
+/** How the UI names each, in badges and choices. */
+export const SITE_SERVER_LABEL: Record<SiteServer, string> = { apache: 'Apache', 'nginx-apache': 'nginx + Apache', nginx: 'nginx' };
+
+/** The address a site's hosts line points at on each: nginx's for both nginx modes. */
+export const onNginxAddress = (server: SiteServer) => server !== 'apache';
+
 /** One config file of nginx's sites-available, as the nginx tab lists it. */
 export interface NginxConfig {
   /** The file name in sites-available, like default or local.wandworks.example.conf. */

@@ -1742,3 +1742,149 @@ nginx_site_tree() {
   run dmp nginx-site-write local.wandworks.example --mount /x=local.none.wandworks.example
   [ "$status" -eq 1 ]
 }
+
+# nginx in front of Apache: the stubs keep a2enconf and the remoteip module in the temp tree.
+front_tree() {
+  nginx_site_tree
+  mkdir -p "$T/mods-available" "$T/mods-enabled" "$T/conf-available" "$T/conf-enabled"
+  : > "$T/mods-available/remoteip.load"
+  stub a2enmod 'ln -sf "../mods-available/${@: -1}.load" "'"$T"'/mods-enabled/${@: -1}.load"'
+  stub a2dismod 'rm -f "'"$T"'/mods-enabled/${@: -1}.load"'
+  stub a2enconf 'ln -sf "../conf-available/${@: -1}.conf" "'"$T"'/conf-enabled/${@: -1}.conf"'
+  stub a2disconf 'rm -f "'"$T"'/conf-enabled/${@: -1}.conf"'
+}
+
+@test "nginx-site-write --upstream apache puts nginx in front of the site's vhost, with remoteip for Apache" {
+  front_tree
+  run dmp nginx-site-write local.wandworks.example --upstream apache local.wandworks.de
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.wandworks.example.conf"
+  head -n 1 "$site" | grep -qx '# Managed by devmagic-panel. Edits here are overwritten.'
+  grep -qx '# mode: apache' "$site"
+  grep -qx '# static: on' "$site"
+  [ "$(grep -c 'server_name local.wandworks.example local.wandworks.de;' "$site")" -eq 2 ]
+  grep -q 'proxy_pass https://dmp-apache;' "$site"
+  grep -q 'proxy_ssl_name $host;' "$site"
+  grep -q 'proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' "$site"
+  grep -q 'try_files $uri @dmp-apache;' "$site"
+  run grep -q 'fastcgi' "$site"
+  [ "$status" -ne 0 ]
+  php="$T/nginx/conf.d/devmagic-panel-php.conf"
+  grep -q 'server 127.0.0.1:443;' "$php"
+  run grep -q 'dmp-php-local.wandworks.example' "$php"
+  [ "$status" -ne 0 ]
+  grep -qx '    RemoteIPInternalProxy 127.0.0.2' "$T/conf-available/devmagic-panel-remoteip.conf"
+  [ -L "$T/conf-enabled/devmagic-panel-remoteip.conf" ]
+  [ -L "$T/mods-enabled/remoteip.load" ]
+  [ -f "$T/state/nginx/remoteip-module" ]
+  dmp hosts-add local.wandworks.example local.wandworks.de
+  grep -qx '127.0.0.2 local.wandworks.example local.wandworks.de' "$T/hosts"
+  [ -L "$T/sites-enabled/local.wandworks.example-ssl.conf" ]
+}
+
+@test "nginx in front of Apache sends folders with an .htaccess of their own to Apache, and everything with --static off" {
+  front_tree
+  mkdir -p "$T/www/local.wandworks.example/wp-content/uploads/wc-logs" "$T/www/local.wandworks.example/private"
+  printf 'Require all denied\n' > "$T/www/local.wandworks.example/wp-content/uploads/wc-logs/.htaccess"
+  run dmp nginx-site-write local.wandworks.example --upstream apache --apache-path /wp-content/uploads/wc-logs
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.wandworks.example.conf"
+  grep -qx '# apache-path: /wp-content/uploads/wc-logs' "$site"
+  grep -q 'location ^~ /wp-content/uploads/wc-logs/ {' "$site"
+  run dmp nginx-site-write local.wandworks.example --upstream apache --apache-path /private
+  [ "$status" -eq 1 ]
+  ln -s "$T/www/local.wandworks.example/wp-content/uploads/wc-logs" "$T/www/local.wandworks.example/logs"
+  run dmp nginx-site-write local.wandworks.example --upstream apache --apache-path /logs
+  [ "$status" -eq 1 ]
+  run dmp nginx-site-write local.wandworks.example --upstream apache --apache-path /../etc
+  [ "$status" -eq 2 ]
+  run dmp nginx-site-write local.wandworks.example --upstream apache --static off
+  [ "$status" -eq 0 ]
+  grep -qx '# static: off' "$site"
+  run grep -q 'try_files' "$site"
+  [ "$status" -ne 0 ]
+}
+
+@test "nginx-site-write --upstream refuses options of nginx's own PHP, and --static without it" {
+  front_tree
+  for bad in "--upstream php" "--upstream apache --kind single" "--upstream apache --uploads-proxy www.spellbook.example" "--static off" "--upstream apache --static maybe"; do
+    # shellcheck disable=SC2086
+    run dmp nginx-site-write local.wandworks.example $bad
+    [ "$status" -eq 2 ]
+  done
+  [ ! -e "$T/nginx/sites-available/local.wandworks.example.conf" ]
+}
+
+@test "nginx in front of Apache needs the panel's vhost, enabled" {
+  front_tree
+  dmp vhost-remove local.wandworks.example
+  run dmp nginx-site-write local.wandworks.example --upstream apache
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no Apache vhost for local.wandworks.example"* ]]
+  printf '<VirtualHost *:443>\nServerName local.wandworks.example\n</VirtualHost>\n' > "$T/sites-available/local.wandworks.example-ssl.conf"
+  run dmp nginx-site-write local.wandworks.example --upstream apache
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"was not created by devmagic-panel"* ]]
+  [ ! -e "$T/nginx/sites-available/local.wandworks.example.conf" ]
+}
+
+@test "vhost-write keeps nginx in front with the new names, and vhost-remove refuses while it is" {
+  front_tree
+  mkdir -p "$T/www/local.wandworks.example/private"
+  printf 'Require all denied\n' > "$T/www/local.wandworks.example/private/.htaccess"
+  dmp nginx-site-write local.wandworks.example --upstream apache --apache-path /private local.wandworks.de
+  dmp cert-issue local.wandworks.example local.wandworks.de local.wandworks.at >/dev/null
+  run dmp vhost-write local.wandworks.example local.wandworks.de local.wandworks.at
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.wandworks.example.conf"
+  [ "$(grep -c 'server_name local.wandworks.example local.wandworks.de local.wandworks.at;' "$site")" -eq 2 ]
+  grep -qx '# apache-path: /private' "$site"
+  grep -qx '# mode: apache' "$site"
+  run dmp vhost-remove local.wandworks.example
+  [ "$status" -eq 1 ]
+  [ -f "$T/sites-available/local.wandworks.example-ssl.conf" ]
+  dmp nginx-site-remove local.wandworks.example
+  run dmp vhost-remove local.wandworks.example
+  [ "$status" -eq 0 ]
+}
+
+@test "nginx-teardown takes the remoteip settings out, and the module the panel turned on" {
+  front_tree
+  dmp nginx-site-write local.wandworks.example --upstream apache
+  run dmp nginx-teardown
+  [ "$status" -eq 1 ]
+  [ -f "$T/conf-available/devmagic-panel-remoteip.conf" ]
+  dmp nginx-site-remove local.wandworks.example
+  run dmp nginx-teardown
+  [ "$status" -eq 0 ]
+  [ ! -e "$T/conf-available/devmagic-panel-remoteip.conf" ]
+  [ ! -e "$T/conf-enabled/devmagic-panel-remoteip.conf" ]
+  [ ! -e "$T/mods-enabled/remoteip.load" ]
+}
+
+@test "nginx-teardown leaves a remoteip module that was on before" {
+  front_tree
+  ln -s ../mods-available/remoteip.load "$T/mods-enabled/remoteip.load"
+  dmp nginx-site-write local.wandworks.example --upstream apache
+  [ ! -f "$T/state/nginx/remoteip-module" ]
+  dmp nginx-site-remove local.wandworks.example
+  dmp nginx-teardown
+  [ -L "$T/mods-enabled/remoteip.load" ]
+}
+
+@test "a site with nginx in front of Apache goes to the trash with both files and comes back so" {
+  front_tree
+  dmp nginx-site-write local.wandworks.example --upstream apache local.wandworks.de
+  dmp hosts-add local.wandworks.example local.wandworks.de
+  dmp trash-site local.wandworks.example 20261106-120000 - -
+  manifest="$T/state/trash/local.wandworks.example-20261106-120000/manifest.env"
+  grep -qx 'NGINX=local.wandworks.example.conf' "$manifest"
+  grep -qx 'VHOSTS=local.wandworks.example-ssl.conf' "$manifest"
+  run dmp trash-remove local.wandworks.example 20261106-120000
+  [ "$status" -eq 0 ]
+  run dmp trash-restore local.wandworks.example-20261106-120000
+  [ "$status" -eq 0 ]
+  grep -qx '# mode: apache' "$T/nginx/sites-available/local.wandworks.example.conf"
+  [ -L "$T/sites-enabled/local.wandworks.example-ssl.conf" ]
+  grep -qx '127.0.0.2 local.wandworks.example local.wandworks.de' "$T/hosts"
+}

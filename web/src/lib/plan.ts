@@ -26,6 +26,7 @@ export function previewSteps(input: CreateSiteInput, dbName: string, dumpName?: 
     ['mount', `Serve it at https://${input.domain}${input.path ?? ''}/`, Boolean(under)],
     ['cert', `Issue a certificate for ${names} name${names > 1 ? 's' : ''}`, !under],
     ['vhost', `Write the ${input.server === 'nginx' ? 'nginx site' : 'Apache vhost'} and reload${input.uploadsFrom && input.uploadsVia === 'redirect' ? ` (missing uploads from ${input.uploadsFrom})` : ''}`, !under],
+    ['front', 'Put nginx in front of the Apache vhost and reload', !under && input.server === 'nginx-apache'],
     ['hosts', 'Add the /etc/hosts entry', !under],
     ['db', `Create database ${dbName} and its user`, isWp],
     ['config', 'Write wp-config.php', isWp],

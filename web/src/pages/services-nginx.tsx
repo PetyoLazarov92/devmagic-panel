@@ -1,4 +1,5 @@
-import type { NginxConfig, NginxReport } from '@devmagic-panel/shared';
+import type { NginxConfig, NginxReport, Site, SiteServer } from '@devmagic-panel/shared';
+import { SITE_SERVER_LABEL, SITE_SERVERS } from '@devmagic-panel/shared';
 import { ArrowRightLeft, Check, Copy, FileCode2, LoaderCircle, Power, RefreshCw, ScrollText, Server, Split, TriangleAlert } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { JobBox } from '@/components/job-box';
@@ -314,56 +315,59 @@ function ConfigsCard({ report }: { report: NginxReport }) {
 }
 
 /**
- * Sites on nginx and on Apache, the default web server for new sites, and
+ * Sites on each web server, the default web server for new sites, and
  * moving every site that can at once (sites.setServerAll): a job, each site
  * checked as it moves, Undo moves every site back.
  */
-function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: 'apache' | 'nginx', acceptIgnored: boolean) => void }) {
+function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: SiteServer, acceptIgnored: boolean) => void }) {
   const sites = useAsync(() => api.sites(), []);
   const { newSiteServer } = usePreferences();
-  const [confirm, setConfirm] = useState<'apache' | 'nginx' | null>(null);
+  const [confirm, setConfirm] = useState<SiteServer | null>(null);
   const [accepted, setAccepted] = useState(false);
   const own = (sites.data ?? []).filter((s) => !s.path);
-  const on = (server: 'apache' | 'nginx') => own.filter((s) => s.server === server);
+  const on = (server: SiteServer) => own.filter((s) => s.server === server);
   // What a move of every site to one server does to each site there is not yet.
-  const plan = (server: 'apache' | 'nginx') => {
+  const plan = (server: SiteServer) => {
     const candidates = own.filter((s) => s.server !== server);
-    const stay = candidates.filter((s) => s.move?.refusal).map((s) => ({ site: s, why: s.move?.refusal as string }));
-    const ignored = candidates.filter((s) => !s.move?.refusal && server === 'nginx' && (s.move?.ignored.length ?? 0) > 0);
-    const move = candidates.filter((s) => !s.move?.refusal && !ignored.includes(s));
+    const why = (s: Site) => s.move?.refusals[server];
+    const stay = candidates.filter((s) => why(s)).map((s) => ({ site: s, why: why(s) as string }));
+    const ignored = candidates.filter((s) => !why(s) && server === 'nginx' && (s.move?.ignored.length ?? 0) > 0);
+    const move = candidates.filter((s) => !why(s) && !ignored.includes(s));
     return { stay, ignored, move };
   };
   const current = confirm ? plan(confirm) : null;
   const moving = current ? current.move.length + (accepted ? current.ignored.length : 0) : 0;
+  const counts = SITE_SERVERS.map((server) => `${on(server).length} on ${SITE_SERVER_LABEL[server]}`).join(', ');
 
   return (
     <Card className="lg:col-span-2">
       <CardHeader>
         <CardTitle>Sites</CardTitle>
-        <span className="text-xs text-muted-foreground">{sites.data ? `${on('nginx').length} on nginx, ${on('apache').length} on Apache` : 'reading'}</span>
+        <span className="text-xs text-muted-foreground">{sites.data ? counts : 'reading'}</span>
       </CardHeader>
       <div className="grid gap-4 p-5 text-sm">
         <fieldset className="grid gap-2">
           <legend className="mb-1 font-medium">New sites</legend>
           <div className="flex flex-wrap gap-4">
-            {(['apache', 'nginx'] as const).map((server) => (
+            {SITE_SERVERS.map((server) => (
               <label key={server} className="flex cursor-pointer items-center gap-2">
                 <input type="radio" name="new-site-server" checked={newSiteServer === server} onChange={() => savePreferences({ newSiteServer: server })} className="accent-[var(--primary)]" />
-                {server === 'nginx' ? 'nginx' : 'Apache'}
+                {SITE_SERVER_LABEL[server]}
               </label>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">What the new site wizard picks; you can pick the other one there. A site under a path runs on its parent&apos;s server.</p>
+          <p className="text-xs text-muted-foreground">What the new site wizard picks; you can pick another one there. A site under a path runs on its parent&apos;s server.</p>
         </fieldset>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy || !sites.data || plan('nginx').move.length + plan('nginx').ignored.length === 0} onClick={() => { setAccepted(false); setConfirm('nginx'); }}>
-            <ArrowRightLeft />
-            Move every site to nginx
-          </Button>
-          <Button variant="outline" disabled={busy || !sites.data || on('nginx').length === 0} onClick={() => { setAccepted(false); setConfirm('apache'); }}>
-            <ArrowRightLeft />
-            Move every site to Apache
-          </Button>
+          {SITE_SERVERS.map((server) => {
+            const p = plan(server);
+            return (
+              <Button key={server} variant="outline" disabled={busy || !sites.data || p.move.length + p.ignored.length === 0} onClick={() => { setAccepted(false); setConfirm(server); }}>
+                <ArrowRightLeft />
+                Move every site to {SITE_SERVER_LABEL[server]}
+              </Button>
+            );
+          })}
         </div>
         <p className="text-xs text-muted-foreground">One site moves at a time, on its Server and PHP tab.</p>
       </div>
@@ -371,7 +375,7 @@ function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: 'apache
       <Dialog
         open={confirm !== null}
         onClose={() => setConfirm(null)}
-        title={confirm === 'nginx' ? 'Move every site to nginx?' : 'Move every site to Apache?'}
+        title={`Move every site to ${confirm ? SITE_SERVER_LABEL[confirm] : ''}?`}
         description="Each site moves as it does from its Server and PHP tab, one after the other, and is checked before the next. Undo on the job moves every site back."
       >
         {current && (

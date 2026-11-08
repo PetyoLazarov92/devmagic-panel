@@ -34,7 +34,10 @@ export function currentSite(path: string): { domain: string; path?: string } | n
 export function entryFits(entry: PaletteEntry, site: Site): boolean {
   if (entry.scope === 'git') return !site.path && Boolean(site.git);
   const server = entry.input?.server;
-  if (server !== undefined) return !site.path && site.server !== server && site.move !== undefined && !site.move.refusal && site.move.ignored.length === 0;
+  if (server !== undefined) {
+    const to = server as Site['server'];
+    return !site.path && site.server !== to && site.move !== undefined && !site.move.refusals[to] && (to !== 'nginx' || site.move.ignored.length === 0);
+  }
   if (entry.scope === 'domain') return !site.path;
   return entry.scope === 'site';
 }

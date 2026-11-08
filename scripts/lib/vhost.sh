@@ -185,6 +185,10 @@ dmp_vhost_write_site() {
   [[ -f "$(dmp_cert_file "$domain")" ]] || dmp_die "no certificate for $domain yet, run: dmp-root cert-issue $domain"
   dmp_step "Writing vhost for $domain"
   dmp_vhost_render_site "$domain" "$proxy" "${aliases[@]}" | dmp_vhost_install "$domain"
+  # nginx in front of this vhost answers to the same names.
+  if declare -F dmp_nginx_front_refresh >/dev/null; then
+    dmp_nginx_front_refresh "$domain" "${aliases[@]}"
+  fi
 }
 
 dmp_vhost_write_panel() {
@@ -201,6 +205,9 @@ dmp_vhost_remove() {
     return 0
   fi
   dmp_vhost_require_managed "$file"
+  if declare -F dmp_nginx_front_on >/dev/null && dmp_nginx_front_on "$domain"; then
+    dmp_die "nginx answers for $domain in front of this vhost: take the site off nginx first (dmp-root nginx-site-remove $domain)"
+  fi
   dmp_step "Removing vhost for $domain"
   a2dissite -q "$domain-ssl.conf" >/dev/null || true
   rm -f "$file"

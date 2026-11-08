@@ -1,5 +1,5 @@
 import type { InstallHow, Preferences, Site, SiteGit } from '@devmagic-panel/shared';
-import { branchWebUrl, INSTALL_HOW_LABELS, INSTALL_HOWS, repoWeb, siteRepoLabel, SITES_SORT_LABELS, SITES_SORTS } from '@devmagic-panel/shared';
+import { branchWebUrl, INSTALL_HOW_LABELS, INSTALL_HOWS, repoWeb, SITE_SERVER_LABEL, siteRepoLabel, SITES_SORT_LABELS, SITES_SORTS } from '@devmagic-panel/shared';
 import { Archive, ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LayoutGrid, List, LoaderCircle, LogIn, PackageOpen, Plus, Search } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { SitesSkeleton } from '@/components/skeletons';
@@ -27,6 +27,13 @@ import { scrollToCard } from '@/lib/scroll-to';
 type Filter = 'all' | 'attention' | 'removed';
 
 /** The sites in the order picked: by when they came here (unknown last), else by name. */
+/** The badge's tooltip for a site on nginx, alone or in front of Apache. */
+const SERVER_TITLE: Record<Site['server'], string> = {
+  apache: 'Runs on Apache',
+  'nginx-apache': 'nginx answers in front of Apache, which reads .htaccess',
+  nginx: 'Runs on nginx with PHP-FPM, next to Apache',
+};
+
 function sortSites(list: Site[], sort: Preferences['sitesSort']): Site[] {
   const byName = (a: Site, b: Site) => siteName(a).localeCompare(siteName(b));
   if (sort === 'name') return [...list].sort(byName);
@@ -232,7 +239,7 @@ function SiteCard({ site }: { site: Site }) {
           </h2>
           {siteSubtitle(site) && <p className="truncate text-sm text-muted-foreground">{siteSubtitle(site)}</p>}
           {site.network && <NetworkBadge site={site} className="mt-1.5" />}
-          {site.server === 'nginx' && <Badge tone="primary" className="mt-1.5" title="Runs on nginx, next to Apache">nginx</Badge>}
+          {site.server !== 'apache' && <Badge tone="primary" className="mt-1.5" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>}
           {site.installing && <Badge tone="warning" className="mt-1.5"><LoaderCircle className="size-3 animate-spin" />Installing: see progress</Badge>}
           {site.busy && (
             <Link href={site.busy.jobId ? `/jobs/${encodeURIComponent(site.busy.jobId)}` : href} className="relative z-10 mt-1.5 block w-fit">
@@ -324,7 +331,7 @@ function SiteRow({ site }: { site: Site }) {
         </p>
         {site.title && <p className="truncate text-xs text-muted-foreground">{site.title}</p>}
       </div>
-      {site.server === 'nginx' && <Badge tone="primary" className="hidden shrink-0 sm:inline-flex" title="Runs on nginx, next to Apache">nginx</Badge>}
+      {site.server !== 'apache' && <Badge tone="primary" className="hidden shrink-0 sm:inline-flex" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>}
       {site.installing && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Installing</Badge>}
       {site.busy && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Busy</Badge>}
       {issues > 0 && <Badge tone={site.health === 'fail' ? 'danger' : 'warning'} className="hidden shrink-0 sm:inline-flex">{issues === 1 ? '1 issue' : `${issues} issues`}</Badge>}

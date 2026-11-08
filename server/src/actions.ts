@@ -1,14 +1,14 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ActionId, ActionInput, ActionRunResult, ClaudeRun, ClaudeStep, ClaudeUsage } from '@devmagic-panel/shared';
-import { accessKey, actions, presetFromCreate, readKey, repoKey, totalTokens } from '@devmagic-panel/shared';
+import { accessKey, actions, presetFromCreate, readKey, repoKey, SITE_SERVER_LABEL, totalTokens } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { CoreStatusMap } from './core-status.js';
 import { NSS_NICKNAME } from './environment.js';
 import type { ExecResult, Executor } from './exec.js';
 import { runRoot } from './exec.js';
 import {
-  addAliases, clearCache, reloadArgs, clearDebugLog, fixWritable, flushRewrites, login, removeLegacySalts, setConstant, setDebug, setLocalMode, shuffleSalts, setUploadsFrom, SiteActionRefused, siteFor, siteKey, SiteNotFoundError, switchCore, writeHtaccess, type HandlerOutcome,
+  addAliases, clearCache, reloadCommands, clearDebugLog, fixWritable, flushRewrites, login, removeLegacySalts, setConstant, setDebug, setLocalMode, shuffleSalts, setUploadsFrom, SiteActionRefused, siteFor, siteKey, SiteNotFoundError, switchCore, writeHtaccess, type HandlerOutcome,
 } from './sites/site-actions.js';
 import { findVhost } from './sites/discover.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
@@ -304,9 +304,9 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'nginx.teardown': async (ctx) => startJob(ctx, planNginxTeardown(ctx), 'Turn nginx off', 'nginx'),
   'nginx.reload': (ctx) => steps(() => root(ctx, 'nginx-reload')),
   'sites.setServerAll': async (ctx, input) =>
-    startJob(ctx, planSetServerAll(ctx, input), input.server === 'nginx' ? 'Move every site to nginx' : 'Move every site to Apache', 'web servers'),
+    startJob(ctx, planSetServerAll(ctx, input), `Move every site to ${SITE_SERVER_LABEL[input.server]}`, 'web servers'),
   'site.setServer': async (ctx, input) =>
-    startJob(ctx, planSetServer(ctx, input), input.server === 'nginx' ? `Run ${input.domain} on nginx` : `Run ${input.domain} on Apache again`, input.domain),
+    startJob(ctx, planSetServer(ctx, input), `Run ${input.domain} on ${SITE_SERVER_LABEL[input.server]}`, input.domain),
   'mysql.analyze': (ctx, input) => analyzeDatabases(mysqlCtx(ctx), input),
   'mysql.optimize': async (ctx, input) =>
     startJob(ctx, await planOptimize(mysqlCtx(ctx), input, (s) => ctx.jobs.busyFor(`${s.domain}${s.path ?? ''}`) !== undefined), `Optimize ${input.database}`, input.database),
@@ -401,7 +401,8 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'ca.untrustLegacy': (ctx) => steps(() => root(ctx, 'ca-untrust-legacy')),
   'hosts.add': (ctx, { domain, aliases }) => steps(() => root(ctx, 'hosts-add', domain, ...aliases)),
   'hosts.remove': (ctx, { domain }) => steps(() => root(ctx, 'hosts-remove', domain)),
-  'cert.reissue': (ctx, { domain }) => steps(() => root(ctx, 'cert-reissue-from-vhost', domain), () => root(ctx, ...reloadArgs(findVhost(ctx.config, domain)))),
+  'cert.reissue': (ctx, { domain }) =>
+    steps(() => root(ctx, 'cert-reissue-from-vhost', domain), ...reloadCommands(findVhost(ctx.config, domain)).map((args) => () => root(ctx, ...args))),
   'site.setLocalMode': setLocalMode,
   'site.writeHtaccess': writeHtaccess,
   'trash.restore': async (ctx, input) => {

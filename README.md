@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.24.2-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.25.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -49,7 +49,7 @@ listens on localhost.
 - ✅ **New site wizard**: from a git repo and a dump, a fresh WordPress, an empty site, or your organization's repos; multisite and paths included. [More](docs/new-site.md)
 - ✅ **SSL from a local CA**: one certificate covers every domain of a site, trusted in the system, Chrome, Edge and Firefox. [More](docs/sites.md#domains-and-ssl)
 - ✅ **Apache and hosts**: vhosts with the panel's marker and one marked block in `/etc/hosts`; what you made by hand stays. [More](docs/existing-setup.md)
-- ✅ **nginx next to Apache**: each on its own loopback address; move sites between them in one job, with Undo. [More](docs/services.md#nginx-servicesnginx)
+- ✅ **nginx next to Apache**: each site on Apache, nginx in front of Apache, or nginx alone, moved in one job with Undo. [More](docs/services.md#nginx-servicesnginx)
 - ✅ **Shared WordPress cores** through `wpcore`: add a release, switch sites to it, remove unused ones. [More](docs/pages.md#wp-cores)
 - ✅ **Local mode**: mail goes to Mailpit, search engines are told not to index, logins work from this computer only. [More](docs/existing-setup.md#the-two-files-the-panel-adds-to-a-site)
 - ✅ **One click**: wp-admin login, caches, rewrite rules, debug constants, `debug.log`, VS Code, branches and pull. [More](docs/sites.md#quick-actions)
@@ -89,7 +89,7 @@ listens on localhost.
   <img src="assets/screenshots/new-site-light.png" alt="The new site wizard: from an organization, from a git repo and a database dump, fresh WordPress or an empty site">
 </picture>
 
-**A site's server and PHP**: Apache or nginx, and a PHP version and settings of its own
+**A site's server and PHP**: Apache, nginx + Apache or nginx, and a PHP version and settings of its own
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/site-dark.png">

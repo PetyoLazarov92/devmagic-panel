@@ -31,8 +31,8 @@ The new site wizard starts four ways: **from a git repo and a database dump**,
   else nvm's default or the Node the panel runs on (the panel's service has no
   nvm in its PATH).
 - **Core**: the newest core you have is picked unless you choose another.
-- **Web server**: once nginx runs next to Apache, Apache, or nginx with the
-  PHP-FPM version it would run on.
+- **Web server**: once nginx runs next to Apache, Apache, nginx in front of
+  Apache, or nginx with the PHP-FPM version it would run on.
 - **Admins**: a dump's admins are listed (a network's super admins; the scan
   reads up to 16 GB of SQL for them), and one-click login signs you in as the
   first. An admin for this copy (admin / admin, superadmin on a network) is

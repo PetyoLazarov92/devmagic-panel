@@ -1,5 +1,5 @@
-import type { Site } from '@devmagic-panel/shared';
-import { ArrowLeftRight, LoaderCircle, Server, TriangleAlert } from 'lucide-react';
+import { SITE_SERVER_LABEL, SITE_SERVERS, type Site, type SiteServer } from '@devmagic-panel/shared';
+import { ArrowLeftRight, Info, LoaderCircle, Server, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
@@ -11,16 +11,53 @@ import { Checkbox } from '@/components/ui/field';
 import { api } from '@/lib/api';
 import { Link } from '@/lib/router';
 import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 
-const LABEL = { apache: 'Apache', nginx: 'nginx' } as const;
+/** The badge tone of each web server: both nginx modes stand out from plain Apache. */
+export const SERVER_TONE: Record<SiteServer, 'neutral' | 'primary'> = { apache: 'neutral', 'nginx-apache': 'primary', nginx: 'primary' };
+
+/** One line on what each web server means for the site, and the hosts it is like. */
+const ABOUT: Record<SiteServer, { what: string; like: string }> = {
+  apache: { what: 'Apache answers and reads every .htaccess.', like: 'Like most shared hosts.' },
+  'nginx-apache': { what: 'nginx answers and passes requests to Apache, which still reads every .htaccess.', like: 'Like hosts that put nginx in front of Apache.' },
+  nginx: { what: 'nginx answers and runs PHP through PHP-FPM. The fastest; .htaccess is not read.', like: 'Like hosts that run nginx only.' },
+};
+
+/** What the site runs on now, in one line under the badge. */
+function currentLine(site: Site): string {
+  const front = site.move?.front;
+  if (site.server === 'nginx') return `PHP through PHP-FPM${site.move?.php ? ` ${site.move.php}` : ''}; .htaccess is not read`;
+  if (site.server === 'apache') return 'Reads .htaccess, as most WordPress hosts run it';
+  if (front?.static === false) return 'Every request goes through Apache, which reads .htaccess';
+  const folders = front?.apachePaths.length ?? 0;
+  return `nginx serves images, CSS, JS and fonts; the rest goes to Apache, which reads .htaccess${folders ? ` (and ${folders} folder${folders === 1 ? '' : 's'} with ${folders === 1 ? 'its' : 'their'} own)` : ''}`;
+}
+
+/** What the move does, step by step, for the dialog. */
+function moveText(from: SiteServer, to: SiteServer, php: string | undefined): string {
+  const fpm = `PHP-FPM${php ? ` ${php}` : ''}`;
+  if (from === to) return 'The panel writes the nginx file again with these settings, checks nginx accepts it, reloads nginx and checks the site answers.';
+  if (to === 'nginx') {
+    return `The panel writes the site's nginx file with WordPress's rules, runs its PHP through ${fpm}, points its hosts line at nginx, checks it answers, then removes the Apache vhost. Its folder, database and certificate stay. Undo on the job moves it back.`;
+  }
+  if (to === 'nginx-apache') {
+    return `${from === 'nginx' ? 'The panel writes the Apache vhost again, then puts' : 'The panel puts'} nginx in front of it: nginx answers with the site's certificate and passes requests to Apache over HTTPS, the hosts line points at nginx, and the site is checked. PHP runs as it does on Apache. Undo on the job moves it back.`;
+  }
+  return from === 'nginx'
+    ? 'The panel writes the Apache vhost again, takes the site off nginx, points its hosts line at Apache and checks it answers. Undo on the job moves it back to nginx.'
+    : 'The panel takes nginx out from in front of Apache and points the hosts line back at Apache, which answers as it did. Undo on the job puts nginx back.';
+}
 
 /**
- * The web server a site runs on, first on its Server and PHP tab, and the move to
- * the other one (site.setServer). Both answer on ports 80 and 443, each on
- * its own address; the hosts line decides, so nothing is proxied.
+ * The web server a site runs on, first on its Server and PHP tab, and the
+ * move to another (site.setServer): Apache, nginx in front of Apache, or nginx
+ * with PHP-FPM. Apache and nginx answer on ports 80 and 443, each on its own
+ * address; the hosts line decides which one gets the site.
  */
 export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState<SiteServer>(site.server);
+  const [staticFiles, setStaticFiles] = useState(true);
   const [accepted, setAccepted] = useState(false);
   const job = useJob();
   const done = useRef<string | null>(null);
@@ -33,12 +70,25 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
   }, [job.job, onChanged]);
 
   const move = site.move;
-  const target = site.server === 'nginx' ? 'apache' : 'nginx';
-  const ignored = site.server === 'apache' ? (move?.ignored ?? []) : [];
-  const refusal = move?.refusal;
+  const refusals = move?.refusals ?? {};
+  const front = move?.front;
+  const ignored = target === 'nginx' && site.server !== 'nginx' ? (move?.ignored ?? []) : [];
+  const staticRules = target === 'nginx-apache' && staticFiles ? (front?.staticRules ?? []) : [];
+  const anyOpen = SITE_SERVERS.some((s) => s !== site.server && !refusals[s]) || site.server === 'nginx-apache';
+  // The same server: only nginx in front of Apache has settings to change.
+  const unchanged = target === site.server && (target !== 'nginx-apache' || staticFiles === (front?.static ?? true));
+  const blocked = Boolean(target !== site.server && refusals[target]) || unchanged || (ignored.length > 0 && !accepted);
+  const nginxRefusal = refusals.nginx ?? refusals['nginx-apache'];
+
+  const openDialog = () => {
+    setTarget(site.server);
+    setStaticFiles(front?.static ?? true);
+    setAccepted(false);
+    setOpen(true);
+  };
   const start = () => {
     setOpen(false);
-    void job.follow(api.startJob('site.setServer', { domain: site.domain, server: target, acceptIgnored: accepted }));
+    void job.follow(api.startJob('site.setServer', { domain: site.domain, server: target, static: staticFiles, acceptIgnored: accepted }));
   };
 
   return (
@@ -50,19 +100,20 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
       <div className="grid gap-3 p-5 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="grid gap-1">
-            <p className="flex items-center gap-2">
-              <Badge tone={site.server === 'nginx' ? 'primary' : 'neutral'}>{LABEL[site.server]}</Badge>
-              <span className="text-muted-foreground">
-                {site.server === 'nginx'
-                  ? `PHP through PHP-FPM${move?.php ? ` ${move.php}` : ''}; .htaccess is not read`
-                  : 'with .htaccess, as most WordPress hosts run it'}
-              </span>
+            <p className="flex flex-wrap items-center gap-2">
+              <Badge tone={SERVER_TONE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>
+              <span className="text-muted-foreground">{currentLine(site)}</span>
             </p>
-            {refusal && <p className="text-xs text-muted-foreground">{refusal}{/set it up on Services, nginx/.test(refusal) && <> (<Link href="/services/nginx" className="text-primary hover:underline">open nginx</Link>)</>}.</p>}
+            {!anyOpen && nginxRefusal && (
+              <p className="text-xs text-muted-foreground">
+                {nginxRefusal}
+                {/set it up on Services, nginx/.test(nginxRefusal) && <> (<Link href="/services/nginx" className="text-primary hover:underline">open nginx</Link>)</>}.
+              </p>
+            )}
           </div>
-          <Button variant="outline" disabled={busy || Boolean(refusal)} onClick={() => { setAccepted(false); setOpen(true); }}>
+          <Button variant="outline" disabled={busy || !anyOpen} onClick={openDialog}>
             {busy ? <LoaderCircle className="animate-spin" /> : <ArrowLeftRight />}
-            Move to {LABEL[target]}
+            Change
           </Button>
         </div>
         {(job.job || job.error) && (
@@ -73,17 +124,62 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
         )}
       </div>
 
-      <Dialog
-        open={open}
-        onClose={() => setOpen(false)}
-        title={`Move ${site.domain} to ${LABEL[target]}?`}
-        description={
-          target === 'nginx'
-            ? `The panel writes the site's nginx file with WordPress's rules, runs its PHP through PHP-FPM${move?.php ? ` ${move.php}` : ''}, points its hosts line at nginx, checks it answers, then removes the Apache vhost. Its folder, database and certificate stay. Undo on the job moves it back.`
-            : 'The panel writes the Apache vhost again, takes the site off nginx, points its hosts line at Apache and checks it answers. Undo on the job moves it back to nginx.'
-        }
-      >
+      <Dialog open={open} onClose={() => setOpen(false)} title={`Web server for ${site.domain}`} description="Pick the setup the site runs on in production, so it behaves the same here." className="sm:max-w-3xl">
         <div className="grid gap-4 text-sm">
+          <fieldset className="grid gap-2 sm:grid-cols-3">
+            <legend className="sr-only">Web server</legend>
+            {SITE_SERVERS.map((server) => {
+              const why = server === site.server ? undefined : refusals[server];
+              return (
+                <label
+                  key={server}
+                  className={cn(
+                    'flex cursor-pointer flex-col gap-1.5 rounded-lg border p-3',
+                    target === server && 'border-primary/50 bg-primary/5',
+                    why && 'cursor-not-allowed opacity-60',
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <input type="radio" name="site-server" checked={target === server} disabled={Boolean(why)} onChange={() => setTarget(server)} className="accent-[var(--primary)]" />
+                    <span className="font-medium">{SITE_SERVER_LABEL[server]}</span>
+                    {server === site.server && <Badge>Now</Badge>}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{server === 'nginx' && move?.php ? ABOUT.nginx.what.replace('PHP-FPM', `PHP-FPM ${move.php}`) : ABOUT[server].what}</span>
+                  <span className="text-xs text-muted-foreground">{ABOUT[server].like}</span>
+                  {why && <span className="text-xs text-warning">{why}</span>}
+                </label>
+              );
+            })}
+          </fieldset>
+
+          {target === 'nginx-apache' && (
+            <div className="grid gap-2 rounded-lg border px-3 py-2.5">
+              <Checkbox
+                id="server-static"
+                checked={staticFiles}
+                onChange={setStaticFiles}
+                label="nginx serves images, CSS, JS and fonts itself"
+                hint={
+                  front?.apachePaths.length
+                    ? `Faster. These folders have an .htaccess of their own and still go to Apache: ${front.apachePaths.join(', ')}.`
+                    : 'Faster. A file that is missing still goes to Apache, and so would a folder with an .htaccess of its own.'
+                }
+              />
+              {staticRules.length > 0 && (
+                <div className="grid gap-1.5 rounded-md border border-warning/30 bg-warning/8 px-3 py-2">
+                  <p className="flex gap-2 text-warning">
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                    These .htaccess rules would not run for the files nginx serves:
+                  </p>
+                  <ul className="list-disc pl-9 text-xs text-muted-foreground">
+                    {staticRules.map((rule) => <li key={rule}><code>{rule}</code></li>)}
+                  </ul>
+                  <p className="pl-6 text-xs text-muted-foreground">Untick it to send every request through Apache, so they all run.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {ignored.length > 0 && (
             <div className="grid gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2">
               <p className="flex gap-2 text-warning">
@@ -93,13 +189,22 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
               <ul className="list-disc pl-9 text-muted-foreground">
                 {ignored.map((name) => <li key={name}>{name}</li>)}
               </ul>
+              {!refusals['nginx-apache'] && <p className="pl-6 text-xs text-muted-foreground">To keep them working with nginx, pick nginx + Apache instead.</p>}
               <Checkbox id="server-accept-ignored" checked={accepted} onChange={setAccepted} label="Move it anyway; I know these rules do nothing on nginx" />
             </div>
           )}
-          <p className="text-xs text-muted-foreground">A browser may keep the old server for up to a minute; reload the page if it does.</p>
+
+          {!unchanged && (
+            <p className="flex gap-2 text-xs text-muted-foreground">
+              <Info className="mt-0.5 size-3.5 shrink-0" />
+              <span>{moveText(site.server, target, move?.php)} A browser may keep the old server for up to a minute; reload the page if it does.</span>
+            </p>
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button disabled={ignored.length > 0 && !accepted} onClick={start}>Move to {LABEL[target]}</Button>
+            <Button disabled={blocked} onClick={start}>
+              {target === site.server ? 'Save' : `Move to ${SITE_SERVER_LABEL[target]}`}
+            </Button>
           </div>
         </div>
       </Dialog>

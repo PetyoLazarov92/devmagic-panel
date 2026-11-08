@@ -177,7 +177,7 @@ export function planNginxSetup(ctx: SitePhpContext): JobStep[] {
 /** nginx.teardown: Apache back on every address and nginx stopped, then every site must still answer. Undo sets nginx up again. */
 export function planNginxTeardown(ctx: SitePhpContext): JobStep[] {
   if (!nginxSetUp(ctx.config)) throw new SiteActionRefused('nginx is not set up next to Apache.');
-  const onNginx = readSiteVhosts(ctx.config).filter((v) => v.server === 'nginx').map((v) => v.names[0] as string);
+  const onNginx = readSiteVhosts(ctx.config).filter((v) => v.server === 'nginx' || v.front).map((v) => v.names[0] as string);
   if (onNginx.length) throw new SiteActionRefused(`${onNginx.join(', ')} ${onNginx.length === 1 ? 'runs' : 'run'} on nginx: move ${onNginx.length === 1 ? 'it' : 'them'} to Apache on the Server and PHP tab first.`);
   return [
     {

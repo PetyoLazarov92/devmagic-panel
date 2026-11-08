@@ -317,6 +317,7 @@ dmp_nginx_teardown() {
   fi
 
   dmp_step "Turning nginx off; Apache answers on every address again"
+  dmp_nginx_remoteip_remove
   work="$(mktemp -d "$state/.teardown.XXXXXX")"
   cp -p "$ports" "$work/ports.now"
   cp -p "$conf" "$work/conf.now"
@@ -407,6 +408,8 @@ DMP_NGINX_MOUNTS=()
 dmp_nginx_php_folders() {
   local domain spec folder
   while IFS= read -r domain; do
+    # A site with nginx in front of Apache runs on Apache's PHP.
+    dmp_nginx_front_file "$(dmp_nginx_site_file "$domain")" && continue
     printf '%s\n' "$domain"
     while IFS= read -r spec; do
       folder="${spec#*=}"
@@ -420,6 +423,8 @@ dmp_nginx_php_render() {
   local domain socket
   printf '%s\n' "$DMP_VHOST_MARKER"
   printf '# The PHP of each site on nginx: its own PHP-FPM pool, or the default version'\''s.\n'
+  # Sites with nginx in front of Apache: their Apache vhost, on HTTPS with the site's name, connections kept open.
+  printf 'upstream dmp-apache {\n    server %s:443;\n    keepalive 16;\n}\n' "$APACHE_ADDRESS"
   while IFS= read -r domain; do
     if socket="$(dmp_nginx_php_socket "$domain")"; then
       printf 'upstream dmp-php-%s {\n    server unix:%s;\n}\n' "$domain" "$socket"
@@ -655,4 +660,227 @@ dmp_nginx_site_remove() {
   dmp_nginx_php_write || dmp_die "nginx -t failed after taking $domain out"
   dmp_nginx_reload_if_active
   dmp_ok "nginx site removed for $domain"
+}
+
+# ── nginx in front of Apache ─────────────────────────────────
+#
+# A site can also keep its Apache vhost and have nginx in front of it, as
+# hosts that run both do: nginx answers on NGINX_ADDRESS with the site's
+# certificate and sends requests to the vhost on APACHE_ADDRESS over HTTPS,
+# with the site's name, so Apache reads every .htaccess and runs the site's
+# PHP as before. Its file is sites-available/<domain>.conf with the marker
+# and "# mode: apache". With "# static: on" nginx serves images, CSS, JS and
+# fonts itself, but in the folders of "# apache-path:" lines (folders with
+# an .htaccess of their own), and a missing file goes to Apache.
+
+# What nginx serves itself in front of Apache; anything else goes to Apache.
+DMP_NGINX_STATIC_EXT='css|js|mjs|map|jpe?g|png|gif|webp|avif|svg|ico|bmp|woff2?|ttf|otf|eot|mp4|webm|ogg|mp3|wav|pdf'
+DMP_REMOTEIP_CONF_NAME="devmagic-panel-remoteip.conf"
+# Folders with an .htaccess of their own, which always go to Apache. dmp-root sets them after checking each one.
+DMP_NGINX_APACHE_PATHS=()
+
+dmp_remoteip_conf() { printf '%s/conf-available/%s' "$(dmp_apache_dir)" "$DMP_REMOTEIP_CONF_NAME"; }
+
+# True when the file is the panel's nginx file of a site with nginx in front of Apache.
+dmp_nginx_front_file() { [[ -f "$1" ]] && dmp_vhost_is_managed "$1" && grep -qx '# mode: apache' "$1"; }
+dmp_nginx_front_on() { dmp_nginx_front_file "$(dmp_nginx_site_file "$1")"; }
+
+# Apache logs and PHP see the visitor's address, not nginx's: X-Forwarded-For,
+# trusted from NGINX_ADDRESS only. Written with the first site in front of
+# Apache; nginx-teardown takes it out again, and the module when it turned it on.
+dmp_nginx_remoteip_ensure() {
+  local conf name state
+  conf="$(dmp_remoteip_conf)"
+  name="${DMP_REMOTEIP_CONF_NAME%.conf}"
+  state="$(dmp_nginx_state)"
+  if [[ -f "$conf" ]] && grep -qx "    RemoteIPInternalProxy $NGINX_ADDRESS" "$conf" && [[ -e "$(dmp_apache_dir)/conf-enabled/$DMP_REMOTEIP_CONF_NAME" ]]; then
+    return 0
+  fi
+  dmp_vhost_require_managed "$conf"
+  install -d -m 0755 "$(dirname "$conf")" "$state"
+  if [[ ! -e "$(dmp_apache_dir)/mods-enabled/remoteip.load" ]]; then
+    a2enmod -q remoteip >/dev/null || dmp_die "a2enmod remoteip failed"
+    : > "$state/remoteip-module"
+  fi
+  {
+    printf '%s\n' "$DMP_VHOST_MARKER"
+    printf '# nginx answers in front of Apache for some sites: Apache sees the visitor'\''s\n'
+    printf '# address from X-Forwarded-For, only when nginx (%s) sends it.\n' "$NGINX_ADDRESS"
+    printf '<IfModule remoteip_module>\n    RemoteIPHeader X-Forwarded-For\n    RemoteIPInternalProxy %s\n</IfModule>\n' "$NGINX_ADDRESS"
+  } | dmp_nginx_put "$conf"
+  a2enconf -q "$name" >/dev/null || dmp_die "a2enconf $name failed"
+  if ! dmp_apache_configtest; then
+    a2disconf -q "$name" >/dev/null 2>&1 || true
+    rm -f "${conf:?}"
+    dmp_die "Apache's configtest failed with the remoteip settings; they are taken out"
+  fi
+  dmp_apache_reload
+}
+
+# nginx-teardown: the remoteip settings go, and the module when the panel turned it on.
+dmp_nginx_remoteip_remove() {
+  local conf
+  conf="$(dmp_remoteip_conf)"
+  [[ -f "$conf" ]] && dmp_vhost_is_managed "$conf" || return 0
+  a2disconf -q "${DMP_REMOTEIP_CONF_NAME%.conf}" >/dev/null 2>&1 || true
+  rm -f "${conf:?}"
+  if [[ -f "$(dmp_nginx_state)/remoteip-module" ]]; then
+    a2dismod -q remoteip >/dev/null 2>&1 || true
+  fi
+}
+
+# Usage: dmp_nginx_front_render <domain> <on|off> [alias...]
+dmp_nginx_front_render() {
+  local domain="$1" static="$2" version names listen443 http2="" headers="" locations="" at
+  shift 2
+  names="$domain${*:+ $*}"
+  version="$(dmp_nginx_version)"
+  if [[ -n "$version" ]] && dmp_version_at_least "$version" "$DMP_NGINX_HTTP2_DIRECTIVE"; then
+    listen443="listen $NGINX_ADDRESS:443 ssl;"
+    http2=$'\n'"    http2 on;"
+  else
+    listen443="listen $NGINX_ADDRESS:443 ssl http2;"
+  fi
+  if [[ "$static" == on ]]; then
+    for at in "${DMP_NGINX_APACHE_PATHS[@]}"; do
+      headers+=$'\n'"# apache-path: $at"
+      locations+=$'\n'"    location ^~ $at/ {"
+      locations+=$'\n'"        proxy_pass https://dmp-apache;"
+      locations+=$'\n'"    }"
+    done
+    [[ -z "$locations" ]] || locations=$'\n'"    # Folders with an .htaccess of their own: Apache, files and all.$locations"
+    locations+=$'\n'"    # Dot files: Apache decides, as it would on its own."
+    locations+=$'\n'"    location ~ /\\. {"
+    locations+=$'\n'"        proxy_pass https://dmp-apache;"
+    locations+=$'\n'"    }"
+    locations+=$'\n'"    # Images, CSS, JS and fonts that exist come from nginx; a missing one goes to Apache."
+    locations+=$'\n'"    location ~* \\.(?:$DMP_NGINX_STATIC_EXT)\$ {"
+    locations+=$'\n'"        try_files \$uri @dmp-apache;"
+    locations+=$'\n'"    }"
+    locations+=$'\n'"    location @dmp-apache {"
+    locations+=$'\n'"        proxy_pass https://dmp-apache;"
+    locations+=$'\n'"    }"$'\n'
+  fi
+  cat <<EOF
+$DMP_VHOST_MARKER
+# mode: apache
+# static: $static$headers
+server {
+    listen $NGINX_ADDRESS:80;
+    server_name $names;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    $listen443$http2
+    server_name $names;
+    root $WEB_DIR/$domain;
+
+    ssl_certificate $(dmp_cert_file "$domain");
+    ssl_certificate_key $(dmp_cert_key_file "$domain");
+
+    access_log $NGINX_LOG_DIR/$domain-access.log;
+    error_log $NGINX_LOG_DIR/$domain-error.log;
+
+    # Requests go to the site's Apache vhost, which reads .htaccess and runs its PHP.
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_ssl_server_name on;
+    proxy_ssl_name \$host;
+    proxy_redirect off;
+    proxy_buffers 16 16k;
+    proxy_buffer_size 32k;
+    # Imports and step debugging run as long as PHP lets them.
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+$locations
+    location / {
+        proxy_pass https://dmp-apache;
+    }
+}
+EOF
+}
+
+# The settings a front file was written with: its "static" and "apache-path" lines, each checked again.
+dmp_nginx_front_settings() {
+  local file="$1" domain="$2" line
+  DMP_NGINX_APACHE_PATHS=()
+  DMP_NGINX_FRONT_STATIC=on
+  grep -qx '# static: off' "$file" && DMP_NGINX_FRONT_STATIC=off
+  while IFS= read -r line; do
+    dmp_nginx_apache_path_ok "$domain" "$line" && DMP_NGINX_APACHE_PATHS+=("$line")
+  done < <(sed -nE 's/^# apache-path: (\/[A-Za-z0-9._\/-]+)$/\1/p' "$file")
+  return 0
+}
+
+# A folder of the site, no link on the way, with an .htaccess of its own.
+dmp_nginx_apache_path_ok() {
+  local domain="$1" at="$2" dir real
+  [[ "$at" =~ ^(/[A-Za-z0-9._-]+)+$ && "$at/" != */./* && "$at/" != */../* ]] || return 1
+  dir="$WEB_DIR/$domain$at"
+  [[ -d "$dir" && -f "$dir/.htaccess" ]] || return 1
+  real="$(realpath -e -- "$dir" 2>/dev/null)" || return 1
+  [[ "$real" == "$WEB_DIR/$domain$at" ]]
+}
+
+# nginx-site-write <domain> --upstream apache [--static on|off] [--apache-path /path]... [alias...]:
+# nginx in front of the site's Apache vhost, which must be the panel's and
+# enabled; then nginx -t and a reload, or the file as it was.
+dmp_nginx_front_write() {
+  local domain="$1" static="$2" file link apache previous="" tmp outside
+  shift 2
+  local -a aliases
+  mapfile -t aliases < <(dmp_unique_aliases "$domain" "$@")
+  dmp_nginx_is_setup || dmp_die "nginx is not set up next to Apache: run dmp-root nginx-setup first"
+  [[ "$domain" != "$PANEL_DOMAIN" ]] || dmp_usage_error "the panel's own site stays on Apache"
+  [[ -d "$WEB_DIR/$domain" && ! -L "$WEB_DIR/$domain" ]] || dmp_die "no site folder $WEB_DIR/$domain"
+  [[ -f "$(dmp_cert_file "$domain")" ]] || dmp_die "no certificate for $domain yet, run: dmp-root cert-issue $domain"
+  apache="$APACHE_SITES_AVAILABLE/$domain-ssl.conf"
+  [[ -f "$apache" ]] || dmp_die "no Apache vhost for $domain: nginx in front of Apache needs it, run: dmp-root vhost-write $domain"
+  dmp_vhost_is_managed "$apache" || dmp_die "$apache was not created by devmagic-panel; the site stays on Apache as it is"
+  [[ -e "$APACHE_SITES_ENABLED/$domain-ssl.conf" ]] || dmp_die "the Apache vhost of $domain is not enabled"
+  outside="$(dmp_hosts_outside_block "$domain" "${aliases[@]}" | sort -u | tr '\n' ' ')"
+  [[ -z "$outside" ]] || dmp_die "${outside% } in $HOSTS_FILE outside the panel's block would keep the site on Apache; remove that line first"
+
+  file="$(dmp_nginx_site_file "$domain")"
+  link="$(dmp_nginx_site_link "$domain")"
+  dmp_vhost_require_managed "$file"
+  dmp_nginx_remoteip_ensure
+  dmp_step "Writing nginx in front of Apache for $domain"
+  install -d -m 0755 "$NGINX_SITES_AVAILABLE" "$NGINX_SITES_ENABLED" "$NGINX_LOG_DIR"
+  if [[ -f "$file" ]]; then
+    previous="$(mktemp "$NGINX_SITES_AVAILABLE/.$domain.prev.XXXXXX")"
+    cp -p "$file" "$previous"
+  fi
+  tmp="$(mktemp "$NGINX_SITES_AVAILABLE/.$domain.XXXXXX")"
+  dmp_nginx_front_render "$domain" "$static" "${aliases[@]}" > "$tmp"
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$file"
+  ln -sfn "$file" "$link"
+  # The upstreams: dmp-apache, and none for this site's PHP any more.
+  if ! dmp_nginx_php_write; then
+    if [[ -n "$previous" ]]; then
+      mv -f "$previous" "$file"
+    else
+      rm -f "${file:?}" "${link:?}"
+    fi
+    dmp_nginx_php_write >/dev/null 2>&1 || true
+    dmp_die "nginx refused the site for $domain; it is as it was"
+  fi
+  [[ -z "$previous" ]] || rm -f "${previous:?}"
+  dmp_nginx_reload_if_active
+  dmp_ok "nginx answers for $domain in front of Apache: $file"
+}
+
+# After vhost-write: the front file takes the vhost's names, with the settings it has.
+dmp_nginx_front_refresh() {
+  local domain="$1"
+  shift
+  dmp_nginx_front_on "$domain" || return 0
+  dmp_nginx_front_settings "$(dmp_nginx_site_file "$domain")" "$domain"
+  dmp_nginx_front_write "$domain" "$DMP_NGINX_FRONT_STATIC" "$@"
 }

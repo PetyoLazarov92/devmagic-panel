@@ -45,18 +45,22 @@ describe('paletteRuns', () => {
     expect(mysql?.entry.confirm).toBeTruthy();
   });
 
-  it('offers a move to the other web server only to a site that can move there as it is', () => {
-    const movable = { move: { ignored: [] } };
+  it('offers a move to another web server only to a site that can move there as it is', () => {
+    const front = { apachePaths: [], staticRules: [] };
+    const movable = { move: { refusals: {}, ignored: [], front } };
     const list = [
       site('local.wandworks.example', { server: 'apache', ...movable }),
       site('local.shop.com', { server: 'nginx', ...movable }),
-      site('local.blog.com', { server: 'apache', move: { refusal: 'Set nginx up first', ignored: [] } }),
-      site('local.forum.com', { server: 'apache', move: { ignored: ['RewriteRule ^old/ /new/ [R=301]'] } }),
+      site('local.blog.com', { server: 'apache', move: { refusals: { nginx: 'Set nginx up first', 'nginx-apache': 'Set nginx up first' }, ignored: [], front } }),
+      site('local.forum.com', { server: 'apache', move: { refusals: {}, ignored: ['RewriteRule ^old/ /new/ [R=301]'], front } }),
       site('local.wandworks.example', { path: '/learn', server: 'apache', ...movable }),
     ];
     const moves = paletteRuns(list, null).filter((r) => r.id === 'site.setServer').map((r) => [r.label, r.input]);
     expect(moves).toEqual([
       ['Move to nginx on local.wandworks.example', { domain: 'local.wandworks.example', server: 'nginx' }],
+      ['Put nginx in front of Apache on local.wandworks.example', { domain: 'local.wandworks.example', server: 'nginx-apache' }],
+      ['Put nginx in front of Apache on local.shop.com', { domain: 'local.shop.com', server: 'nginx-apache' }],
+      ['Put nginx in front of Apache on local.forum.com', { domain: 'local.forum.com', server: 'nginx-apache' }],
       ['Move to Apache on local.shop.com', { domain: 'local.shop.com', server: 'apache' }],
     ]);
   });

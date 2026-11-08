@@ -1,6 +1,7 @@
 import type { CheckFix, CheckStatus } from './environment.js';
 import type { LocalHelperPlugin, WpDebugConstant } from './actions.js';
 import type { AccessResult, ReadResult } from './org.js';
+import type { SiteServer } from './nginx.js';
 
 /**
  * A local site as the panel shows it. Everything here is read from the system
@@ -238,14 +239,17 @@ export interface Site {
   docroot: string;
   /** False for vhosts made by hand or by devmagic: the panel leaves those files as they are. */
   vhostManaged: boolean;
-  /** The web server that has the site: Apache, or nginx once the panel moved it there (its hosts line points at nginx's address). */
-  server: 'apache' | 'nginx';
   /**
-   * Moving the site to the other server (site.setServer), for a site of its
-   * own (not one under a path): why it cannot, what nginx would leave out of
-   * its .htaccess, and the PHP-FPM version it would run on there.
+   * The web server that has the site: Apache, nginx in front of its Apache
+   * vhost, or nginx with PHP-FPM (both nginx modes point its hosts line at
+   * nginx's address).
    */
-  move?: { refusal?: string; ignored: string[]; php?: string };
+  server: SiteServer;
+  /**
+   * Moving the site to another server (site.setServer), for a site of its own
+   * (not one under a path).
+   */
+  move?: SiteMove;
   /** True when the panel can move the site to Deleted sites: its folder is WEB_DIR/<domain> and its vhost <domain>-ssl.conf or <domain>.conf. */
   removable: boolean;
   /** True for sites the panel created (its vhost marker and its folder in the registry). */
@@ -872,4 +876,23 @@ export interface RepoLookup {
   helpers: LocalHelperPlugin[];
   mediaPlugin: boolean;
   builds: RepoBuild[];
+}
+
+/** What the site page needs to move a site between web servers. */
+export interface SiteMove {
+  /** Why the site cannot run on a server; a server not listed here is open to it. */
+  refusals: Partial<Record<SiteServer, string>>;
+  /** The .htaccess rules nginx with PHP-FPM would not read. */
+  ignored: string[];
+  /** The PHP-FPM version the site would run on with nginx alone. */
+  php?: string;
+  /** With nginx in front of Apache. */
+  front: {
+    /** Folders with an .htaccess of their own, which always go to Apache, like /wp-content/uploads/wc-logs. */
+    apachePaths: string[];
+    /** Rules of the root .htaccess about images, CSS, JS or fonts, which do not run for the ones nginx serves itself. */
+    staticRules: string[];
+    /** Whether nginx serves those files itself now, for a site in front of Apache already. */
+    static?: boolean;
+  };
 }

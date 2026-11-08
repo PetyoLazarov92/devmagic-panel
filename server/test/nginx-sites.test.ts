@@ -1,14 +1,14 @@
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ActionInputError, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs, type JobStep } from '../src/jobs.js';
 import { discoverSites } from '../src/sites/discover.js';
-import { htaccessIgnored } from '../src/sites/htaccess.js';
+import { htaccessFolders, htaccessIgnored, staticRules } from '../src/sites/htaccess.js';
 import { hostsBlockAddress, hostsOutsideBlock, HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { moveRefusal, planSetServer, planSetServerAll } from '../src/sites/server-switch.js';
 import { planNginxTeardown } from '../src/nginx.js';
-import { parseNginxSite, readSiteVhosts } from '../src/sites/vhost.js';
+import { parseNginxSite, readSiteVhosts, siteAddress, siteServer } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
 import { DMP, fakeExec, wpSiteTree } from './helpers.js';
 
@@ -113,7 +113,7 @@ describe('site.setServer', () => {
   it('moves a site to nginx: its nginx file, the hosts line, a check through nginx, then the Apache vhost goes', async () => {
     const t = tree();
     const { c, fake, lines } = ctx(t);
-    const steps = planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: false });
+    const steps = planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false });
     expect(steps.map((s) => s.id)).toEqual(['nginx', 'hosts', 'check', 'apache']);
     expect(steps[0]?.label).toContain('PHP-FPM 8.3');
     const undos = await runSteps(steps);
@@ -130,7 +130,7 @@ describe('site.setServer', () => {
     const t = tree();
     onNginx(t, { keepApache: true });
     const { c, fake } = ctx(t);
-    await planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: false }).find((s) => s.id === 'check')?.run({} as Parameters<JobStep['run']>[0]);
+    await planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false }).find((s) => s.id === 'check')?.run({} as Parameters<JobStep['run']>[0]);
     expect(fake.calls.find((x) => x.file === 'curl')?.args).toContain('local.shop.com:443:127.0.0.2');
   });
 
@@ -139,7 +139,7 @@ describe('site.setServer', () => {
     writeFileSync(join(t.docroot, 'wp-config.php'), "<?php\ndefine('DB_NAME', 'shop_com');\ndefine('MULTISITE', true);\ndefine('SUBDOMAIN_INSTALL', false);\n");
     onNginx(t);
     const { c, lines } = ctx(t);
-    const steps = planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: false });
+    const steps = planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false });
     expect(steps.map((s) => s.id)).toEqual(['nginx', 'check']);
     await runSteps(steps);
     expect(lines()).toEqual(['nginx-site-write local.shop.com --kind subdirectory local.shop.de']);
@@ -150,7 +150,7 @@ describe('site.setServer', () => {
     mkdirSync(join(t.config.WEB_DIR, 'local.learn.shop.com'));
     t.write('sites-available/local.shop.com-ssl.conf', `${MARKER}\n<VirtualHost *:443>\n ServerName local.shop.com\n ServerAlias local.shop.de\n DocumentRoot ${t.docroot}\n Alias /learn ${join(t.config.WEB_DIR, 'local.learn.shop.com')}\n</VirtualHost>\n`);
     const { c, lines } = ctx(t);
-    await runSteps(planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: false }));
+    await runSteps(planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false }));
     expect(lines()[0]).toBe('nginx-site-write local.shop.com --kind single --mount /learn=local.learn.shop.com local.shop.de');
   });
 
@@ -167,13 +167,13 @@ describe('site.setServer', () => {
     const t = tree();
     onNginx(t);
     const { c, lines } = ctx(t);
-    const undos = await runSteps(planSetServer(c, { domain: 'local.shop.com', server: 'apache', acceptIgnored: false }));
+    const undos = await runSteps(planSetServer(c, { domain: 'local.shop.com', server: 'apache', static: true, acceptIgnored: false }));
     expect(lines()).toEqual(['vhost-write local.shop.com local.shop.de', 'nginx-site-remove local.shop.com', 'hosts-add local.shop.com local.shop.de']);
     expect(undos).toEqual(['Remove the Apache vhost', 'Write the nginx site again and point the hosts line at nginx']);
   });
 
   it('refuses before anything runs: nginx not set up, no PHP-FPM, a vhost made by hand, a hosts line outside the block, a site under a path from outside the web root', () => {
-    const input = { domain: 'local.shop.com', server: 'nginx' as const, acceptIgnored: false };
+    const input = { domain: 'local.shop.com', server: 'nginx' as const, static: true, acceptIgnored: false };
     expect(() => planSetServer(ctx(tree({ nginxSetUp: false })).c, input)).toThrow(/not set up next to Apache/);
     expect(() => planSetServer(ctx(tree({ fpm: false })).c, input)).toThrow(/PHP-FPM only/);
     const hand = tree();
@@ -193,8 +193,8 @@ describe('site.setServer', () => {
     const t = tree();
     t.write('www/local.shop.com/.htaccess', '# BEGIN Wandworks Redirects\nRedirect 301 /old /new\n# END Wandworks Redirects\n');
     const { c } = ctx(t);
-    expect(() => planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: false })).toThrow(/Wandworks Redirects/);
-    expect(planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: true })).toHaveLength(4);
+    expect(() => planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false })).toThrow(/Wandworks Redirects/);
+    expect(planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: true })).toHaveLength(4);
     const vhost = readSiteVhosts(t.config)[0];
     expect(vhost && moveRefusal(t.config, vhost, 'local.shop.com')).toBeNull();
     const off = tree({ nginxSetUp: false });
@@ -221,7 +221,7 @@ describe('sites.setServerAll', () => {
     t.write('sites-available/local.hand.com-ssl.conf', `<VirtualHost *:443>\n ServerName local.hand.com\n DocumentRoot ${hand}\n</VirtualHost>\n`);
     symlinkSync(join(t.config.APACHE_SITES_AVAILABLE, 'local.hand.com-ssl.conf'), join(t.config.APACHE_SITES_ENABLED, 'local.hand.com-ssl.conf'));
     const { c, lines } = ctx(t);
-    const steps = planSetServerAll(c, { server: 'nginx', acceptIgnored: false });
+    const steps = planSetServerAll(c, { server: 'nginx', static: true, acceptIgnored: false });
     expect(steps.map((s) => s.id)).toEqual(['list', 'local.shop.com:nginx', 'local.shop.com:hosts', 'local.shop.com:check', 'local.shop.com:apache']);
     expect(steps[0]?.label).toBe('Move 1 site to nginx, leave 1 as it is');
     const out = await steps[0]?.run({} as Parameters<JobStep['run']>[0]);
@@ -233,9 +233,9 @@ describe('sites.setServerAll', () => {
   it('leaves sites with .htaccess rules nginx ignores unless ticked, and refuses when nothing can move', () => {
     const t = tree();
     t.write('www/local.shop.com/.htaccess', 'Header set X-Wandworks 1\n');
-    expect(() => planSetServerAll(ctx(t).c, { server: 'nginx', acceptIgnored: false })).toThrow(/No site can move to nginx: local.shop.com: nginx would not read/);
-    expect(planSetServerAll(ctx(t).c, { server: 'nginx', acceptIgnored: true })).toHaveLength(5);
-    expect(() => planSetServerAll(ctx(t).c, { server: 'apache', acceptIgnored: false })).toThrow(/Every site runs on Apache already/);
+    expect(() => planSetServerAll(ctx(t).c, { server: 'nginx', static: true, acceptIgnored: false })).toThrow(/No site can move to nginx: local.shop.com: nginx would not read/);
+    expect(planSetServerAll(ctx(t).c, { server: 'nginx', static: true, acceptIgnored: true })).toHaveLength(5);
+    expect(() => planSetServerAll(ctx(t).c, { server: 'apache', static: true, acceptIgnored: false })).toThrow(/Every site runs on Apache already/);
   });
 });
 
@@ -281,6 +281,199 @@ describe('a site on nginx elsewhere in the panel', () => {
     t.write('www/local.shop.com/.htaccess', 'Header set X-Wandworks 1\n');
     const [site] = await discoverSites({ config: t.config, exec: fakeExec().exec, secrets: null, wpcoreConf: t.wpcoreConf });
     expect(site?.server).toBe('apache');
-    expect(site?.move).toEqual({ ignored: ['1 line of your own'], php: '8.3' });
+    expect(site?.move).toEqual({ refusals: {}, ignored: ['1 line of your own'], php: '8.3', front: { apachePaths: [], staticRules: ['Header set X-Wandworks'] } });
+  });
+});
+
+/** Writes a file in the temp tree, its folders made first. */
+const put = (t: { root: string; write: (path: string, text?: string) => void }, path: string, text = '') => {
+  mkdirSync(dirname(join(t.root, path)), { recursive: true });
+  t.write(path, text);
+};
+
+/** nginx in front of the site's Apache vhost, as dmp_nginx_front_render writes it. */
+const frontFile = (root: string, domain: string, names: string, { static: staticFiles = true, paths = [] as string[] } = {}) => `${MARKER}
+# mode: apache
+# static: ${staticFiles ? 'on' : 'off'}
+${paths.map((p) => `# apache-path: ${p}\n`).join('')}server {
+    listen 127.0.0.2:80;
+    server_name ${names};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 127.0.0.2:443 ssl http2;
+    server_name ${names};
+    root ${root}/www/${domain};
+    ssl_certificate ${root}/certs/${domain}/${domain}.crt;
+    error_log ${root}/nginx/log/${domain}-error.log;
+    location / {
+        proxy_pass https://dmp-apache;
+    }
+}
+`;
+
+/** nginx put in front of local.shop.com's Apache vhost, which stays enabled; its hosts line on nginx's address. */
+function inFront(t: ReturnType<typeof tree>, options: { static?: boolean; paths?: string[] } = {}) {
+  const file = join(t.config.NGINX_SITES_AVAILABLE, 'local.shop.com.conf');
+  writeFileSync(file, frontFile(t.root, 'local.shop.com', 'local.shop.com local.shop.de', options));
+  symlinkSync(file, join(t.config.NGINX_SITES_ENABLED, 'local.shop.com.conf'));
+  t.write('hosts', `127.0.0.1 localhost\n${HOSTS_BEGIN}\n127.0.0.2 local.shop.com local.shop.de\n${HOSTS_END}\n`);
+}
+
+describe('nginx in front of Apache', () => {
+  it('reads the site as its Apache vhost with the front noted, on nginx address', () => {
+    const t = tree();
+    inFront(t, { paths: ['/private'] });
+    const vhosts = readSiteVhosts(t.config);
+    expect(vhosts).toHaveLength(1);
+    const [vhost] = vhosts;
+    expect(vhost?.server).toBe('apache');
+    expect(vhost?.front).toEqual({ file: join(t.config.NGINX_SITES_AVAILABLE, 'local.shop.com.conf'), static: true, apachePaths: ['/private'] });
+    expect(vhost && siteServer(vhost)).toBe('nginx-apache');
+    expect(siteAddress(t.config, vhost)).toBe('127.0.0.2');
+  });
+
+  it('puts nginx in front of an Apache site: front file with the folders of their own, hosts line, check; Undo takes it out', async () => {
+    const t = tree();
+    put(t, 'www/local.shop.com/wp-content/uploads/wc-logs/.htaccess', 'Require all denied\n');
+    put(t, 'www/local.shop.com/wp-content/uploads/wc-logs/deeper/.htaccess', 'Require all denied\n');
+    put(t, 'www/local.shop.com/wp-content/plugins/x/node_modules/y/.htaccess', 'Deny from all\n');
+    const { c, lines } = ctx(t);
+    const steps = planSetServer(c, { domain: 'local.shop.com', server: 'nginx-apache', static: true, acceptIgnored: false });
+    expect(steps.map((s) => s.id)).toEqual(['nginx', 'hosts', 'check']);
+    const undos = await runSteps(steps);
+    expect(lines()).toEqual([
+      'nginx-site-write local.shop.com --upstream apache --static on --apache-path /wp-content/uploads/wc-logs local.shop.de',
+      'hosts-add local.shop.com local.shop.de',
+    ]);
+    expect(undos).toEqual(['Take nginx out and point the hosts line at Apache']);
+  });
+
+  it('sends everything through Apache without the static files, and needs no PHP-FPM or a site in the usual layout of mounts', async () => {
+    const t = tree({ fpm: false });
+    put(t, 'www/local.shop.com/private/.htaccess', 'Require all denied\n');
+    const { c, lines } = ctx(t);
+    await runSteps(planSetServer(c, { domain: 'local.shop.com', server: 'nginx-apache', static: false, acceptIgnored: false }));
+    expect(lines()[0]).toBe('nginx-site-write local.shop.com --upstream apache --static off local.shop.de');
+  });
+
+  it('writes the front again for a site in front already, as Aura fixes do', async () => {
+    const t = tree();
+    inFront(t);
+    put(t, 'www/local.shop.com/private/.htaccess', 'Require all denied\n');
+    const { c, lines } = ctx(t);
+    const steps = planSetServer(c, { domain: 'local.shop.com', server: 'nginx-apache', static: true, acceptIgnored: false });
+    expect(steps.map((s) => s.id)).toEqual(['nginx', 'check']);
+    await runSteps(steps);
+    expect(lines()).toEqual(['nginx-site-write local.shop.com --upstream apache --static on --apache-path /private local.shop.de']);
+  });
+
+  it('moves a site in front of Apache back to Apache: nginx out, hosts line back', async () => {
+    const t = tree();
+    inFront(t, { static: false });
+    const { c, lines } = ctx(t);
+    const undos = await runSteps(planSetServer(c, { domain: 'local.shop.com', server: 'apache', static: true, acceptIgnored: false }));
+    expect(lines()).toEqual(['nginx-site-remove local.shop.com', 'hosts-add local.shop.com local.shop.de']);
+    expect(undos).toEqual(['Put nginx in front of Apache again']);
+  });
+
+  it('moves a site in front of Apache to nginx alone: nginx file, hosts, check, then the vhost goes', async () => {
+    const t = tree();
+    inFront(t);
+    const { c, lines } = ctx(t);
+    const steps = planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false });
+    expect(steps.map((s) => s.id)).toEqual(['nginx', 'hosts', 'check', 'apache']);
+    const undos = await runSteps(steps);
+    expect(lines()).toEqual(['nginx-site-write local.shop.com --kind single local.shop.de', 'hosts-add local.shop.com local.shop.de', 'vhost-remove local.shop.com']);
+    expect(undos).toEqual(['Put nginx in front of Apache again', 'Write the Apache vhost again']);
+  });
+
+  it('moves a site on nginx alone in front of Apache: the vhost comes back first', async () => {
+    const t = tree();
+    onNginx(t);
+    const { c, lines } = ctx(t);
+    const steps = planSetServer(c, { domain: 'local.shop.com', server: 'nginx-apache', static: true, acceptIgnored: false });
+    expect(steps.map((s) => s.id)).toEqual(['apache', 'nginx', 'hosts', 'check']);
+    const undos = await runSteps(steps);
+    expect(lines()).toEqual(['vhost-write local.shop.com local.shop.de', 'nginx-site-write local.shop.com --upstream apache --static on local.shop.de', 'hosts-add local.shop.com local.shop.de']);
+    expect(undos).toEqual(['Remove the Apache vhost', 'Write the nginx site again']);
+  });
+
+  it('refuses before nginx is set up, for a vhost made by hand and with a hosts line outside the block', () => {
+    const input = { domain: 'local.shop.com', server: 'nginx-apache' as const, static: true, acceptIgnored: false };
+    expect(() => planSetServer(ctx(tree({ nginxSetUp: false })).c, input)).toThrow(/not set up next to Apache/);
+    const hand = tree();
+    hand.write('sites-available/local.shop.com-ssl.conf', `<VirtualHost *:443>\n ServerName local.shop.com\n DocumentRoot ${hand.docroot}\n</VirtualHost>\n`);
+    expect(() => planSetServer(ctx(hand).c, input)).toThrow(/made by hand/);
+    const outside = tree();
+    outside.write('hosts', `127.0.0.1 local.shop.de\n${HOSTS_BEGIN}\n127.0.0.1 local.shop.com local.shop.de\n${HOSTS_END}\n`);
+    expect(() => planSetServer(ctx(outside).c, input)).toThrow(/outside the panel's block/);
+  });
+
+  it('keeps nginx on while a site is in front of Apache', () => {
+    const t = tree();
+    inFront(t);
+    expect(() => planNginxTeardown(ctx(t).c)).toThrow(/local.shop.com runs on nginx/);
+  });
+
+  it('shows the site as nginx + Apache, with Aura issues for static rules and new folders of their own', async () => {
+    const t = tree();
+    inFront(t);
+    put(t, 'www/local.shop.com/.htaccess', '# BEGIN WordPress\nRewriteRule . /index.php [L]\n# END WordPress\nExpiresByType image/png "access plus 1 year"\n');
+    put(t, 'www/local.shop.com/private/.htaccess', 'Require all denied\n');
+    const [site] = await discoverSites({ config: t.config, exec: fakeExec().exec, secrets: null, wpcoreConf: t.wpcoreConf });
+    expect(site?.server).toBe('nginx-apache');
+    expect(site?.move?.front).toMatchObject({ static: true, apachePaths: ['/private'], staticRules: ['ExpiresByType image/png "access'] });
+    expect(site?.move?.refusals).toEqual({});
+    const ids = site?.issues.map((i) => i.id) ?? [];
+    expect(ids).toEqual(expect.arrayContaining(['nginx.static', 'nginx.folders']));
+    expect(ids).not.toContain('hosts.server');
+    expect(site?.issues.find((i) => i.id === 'nginx.static')?.fix).toEqual({ action: 'site.setServer', input: { domain: 'local.shop.com', server: 'nginx-apache', static: false }, label: 'Send everything through Apache' });
+  });
+
+  it('flags a hosts line still on Apache for a site in front of Apache', async () => {
+    const t = tree();
+    inFront(t, { static: false });
+    t.write('hosts', `${HOSTS_BEGIN}\n127.0.0.1 local.shop.com local.shop.de\n${HOSTS_END}\n`);
+    const [site] = await discoverSites({ config: t.config, exec: fakeExec().exec, secrets: null, wpcoreConf: t.wpcoreConf });
+    expect(site?.issues.find((i) => i.id === 'hosts.server')?.text).toMatch(/runs on nginx \+ Apache at 127.0.0.2/);
+  });
+
+  it('moves every site in front of Apache, without asking about .htaccess rules', async () => {
+    const t = tree();
+    put(t, 'www/local.shop.com/.htaccess', 'Redirect 301 /old /new\n');
+    const { c, lines } = ctx(t);
+    await runSteps(planSetServerAll(c, { server: 'nginx-apache', static: true, acceptIgnored: false }));
+    expect(lines()).toContain('nginx-site-write local.shop.com --upstream apache --static on local.shop.de');
+  });
+});
+
+describe('.htaccess for nginx in front of Apache', () => {
+  it('finds folders with an .htaccess of their own, skipping dependencies and folders inside another one', () => {
+    const t = tree();
+    put(t, 'www/local.shop.com/.htaccess', '');
+    put(t, 'www/local.shop.com/b/.htaccess', '');
+    put(t, 'www/local.shop.com/a/x/.htaccess', '');
+    put(t, 'www/local.shop.com/a/x/y/.htaccess', '');
+    put(t, 'www/local.shop.com/vendor/z/.htaccess', '');
+    put(t, 'www/local.shop.com/odd name/.htaccess', '');
+    expect(htaccessFolders(t.docroot)).toEqual(['/a/x', '/b']);
+  });
+
+  it('names rules about images, CSS, JS and fonts, never WordPress own', () => {
+    const text = [
+      '# BEGIN WordPress',
+      'RewriteRule . /index.php [L]',
+      '# END WordPress',
+      'Header always set X-Frame-Options SAMEORIGIN',
+      '<FilesMatch "\\.(png|jpe?g)$">',
+      '  Header set Cache-Control "max-age=31536000"',
+      '</FilesMatch>',
+      'RewriteRule ^old\\.css$ /new.css [R=301,L]',
+      'RewriteRule ^old/(.*)$ /new/$1 [R=301,L]',
+      'Redirect 301 /a /b',
+    ].join('\n');
+    expect(staticRules(text)).toEqual(['Header always set', 'FilesMatch "\\.(png|jpe?g)$"', 'RewriteRule ^old\\.css$ /new.css']);
   });
 });

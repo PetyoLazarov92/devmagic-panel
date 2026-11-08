@@ -145,8 +145,8 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       `conf.d/devmagic-panel.conf` (the panel's marker, the record that nginx
       is set up), so nginx answers on `NGINX_ADDRESS` (127.0.0.2), both on
       ports 80 and 443; `nginx-teardown` puts it all back, once no site runs
-      on nginx. A site goes to the server its hosts line points at, never
-      through a proxy: `hosts-add` reads the address from the system (an
+      on nginx. A site goes to the server its hosts line points at:
+      `hosts-add` reads the address from the system (an
       enabled `nginx-site-write` file of the panel's for the domain means
       `NGINX_ADDRESS`), never from the caller. A site on nginx has
       `sites-available/<domain>.conf` with the marker, a `# kind:` line and a
@@ -155,7 +155,15 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       `conf.d/devmagic-panel-php.conf` (its pool or the default version's
       FPM), written with Apache's PHP conf. `site.setServer` moves a site;
       every rewrite of a site's config goes through `siteWriteArgs`, so it
-      lands on the server that has the site. The panel, phpMyAdmin and vhosts
+      lands on the server that has the site. A site can also have nginx in
+      front of its Apache vhost (`site.setServer` with `nginx-apache`,
+      `nginx-site-write --upstream apache`): a file with `# mode: apache`,
+      `# static:` and `# apache-path:` lines (folders with an .htaccess of
+      their own, checked by dmp-root), proxied to `APACHE_ADDRESS:443` with the
+      site's name, so Apache reads .htaccess and runs its PHP; `vhost-write`
+      keeps that file's names in step and `vhost-remove` refuses while it is
+      there, and the panel's `devmagic-panel-remoteip.conf` trusts
+      X-Forwarded-For from `NGINX_ADDRESS` only. The panel, phpMyAdmin and vhosts
       made by hand stay on Apache; nginx configs made by hand are only read,
       and one that listens on port 80 or 443 off nginx's address makes the
       setup refuse with its name.

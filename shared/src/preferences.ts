@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SITE_SERVERS } from './nginx.js';
 
 /** How the panel looks for you: kept in the panel's database, so every browser you sign in from gets them. */
 export const THEMES = ['light', 'dark', 'system'] as const;
@@ -21,10 +22,7 @@ export type WpDbList = (typeof WP_DB_LISTS)[number];
 /** How many rows a list of the WordPress view shows before Show all. */
 export const WP_DB_LIST_ROWS = 7;
 
-/** The web server a new site of its own gets, once nginx runs next to Apache. */
-export const SITE_SERVERS = ['apache', 'nginx'] as const;
-
-const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS), rowDialogFull: z.boolean() };
+const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), /** The web server a new site of its own gets, once nginx runs next to Apache. */ newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS), rowDialogFull: z.boolean() };
 
 export const preferences = z.object({
   theme: fields.theme.default('system'),

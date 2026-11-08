@@ -4,6 +4,7 @@ import { MYSQL_SETTING_NAMES, mysqlAccount, mysqlBackupName, mysqlDatabaseName, 
 import { PROFILE_NAME } from './profiles.js';
 import { mysqlIdentifier, WP_CONTENT_KINDS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS, WP_TABLE_FIXES } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
+import { SITE_SERVERS } from './nginx.js';
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
 import { cronSchedule } from './cron.js';
 import { namespaceRef } from './repo-host.js';
@@ -522,22 +523,23 @@ export const actions = {
     input: z.object({}),
   },
   'site.setServer': {
-    title: 'Move a site between Apache and nginx',
+    title: 'Move a site between Apache, nginx in front of Apache, and nginx',
     palette: [
-      { scope: 'domain', label: 'Move to nginx', input: { server: 'nginx' }, confirm: 'The site moves to nginx and is checked that it answers; Undo moves it back.' },
-      { scope: 'domain', label: 'Move to Apache', input: { server: 'apache' }, confirm: 'The site moves back to Apache and is checked that it answers; Undo moves it to nginx again.' },
+      { scope: 'domain', label: 'Move to nginx', input: { server: 'nginx' }, confirm: 'The site moves to nginx with PHP-FPM and is checked that it answers; Undo moves it back.' },
+      { scope: 'domain', label: 'Put nginx in front of Apache', input: { server: 'nginx-apache' }, confirm: 'nginx answers for the site and passes requests to its Apache vhost, which still reads .htaccess; Undo takes nginx out again.' },
+      { scope: 'domain', label: 'Move to Apache', input: { server: 'apache' }, confirm: 'The site runs on Apache alone and is checked that it answers; Undo moves it back.' },
     ],
     description:
-      "Moves a site to nginx or back to Apache. Both servers answer on ports 80 and 443, each on its own address, and a site goes to the one its hosts line points at. To nginx: writes the site's nginx file (WordPress's rules for a single site or its kind of network, the uploads redirect, PHP through its own PHP-FPM pool or the default version's), points the hosts line at nginx, checks the site answers, then removes the Apache vhost. Back to Apache: the other way round. Its folder, database and certificate stay. Only for a site the panel made the vhost of, in the usual folder, without sites under paths, once nginx is set up; nginx reads no .htaccess, so a site whose .htaccess has rules beyond WordPress's needs acceptIgnored. On nginx already, writes its nginx file again (after it became a network). Starts a job; Undo moves it back.",
+      "Moves a site to nginx or back to Apache. Both servers answer on ports 80 and 443, each on its own address, and a site goes to the one its hosts line points at. To nginx: writes the site's nginx file (WordPress's rules for a single site or its kind of network, the uploads redirect, PHP through its own PHP-FPM pool or the default version's), points the hosts line at nginx, checks the site answers, then removes the Apache vhost. nginx-apache puts nginx in front of the site's Apache vhost instead: nginx answers with the site's certificate and passes requests to the vhost over HTTPS, so Apache still reads every .htaccess and runs its PHP; with static (the default) nginx serves images, CSS, JS and fonts that exist itself, but in folders with an .htaccess of their own. Back to Apache: the other way round. Its folder, database and certificate stay. Only for a site the panel made the vhost of, in the usual folder, without sites under paths, once nginx is set up; nginx reads no .htaccess, so a site whose .htaccess has rules beyond WordPress's needs acceptIgnored. On nginx already, writes its nginx file again (after it became a network). Starts a job; Undo moves it back.",
     changesSystem: true,
-    input: z.object({ domain: localName, server: z.enum(['apache', 'nginx']), acceptIgnored: z.boolean().default(false) }),
+    input: z.object({ domain: localName, server: z.enum(SITE_SERVERS), static: z.boolean().default(true), acceptIgnored: z.boolean().default(false) }),
   },
   'sites.setServerAll': {
-    title: 'Move every site to Apache or nginx',
+    title: 'Move every site to one web server',
     description:
       "Moves every site that can to one web server, one after the other, each as site.setServer moves it, and checks each answers. Sites that cannot stay where they are and are listed: vhosts made by hand, sites without PHP-FPM for their PHP version, and, unless acceptIgnored, sites whose .htaccess has rules nginx does not read. Starts a job; Undo moves every site back.",
     changesSystem: true,
-    input: z.object({ server: z.enum(['apache', 'nginx']), acceptIgnored: z.boolean().default(false) }),
+    input: z.object({ server: z.enum(SITE_SERVERS), static: z.boolean().default(true), acceptIgnored: z.boolean().default(false) }),
   },
   'nginx.reload': {
     title: 'Reload nginx',
@@ -1422,7 +1424,7 @@ export const actions = {
         /** For a network in the dump: its layout here, and the sites whose address changes are moved after the replace. */
         network: networkChoice.optional(),
         /** The web server of a site of its own, once nginx runs next to Apache; a site under a path runs on its parent's. */
-        server: z.enum(['apache', 'nginx']).default('apache'),
+        server: z.enum(SITE_SERVERS).default('apache'),
       })
       .superRefine((v, ctx) => {
         if (v.source === 'repo' && !v.repo) ctx.addIssue({ code: 'custom', path: ['repo'], message: 'A repo is required' });
@@ -1435,7 +1437,7 @@ export const actions = {
         if (v.uploadsVia === 'plugin' && (v.source !== 'repo' || !v.uploadsFrom)) {
           ctx.addIssue({ code: 'custom', path: ['uploadsVia'], message: 'BE Media from Production needs a repo that has it and a production host' });
         }
-        if (v.path && v.server === 'nginx') ctx.addIssue({ code: 'custom', path: ['server'], message: "A site under a path runs on its parent's server" });
+        if (v.path && v.server !== 'apache') ctx.addIssue({ code: 'custom', path: ['server'], message: "A site under a path runs on its parent's server" });
         if (v.replaceExisting && v.path) ctx.addIssue({ code: 'custom', path: ['replaceExisting'], message: 'A site under a path is not replaced; remove it first' });
         if (v.network) {
           if (!v.uploadId || v.path) ctx.addIssue({ code: 'custom', path: ['network'], message: 'A network layout needs a dump, and no site under a path' });

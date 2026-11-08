@@ -68,8 +68,9 @@ export function siteWriteArgs(config: SystemConfig, vhost: VhostInfo, domain: st
     : ['vhost-write', domain, ...redirect, ...mountArgs(config, mounts), ...aliases];
 }
 
-/** The reload that picks up a reissued certificate: the server that has the site. */
-export const reloadArgs = (vhost: Pick<VhostInfo, 'server'> | undefined) => (vhost?.server === 'nginx' ? ['nginx-reload'] : ['apache-reload']);
+/** The reloads that pick up a reissued certificate: the server that has the site, and nginx in front of its vhost. */
+export const reloadCommands = (vhost: Pick<VhostInfo, 'server' | 'front'> | undefined): string[][] =>
+  vhost?.server === 'nginx' ? [['nginx-reload']] : vhost?.front ? [['apache-reload'], ['nginx-reload']] : [['apache-reload']];
 
 /** The address of a site, with its path when it has one. */
 export const siteHost = (domain: string, path?: string) => `${domain}${path ?? ''}`;
@@ -268,7 +269,7 @@ export async function addAliases(ctx: SiteActionContext, { domain, aliases }: Ac
       root(...siteWriteArgs(ctx.config, vhost, domain, vhost.uploadsProxy, names)),
       root('cert-reissue-from-vhost', domain),
       root('hosts-add', domain, ...names),
-      root(...reloadArgs(vhost)),
+      ...reloadCommands(vhost).map((args) => root(...args)),
     ),
   };
 }

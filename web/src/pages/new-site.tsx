@@ -1,4 +1,4 @@
-import type { AddressInput, InstallDraft, NginxState, NewSiteSource, OrgStatus, RepoBuild, RepoInspection, RepoLayout, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
+import type { AddressInput, InstallDraft, NginxState, NewSiteSource, SiteServer, OrgStatus, RepoBuild, RepoInspection, RepoLayout, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
 import { actions, addressSummary, branchName, branchWebUrl, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin, repoWeb, sameRepo } from '@devmagic-panel/shared';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, CircleX, Copy, ExternalLink, FileArchive, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, Upload, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -89,7 +89,7 @@ export interface WizardState {
   /** The primary domain is installed already: archive that site first and install again. */
   replaceExisting: boolean;
   /** Apache or nginx, once nginx runs next to Apache; null until it is known: the default for new sites from the nginx tab. */
-  server: 'apache' | 'nginx' | null;
+  server: SiteServer | null;
   /** Installing from a GitHub organization or GitLab group: the repo, what Claude Code read and the dump; null for the other starts. */
   org: OrgState | null;
   /** A hash of each step's answers when you continued from it, so the step list can open the steps you reached (lib/steps). */
@@ -284,7 +284,7 @@ export function toInput(state: WizardState): CreateSiteInput {
     ...(under ? { path: under.path } : {}),
     replaceExisting: !under && state.replaceExisting,
     // A site under a path runs on its parent's server.
-    server: !under && state.server === 'nginx' ? 'nginx' : 'apache',
+    server: !under && state.server ? state.server : 'apache',
     // The organization or group it came from; a pasted URL on another host has none.
     ...(state.org?.repo?.org && isRepo ? { organization: state.org.repo.org } : {}),
     aliases: locals.slice(1),
@@ -1389,16 +1389,17 @@ function DomainsStep({ state, set, nginx, errors, sites, underError, underFolder
   );
 }
 
-/** Apache or nginx for the new site, once nginx runs next to Apache; a site can move later on its Server and PHP tab. */
+/** The web server of the new site, once nginx runs next to Apache; a site can move later on its Server and PHP tab. */
 function ServerChoice({ state, set, php }: { state: WizardState; set: Setter; php: string | undefined }) {
   const choices = [
     { value: 'apache', label: 'Apache', hint: 'Reads .htaccess, as most WordPress hosts run it' },
+    { value: 'nginx-apache', label: 'nginx + Apache', hint: 'nginx in front, Apache behind it reads .htaccess, like hosts that run both' },
     { value: 'nginx', label: 'nginx', hint: php ? `PHP through PHP-FPM ${php}; .htaccess is not read` : 'Needs PHP-FPM for the default PHP version: install it on Services, PHP' },
   ] as const;
   return (
     <fieldset className="grid gap-2">
       <legend className="mb-1 text-sm font-medium">Web server</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-3">
         {choices.map((c) => (
           <label key={c.value} className={cn('flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm', state.server === c.value && 'border-primary/50 bg-primary/5', c.value === 'nginx' && !php && 'cursor-not-allowed opacity-60')}>
             <input type="radio" name="web-server" checked={state.server === c.value} disabled={c.value === 'nginx' && !php} onChange={() => set('server', c.value)} className="mt-0.5 accent-[var(--primary)]" />
@@ -1409,7 +1410,7 @@ function ServerChoice({ state, set, php }: { state: WizardState; set: Setter; ph
           </label>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">The site can move to the other one later, on its Server and PHP tab.</p>
+      <p className="text-xs text-muted-foreground">Pick what the site runs on in production. It can move later, on its Server and PHP tab.</p>
     </fieldset>
   );
 }
