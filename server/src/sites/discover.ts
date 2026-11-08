@@ -20,7 +20,7 @@ import { saltStatus } from './salts.js';
 import { parseWpConfig, parseWpVersion, type WpConfig } from './wpconfig.js';
 import { removalRefusal } from './remove.js';
 import { apachePaths, moveFacts } from './server-switch.js';
-import { readHtaccessReport } from './htaccess-rules.js';
+import { readHtaccessReport, ruleDiff } from './htaccess-rules.js';
 
 export interface DiscoverContext {
   config: SystemConfig;
@@ -29,6 +29,8 @@ export interface DiscoverContext {
   wpcoreConf: string;
   /** WordPress.org's status per version; null when unknown (offline). */
   coreStatus?: CoreStatusMap | null;
+  /** The .htaccess checksums of a change to a site on nginx you put off (Not now), from the panel's database. */
+  htaccessDismissed?: (domain: string) => Record<string, string> | undefined;
   now?: () => number;
 }
 
@@ -551,15 +553,18 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
   if (wp && vhost.server === 'nginx') {
     if (!mount) {
       // nginx reads no .htaccess: the panel translates what it can into the site's nginx file, once you review it.
-      const report = readHtaccessReport(docroot, { rules: vhost.rules ?? [], sums: vhost.htaccessSums ?? {} });
+      const applied = { rules: vhost.rules ?? [], sums: vhost.htaccessSums ?? {} };
+      const report = readHtaccessReport(docroot, applied, Date.now(), false, ctx.htaccessDismissed?.(domain));
       const translatable = report.rules.filter((r) => r.status === 'translated').length;
-      if (report.changed) {
-        const recorded = Object.keys(vhost.htaccessSums ?? {}).length > 0;
+      if (report.pending && !report.dismissed) {
+        const recorded = Object.keys(applied.sums).length > 0;
+        const { added, removed } = ruleDiff(report, applied.rules);
+        const parts = [added.length ? `${added.length} rule${added.length === 1 ? '' : 's'} to add` : '', removed.length ? `${removed.length} to take out` : ''].filter(Boolean).join(' and ');
         issues.push({
           id: 'nginx.htaccess.changed',
           status: 'warn',
           text: recorded
-            ? 'An .htaccess changed since its rules were applied on nginx, so nginx does not have the change'
+            ? `An .htaccess changed since its rules were applied on nginx: ${parts}`
             : `${translatable} .htaccess rule${translatable === 1 ? '' : 's'} the panel can translate ${translatable === 1 ? 'is' : 'are'} not on nginx`,
           hint: 'Review and apply them on the Server and PHP tab, under .htaccess rules.',
         });

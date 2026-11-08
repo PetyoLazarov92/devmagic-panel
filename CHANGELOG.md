@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.27.0 (2026-11-08)
+* **Sites:** the panel watches the `.htaccess` files of sites on nginx while it runs and says when one changes: a notice on any page with Review, which opens the review of that site's rules. A change that leaves nginx's rules as they are, like a caching plugin saving its settings, stays quiet. Nothing is applied without the review
+* **Sites:** the .htaccess rules card tells a change nginx needs (with how many rules to add or take out) from one it does not, and Not now puts a change off: Aura and the notices stay quiet until a file changes again
+* **Mockup:** `?htaccess=change` in the address shows the notice of a change a moment after the page opens
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.26.0 (2026-11-08)
 * **Sites:** moving a site to nginx alone translates its `.htaccess` files for nginx: redirects, rewrites, denied files and folders, security headers and error pages go into the site's nginx file. The dialog lists every rule with what it becomes, or why it stays out (WordPress's own rules, caches, PHP settings, conditions), and a tick leaves one out
 * **Sites:** a site on nginx has an .htaccess rules card: each rule and whether its nginx file has it, Check again, and Copy nginx rules for a host's own settings. When an `.htaccess` changed since, Review and apply writes the rules again with Undo, and refuses a file that changed again during the review

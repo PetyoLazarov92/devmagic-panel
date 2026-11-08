@@ -46,6 +46,7 @@ import { planInstallVersion, planPhpPackage, planRemoveVersion, planUpgradeVersi
 import { planSwitchToFpm, planSwitchToModPhp } from './php/switch.js';
 import { planNginxSetup, planNginxTeardown } from './nginx.js';
 import { planApplyHtaccess, planSetServer, planSetServerAll } from './sites/server-switch.js';
+import { dismissHtaccessChange } from './sites/htaccess-watch.js';
 import { analyzeDatabases, deleteMysqlBackup, type MysqlContext, mysqlBackupsDir, MysqlRefused, planDropDatabase, planDropUsers, planOptimize, resetSiteUser } from './mysql-server.js';
 import type { RunStore } from './store.js';
 import { clearMail, type Downloader, mailpitFetch, type MailpitFetch, planInstallMailpit } from './mailpit.js';
@@ -305,6 +306,10 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'nginx.reload': (ctx) => steps(() => root(ctx, 'nginx-reload')),
   'sites.setServerAll': async (ctx, input) =>
     startJob(ctx, planSetServerAll(ctx, input), `Move every site to ${SITE_SERVER_LABEL[input.server]}`, 'web servers'),
+  'site.dismissHtaccessChange': async (ctx, { domain, sums }) => {
+    dismissHtaccessChange(ctx.store, domain, sums);
+    return [{ code: 0, stdout: `${domain}: this .htaccess change stays quiet until a file changes again`, stderr: '' }];
+  },
   'site.applyHtaccessRules': async (ctx, input) => startJob(ctx, planApplyHtaccess(ctx, input), `Apply ${input.domain}'s .htaccess rules on nginx`, input.domain),
   'site.setServer': async (ctx, input) =>
     startJob(ctx, planSetServer(ctx, input), `Run ${input.domain} on ${SITE_SERVER_LABEL[input.server]}`, input.domain),

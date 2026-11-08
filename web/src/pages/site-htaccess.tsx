@@ -12,6 +12,8 @@ import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+import { onHtaccessChanged } from '@/lib/htaccess-notices';
+import { useQueryParam } from '@/lib/router';
 import { cn } from '@/lib/utils';
 
 const TONE: Record<HtaccessRuleStatus, 'neutral' | 'success' | 'warning' | 'primary'> = {
@@ -140,10 +142,36 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
     report.reload();
     onChanged();
   }, [job.job, onChanged]);
+  // A change the panel noticed while this page is open: read the files again.
+  useEffect(() => onHtaccessChanged((domain) => domain === site.domain && report.reload()), [site.domain]);
 
   const data = report.data;
   const counts = data ? ruleCounts(data) : null;
   const applied = data?.applied?.rules ?? [];
+  const translated = data ? [...new Set(data.rules.filter((r) => r.status === 'translated' && r.rule).map((r) => r.rule as string))] : [];
+  const added = translated.filter((r) => !applied.includes(r)).length;
+  const removed = applied.filter((r) => !translated.includes(r)).length;
+  const recorded = Object.keys(data?.applied?.sums ?? {}).length > 0;
+  const [putting, setPutting] = useState(false);
+  const notNow = async () => {
+    if (!data) return;
+    setPutting(true);
+    const r = await api.runAction('site.dismissHtaccessChange', { domain: site.domain, sums: reviewedSums(data) }).catch(() => null);
+    setPutting(false);
+    if (!r?.ok) toast({ tone: 'danger', title: 'Could not put the change off' });
+    report.reload();
+    onChanged();
+  };
+  // Opened from a notice's Review (?review=htaccess): the review opens once the files are read.
+  const asked = useQueryParam('review') === 'htaccess';
+  const opened = useRef(false);
+  useEffect(() => {
+    if (asked && data && !opened.current && (data.pending || data.changed)) {
+      opened.current = true;
+      setSkip([]);
+      setOpen(true);
+    }
+  }, [asked, data]);
   const review = () => {
     // Every translated rule starts ticked: the review is where one is left out.
     setSkip([]);
@@ -167,14 +195,25 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
         {report.error && <p role="alert" className="text-danger">{report.error}</p>}
         {data && counts && (
           <>
-            {data.changed && (
+            {data.pending && (
               <Notice
-                tone="warning"
-                action={<Button size="sm" disabled={busy} onClick={review}>Review and apply</Button>}
+                tone={data.dismissed ? 'info' : 'warning'}
+                action={
+                  <>
+                    {!data.dismissed && <Button size="sm" variant="ghost" disabled={busy || putting} onClick={() => void notNow()}>Not now</Button>}
+                    <Button size="sm" disabled={busy} onClick={review}>Review and apply</Button>
+                  </>
+                }
               >
-                {Object.keys(data.applied?.sums ?? {}).length > 0
-                  ? 'An .htaccess changed since its rules were applied, so nginx does not have the change yet.'
+                {recorded
+                  ? `An .htaccess changed since its rules were applied: ${[added ? `${added} rule${added === 1 ? '' : 's'} to add` : '', removed ? `${removed} to take out` : ''].filter(Boolean).join(' and ')} on nginx.`
                   : `${counts.translated} rule${counts.translated === 1 ? '' : 's'} the panel can translate ${counts.translated === 1 ? 'is' : 'are'} not on nginx yet.`}
+                {data.dismissed && ' You put it off, so Aura and the notices stay quiet until a file changes again.'}
+              </Notice>
+            )}
+            {!data.pending && data.changed && (
+              <Notice tone="info" action={<Button size="sm" variant="outline" disabled={busy} onClick={review}>Review</Button>}>
+                An .htaccess changed, but none of the rules nginx gets did (WordPress&apos;s own rules, caches or comments). Review and apply records the files as they are now.
               </Notice>
             )}
             <div className="flex flex-wrap items-center justify-between gap-3">

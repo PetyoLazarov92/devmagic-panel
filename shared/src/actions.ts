@@ -528,6 +528,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({}),
   },
+  'site.dismissHtaccessChange': {
+    title: "Put off a change to a site's .htaccess",
+    description:
+      "For a site on nginx: the change to its .htaccess files, as sums gives their checksums, stops showing on Aura and in notices until a file changes again. Nothing on the system changes; the rules card keeps it listed with Review and apply.",
+    changesSystem: false,
+    input: z.object({ domain: localName, sums: htaccessChoice.shape.sums }),
+  },
   'site.setServer': {
     title: 'Move a site between Apache, nginx in front of Apache, and nginx',
     palette: [

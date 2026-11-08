@@ -159,7 +159,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       `# htaccess: /folder <sha256>` lines (`ruleArgs`): rules the panel
       translated from the site's .htaccess files (`sites/htaccess-rules.ts`)
       into a few fixed kinds that dmp-root checks field by field and writes
-      itself, never nginx text, and applied only after you review them. A
+      itself, never nginx text, and applied only after you review them
+      (`sites/htaccess-watch.ts` notices changes and says so, never applies;
+      Not now is kept in the panel's database). A
       site can also have nginx in
       front of its Apache vhost (`site.setServer` with `nginx-apache`,
       `nginx-site-write --upstream apache`): a file with `# mode: apache`,

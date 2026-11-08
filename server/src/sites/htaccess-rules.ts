@@ -392,7 +392,13 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
  * `applied` is what its nginx file has: the report then says whether a file
  * changed since.
  */
-export function readHtaccessReport(docroot: string, applied?: { rules: string[]; sums: Record<string, string> }, now = Date.now(), fresh = false): HtaccessReport {
+export function readHtaccessReport(
+  docroot: string,
+  applied?: { rules: string[]; sums: Record<string, string> },
+  now = Date.now(),
+  fresh = false,
+  dismissed?: Record<string, string>,
+): HtaccessReport {
   const scan = scanHtaccess(docroot, fresh);
   const folders = [...(existsSync(join(docroot, '.htaccess')) ? ['/'] : []), ...scan.folders];
   const files: HtaccessFile[] = [];
@@ -432,8 +438,17 @@ export function readHtaccessReport(docroot: string, applied?: { rules: string[];
     const current = Object.fromEntries(files.map((f) => [f.folder, f.sha256]));
     const recorded = Object.keys(applied.sums).length > 0;
     report.changed = recorded ? !sameSums(current, applied.sums) : rules.some((r) => r.status === 'translated');
+    const { added, removed } = ruleDiff(report, applied.rules);
+    report.pending = added.length + removed.length > 0;
+    if (dismissed && sameSums(current, dismissed)) report.dismissed = true;
   }
   return report;
+}
+
+/** The translated rules a nginx file lacks, and the ones it has that the .htaccess files no longer give. */
+export function ruleDiff(report: HtaccessReport, applied: string[]): { added: string[]; removed: string[] } {
+  const now = chosenRules(report);
+  return { added: now.filter((r) => !applied.includes(r)), removed: applied.filter((r) => !now.includes(r)) };
 }
 
 /** True when two sets of checksums name the same files with the same contents. */

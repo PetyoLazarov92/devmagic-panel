@@ -1785,6 +1785,12 @@ export const mockApi: Api = {
     advance(job, 'steps', failAt);
     return id;
   },
+  htaccessChanges: async (since) => {
+    // ?htaccess=change in the address: one change to review shows a moment after the page opens.
+    const now = new Date().toISOString();
+    const wanted = new URLSearchParams(window.location.search).get('htaccess') === 'change';
+    return since && wanted && !mockHtaccessNoticed ? ((mockHtaccessNoticed = true), { now, changes: [{ domain: 'local.wandworks-brands.example', at: now, kind: 'rules' as const, added: 1, removed: 0 }] }) : { now, changes: [] };
+  },
   htaccess: async (domain) => {
     await wait(350);
     return mockHtaccess(domain, sites.find((s) => s.domain === domain && !s.path)?.server ?? 'apache');
@@ -1998,6 +2004,8 @@ export const mockApi: Api = {
   playRun,
 };
 
+let mockHtaccessNoticed = false;
+
 /** A site's .htaccess for the mockup: a few rules of every kind, and on nginx a change since they were applied. */
 function mockHtaccess(domain: string, server: Site['server']): HtaccessReport {
   const sum = (n: number) => String(n).repeat(64).slice(0, 64);
@@ -2018,6 +2026,7 @@ function mockHtaccess(domain: string, server: Site['server']): HtaccessReport {
     // Applied before the Wands rule came in: the root .htaccess changed since.
     report.applied = { rules: rules.filter((r) => r.rule && r.id !== 'c3d4e5f6a1b2').map((r) => r.rule as string), sums: { '/': sum(3), '/wp-content/uploads/wc-logs': sum(2) } };
     report.changed = true;
+    report.pending = true;
   }
   return report;
 }

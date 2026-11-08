@@ -13,6 +13,7 @@ import { loadGitHosts } from '@/lib/git-hosts';
 import { setAssistantOpen } from '@/lib/assistant';
 import { useDeveloper, useVersionTaps } from '@/lib/developer';
 import { useMailUnread } from '@/lib/mail-unread';
+import { useHtaccessNotices } from '@/lib/htaccess-notices';
 import { navActive } from '@/lib/nav';
 import { loadPreferences } from '@/lib/preferences';
 import { useAsync } from '@/lib/use-async';
@@ -83,6 +84,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
   const update = useUpdateStatus();
   const dot = updateDot(update);
   const unread = useMailUnread(path);
+  useHtaccessNotices();
   // A dot on a nav item says something waits there: a newer release, or mail nobody opened.
   const dots: Record<string, { tone: string; title: string } | null> = {
     '/update': dot ? { tone: dot === 'new' ? 'bg-primary' : 'bg-warning', title: dot === 'new' ? `${update?.latest ?? 'A new release'} available` : 'No access to updates' } : null,

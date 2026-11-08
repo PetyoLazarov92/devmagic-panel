@@ -22,6 +22,7 @@ import { gitFolder, readGitDetails, readPullRequests } from './git.js';
 import { parseApacheErrorLog, parseDebugLog, parseNginxErrorLog, tailFile } from './logs.js';
 import { removalRefusal } from './remove.js';
 import { readHtaccessReport } from './htaccess-rules.js';
+import { htaccessDismissed } from './htaccess-watch.js';
 import { inspectRepo, repoLookup, RepoRefused } from './repo.js';
 import { currentSite } from './archive.js';
 import { listTrash, TRASH_DAYS, trashFreeBytes } from './trash.js';
@@ -86,7 +87,7 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
       cached = {
         at: Date.now(),
         sites: deps.coreStatus().then((coreStatus) =>
-          discoverSites({ config: deps.config, exec: deps.exec, secrets: deps.secrets(), wpcoreConf: deps.wpcoreConf, coreStatus }),
+          discoverSites({ config: deps.config, exec: deps.exec, secrets: deps.secrets(), wpcoreConf: deps.wpcoreConf, coreStatus, htaccessDismissed: (domain) => htaccessDismissed(deps.store, domain) }),
         ),
       };
       cached.sites.catch(() => {
@@ -146,7 +147,7 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     const vhost = findVhost(deps.config, request.params.domain);
     if (!vhost?.docroot || vhost.names[0] !== request.params.domain) return reply.code(404).send({ error: `no site called ${request.params.domain}` });
     const applied = vhost.server === 'nginx' ? { rules: vhost.rules ?? [], sums: vhost.htaccessSums ?? {} } : undefined;
-    return readHtaccessReport(vhost.docroot, applied, Date.now(), true);
+    return readHtaccessReport(vhost.docroot, applied, Date.now(), true, htaccessDismissed(deps.store, request.params.domain));
   });
 
   // Deleted sites, newest first; dmp-root reads the root-only trash.

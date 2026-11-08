@@ -2,7 +2,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -23,6 +23,7 @@ import { servicesReport } from './services.js';
 import { apacheErrorLog, apacheReport } from './apache.js';
 import { nginxErrorLog, nginxReport, nginxSetUp } from './nginx.js';
 import { nginxPhpVersion } from './sites/server-switch.js';
+import { HtaccessWatcher } from './sites/htaccess-watch.js';
 import { type BrowseContext, type CleanupWhere, dbCell, dbOverview, dbRows, dbSchema, dbStructure } from './mysql-browse.js';
 import { runQuery } from './mysql-query.js';
 import { cleanupViewWhere, listCleanups } from './mysql-cleanup.js';
@@ -155,6 +156,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const following = (runId: number) => ['running', 'queued'].includes(jobs.forRun(runId)?.status ?? '');
   const install = () => settleInstall({ exec: deps.exec, dataDir: update.dataDir, store: deps.store }, following);
   const drafts = new Drafts(deps.store, deps.uploadsDir);
+  // Watches the .htaccess files of sites on nginx; only for the running panel, never in tests.
+  const htaccessWatcher = deps.housekeeping ? new HtaccessWatcher(deps.config) : null;
+  if (htaccessWatcher) {
+    try {
+      htaccessWatcher.refresh();
+    } catch (error) {
+      app.log.warn(`htaccess watch: ${(error as Error).message}`);
+    }
+    app.addHook('onClose', async () => htaccessWatcher.close());
+  }
   if (deps.housekeeping) {
     const running = (jobId: string) => ['running', 'queued', 'undoing'].includes(jobs.get(jobId)?.status ?? '');
     const sweep = () => {
@@ -501,6 +512,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     api.get('/api/apache/log', async (): Promise<SiteLog> => apacheErrorLog(deps.config));
     api.get('/api/nginx', async (): Promise<NginxReport> => nginxReport(deps.config, deps.exec, deps.dmpRoot));
     api.get('/api/nginx/log', async (): Promise<SiteLog> => nginxErrorLog(deps.config));
+    // Changes to the .htaccess files of sites on nginx since the time the browser last asked, for a notice with Review.
+    let watchedAt = 0;
+    api.get<{ Querystring: { since?: string } }>('/api/htaccess/changes', async (request): Promise<HtaccessChanges> => {
+      if (!htaccessWatcher) return { now: new Date().toISOString(), changes: [] };
+      // A site that moved to nginx since is watched within a minute.
+      if (Date.now() - watchedAt > 60_000) {
+        watchedAt = Date.now();
+        htaccessWatcher.refresh();
+      }
+      const since = request.query.since && !Number.isNaN(Date.parse(request.query.since)) ? request.query.since : undefined;
+      return htaccessWatcher.changes(since);
+    });
     api.get('/api/nginx/state', async (): Promise<NginxState> => {
       const php = nginxPhpVersion(deps.config, '');
       return { setUp: nginxSetUp(deps.config), ...(php ? { php } : {}) };

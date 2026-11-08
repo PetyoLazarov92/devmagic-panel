@@ -64,6 +64,10 @@ export interface HtaccessReport {
   };
   /** For a site on nginx: an .htaccess changed, came or went since its rules were applied (or never were, while it has rules to apply). */
   changed?: boolean;
+  /** For a site on nginx: the translated rules differ from what its nginx file has, so there is something to apply. */
+  pending?: boolean;
+  /** For a site on nginx: you put off the change as it is now (Not now). */
+  dismissed?: boolean;
   /** The nginx directives of the translated rules, to copy to a host's own nginx settings. */
   nginx: string;
 }
@@ -72,4 +76,25 @@ export interface HtaccessReport {
 export interface HtaccessChoice {
   sums: Record<string, string>;
   skip: string[];
+}
+
+/**
+ * A change to the .htaccess files of a site on nginx, as the panel noticed it:
+ * - rules: the rules nginx would get changed, so there is something to review
+ * - manual: new rules nginx does nothing with (not translated, or PHP settings)
+ * - quiet: nothing nginx gets changed (WordPress's rules, caches, comments)
+ */
+export interface HtaccessChange {
+  domain: string;
+  at: string;
+  kind: 'rules' | 'manual' | 'quiet';
+  /** Translated rules the nginx file does not have yet, and ones it has that are gone from the .htaccess. */
+  added: number;
+  removed: number;
+}
+
+export interface HtaccessChanges {
+  /** Pass it back as since: the next answer has only the changes after it. */
+  now: string;
+  changes: HtaccessChange[];
 }

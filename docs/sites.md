@@ -116,7 +116,19 @@ WordPress). The Overview's Server and PHP tile shows both, like
   the same list with ticks, and the job writes the rules after dmp-root checks
   each one and `nginx -t` passes, with Undo. A file that changed again after
   you opened the review is refused, so you review it again. Aura has an issue
-  while rules wait. dmp-root takes rules of fixed kinds only and writes the
+  while rules wait.
+
+  The panel watches the `.htaccess` files of sites on nginx while it runs (the
+  kernel's change notifications, a few seconds after a burst of writes) and
+  compares checksums when it reads a site, for changes made while it was not
+  running. A change that gives nginx other rules, or new rules nginx does
+  nothing with, shows a notice on any page with **Review**, which opens the
+  review on the site; a change that leaves nginx's rules as they are (a
+  caching plugin saving its settings, WordPress's own rules) stays quiet.
+  **Not now** puts a change off: Aura and the notices stay quiet until a file
+  changes again. Nothing is applied without the review, as on a host that
+  runs nginx only, where an `.htaccess` change does nothing until it is added
+  to the host's nginx rules. dmp-root takes rules of fixed kinds only and writes the
   nginx itself, so nothing from an `.htaccess` reaches nginx as it is.
 
   On Aura, a site with nginx in front of Apache gets

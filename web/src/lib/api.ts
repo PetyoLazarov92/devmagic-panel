@@ -1,4 +1,4 @@
-import type { HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -188,6 +188,8 @@ export interface Api {
   removal: (domain: string) => Promise<RemovalInfo>;
   /** A site's .htaccess files read for nginx, and for a site on nginx what its file has. */
   htaccess: (domain: string) => Promise<HtaccessReport>;
+  /** Changes to the .htaccess files of sites on nginx after since, and the time to ask from next. */
+  htaccessChanges: (since?: string) => Promise<HtaccessChanges>;
   /** Deleted sites, newest first. */
   trash: () => Promise<TrashEntry[]>;
   /** What installing from an organization needs, and its settings. */
@@ -380,6 +382,7 @@ const realApi: Api = {
   },
   removal: (domain) => request('GET', `/api/sites/${encodeURIComponent(domain)}/removal`),
   htaccess: (domain) => request('GET', `/api/sites/${encodeURIComponent(domain)}/htaccess`),
+  htaccessChanges: (since) => request('GET', `/api/htaccess/changes${since ? `?since=${encodeURIComponent(since)}` : ''}`),
   trash: () => request('GET', '/api/trash'),
   orgStatus: () => request('GET', '/api/org/status'),
   saveOrgSettings: (settings) => request('PUT', '/api/org/settings', settings),
