@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.24.1 (2026-11-08)
+* **Mockup:** the mockup (`npm run mockup`) has a page of its own, first in the menu, that says what it never touches on this machine, how it works and which addresses show other states; a link that would leave it shows the address it would open instead
+* Nothing changes in the installed panel. An update installs this release from the panel as usual
+
 ### v1.24.0 (2026-11-08)
 * **Databases:** a row's dialogs can fill the window, and the panel remembers it: viewing, editing, duplicating and adding a row, and a row of a SQL result, open full screen until you switch back
 * **Databases:** a row's buttons stay below its columns as they scroll, so the last field no longer runs into them
