@@ -14,7 +14,7 @@ interface Message extends ChatTurn {
   looked?: string[];
 }
 
-const EXAMPLES = ['Which sites need attention?', 'Why is local.arcade.bet throwing fatals?', 'Fix the certificate problems'];
+const EXAMPLES = ['Which sites need attention?', 'Why is local.arcade.example throwing fatals?', 'Fix the certificate problems'];
 
 /** A change Claude suggested. It runs only when you click Run, through the same action route as every panel button. */
 export function ProposalCard({ proposal, onClose }: { proposal: Proposal; onClose?: (status: 'ran' | 'dismissed') => void }) {

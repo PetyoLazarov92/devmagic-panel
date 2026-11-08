@@ -67,7 +67,7 @@ function setup() {
 describe('restore over an existing site', () => {
   it('is refused unless confirmed, then archives the current site first and restores the copy; Undo puts the current one back', async () => {
     const s = setup();
-    s.store.setInstall('local.shop.com', undefined, { how: 'repo', repo: 'git@github.com:acme/shop-new.git', at: '2026-10-25T08:00:00Z' });
+    s.store.setInstall('local.shop.com', undefined, { how: 'repo', repo: 'git@github.com:wandworks/shop-new.git', at: '2026-10-25T08:00:00Z' });
     s.store.setInstall('local.shop.com', '/learn', { how: 'wordpress', at: '2026-10-25T08:00:00Z' });
 
     await expect(runAction(s.ctx, 'trash.restore', { id: ID })).rejects.toThrow('local.shop.com exists again; confirm replacing it');
@@ -87,7 +87,7 @@ describe('restore over an existing site', () => {
 
     // How the current site was installed went to its archive; the restored one is marked restored.
     const archivedId = s.made[0] as string;
-    expect(s.store.archivedInstall(archivedId)).toMatchObject({ how: 'repo', repo: 'git@github.com:acme/shop-new.git' });
+    expect(s.store.archivedInstall(archivedId)).toMatchObject({ how: 'repo', repo: 'git@github.com:wandworks/shop-new.git' });
     expect(s.store.installs().get('local.shop.com')).toMatchObject({ how: 'restore', archivedAt: '2026-10-24T15:30:00Z' });
     expect(s.store.installs().has('local.shop.com/learn')).toBe(false);
 
@@ -149,7 +149,7 @@ describe('reinstall', () => {
 describe('install records', () => {
   it('come from the run history once, for sites the panel made before it kept them', () => {
     const store = new RunStore(':memory:');
-    const run = store.start('site.create', { source: 'repo', domain: 'local.shop.com', repo: { url: 'git@github.com:acme/shop.git' } });
+    const run = store.start('site.create', { source: 'repo', domain: 'local.shop.com', repo: { url: 'git@github.com:wandworks/shop.git' } });
     store.finish(run, 0, 'ok');
     const failed = store.start('site.create', { source: 'wordpress', domain: 'local.gone.com' });
     store.finish(failed, 1, 'no');
@@ -161,7 +161,7 @@ describe('install records', () => {
     (store as unknown as { db: { exec: (s: string) => void } }).db.exec("DELETE FROM meta WHERE key = 'installs-backfilled'");
     (store as unknown as { backfillInstalls: () => void }).backfillInstalls();
     expect(Object.fromEntries(store.installs())).toEqual({
-      'local.shop.com': expect.objectContaining({ how: 'repo', repo: 'git@github.com:acme/shop.git' }),
+      'local.shop.com': expect.objectContaining({ how: 'repo', repo: 'git@github.com:wandworks/shop.git' }),
       'local.old.com': expect.objectContaining({ how: 'restore' }),
     });
   });

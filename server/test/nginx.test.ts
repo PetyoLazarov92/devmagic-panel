@@ -30,8 +30,8 @@ function site(t: ReturnType<typeof tempTree>, name: string, text: string, enable
 
 describe('nginx configs', () => {
   it('reads server_name and listen, without comments or _', () => {
-    expect(parseNginxConfig('server {\n  listen 127.0.0.2:443 ssl; # tls\n  listen [::]:80;\n  # listen 80;\n  server_name local.acme.com www.local.acme.com _;\n}\n')).toEqual({
-      names: ['local.acme.com', 'www.local.acme.com'],
+    expect(parseNginxConfig('server {\n  listen 127.0.0.2:443 ssl; # tls\n  listen [::]:80;\n  # listen 80;\n  server_name local.wandworks.example www.local.wandworks.example _;\n}\n')).toEqual({
+      names: ['local.wandworks.example', 'www.local.wandworks.example'],
       listens: ['127.0.0.2:443 ssl', '[::]:80'],
     });
   });
@@ -50,10 +50,10 @@ describe('nginx configs', () => {
     site(t, 'default', 'server {\n  listen 80 default_server;\n}\n');
     site(t, 'manual', 'server {\n  listen 80;\n  server_name local.manual.test;\n}\n');
     site(t, 'off', 'server {\n  listen 80;\n}\n', false);
-    site(t, 'local.acme.com.conf', `${MARKER}\nserver {\n  listen 127.0.0.2:443 ssl;\n  server_name local.acme.com;\n}\n`);
+    site(t, 'local.wandworks.example.conf', `${MARKER}\nserver {\n  listen 127.0.0.2:443 ssl;\n  server_name local.wandworks.example;\n}\n`);
     expect(nginxConfigs(t.config)).toEqual([
       { file: 'default', enabled: true, managed: false, names: [], listens: ['80 default_server'] },
-      { file: 'local.acme.com.conf', enabled: true, managed: true, names: ['local.acme.com'], listens: ['127.0.0.2:443 ssl'] },
+      { file: 'local.wandworks.example.conf', enabled: true, managed: true, names: ['local.wandworks.example'], listens: ['127.0.0.2:443 ssl'] },
       { file: 'manual', enabled: true, managed: false, names: ['local.manual.test'], listens: ['80'], conflict: 'listens on port 80 on every address' },
       { file: 'off', enabled: false, managed: false, names: [], listens: ['80'] },
     ]);
@@ -224,7 +224,7 @@ describe('nginx in config.env and its error log', () => {
   it('parses nginx error lines newest first, with PHP level from FastCGI lines', () => {
     const lines = parseNginxErrorLog([
       '2026/11/06 10:00:00 [notice] 1234#1234: signal process started',
-      '2026/11/06 10:01:00 [error] 1235#1235: *7 FastCGI sent in stderr: "PHP message: PHP Fatal error:  Uncaught Error in /var/www/local.acme.com/index.php" while reading response header',
+      '2026/11/06 10:01:00 [error] 1235#1235: *7 FastCGI sent in stderr: "PHP message: PHP Fatal error:  Uncaught Error in /var/www/local.wandworks.example/index.php" while reading response header',
       '2026/11/06 10:02:00 [emerg] 1236#1236: bind() to 127.0.0.2:80 failed (98: Address already in use)',
     ].join('\n'));
     expect(lines.map((l) => l.level)).toEqual(['fatal', 'fatal', 'notice']);

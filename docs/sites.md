@@ -133,8 +133,8 @@ Why a page is slow, in one place:
 
 ## Sites under a path
 
-A WordPress install a vhost serves under a path (an `Alias`, like Northwind
-Learn at `local.northwind.com/learn`) is a site of its own. It has its own
+A WordPress install a vhost serves under a path (an `Alias`, like Spellbook
+Learn at `local.spellbook.example/learn`) is a site of its own. It has its own
 folder, database, git, debug settings, logs, Local mode and snapshots; its
 vhost, certificate and hosts line stay with the parent. The new site wizard
 installs one too: its own folder, and an `Alias` in the parent's vhost.

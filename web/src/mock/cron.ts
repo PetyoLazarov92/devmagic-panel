@@ -15,17 +15,17 @@ interface MockTask {
 }
 
 let tasks: MockTask[] = [
-  { id: 'k3f9q2', title: 'WP-Cron for local.northwind.com', schedule: '*/5 * * * *', enabled: true, timeoutMinutes: 10, task: { kind: 'wp-cron', domain: 'local.northwind.com' } },
-  { id: 'p7w1zz', title: 'Action Scheduler for local.biketours.com', schedule: '*/10 * * * *', enabled: false, timeoutMinutes: 10, task: { kind: 'wp-cli', domain: 'local.biketours.com', command: ['action-scheduler', 'run', '--batch-size=25'] } },
-  { id: 'm2c8re', title: 'Sync orders to the ERP', schedule: '0 3 * * *', enabled: true, timeoutMinutes: 30, task: { kind: 'php-script', domain: 'local.biketours.com', file: 'wp-content/cron/sync-orders.php' } },
+  { id: 'k3f9q2', title: 'WP-Cron for local.spellbook.example', schedule: '*/5 * * * *', enabled: true, timeoutMinutes: 10, task: { kind: 'wp-cron', domain: 'local.spellbook.example' } },
+  { id: 'p7w1zz', title: 'Action Scheduler for local.biketours.example', schedule: '*/10 * * * *', enabled: false, timeoutMinutes: 10, task: { kind: 'wp-cli', domain: 'local.biketours.example', command: ['action-scheduler', 'run', '--batch-size=25'] } },
+  { id: 'm2c8re', title: 'Sync orders to the ERP', schedule: '0 3 * * *', enabled: true, timeoutMinutes: 30, task: { kind: 'php-script', domain: 'local.biketours.example', file: 'wp-content/cron/sync-orders.php' } },
   { id: 'b4ckup', title: 'Back up my notes', schedule: '30 18 * * 1-5', enabled: true, timeoutMinutes: 5, task: { kind: 'program', program: '/home/alex/bin/notes-backup.sh', args: ['--to', '/home/alex/Backups'] } },
 ];
 
 let nextRunId = 900;
 const runs: Array<CronRunView & { output: string }> = [
-  { id: 801, task: 'k3f9q2', trigger: 'cron', status: 'ok', startedAt: minutes(-3), durationMs: 2100, exitCode: 0, output: "Executed the cron event 'wp_version_check' in 0.412s.\nExecuted the cron event 'acme_digest' in 1.102s.\nSuccess: Executed a total of 2 cron events." },
+  { id: 801, task: 'k3f9q2', trigger: 'cron', status: 'ok', startedAt: minutes(-3), durationMs: 2100, exitCode: 0, output: "Executed the cron event 'wp_version_check' in 0.412s.\nExecuted the cron event 'wandworks_digest' in 1.102s.\nSuccess: Executed a total of 2 cron events." },
   { id: 800, task: 'k3f9q2', trigger: 'cron', status: 'ok', startedAt: minutes(-8), durationMs: 900, exitCode: 0, output: 'Success: Executed a total of 0 cron events.' },
-  { id: 790, task: 'm2c8re', trigger: 'cron', status: 'failed', startedAt: minutes(-60 * 7), durationMs: 14_200, exitCode: 255, output: 'PHP Fatal error:  Uncaught Exception: The ERP sandbox refused the login in /var/www/local.biketours.com/wp-content/cron/sync-orders.php:42' },
+  { id: 790, task: 'm2c8re', trigger: 'cron', status: 'failed', startedAt: minutes(-60 * 7), durationMs: 14_200, exitCode: 255, output: 'PHP Fatal error:  Uncaught Exception: The ERP sandbox refused the login in /var/www/local.biketours.example/wp-content/cron/sync-orders.php:42' },
   { id: 760, task: 'b4ckup', trigger: 'manual', status: 'ok', startedAt: minutes(-60 * 26), durationMs: 3400, exitCode: 0, output: 'copied 14 files' },
 ];
 
@@ -81,10 +81,10 @@ function eventsOf(key: string): WpCronEvent[] {
   if (!wpEvents.has(key)) {
     const now = NOW();
     const list: Array<Omit<WpCronEvent, 'overdue' | 'core'>> = [
-      { hook: 'acme_sync_orders', time: now - 2 * 3600, recurrence: 'hourly', interval: 3600, args: [], sig: 'a'.repeat(32) },
+      { hook: 'wandworks_sync_orders', time: now - 2 * 3600, recurrence: 'hourly', interval: 3600, args: [], sig: 'a'.repeat(32) },
       { hook: 'wp_version_check', time: now + 25 * 60, recurrence: 'twicedaily', interval: 43200, args: [], sig: 'b'.repeat(32) },
       { hook: 'wp_update_plugins', time: now + 25 * 60, recurrence: 'twicedaily', interval: 43200, args: [], sig: 'c'.repeat(32) },
-      { hook: 'acme_send_receipt', time: now + 90, recurrence: '', interval: null, args: [4127, 'alex@example.com'], sig: 'd'.repeat(32) },
+      { hook: 'wandworks_send_receipt', time: now + 90, recurrence: '', interval: null, args: [4127, 'alex@example.com'], sig: 'd'.repeat(32) },
       { hook: 'woocommerce_cleanup_sessions', time: now + 3 * 3600, recurrence: 'twicedaily', interval: 43200, args: [], sig: 'e'.repeat(32) },
       { hook: 'wp_scheduled_delete', time: now + 9 * 3600, recurrence: 'daily', interval: 86400, args: [], sig: 'f'.repeat(32) },
       { hook: 'action_scheduler_run_queue', time: now - 40 * 60, recurrence: 'every_minute', interval: 60, args: ['WP Cron'], sig: '0'.repeat(32) },
@@ -113,7 +113,7 @@ export function mockWpCron(domain: string, path?: string, url?: string, disabled
     ...(task ? { task } : {}),
     tasks: mine.filter((t) => t !== task),
     overdue: events.filter((e) => e.overdue).length,
-    configTracked: domain === 'local.biketours.com',
+    configTracked: domain === 'local.biketours.example',
     ...(url ? { url } : {}),
   };
 }

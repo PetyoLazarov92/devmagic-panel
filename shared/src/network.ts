@@ -6,9 +6,9 @@
  */
 
 /**
- * Subdirectory: every site under a path of one domain (local.acme.com/shop/).
+ * Subdirectory: every site under a path of one domain (local.wandworks.example/shop/).
  * Subdomain: every site on a host of its own, a subdomain or a domain mapped
- * to it (local.shop.acme.com, local.shop.com).
+ * to it (local.shop.wandworks.example, local.shop.com).
  */
 export type NetworkLayout = 'subdirectory' | 'subdomain';
 
@@ -53,7 +53,7 @@ export function dumpLayout(sites: NetworkSite[]): NetworkLayout {
   return underPath > others.length - underPath ? 'subdirectory' : 'subdomain';
 }
 
-/** The first label of a host, without www. or local.: shop.acme.com gives shop. */
+/** The first label of a host, without www. or local.: shop.wandworks.example gives shop. */
 function hostSlug(host: string): string {
   return host.replace(/^(?:www\.|local\.)/, '').split('.')[0]?.replace(/[^a-z0-9-]/g, '') || 'site';
 }

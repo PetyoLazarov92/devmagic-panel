@@ -46,7 +46,7 @@ function responses(docroot: string, cert: string) {
       stdout: 'notAfter=Jan 26 09:00:00 2029 GMT\nissuer=O = devmagic-panel, CN = devmagic-panel Local CA (dev)\nX509v3 Subject Alternative Name: \n    DNS:local.shop.com, DNS:local.shop.de\n',
     },
     [`${git} rev-parse --abbrev-ref HEAD`]: { stdout: 'feature/cart\n' },
-    [`${git} remote get-url origin`]: { stdout: 'git@github.com:AcmeCo/shop.git\n' },
+    [`${git} remote get-url origin`]: { stdout: 'git@github.com:WandworksCo/shop.git\n' },
     [`${git} rev-parse --abbrev-ref @{upstream}`]: { stdout: 'origin/feature/cart\n' },
     [`${git} rev-list --left-right --count @{upstream}...HEAD`]: { stdout: '1\t3\n' },
     [`${git} status --porcelain`]: { stdout: ' M a.php\n?? b.php\n' },
@@ -63,13 +63,13 @@ function responses(docroot: string, cert: string) {
 describe('discoverSites', () => {
   it('lists the repos inside a site, a theme on GitLab next to the site\'s own, and leaves one git refuses out', async () => {
     const t = siteTree();
-    mkdirSync(join(t.docroot, 'wp-content/themes/acme/.git'), { recursive: true });
+    mkdirSync(join(t.docroot, 'wp-content/themes/wandworks/.git'), { recursive: true });
     mkdirSync(join(t.docroot, 'wp-content/plugins/broken/.git'), { recursive: true });
-    const theme = `git -C ${join(t.docroot, 'wp-content/themes/acme')}`;
+    const theme = `git -C ${join(t.docroot, 'wp-content/themes/wandworks')}`;
     const { exec } = fakeExec({
       ...responses(t.docroot, t.cert),
       [`${theme} rev-parse --abbrev-ref HEAD`]: { stdout: 'main\n' },
-      [`${theme} remote get-url origin`]: { stdout: 'git@gitlab.com:acme/web/acme-theme.git\n' },
+      [`${theme} remote get-url origin`]: { stdout: 'git@gitlab.com:wandworks/web/wandworks-theme.git\n' },
       [`${theme} rev-parse --abbrev-ref @{upstream}`]: { stdout: 'origin/main\n' },
       [`${theme} rev-list --left-right --count @{upstream}...HEAD`]: { stdout: '2\t0\n' },
       [`${theme} status --porcelain`]: { stdout: '' },
@@ -78,7 +78,7 @@ describe('discoverSites', () => {
     const [site] = await discoverSites({ config: t.config, exec, secrets, wpcoreConf: join(t.root, 'wpcore.conf'), now: () => NOW });
     expect(site?.git?.branch).toBe('feature/cart');
     expect(site?.repos).toEqual([
-      { folder: 'wp-content/themes/acme', kind: 'theme', name: 'acme', git: { remote: 'git@gitlab.com:acme/web/acme-theme.git', branch: 'main', upstream: 'origin/main', dirty: 0, ahead: 0, behind: 2, lastCommit: { hash: 'def5678', subject: 'Header spacing', author: 'Alex Morgan', date: '2026-10-24T08:00:00+00:00' } } },
+      { folder: 'wp-content/themes/wandworks', kind: 'theme', name: 'wandworks', git: { remote: 'git@gitlab.com:wandworks/web/wandworks-theme.git', branch: 'main', upstream: 'origin/main', dirty: 0, ahead: 0, behind: 2, lastCommit: { hash: 'def5678', subject: 'Header spacing', author: 'Alex Morgan', date: '2026-10-24T08:00:00+00:00' } } },
     ]);
   });
 
@@ -95,7 +95,7 @@ describe('discoverSites', () => {
       core: { kind: 'wpcore', version: '7.1.3' },
       cert: { issuer: 'new', names: ['local.shop.com', 'local.shop.de'] },
       notInHosts: ['www.local.shop.com'],
-      git: { branch: 'feature/cart', upstream: 'origin/feature/cart', dirty: 2, ahead: 3, behind: 1, remote: 'git@github.com:AcmeCo/shop.git' },
+      git: { branch: 'feature/cart', upstream: 'origin/feature/cart', dirty: 2, ahead: 3, behind: 1, remote: 'git@github.com:WandworksCo/shop.git' },
       db: { name: 'shop_com', sizeBytes: 1048576, tables: 12 },
       debug: { enabled: true },
       health: 'fail',

@@ -12,7 +12,7 @@ export const PROFILE_KEEP_DAYS = 3;
  * cachegrind.out.<time>.<host><request>, maybe gzipped. The time is
  * seconds and microseconds (a dot between them since Xdebug 3.x, once an
  * underscore); the host and the request run together, with / . ? & and the
- * like turned into _ (local_acme_com_shop__p=2), so only the known sites'
+ * like turned into _ (local_wandworks_example_shop__p=2), so only the known sites'
  * hosts tell where one ends.
  */
 export const PROFILE_NAME = /^cachegrind\.out\.(\d{1,12})[._](\d{1,6})\.([^/\0]{0,700}?)(\.gz)?$/;
@@ -52,7 +52,7 @@ export interface ProfileFunction {
 }
 
 export interface ProfileSummary extends ProfileInfo {
-  /** The script PHP ran, like /var/www/local.acme.com/index.php. */
+  /** The script PHP ran, like /var/www/local.wandworks.example/index.php. */
   script: string;
   totalMs: number;
   /** The most memory the request had, when Xdebug wrote it. */

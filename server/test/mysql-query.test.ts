@@ -111,12 +111,12 @@ describe('the SQL runner', () => {
 
     const up = await runQuery(ctx, 'shop_com', { sql: "UPDATE LOW_PRIORITY wp_postmeta pm JOIN wp_posts p ON p.ID = pm.post_id SET pm.meta_value = 'a, b' WHERE p.post_type = 'set' ORDER BY pm.meta_id LIMIT 5", explain: true });
     expect(up.explained).toBe("SELECT * FROM wp_postmeta pm JOIN wp_posts p ON p.ID = pm.post_id WHERE p.post_type = 'set' ORDER BY pm.meta_id LIMIT 5");
-    const ins = await runQuery(ctx, 'shop_com', { sql: 'INSERT INTO acme_log (a, b) SELECT a, b FROM acme_queue q JOIN acme_items i ON i.id = q.id ON DUPLICATE KEY UPDATE b = VALUES(b)', explain: true });
-    expect(ins.explained).toBe('SELECT a, b FROM acme_queue q JOIN acme_items i ON i.id = q.id');
-    const many = await runQuery(ctx, 'shop_com', { sql: 'DELETE t1 FROM acme_a t1 JOIN acme_b t2 ON t1.id = t2.id', explain: true });
-    expect(many.explained).toBe('SELECT * FROM acme_a t1 JOIN acme_b t2 ON t1.id = t2.id');
-    const using = await runQuery(ctx, 'shop_com', { sql: 'DELETE FROM t1 USING acme_a AS t1 JOIN acme_b ON t1.id = acme_b.id', explain: true });
-    expect(using.explained).toBe('SELECT * FROM acme_a AS t1 JOIN acme_b ON t1.id = acme_b.id');
+    const ins = await runQuery(ctx, 'shop_com', { sql: 'INSERT INTO wandworks_log (a, b) SELECT a, b FROM wandworks_queue q JOIN wandworks_items i ON i.id = q.id ON DUPLICATE KEY UPDATE b = VALUES(b)', explain: true });
+    expect(ins.explained).toBe('SELECT a, b FROM wandworks_queue q JOIN wandworks_items i ON i.id = q.id');
+    const many = await runQuery(ctx, 'shop_com', { sql: 'DELETE t1 FROM wandworks_a t1 JOIN wandworks_b t2 ON t1.id = t2.id', explain: true });
+    expect(many.explained).toBe('SELECT * FROM wandworks_a t1 JOIN wandworks_b t2 ON t1.id = t2.id');
+    const using = await runQuery(ctx, 'shop_com', { sql: 'DELETE FROM t1 USING wandworks_a AS t1 JOIN wandworks_b ON t1.id = wandworks_b.id', explain: true });
+    expect(using.explained).toBe('SELECT * FROM wandworks_a AS t1 JOIN wandworks_b ON t1.id = wandworks_b.id');
   });
 
   it('says an INSERT of listed rows has no plan, without asking MySQL, and still runs no write', async () => {

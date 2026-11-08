@@ -2,12 +2,12 @@ import type { DumpFacts, UploadResult } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { adminChoices, type AdminState } from '../src/lib/admin-choice.js';
 
-const upload = (facts: Partial<DumpFacts>): UploadResult => ({ id: 'u1', name: 'acme.sql', size: 1, facts: { multisite: false, hosts: [], partial: false, ...facts }, suggestions: { replace: [] } });
+const upload = (facts: Partial<DumpFacts>): UploadResult => ({ id: 'u1', name: 'wandworks.sql', size: 1, facts: { multisite: false, hosts: [], partial: false, ...facts }, suggestions: { replace: [] } });
 const state = (over: Partial<AdminState>): AdminState => ({ source: 'repo', upload: null, adminCreate: null, adminIfExists: 'keep', adminIfMissing: 'create', ...over });
 
 describe('the admin user of an install', () => {
   it('touches no user when the dump has admins, until you switch the new one on', () => {
-    const withAdmins = state({ upload: upload({ admins: ['admin', 'acmeshop'] }) });
+    const withAdmins = state({ upload: upload({ admins: ['admin', 'wandworksshop'] }) });
     expect(adminChoices(withAdmins)).toEqual({ ifExists: 'keep', ifMissing: 'skip' });
     expect(adminChoices({ ...withAdmins, adminCreate: true })).toEqual({ ifExists: 'update', ifMissing: 'create' });
   });

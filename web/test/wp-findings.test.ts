@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { cleanupRows, healthRows, wordpressFindings } from '../src/lib/wp-findings.js';
 
 const MB = 1024 * 1024;
-const base: WpDbReport = { database: 'acme', prefix: 'wp_', blog: 1, blogPrefix: 'wp_', missingTables: [], errors: {}, checkedAt: '2026-11-07T10:00:00Z' };
+const base: WpDbReport = { database: 'wandworks', prefix: 'wp_', blog: 1, blogPrefix: 'wp_', missingTables: [], errors: {}, checkedAt: '2026-11-07T10:00:00Z' };
 
 describe('wordpressFindings', () => {
   it('says nothing about a database that is fine, or parts not read yet', () => {
@@ -17,7 +17,7 @@ describe('wordpressFindings', () => {
       autoload: { count: 900, bytes: 1.5 * MB, limitBytes: MB, top: [] },
       transients: { count: 40, bytes: 1000, expired: 12 },
       health: { tables: 12, issues: [{ table: 'wp_posts', problem: 'noPrimaryKey' } as never, { table: 'wp_options', problem: 'engine' } as never] },
-      plugins: { tables: [{ table: 'wp_acme_log', bytes: 10, rows: 1, plugin: 'Acme Log', state: 'missing' }], autoload: [{ plugin: 'Acme Forms', slug: 'acme-forms', state: 'inactive', count: 4, bytes: 200, options: [] }] },
+      plugins: { tables: [{ table: 'wp_wandworks_log', bytes: 10, rows: 1, plugin: 'Wandworks Log', state: 'missing' }], autoload: [{ plugin: 'Wandworks Forms', slug: 'wandworks-forms', state: 'inactive', count: 4, bytes: 200, options: [] }] },
       content: { revisions: 140, autoDrafts: 2, trashedPosts: 0, spamComments: 0, trashedComments: 0 } as never,
     };
     expect(wordpressFindings(r)).toEqual([
@@ -54,14 +54,14 @@ describe('wordpressFindings', () => {
         { table: 'wp_comments', problem: 'charset', text: 'latin1' },
         { table: 'wp_posts', problem: 'noPrimaryKey', text: 'no key', fix: 'keys' },
       ],
-      myisam: [{ table: 'wp_acme_log', bytes: 10 }, { table: 'wp_options', bytes: 20 }],
+      myisam: [{ table: 'wp_wandworks_log', bytes: 10 }, { table: 'wp_options', bytes: 20 }],
     });
     expect(rows.map((r) => [r.table, r.issues.map((i) => i.problem), r.fixes, r.wordpress, r.danger])).toEqual([
       ['wp_posts', ['noPrimaryKey'], 1, true, true],
       ['wp_options', ['notUnique', 'engine', 'utf8mb3'], 2, true, false],
-      ['wp_acme_log', ['engine'], 1, false, false],
+      ['wp_wandworks_log', ['engine'], 1, false, false],
       ['wp_comments', ['charset'], 0, true, false],
     ]);
-    expect(wordpressFindings({ ...base, health: { tables: 11, issues: [], myisam: [{ table: 'wp_acme_log', bytes: 10 }] } })).toEqual([{ card: 'wp-health', tone: 'warning', text: '1 table to fix' }]);
+    expect(wordpressFindings({ ...base, health: { tables: 11, issues: [], myisam: [{ table: 'wp_wandworks_log', bytes: 10 }] } })).toEqual([{ card: 'wp-health', tone: 'warning', text: '1 table to fix' }]);
   });
 });

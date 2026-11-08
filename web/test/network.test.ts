@@ -4,45 +4,45 @@ import { cleanSitePath, NO_NETWORK_ANSWERS, networkPlan } from '../src/lib/netwo
 
 // A team's local copy of a network, its sites under paths of one domain.
 const facts: DumpFacts = {
-  multisite: true, partial: false, hosts: ['local.acme-group.com'], networkPath: '/',
+  multisite: true, partial: false, hosts: ['local.wandworks-group.example'], networkPath: '/',
   sites: [
-    { id: 1, domain: 'local.acme-group.com', path: '/', name: 'Acme Group' },
-    { id: 3, domain: 'local.acme-group.com', path: '/acme-repairs/', name: 'Acme Repairs' },
-    { id: 10, domain: 'local.acme-group.com', path: '/north-cleanup/', name: 'North Cleanup' },
+    { id: 1, domain: 'local.wandworks-group.example', path: '/', name: 'Wandworks Group' },
+    { id: 3, domain: 'local.wandworks-group.example', path: '/wandworks-repairs/', name: 'Wandworks Repairs' },
+    { id: 10, domain: 'local.wandworks-group.example', path: '/wandworks-cleaning/', name: 'Wandworks Cleaning' },
   ],
 };
-const main = 'local.acme-group.com';
+const main = 'local.wandworks-group.example';
 
 describe('the network on the Domains step', () => {
   it('starts as the dump has it, with nothing to move', () => {
     const plan = networkPlan(facts, NO_NETWORK_ANSWERS, main, []);
     expect(plan).toMatchObject({ layout: 'subdirectory', dumpLayout: 'subdirectory', moves: [] });
-    expect(plan?.rows.map((r) => `${r.here.domain}${r.here.path}`)).toEqual(['local.acme-group.com/', 'local.acme-group.com/acme-repairs/', 'local.acme-group.com/north-cleanup/']);
+    expect(plan?.rows.map((r) => `${r.here.domain}${r.here.path}`)).toEqual(['local.wandworks-group.example/', 'local.wandworks-group.example/wandworks-repairs/', 'local.wandworks-group.example/wandworks-cleaning/']);
   });
 
   it('moves every site but the main one to a domain of its own, with what you typed over the suggestion', () => {
-    const plan = networkPlan(facts, { layout: 'subdomain', domains: { 10: 'Local.NorthCleanup.com ' }, paths: {} }, main, []);
-    expect(plan?.rows.map((r) => r.here.domain)).toEqual(['local.acme-group.com', 'local.acme-repairs.com', 'local.northcleanup.com']);
+    const plan = networkPlan(facts, { layout: 'subdomain', domains: { 10: 'Local.WandworksCleaning.example ' }, paths: {} }, main, []);
+    expect(plan?.rows.map((r) => r.here.domain)).toEqual(['local.wandworks-group.example', 'local.wandworks-repairs.example', 'local.wandworkscleaning.example']);
     expect(plan?.moves.map((m) => m.id)).toEqual([10, 3]);
     expect(plan?.rows.every((r) => !r.error)).toBe(true);
   });
 
   it("keeps a site mapped to a domain of its own when that domain is one of this site's, also with a path typed in", () => {
-    const mapped: DumpFacts = { ...facts, sites: [...(facts.sites ?? []), { id: 21, domain: 'local.manage.acme-group.com', path: '/test/', name: 'Test Site' }] };
-    const locals = [main, 'local.manage.acme-group.com'];
+    const mapped: DumpFacts = { ...facts, sites: [...(facts.sites ?? []), { id: 21, domain: 'local.manage.wandworks-group.example', path: '/test/', name: 'Test Site' }] };
+    const locals = [main, 'local.manage.wandworks-group.example'];
     const plan = networkPlan(mapped, NO_NETWORK_ANSWERS, main, [], locals);
-    expect(plan?.rows.find((r) => r.site.id === 21)?.here).toEqual({ domain: 'local.manage.acme-group.com', path: '/test/' });
+    expect(plan?.rows.find((r) => r.site.id === 21)?.here).toEqual({ domain: 'local.manage.wandworks-group.example', path: '/test/' });
     expect(plan?.moves).toEqual([]);
     const typed = networkPlan(mapped, { layout: 'subdirectory', domains: {}, paths: { 21: '/qa/' } }, main, [], locals);
-    expect(typed?.rows.find((r) => r.site.id === 21)?.here).toEqual({ domain: 'local.manage.acme-group.com', path: '/qa/' });
+    expect(typed?.rows.find((r) => r.site.id === 21)?.here).toEqual({ domain: 'local.manage.wandworks-group.example', path: '/qa/' });
     // Not one of this site's domains: it goes under the main one.
     expect(networkPlan(mapped, NO_NETWORK_ANSWERS, main, [], [main])?.rows.find((r) => r.site.id === 21)?.here).toEqual({ domain: main, path: '/test/' });
   });
 
   it('says what is wrong with an address: not a local name, an odd path, or one another site has', () => {
-    const domains = networkPlan(facts, { layout: 'subdomain', domains: { 3: 'acmerepairs.com', 10: 'local.acme-group.com' }, paths: {} }, main, []);
+    const domains = networkPlan(facts, { layout: 'subdomain', domains: { 3: 'wandworksrepairs.example', 10: 'local.wandworks-group.example' }, paths: {} }, main, []);
     expect(domains?.rows.map((r) => r.error)).toEqual(['Another site of the network has this address', 'Use a local name: local.example.com, *.test or *.localhost', 'Another site of the network has this address']);
-    const taken = networkPlan(facts, { layout: 'subdirectory', domains: {}, paths: { 3: 'north-cleanup' } }, main, []);
+    const taken = networkPlan(facts, { layout: 'subdirectory', domains: {}, paths: { 3: 'wandworks-cleaning' } }, main, []);
     expect(taken?.rows.map((r) => r.error)).toEqual([undefined, 'Another site of the network has this address', 'Another site of the network has this address']);
     const odd = networkPlan(facts, { layout: 'subdirectory', domains: {}, paths: { 10: 'a b!' } }, main, []);
     expect(odd?.rows[2]?.error).toBe('A path like /shop/: letters, digits, - and _');
@@ -66,17 +66,17 @@ describe('the network on the Domains step', () => {
   it('keeps each site of a mixed network where it is by default, with only its host replaced', () => {
     const mixed: DumpFacts = {
       ...facts,
-      hosts: ['acme-group.com', 'acmerepairs.com'],
+      hosts: ['wandworks-group.example', 'wandworksrepairs.example'],
       sites: [
-        { id: 1, domain: 'acme-group.com', path: '/' },
-        { id: 3, domain: 'acmerepairs.com', path: '/' },
-        { id: 10, domain: 'acme-group.com', path: '/north-cleanup/' },
+        { id: 1, domain: 'wandworks-group.example', path: '/' },
+        { id: 3, domain: 'wandworksrepairs.example', path: '/' },
+        { id: 10, domain: 'wandworks-group.example', path: '/wandworks-cleaning/' },
       ],
     };
-    const replace = [{ from: 'acme-group.com', to: 'local.acme-group.com' }, { from: 'acmerepairs.com', to: 'local.acmerepairs.com' }];
+    const replace = [{ from: 'wandworks-group.example', to: 'local.wandworks-group.example' }, { from: 'wandworksrepairs.example', to: 'local.wandworksrepairs.example' }];
     const plan = networkPlan(mixed, NO_NETWORK_ANSWERS, main, replace);
     expect(plan).toMatchObject({ layout: 'keep', mixed: true, moves: [] });
-    expect(plan?.rows.map((r) => `${r.here.domain}${r.here.path}`)).toEqual(['local.acme-group.com/', 'local.acmerepairs.com/', 'local.acme-group.com/north-cleanup/']);
+    expect(plan?.rows.map((r) => `${r.here.domain}${r.here.path}`)).toEqual(['local.wandworks-group.example/', 'local.wandworksrepairs.example/', 'local.wandworks-group.example/wandworks-cleaning/']);
     expect(plan?.rows.map((r) => r.status)).toEqual(['host', 'host', 'host']);
     expect(plan?.movesFor).toEqual({ subdirectory: 1, subdomain: 1, keep: 0 });
     // Keep is only for a mixed network: elsewhere it is the dump's type.

@@ -35,7 +35,7 @@ describe('normalizeSql', () => {
   });
 
   it('drops comments and folds whitespace', () => {
-    expect(normalizeSql('/* acme */ SELECT\n  1.5,\t0x1F -- note\nFROM wp_users')).toBe('SELECT ?, ? FROM wp_users');
+    expect(normalizeSql('/* wandworks */ SELECT\n  1.5,\t0x1F -- note\nFROM wp_users')).toBe('SELECT ?, ? FROM wp_users');
   });
 });
 

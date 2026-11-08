@@ -47,14 +47,14 @@ describe('cron-run', () => {
   it("checks a site's own WP-CLI command each time, then runs it as words", async () => {
     let has = true;
     const s = setup({ wp: (call) => (call.args.includes('has-command') ? { code: has ? 0 : 1 } : { stdout: 'synced\n' }) });
-    await runCronTask(s.deps, args({ kind: 'wp-cli', domain: 'local.shop.com', command: ['acme', 'sync', '--limit=50'] }), 'cron');
+    await runCronTask(s.deps, args({ kind: 'wp-cli', domain: 'local.shop.com', command: ['wandworks', 'sync', '--limit=50'] }), 'cron');
     expect(lines(s.calls)).toEqual([
-      `wp --path=${s.docroot} --url=https://local.shop.com/ cli has-command acme`,
-      `wp --path=${s.docroot} --url=https://local.shop.com/ acme sync --limit=50`,
+      `wp --path=${s.docroot} --url=https://local.shop.com/ cli has-command wandworks`,
+      `wp --path=${s.docroot} --url=https://local.shop.com/ wandworks sync --limit=50`,
     ]);
     has = false;
-    const run = await runCronTask(s.deps, args({ kind: 'wp-cli', domain: 'local.shop.com', command: ['acme', 'sync'] }), 'cron');
-    expect(run).toMatchObject({ status: 'failed', output: 'local.shop.com has no WP-CLI command acme: is its plugin active?' });
+    const run = await runCronTask(s.deps, args({ kind: 'wp-cli', domain: 'local.shop.com', command: ['wandworks', 'sync'] }), 'cron');
+    expect(run).toMatchObject({ status: 'failed', output: 'local.shop.com has no WP-CLI command wandworks: is its plugin active?' });
   });
 
   it('runs a PHP file of the site with the CLI, and never one a link takes outside it', async () => {

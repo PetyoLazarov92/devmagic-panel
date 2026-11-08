@@ -4,15 +4,15 @@ import { describe, expect, it } from 'vitest';
 import { orgCardState, resumeStep, runSource, skipAccess, tokenCount, unskipAccess, usageText } from '../src/lib/claude-steps.js';
 
 const job = (status: JobView['status'], id = 'j1', output?: string): JobView => ({
-  id, title: 'Read acme/site with Claude Code', status, steps: [{ id: 'read', label: 'Claude Code reads the docs of acme/site', status: status === 'failed' ? 'failed' : 'done', ...(output ? { output } : {}) }],
+  id, title: 'Read wandworks/site with Claude Code', status, steps: [{ id: 'read', label: 'Claude Code reads the docs of wandworks/site', status: status === 'failed' ? 'failed' : 'done', ...(output ? { output } : {}) }],
   undo: [], undoable: [], progress: 0, startedAt: '2026-10-26T10:00:00Z', runId: 1,
 });
 
 describe('a Claude Code step coming back', () => {
-  const key = 'acme/site@main';
+  const key = 'wandworks/site@main';
   it('uses the answer kept for the same repo and branch, and never one for another', () => {
     expect(resumeStep(key, { key }, undefined, null)).toEqual({ use: 'answer' });
-    expect(resumeStep(key, { key: 'acme/site@develop' }, undefined, null)).toEqual({ use: 'start' });
+    expect(resumeStep(key, { key: 'wandworks/site@develop' }, undefined, null)).toEqual({ use: 'start' });
   });
 
   it('follows its job while it runs, and says why it failed', () => {
@@ -24,7 +24,7 @@ describe('a Claude Code step coming back', () => {
   });
 
   it('starts again for another repo, a job the panel lost, or one that ended without an answer', () => {
-    expect(resumeStep(key, undefined, { id: 'j1', key: 'acme/shop@main' }, job('running'))).toEqual({ use: 'start' });
+    expect(resumeStep(key, undefined, { id: 'j1', key: 'wandworks/shop@main' }, job('running'))).toEqual({ use: 'start' });
     expect(resumeStep(key, undefined, { id: 'j1', key }, null)).toEqual({ use: 'start' });
     expect(resumeStep(key, undefined, { id: 'j1', key }, job('done'))).toEqual({ use: 'start' });
   });

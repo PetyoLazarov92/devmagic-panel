@@ -117,7 +117,7 @@ describe('fixing a WordPress table', () => {
 
   it('refuses a fix the table does not need, a table that is not WordPress\'s, and latin1', async () => {
     await expect(planFixTable(rows(fakeShop()), { domain: 'local.shop.com', table: 'wp_postmeta', fix: 'engine' })).rejects.toThrow('wp_postmeta needs no such fix any more');
-    await expect(planFixTable(rows(fakeShop()), { domain: 'local.shop.com', table: 'wp_acme_log', fix: 'engine' })).rejects.toThrow("wp_acme_log is not one of this site's WordPress tables");
+    await expect(planFixTable(rows(fakeShop()), { domain: 'local.shop.com', table: 'wp_wandworks_log', fix: 'engine' })).rejects.toThrow("wp_wandworks_log is not one of this site's WordPress tables");
     await expect(planFixTable(rows(fakeShop()), { domain: 'local.shop.com', table: 'wp_comments', fix: 'charset' })).rejects.toThrow('wp_comments needs no such fix any more');
   });
 });
@@ -125,9 +125,9 @@ describe('fixing a WordPress table', () => {
 describe('space a rebuild gives back', () => {
   it('offers the tables with room worth it, and none when every table shares one InnoDB file', async () => {
     const mb = 1024 * 1024;
-    const free = [['wp_postmeta', 48 * mb, 300 * mb], ['wp_options', 2 * mb, 10 * mb], ['wp_acme_log', 90 * mb, 120 * mb], ['wp_posts', 20 * mb, 900 * mb]];
-    const health = await wordpressHealth(browse(fakeShop({ free })), 'shop_com', new Set([...TABLES, 'wp_acme_log', 'wp_2_options']), 'wp_', 'wp_', 1);
-    expect(health.free).toEqual([{ table: 'wp_acme_log', freeBytes: 90 * mb, bytes: 120 * mb }, { table: 'wp_postmeta', freeBytes: 48 * mb, bytes: 300 * mb }]);
+    const free = [['wp_postmeta', 48 * mb, 300 * mb], ['wp_options', 2 * mb, 10 * mb], ['wp_wandworks_log', 90 * mb, 120 * mb], ['wp_posts', 20 * mb, 900 * mb]];
+    const health = await wordpressHealth(browse(fakeShop({ free })), 'shop_com', new Set([...TABLES, 'wp_wandworks_log', 'wp_2_options']), 'wp_', 'wp_', 1);
+    expect(health.free).toEqual([{ table: 'wp_wandworks_log', freeBytes: 90 * mb, bytes: 120 * mb }, { table: 'wp_postmeta', freeBytes: 48 * mb, bytes: 300 * mb }]);
     const shared = TABLES.map((t) => [t, 512 * mb, 64 * mb]);
     expect((await wordpressHealth(browse(fakeShop({ free: shared })), 'shop_com', new Set(TABLES), 'wp_', 'wp_', 1)).free).toBeUndefined();
   });
@@ -145,23 +145,23 @@ describe('turning every MyISAM table into InnoDB', () => {
     }
     return { out, undos };
   };
-  const facts = [['wp_acme_log', 0, 40 * mb, 'MyISAM'], ['wp_options', 0, 2 * mb, 'MyISAM'], ['wp_done', 0, mb, 'MyISAM'], ['wp_posts', 0, 90 * mb, 'InnoDB']];
+  const facts = [['wp_wandworks_log', 0, 40 * mb, 'MyISAM'], ['wp_options', 0, 2 * mb, 'MyISAM'], ['wp_done', 0, mb, 'MyISAM'], ['wp_posts', 0, 90 * mb, 'InnoDB']];
 
   it("lists the site's MyISAM tables of every kind, the smallest first", async () => {
-    const health = await wordpressHealth(browse(fakeShop({ free: facts })), 'shop_com', new Set([...TABLES, 'wp_acme_log', 'wp_done']), 'wp_', 'wp_', 1);
-    expect(health.myisam).toEqual([{ table: 'wp_done', bytes: mb }, { table: 'wp_options', bytes: 2 * mb }, { table: 'wp_acme_log', bytes: 40 * mb }]);
+    const health = await wordpressHealth(browse(fakeShop({ free: facts })), 'shop_com', new Set([...TABLES, 'wp_wandworks_log', 'wp_done']), 'wp_', 'wp_', 1);
+    expect(health.myisam).toEqual([{ table: 'wp_done', bytes: mb }, { table: 'wp_options', bytes: 2 * mb }, { table: 'wp_wandworks_log', bytes: 40 * mb }]);
   });
 
   it('saves and converts them one step a table, leaves one converted since, and Undo takes back only what it converted', async () => {
     const fake = fakeShop({ free: facts });
     const { title, steps } = await planToInnodb(rows(fake), { domain: 'local.shop.com' });
     expect(title).toBe('Turn 3 tables into InnoDB');
-    expect(steps.map((x) => x.label)).toEqual(['Check the disk has room', 'Turn wp_done into InnoDB', 'Turn wp_options into InnoDB', 'Turn wp_acme_log into InnoDB']);
+    expect(steps.map((x) => x.label)).toEqual(['Check the disk has room', 'Turn wp_done into InnoDB', 'Turn wp_options into InnoDB', 'Turn wp_wandworks_log into InnoDB']);
     const { out, undos } = await runAll(steps);
-    expect(out.slice(1)).toEqual(['wp_done is InnoDB already: left as it is', 'wp_options is InnoDB now', 'wp_acme_log is InnoDB now']);
+    expect(out.slice(1)).toEqual(['wp_done is InnoDB already: left as it is', 'wp_options is InnoDB now', 'wp_wandworks_log is InnoDB now']);
     const alters = fake.calls.filter((c) => c.input?.includes('ALTER TABLE')).map((c) => c.input?.match(/ALTER TABLE .*;/)?.[0]);
-    expect(alters).toEqual(['ALTER TABLE `wp_options` ENGINE=InnoDB;', 'ALTER TABLE `wp_acme_log` ENGINE=InnoDB;']);
-    expect(fake.calls.filter((c) => c.file === 'mysqldump').map((c) => c.args.at(-1))).toEqual(['wp_options', 'wp_acme_log']);
+    expect(alters).toEqual(['ALTER TABLE `wp_options` ENGINE=InnoDB;', 'ALTER TABLE `wp_wandworks_log` ENGINE=InnoDB;']);
+    expect(fake.calls.filter((c) => c.file === 'mysqldump').map((c) => c.args.at(-1))).toEqual(['wp_options', 'wp_wandworks_log']);
     expect(undos).toEqual(['Put the tables back as they were']);
   });
 
@@ -203,14 +203,14 @@ describe('fixing every problem Table health found', () => {
   });
 
   it("turns a plugin's MyISAM table into InnoDB too, and does only the tables asked for", async () => {
-    const withLog = [...facts, ['wp_acme_log', 0, 3 * mb, 'MyISAM']];
+    const withLog = [...facts, ['wp_wandworks_log', 0, 3 * mb, 'MyISAM']];
     const all = await planFixTables(rows(fakeShop({ free: withLog })), { domain: 'local.shop.com' });
-    expect(all.steps.map((x) => x.label)).toContain('Fix wp_acme_log: InnoDB');
+    expect(all.steps.map((x) => x.label)).toContain('Fix wp_wandworks_log: InnoDB');
     const fake = fakeShop({ free: withLog });
-    const one = await planFixTables(rows(fake), { domain: 'local.shop.com', tables: ['wp_acme_log'] });
-    expect(one.title).toBe('Fix wp_acme_log');
+    const one = await planFixTables(rows(fake), { domain: 'local.shop.com', tables: ['wp_wandworks_log'] });
+    expect(one.title).toBe('Fix wp_wandworks_log');
     await runAll(one.steps);
-    expect(fake.calls.filter((c) => c.input?.includes('ALTER TABLE')).map((c) => c.input?.match(/ALTER TABLE .*;/)?.[0])).toEqual(['ALTER TABLE `wp_acme_log` ENGINE=InnoDB;']);
+    expect(fake.calls.filter((c) => c.input?.includes('ALTER TABLE')).map((c) => c.input?.match(/ALTER TABLE .*;/)?.[0])).toEqual(['ALTER TABLE `wp_wandworks_log` ENGINE=InnoDB;']);
     await expect(planFixTables(rows(fakeShop({ free: facts })), { domain: 'local.shop.com', tables: ['wp_terms'] })).rejects.toThrow('wp_terms needs no fix the panel makes any more');
   });
 

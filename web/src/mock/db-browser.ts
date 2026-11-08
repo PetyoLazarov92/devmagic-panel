@@ -24,26 +24,26 @@ const text = (name: string, type = 'varchar(191)', extra: Partial<MockColumn> = 
 const num = (name: string, type = 'bigint unsigned', extra: Partial<MockColumn> = {}): MockColumn => ({ name, type, binary: false, numeric: true, ...extra });
 
 const serializedWidgets = 'a:3:{i:2;a:3:{s:5:"title";s:6:"Search";s:5:"count";b:0;s:8:"settings";a:2:{s:4:"mode";s:4:"full";s:5:"limit";i:10;}}s:12:"_multiwidget";i:1;s:7:"enabled";b:1;}';
-const longHtml = `<!-- wp:paragraph --><p>${'Acme ships bikes to every town on the coast. '.repeat(40)}</p><!-- /wp:paragraph -->`;
+const longHtml = `<!-- wp:paragraph --><p>${'Wandworks ships bikes to every town on the coast. '.repeat(40)}</p><!-- /wp:paragraph -->`;
 
 function options(domain: string): MockTable {
   const rows: Array<Array<string | null>> = [
     ['1', 'siteurl', `https://${domain}`, 'on'],
     ['2', 'home', `https://${domain}`, 'on'],
-    ['3', 'blogname', 'Acme Bikes', 'on'],
-    ['4', 'admin_email', 'alex.morgan@acme.com', 'on'],
+    ['3', 'blogname', 'Wandworks Bikes', 'on'],
+    ['4', 'admin_email', 'alex.morgan@wandworks.example', 'on'],
     ['5', 'widget_search', serializedWidgets, 'on'],
-    ['6', 'acme_settings', '{"theme":"dark","features":{"shop":true,"blog":false},"limits":[10,25,50]}', 'on'],
-    ['7', 'acme_cache_blob', longHtml, 'off'],
-    ['8', 'acme_note', 'NULL', 'off'],
-    ['9', 'acme_empty', null, 'off'],
+    ['6', 'wandworks_settings', '{"theme":"dark","features":{"shop":true,"blog":false},"limits":[10,25,50]}', 'on'],
+    ['7', 'wandworks_cache_blob', longHtml, 'off'],
+    ['8', 'wandworks_note', 'NULL', 'off'],
+    ['9', 'wandworks_empty', null, 'off'],
     ['10', 'cron', 'a:2:{i:1767225600;a:1:{s:16:"wp_version_check";a:0:{}}s:7:"version";i:2;}', 'on'],
     // An object with protected and private properties: PHP keeps NUL bytes around their names.
     // Windows line breaks: a plain text box would turn them into \n.
-    ['134', 'acme_footer_note', 'a:1:{s:4:"text";s:18:"Line one\r\nLine two";}', 'off'],
-    ['133', 'acme_task_schedule', 'O:18:"Acme_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:25:"\0Acme_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}', 'off'],
+    ['134', 'wandworks_footer_note', 'a:1:{s:4:"text";s:18:"Line one\r\nLine two";}', 'off'],
+    ['133', 'wandworks_task_schedule', 'O:23:"Wandworks_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:30:"\0Wandworks_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}', 'off'],
   ];
-  for (let i = 11; i <= 132; i++) rows.push([String(i), i % 3 ? `_transient_acme_feed_${i}` : `_transient_timeout_acme_feed_${i}`, i % 3 ? `a:1:{s:4:"item";s:${String(i).length}:"${i}";}` : String(1_767_225_600 + i), 'off']);
+  for (let i = 11; i <= 132; i++) rows.push([String(i), i % 3 ? `_transient_wandworks_feed_${i}` : `_transient_timeout_wandworks_feed_${i}`, i % 3 ? `a:1:{s:4:"item";s:${String(i).length}:"${i}";}` : String(1_767_225_600 + i), 'off']);
   return {
     columns: [num('option_id', 'bigint unsigned', { key: 'PRI', nullable: false, extra: 'auto_increment' }), text('option_name', 'varchar(191)', { key: 'UNI', nullable: false, default: '' }), text('option_value', 'longtext', { nullable: false }), text('autoload', 'varchar(20)', { key: 'MUL', nullable: false, default: 'yes' })],
     rows,
@@ -66,9 +66,9 @@ function users(): MockTable {
   return {
     columns: [num('ID', 'bigint unsigned', { key: 'PRI', nullable: false, extra: 'auto_increment' }), text('user_login', 'varchar(60)', { key: 'MUL', nullable: false }), text('user_pass', 'varchar(255)', { nullable: false }), text('user_email', 'varchar(100)', { key: 'MUL', nullable: false }), text('user_registered', 'datetime', { nullable: false })],
     rows: [
-      ['1', 'alex', '$wp$2y$10$abcdefghijklmnopqrstuv', 'alex.morgan@acme.com', '2024-03-02 10:15:00'],
-      ['2', 'sam', '$wp$2y$10$zyxwvutsrqponmlkjihgfe', 'sam.lee@acme.com', '2025-07-19 16:40:00'],
-      ['3', 'editor', '$P$Bqwertyuiopasdfghjklzx', 'editor@acme.com', '2026-01-05 08:00:00'],
+      ['1', 'alex', '$wp$2y$10$abcdefghijklmnopqrstuv', 'alex.morgan@wandworks.example', '2024-03-02 10:15:00'],
+      ['2', 'sam', '$wp$2y$10$zyxwvutsrqponmlkjihgfe', 'sam.lee@wandworks.example', '2025-07-19 16:40:00'],
+      ['3', 'editor', '$P$Bqwertyuiopasdfghjklzx', 'editor@wandworks.example', '2026-01-05 08:00:00'],
     ],
   };
 }
@@ -109,7 +109,7 @@ function makeTables(database: string, domain: string): Map<string, MockTable> {
     [`${p}terms`, big(420)],
     [`${p}usermeta`, big(260)],
     [`${p}users`, users()],
-    [`acme_sessions`, sessions()],
+    [`wandworks_sessions`, sessions()],
     ...(database.endsWith('db') ? [[`old_${p}options`, { ...options(domain), estimate: 380 }] as [string, MockTable]] : []),
     // A network: wp_blogs and wp_sitemeta, and each further site's own tables with its prefix (wp_2_, wp_3_).
     ...networkTables(database, domain),
@@ -162,21 +162,21 @@ function kindOf(database: string): MysqlDatabaseKind {
 }
 
 function find(database: string, table: string): MockTable {
-  const t = tablesFor(database, siteOf(database)?.domain ?? 'local.acme.com').get(table);
+  const t = tablesFor(database, siteOf(database)?.domain ?? 'local.wandworks.example').get(table);
   if (!t) throw new Error(`No table called ${table} in ${database}`);
   return t;
 }
 
 export function mockDbOverview(database: string): DbOverview {
   const site = siteOf(database);
-  const tables = [...tablesFor(database, site?.domain ?? 'local.acme.com')].map(([name, t]) => tableInfo(name, t));
+  const tables = [...tablesFor(database, site?.domain ?? 'local.wandworks.example')].map(([name, t]) => tableInfo(name, t));
   return {
     database,
     kind: kindOf(database),
     sites: site ? [{ domain: site.domain, ...(site.path ? { path: site.path } : {}), prefix: 'wp_' }] : [],
     tables,
     totalBytes: tables.reduce((n, t) => n + t.dataBytes + t.indexBytes, 0),
-    phpMyAdmin: `https://${site && site.server !== 'nginx' ? site.domain : 'local.acme.com'}/phpmyadmin/`,
+    phpMyAdmin: `https://${site && site.server !== 'nginx' ? site.domain : 'local.wandworks.example'}/phpmyadmin/`,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -342,7 +342,7 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
   const estimatedRows = n(heavy ? 2_480_000 : 48_000);
   const sized = sizes || estimatedRows <= WP_META_SIZE_ROWS;
   const metaKeys = [
-    { key: '_acme_builder_data', count: n(2_400), bytes: n(heavy ? 640_000_000 : 18_000_000) },
+    { key: '_wandworks_builder_data', count: n(2_400), bytes: n(heavy ? 640_000_000 : 18_000_000) },
     { key: '_wp_attachment_metadata', count: n(9_800), bytes: n(42_000_000) },
     { key: '_edit_lock', count: n(3_100), bytes: n(68_000) },
     { key: '_thumbnail_id', count: n(2_900), bytes: n(14_000) },
@@ -363,7 +363,7 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
     ...(heavy ? { free: [{ table: `${blogPrefix}postmeta`, freeBytes: 48 * 1024 ** 2, bytes: 310 * 1024 ** 2 }, { table: `${blogPrefix}comments`, freeBytes: 21 * 1024 ** 2, bytes: 64 * 1024 ** 2 }].filter((f) => !fixedTables.has(`${site.db?.name}.${f.table}.optimize`)) } : {}),
   };
   // The same old move left the options and two tables of the theme and a plugin on MyISAM too, until Turn all into InnoDB.
-  const myisam = (heavy ? [{ table: `${blogPrefix}brand_quotes`, bytes: 180_000 }, { table: `${blogPrefix}options`, bytes: 31 * 1024 ** 2 }, { table: `${blogPrefix}acme_slider_log`, bytes: 12 * 1024 ** 2 }] : []).filter(
+  const myisam = (heavy ? [{ table: `${blogPrefix}brand_quotes`, bytes: 180_000 }, { table: `${blogPrefix}options`, bytes: 31 * 1024 ** 2 }, { table: `${blogPrefix}wandworks_slider_log`, bytes: 12 * 1024 ** 2 }] : []).filter(
     (m) => !fixedTables.has(`${site.db?.name}.${m.table}.engine`) && !fixedTables.has(`${site.db?.name}.*.engine`) && !(m.table.endsWith('_options') && fixedTables.has(`${site.db?.name}.*.health`)),
   );
   if (myisam.length) healthIssues.myisam = myisam.sort((a, b) => a.bytes - b.bytes);
@@ -375,7 +375,7 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
     ...(network ? { network } : {}),
     missingTables: heavy ? [] : [`${blogPrefix}termmeta`],
     health: healthIssues,
-    postTypes: { unregistered: heavy ? [{ type: 'elementor_library', count: n(1_240) }, { type: 'acme_portfolio', count: n(12) }] : [] },
+    postTypes: { unregistered: heavy ? [{ type: 'elementor_library', count: n(1_240) }, { type: 'wandworks_portfolio', count: n(12) }] : [] },
     growth: heavy
       ? { since: '2026-10-29', days: 9, tables: [{ table: `${blogPrefix}actionscheduler_logs`, bytes: 412 * 1024 ** 2, grewBytes: 118 * 1024 ** 2 }, { table: `${blogPrefix}options`, bytes: 31 * 1024 ** 2, grewBytes: 9 * 1024 ** 2 }, { table: `${blogPrefix}postmeta`, bytes: 310 * 1024 ** 2, grewBytes: 4 * 1024 ** 2 }] }
       : { since: '2026-11-07', days: 0, tables: [] },
@@ -387,9 +387,9 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
               { table: `${blogPrefix}actionscheduler_logs`, bytes: 412 * 1024 ** 2, rows: 548_000, plugin: 'Action Scheduler (WooCommerce and others)', slug: 'woocommerce', state: 'active' as const },
               { table: `${blogPrefix}actionscheduler_actions`, bytes: 236 * 1024 ** 2, rows: 192_000, plugin: 'Action Scheduler (WooCommerce and others)', slug: 'woocommerce', state: 'active' as const },
               { table: `${blogPrefix}yoast_indexable`, bytes: 88 * 1024 ** 2, rows: 41_000, plugin: 'Yoast SEO', slug: 'wordpress-seo', state: 'missing' as const },
-              { table: `${blogPrefix}acme_slider_log`, bytes: 12 * 1024 ** 2, rows: 9_400, plugin: 'acme-slider', slug: 'acme-slider', by: 'name' as const, state: 'inactive' as const },
-              { table: `${blogPrefix}brand_quotes`, bytes: 180_000, rows: 640, plugin: 'acme-theme', slug: 'acme-theme', kind: 'theme' as const, by: 'code' as const, state: 'active' as const },
-              { table: `${blogPrefix}old_slides`, bytes: 2_400_000, rows: 80, plugin: 'acme-classic', slug: 'acme-classic', kind: 'theme' as const, by: 'code' as const, state: 'inactive' as const },
+              { table: `${blogPrefix}wandworks_slider_log`, bytes: 12 * 1024 ** 2, rows: 9_400, plugin: 'wandworks-slider', slug: 'wandworks-slider', by: 'name' as const, state: 'inactive' as const },
+              { table: `${blogPrefix}brand_quotes`, bytes: 180_000, rows: 640, plugin: 'wandworks-theme', slug: 'wandworks-theme', kind: 'theme' as const, by: 'code' as const, state: 'active' as const },
+              { table: `${blogPrefix}old_slides`, bytes: 2_400_000, rows: 80, plugin: 'wandworks-classic', slug: 'wandworks-classic', kind: 'theme' as const, by: 'code' as const, state: 'inactive' as const },
               { table: `${blogPrefix}shop_queue`, bytes: 96_000, rows: 12, plugin: 'must-use plugins', slug: 'mu-plugins', kind: 'muPlugin' as const, by: 'code' as const, state: 'active' as const },
             ]
           : []),
@@ -397,7 +397,7 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
       ].filter((t) => !pluginGone.has(`${site.db?.name}.${t.table}`)),
       autoload: heavy
         ? [
-            { plugin: 'acme-slider', slug: 'acme-slider', state: 'inactive' as const, count: 2, bytes: 902_000, options: ['acme_slider_cache', 'acme_slider_settings'] },
+            { plugin: 'wandworks-slider', slug: 'wandworks-slider', state: 'inactive' as const, count: 2, bytes: 902_000, options: ['wandworks_slider_cache', 'wandworks_slider_settings'] },
             { plugin: 'Yoast SEO', slug: 'wordpress-seo', state: 'missing' as const, count: 4, bytes: 61_000, options: ['wpseo_titles', 'wpseo', 'wpseo_social', 'wpseo_ms'] },
           ].filter((g) => !g.options.every((o) => pluginGone.has(`${site.db?.name}.${o}`)))
         : [],
@@ -407,9 +407,9 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
       bytes: n(heavy ? 1_930_000 : 212_000),
       limitBytes: WP_AUTOLOAD_LIMIT,
       top: [
-        { name: 'acme_slider_cache', bytes: n(heavy ? 880_000 : 61_000) },
+        { name: 'wandworks_slider_cache', bytes: n(heavy ? 880_000 : 61_000) },
         { name: 'rewrite_rules', bytes: n(94_000) },
-        { name: 'acme_builder_css', bytes: n(heavy ? 310_000 : 22_000) },
+        { name: 'wandworks_builder_css', bytes: n(heavy ? 310_000 : 22_000) },
         { name: 'cron', bytes: n(18_400) },
         { name: 'wp_user_roles', bytes: 6_100 },
         { name: 'widget_block', bytes: 4_200 },
@@ -430,15 +430,15 @@ export function mockWordpressDb(domain: string, path: string | undefined, blog =
       ...(heavy ? { actionsDone: n(186_000), actionLogs: n(548_000), wcSessions: n(1_260) } : {}),
       ...(blog === 1 ? { sessionTokens: 3 } : {}),
     },
-    duplicates: { rows: n(heavy ? 12_480 : 36), keys: [{ key: '_edit_lock', rows: n(heavy ? 9_100 : 30) }, { key: '_acme_price', rows: n(heavy ? 3_380 : 6) }] },
+    duplicates: { rows: n(heavy ? 12_480 : 36), keys: [{ key: '_edit_lock', rows: n(heavy ? 9_100 : 30) }, { key: '_wandworks_price', rows: n(heavy ? 3_380 : 6) }] },
     orphans: { postmeta: n(heavy ? 4_210 : 0), commentmeta: n(heavy ? 1_300 : 0), termmeta: 0, termRelationships: n(26), ...(blog === 1 ? { usermeta: 3 } : {}) },
     metaKeys: { estimatedRows, sized, keys: sized ? metaKeys : [...metaKeys].sort((a, b) => b.count - a.count).map(({ key, count }) => ({ key, count })) },
     users: {
       count: 3,
       list: [
-        { id: '1', login: 'alex', email: 'alex.morgan@acme.com', registered: '2024-03-02 10:15:00', roles: ['administrator'] },
-        { id: '2', login: 'sam', email: 'sam.lee@acme.com', registered: '2025-07-19 16:40:00', roles: blog === 1 ? ['editor'] : [] },
-        { id: '3', login: 'shopkeeper', email: 'shop@acme.com', registered: '2026-01-05 08:00:00', roles: ['shop_manager', 'customer'] },
+        { id: '1', login: 'alex', email: 'alex.morgan@wandworks.example', registered: '2024-03-02 10:15:00', roles: ['administrator'] },
+        { id: '2', login: 'sam', email: 'sam.lee@wandworks.example', registered: '2025-07-19 16:40:00', roles: blog === 1 ? ['editor'] : [] },
+        { id: '3', login: 'shopkeeper', email: 'shop@wandworks.example', registered: '2026-01-05 08:00:00', roles: ['shop_manager', 'customer'] },
       ],
     },
     errors: {},
@@ -550,7 +550,7 @@ export function mockRowChanges(database: string, table: string): RowChangeInfo[]
 }
 
 export function mockDbSchema(database: string): DbSchema {
-  const tables = tablesFor(database, siteOf(database)?.domain ?? 'local.acme.com');
+  const tables = tablesFor(database, siteOf(database)?.domain ?? 'local.wandworks.example');
   return { database, tables: Object.fromEntries([...tables].map(([name, t]) => [name, t.columns.map((c) => c.name)])) };
 }
 
@@ -570,7 +570,7 @@ export function mockCleanupStarted(id: string, input: Record<string, unknown>): 
   const prefix = Number(input.blog ?? 1) > 1 ? `wp_${String(input.blog)}_` : 'wp_';
   const written = kind === 'sql' ? mockCheckWrite(String(input.database), String(input.sql)) : null;
   const title = { transients: input.scope === 'all' ? 'Delete every transient' : 'Delete expired transients', content: 'Delete revisions, drafts, trash and spam', orphans: 'Delete what was left behind', empty: `Empty ${String(input.table)}`, drop: `Delete table ${String(input.table)}`, sql: `${written?.statement ?? 'SQL'} on ${written?.tables.map((t) => t.name).join(', ') || 'a new table'}`, fix: id === 'db.toInnodb' ? 'Turn the MyISAM tables into InnoDB' : id === 'db.fixTables' ? 'Fix the problems Table health found' : `Fix ${String(input.table)}`, autoload: 'Turn off autoload for options of plugins that are off' }[kind];
-  const tables = written ? written.tables.map((t) => ({ table: t.name, rows: 0 })) : kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : id === 'db.toInnodb' ? [`${prefix}brand_quotes`, `${prefix}acme_slider_log`, `${prefix}options`].map((table) => ({ table, rows: 0 })) : [{ table: String(input.table), rows: 0 }];
+  const tables = written ? written.tables.map((t) => ({ table: t.name, rows: 0 })) : kind === 'transients' ? [{ table: `${prefix}options`, rows: 2870 }] : kind === 'content' ? [{ table: `${prefix}postmeta`, rows: 940 }, { table: `${prefix}posts`, rows: 18_451 }] : kind === 'orphans' ? [{ table: `${prefix}postmeta`, rows: 4210 }, { table: `${prefix}commentmeta`, rows: 1300 }] : id === 'db.toInnodb' ? [`${prefix}brand_quotes`, `${prefix}wandworks_slider_log`, `${prefix}options`].map((table) => ({ table, rows: 0 })) : [{ table: String(input.table), rows: 0 }];
   const now = new Date();
   cleanups.unshift({ id: `20261107-${String(103000 + cleanups.length).padStart(6, '0')}-mockcl`, title, kind, tables, bytes: 3_400_000, savedAt: now.toISOString(), purgeAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(), database, ...(site ? { site } : {}) });
 }
@@ -612,9 +612,9 @@ export const killedProcesses = new Set<number>();
 
 export function mockProcesses(): MysqlProcess[] {
   const all: MysqlProcess[] = [
-    { id: 318, user: 'northwinddb', host: 'localhost', db: 'northwinddb', command: 'Query', seconds: 42, state: 'Sending data', info: "SELECT p.ID, m.meta_value FROM wp_posts p JOIN wp_postmeta m ON m.post_id = p.ID WHERE m.meta_key = '_acme_builder_data'" },
+    { id: 318, user: 'spellbookdb', host: 'localhost', db: 'spellbookdb', command: 'Query', seconds: 42, state: 'Sending data', info: "SELECT p.ID, m.meta_value FROM wp_posts p JOIN wp_postmeta m ON m.post_id = p.ID WHERE m.meta_key = '_wandworks_builder_data'" },
     { id: 322, user: 'dailypostdb', host: 'localhost', db: 'dailypostdb', command: 'Query', seconds: 3, state: 'executing', info: "UPDATE wp_options SET option_value = '...' WHERE option_name = 'cron'" },
-    { id: 290, user: 'northwinddb', host: 'localhost', db: 'northwinddb', command: 'Sleep', seconds: 118 },
+    { id: 290, user: 'spellbookdb', host: 'localhost', db: 'spellbookdb', command: 'Sleep', seconds: 118 },
     { id: 5, user: 'event_scheduler', host: 'localhost', command: 'Daemon', seconds: 259_200, state: 'Waiting on empty queue' },
   ];
   return all.filter((p) => !killedProcesses.has(p.id));
@@ -627,12 +627,12 @@ export function mockSlowQueries(database?: string): SlowQueryReport {
   const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
   const all: SlowQuery[] = [
     {
-      id: 'a1f0', database: 'northwinddb', count: 412, totalMs: 61_800, avgMs: 150, maxMs: 2_310, rowsExamined: 98_000_000, rowsSent: 4_120, noIndex: 412, lastSeen: ago(2),
+      id: 'a1f0', database: 'spellbookdb', count: 412, totalMs: 61_800, avgMs: 150, maxMs: 2_310, rowsExamined: 98_000_000, rowsSent: 4_120, noIndex: 412, lastSeen: ago(2),
       text: 'SELECT `p` . `ID` , `m` . `meta_value` FROM `wp_posts` `p` JOIN `wp_postmeta` `m` ON `m` . `post_id` = `p` . `ID` WHERE `m` . `meta_value` LIKE ?',
-      sample: "SELECT p.ID, m.meta_value FROM wp_posts p JOIN wp_postmeta m ON m.post_id = p.ID WHERE m.meta_value LIKE '%acme-sale%'",
+      sample: "SELECT p.ID, m.meta_value FROM wp_posts p JOIN wp_postmeta m ON m.post_id = p.ID WHERE m.meta_value LIKE '%wandworks-sale%'",
     },
     {
-      id: 'b7c2', database: 'northwinddb', count: 2_960, totalMs: 23_680, avgMs: 8, maxMs: 95, rowsExamined: 1_480_000, rowsSent: 1_480_000, noIndex: 0, lastSeen: ago(1),
+      id: 'b7c2', database: 'spellbookdb', count: 2_960, totalMs: 23_680, avgMs: 8, maxMs: 95, rowsExamined: 1_480_000, rowsSent: 1_480_000, noIndex: 0, lastSeen: ago(1),
       text: 'SELECT `option_name` , `option_value` FROM `wp_options` WHERE `autoload` IN (...)',
       sample: "SELECT option_name, option_value FROM wp_options WHERE autoload IN ('yes', 'on', 'auto-on', 'auto')",
     },
@@ -642,25 +642,25 @@ export function mockSlowQueries(database?: string): SlowQueryReport {
       sample: "SELECT SQL_CALC_FOUND_ROWS wp_posts.ID FROM wp_posts WHERE 1=1 AND wp_posts.post_type = 'post' ORDER BY wp_posts.post_date DESC LIMIT 0, 10",
     },
     {
-      id: 'd410', database: 'northwinddb', count: 5_100, totalMs: 1_530, avgMs: 0.3, maxMs: 12, rowsExamined: 5_100, rowsSent: 5_100, noIndex: 0, lastSeen: ago(1),
+      id: 'd410', database: 'spellbookdb', count: 5_100, totalMs: 1_530, avgMs: 0.3, maxMs: 12, rowsExamined: 5_100, rowsSent: 5_100, noIndex: 0, lastSeen: ago(1),
       text: 'SELECT * FROM `wp_users` WHERE `ID` = ? LIMIT ?',
       sample: 'SELECT * FROM wp_users WHERE ID = 1 LIMIT 1',
     },
     {
-      id: 'e5a7', database: 'northwinddb', count: 640, totalMs: 7_040, avgMs: 11, maxMs: 180, rowsExamined: 1_520_000, rowsSent: 0, noIndex: 640, lastSeen: ago(3),
+      id: 'e5a7', database: 'spellbookdb', count: 640, totalMs: 7_040, avgMs: 11, maxMs: 180, rowsExamined: 1_520_000, rowsSent: 0, noIndex: 640, lastSeen: ago(3),
       text: 'DELETE FROM `wp_options` WHERE `option_name` LIKE ? AND `option_value` < ?',
       sample: "DELETE FROM wp_options WHERE option_name LIKE '\\_transient\\_timeout\\_%' AND option_value < 1794045600",
     },
     {
-      id: 'e9b1', database: 'northwinddb', count: 210, totalMs: 2_100, avgMs: 10, maxMs: 44, rowsExamined: 210, rowsSent: 0, noIndex: 0, lastSeen: ago(3),
+      id: 'e9b1', database: 'spellbookdb', count: 210, totalMs: 2_100, avgMs: 10, maxMs: 44, rowsExamined: 210, rowsSent: 0, noIndex: 0, lastSeen: ago(3),
       text: 'INSERT INTO `wp_options` ( `option_name` , `option_value` , `autoload` ) VALUES (...) ON DUPLICATE KEY UPDATE `option_value` = VALUES ( `option_value` )',
-      sample: "INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('_transient_acme_feed', 'a:0:{}', 'off') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)",
+      sample: "INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('_transient_wandworks_feed', 'a:0:{}', 'off') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)",
     },
     // The quick reads of a busy site: enough of them that the list needs Show more.
     ...Array.from({ length: 24 }, (_, i): SlowQuery => ({
-      id: `f${i.toString(16).padStart(3, '0')}`, database: i % 3 === 0 ? 'dailypostdb' : 'northwinddb', count: 900 - i * 30, totalMs: 1_200 - i * 40, avgMs: 1.2, maxMs: 9, rowsExamined: 900 - i * 30, rowsSent: 900 - i * 30, noIndex: 0, lastSeen: ago(5 + i),
-      text: `SELECT \`meta_value\` FROM \`wp_postmeta\` WHERE \`post_id\` = ? AND \`meta_key\` = ? /* acme_field_${i + 1} */`,
-      sample: `SELECT meta_value FROM wp_postmeta WHERE post_id = ${100 + i} AND meta_key = 'acme_field_${i + 1}'`,
+      id: `f${i.toString(16).padStart(3, '0')}`, database: i % 3 === 0 ? 'dailypostdb' : 'spellbookdb', count: 900 - i * 30, totalMs: 1_200 - i * 40, avgMs: 1.2, maxMs: 9, rowsExamined: 900 - i * 30, rowsSent: 900 - i * 30, noIndex: 0, lastSeen: ago(5 + i),
+      text: `SELECT \`meta_value\` FROM \`wp_postmeta\` WHERE \`post_id\` = ? AND \`meta_key\` = ? /* wandworks_field_${i + 1} */`,
+      sample: `SELECT meta_value FROM wp_postmeta WHERE post_id = ${100 + i} AND meta_key = 'wandworks_field_${i + 1}'`,
     })),
   ];
   const fresh = slowQueriesReset.at > 0;

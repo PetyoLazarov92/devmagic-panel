@@ -9,7 +9,7 @@ export interface BuildPick {
   script?: string;
 }
 
-/** A command from the docs, like "npm run prod" in wp-content/themes/acme. */
+/** A command from the docs, like "npm run prod" in wp-content/themes/wandworks. */
 export interface DocsCommand {
   folder: string;
   command: string;

@@ -9,7 +9,7 @@ const listed = [
   at('file', '/usr/local/lib/devmagic-panel/bin/dmp-root'),
   at('file', '/usr/local/lib/devmagic-panel/lib/apache.sh'),
   at('dir', '/var/lib/devmagic-panel'),
-  at('dir', '/home/acme/.local/share/devmagic-panel/gone', false),
+  at('dir', '/home/wandworks/.local/share/devmagic-panel/gone', false),
   at('link', '/etc/apache2/sites-enabled/local.devmagic-ssl.conf'),
 ];
 
@@ -19,7 +19,7 @@ describe('the file lists as a tree', () => {
       ['apt:rclone', false],
       ['/usr/local/lib/devmagic-panel', true],
       ['/var/lib/devmagic-panel', true],
-      ['/home/acme/.local/share/devmagic-panel/gone', false],
+      ['/home/wandworks/.local/share/devmagic-panel/gone', false],
       ['/etc/apache2/sites-enabled/local.devmagic-ssl.conf', false],
     ]);
   });

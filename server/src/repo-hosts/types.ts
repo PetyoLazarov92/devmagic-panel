@@ -6,7 +6,7 @@ export class HostRefused extends Error {}
 /** One repo as a host lists it, trimmed to what the panel keeps. */
 export interface HostRepo {
   name: string;
-  /** Its path on the host: acme/shop, acme/web/shop. */
+  /** Its path on the host: wandworks/shop, wandworks/web/shop. */
   path: string;
   description?: string;
   archived: boolean;

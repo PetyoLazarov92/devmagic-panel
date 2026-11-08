@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.24.2 (2026-11-08)
+* **Mockup:** a public demo builds from it with `npm run build:demo`: static files with a banner that says it is sample data and links to the real panel, and an `.htaccess` with a strict CSP and noindex; `npm run demo:serve` serves the build the same way to check it
+* **Mockup:** it shows the panel's own version, with two newer releases to update to, and `?proposals=none` starts with nothing suggested
+* **Repo:** `npm run screenshots` takes the README's screenshots from the mockup in light and dark, through the system's Chrome; nine pairs now, with the database, SQL runner, performance, command palette and activity
+* **Repo:** the sample data, tests and docs use one set of made-up names shared with webtimeless.cloud: Spellbook and Wandworks, with production addresses on the reserved `.example`
+* Nothing changes in the installed panel. An update installs this release from the panel as usual
+
 ### v1.24.1 (2026-11-08)
 * **Mockup:** the mockup (`npm run mockup`) has a page of its own, first in the menu, that says what it never touches on this machine, how it works and which addresses show other states; a link that would leave it shows the address it would open instead
 * Nothing changes in the installed panel. An update installs this release from the panel as usual
@@ -172,7 +179,7 @@
 * **Databases:** the browser only reads. Each read runs in a read-only transaction with a time limit (15 seconds, 5 for counting), its SQL on stdin; values go to MySQL as hex literals in the column's collation and names only once MySQL listed them, and a filter's value never reaches a URL. Open in phpMyAdmin goes to the database or table on a site Apache serves, when phpMyAdmin is installed
 
 ### v1.8.0 (2026-11-06)
-* **Sites:** a site with WordPress installs under its paths (`local.acme.com/learn`) moves to nginx with them: each is served from its own folder with `alias`, its own PHP-FPM upstream (its pool, or the default version's), WordPress's fallback to its own `index.php`, and the same deny rules. A new site under a path of a site on nginx goes into its nginx file. Checked with nginx 1.24's own `nginx -t` and with requests against it
+* **Sites:** a site with WordPress installs under its paths (`local.wandworks.example/learn`) moves to nginx with them: each is served from its own folder with `alias`, its own PHP-FPM upstream (its pool, or the default version's), WordPress's fallback to its own `index.php`, and the same deny rules. A new site under a path of a site on nginx goes into its nginx file. Checked with nginx 1.24's own `nginx -t` and with requests against it
 * **Sites:** the new site wizard asks which web server a site of its own gets, once nginx runs next to Apache: Apache, or nginx with the PHP-FPM version it would run on. The install writes the nginx file with WordPress's rules for what the dump is (a single site, or its kind of network). A site under a path runs on its parent's server
 * **Services:** the nginx tab has a Sites card: how many sites run on each server, the web server the wizard picks for new sites, and Move every site to nginx or to Apache. That is one job that moves each site that can, one after the other, checks each, lists the ones that stay and why, and Undo moves every site back
 * **Panel:** preferences load with their defaults filled in, so a setting a newer panel adds never comes back empty. The root scripts change, so the update finishes with its installer, which asks for your password
@@ -195,12 +202,12 @@
 * **Sites:** Organizations and groups to scan says what each host still needs before it lists anything (`sudo apt install glab`, `glab auth login`, `gh auth login`), with Check again, and the organization step says so in one line while no GitLab CLI is signed in. Cloning needs only your SSH key; the CLIs only list repos. The root scripts do not change: the Updates page installs this release as usual
 
 ### v1.5.0 (2026-11-06)
-* **Sites:** repos inside a site's folder show on its Git card, each in a section of its own after the site's: wp-content, and each theme, plugin and must-use plugin folder with a `.git` of its own (`Theme: acme`, `Plugin: acme-blocks`). Each has its branch picker, ahead and behind, uncommitted changes, Pull, Fetch, Switch and its pull or merge requests, and the one the site was installed from is marked. Before, a site whose theme or plugin was its repo, as the panel installs one with the Theme or Plugin layout, showed no Git card at all
+* **Sites:** repos inside a site's folder show on its Git card, each in a section of its own after the site's: wp-content, and each theme, plugin and must-use plugin folder with a `.git` of its own (`Theme: wandworks`, `Plugin: wandworks-blocks`). Each has its branch picker, ahead and behind, uncommitted changes, Pull, Fetch, Switch and its pull or merge requests, and the one the site was installed from is marked. Before, a site whose theme or plugin was its repo, as the panel installs one with the Theme or Plugin layout, showed no Git card at all
 * **Sites:** the Sites list shows a site's own branch, or its first theme or plugin repo's when it has none, with how many more repos it has. A folder reached through a symlink is left out, and a site shows at most 20 repos
 * **Sites:** the new site wizard, the organization list's "installed as" and the GitLab host checks count these repos too. The root scripts do not change: the Updates page installs this release as usual
 
 ### v1.4.0 (2026-11-06)
-* **Sites:** installed sites on your own GitLab whose name does not say so (`git.acme.test`), on Gitea or Forgejo, or cloned through an SSH alias (`git@gitlab-work:acme/site.git`) get the right branch, commit and repository links and their merge requests with no setting. The panel resolves aliases with `ssh -G` and asks each unknown host once a week with the same SSH hello `git fetch` makes; no token, and no new host key is accepted for you
+* **Sites:** installed sites on your own GitLab whose name does not say so (`git.wandworks.test`), on Gitea or Forgejo, or cloned through an SSH alias (`git@gitlab-work:wandworks/site.git`) get the right branch, commit and repository links and their merge requests with no setting. The panel resolves aliases with `ssh -G` and asks each unknown host once a week with the same SSH hello `git fetch` makes; no token, and no new host key is accepted for you
 * **Sites:** From an organization or group ticks your own account on each signed-in host the first time, so its repos list without a visit to Organizations and groups to scan. A list you saved stays as you left it
 * **Sites:** a Shared with you entry per host lists the repos you were added to outside your organizations, groups and account: GitHub repos you collaborate on, GitLab projects outside your groups. Two repos of one name from different owners stay apart
 * **Panel:** the Environment page's GitLab checks also cover the hosts found this way. The root scripts do not change: the Updates page installs this release as usual
@@ -213,7 +220,7 @@
 
 ### v1.2.0 (2026-11-06)
 * **Sites:** the new site wizard installs from GitLab groups next to GitHub organizations, on gitlab.com and on your own GitLab, listed through the GitLab CLI (`glab`, 1.36 or newer) with its own sign-in, which the panel never reads. A group is scanned with its subgroups, only projects you can clone are listed, and two projects of one name in different subgroups stay apart. Add your own GitLab hosts under Organizations and groups to scan
-* **Sites:** a pasted repo URL in a GitLab subgroup (`git@gitlab.com:acme/web/site.git`) keeps its whole path, and the manual repo start says it takes any git host
+* **Sites:** a pasted repo URL in a GitLab subgroup (`git@gitlab.com:wandworks/web/site.git`) keeps its whole path, and the manual repo start says it takes any git host
 * **Sites:** the Git card shows open GitLab merge requests (`!12`) beside their branches, as it does pull requests on GitHub
 * **Sites:** branch, commit and repository links know your own GitLab hosts, Gitea and Forgejo (Codeberg among them), and keep an HTTPS port; "Open on" names the host
 * **Panel:** the Environment page checks the GitLab CLI and SSH on each GitLab host you use, found from the settings, the groups you scan and your sites' remotes, as optional warnings at most; nothing about GitLab shows when you use none

@@ -186,7 +186,7 @@ describe('readAura', () => {
 
   it('flags a site whose last compatibility check of the PHP it runs found errors, and no other version', async () => {
     const t = tempTree();
-    const scan = (version: string, errors: number) => ({ version, errors, components: [{ title: 'Acme Forms', errors }, { title: 'Acme', errors: 0 }] });
+    const scan = (version: string, errors: number) => ({ version, errors, components: [{ title: 'Wandworks Forms', errors }, { title: 'Wandworks', errors: 0 }] });
     const scans: Record<string, unknown[]> = {
       'local.a.com': [scan('8.4', 3), scan('8.3', 0)],
       'local.b.com@learn': [scan('8.3', 2)],
@@ -199,25 +199,25 @@ describe('readAura', () => {
     ];
     const report = await readAura({ config: t.config, exec: fakeExec().exec, compatScans: (key) => (scans[key] ?? []) as CompatScan[] }, sites);
     expect(report.items.map((i) => [i.id, i.domain, i.path, i.text])).toEqual([
-      ['php.compat', 'local.a.com', undefined, 'The last compatibility check against PHP 8.4, which it runs, found 3 errors in Acme Forms'],
-      ['php.compat', 'local.b.com', '/learn', 'The last compatibility check against PHP 8.3, which it runs, found 2 errors in Acme Forms'],
+      ['php.compat', 'local.a.com', undefined, 'The last compatibility check against PHP 8.4, which it runs, found 3 errors in Wandworks Forms'],
+      ['php.compat', 'local.b.com', '/learn', 'The last compatibility check against PHP 8.3, which it runs, found 2 errors in Wandworks Forms'],
     ]);
   });
 
   it('asks for each local constant from Settings a WordPress site lacks or sets another way, with a fix', async () => {
     const t = tempTree();
     const sites = [
-      site('local.a.com', { constants: [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'ACME_DEV', value: false }] }),
+      site('local.a.com', { constants: [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'WANDWORKS_DEV', value: false }] }),
       site('local.b.com', { path: '/learn', constants: [] }),
       site('local.c.com'),
     ];
-    const report = await readAura({ config: t.config, exec: fakeExec().exec, localConstants: [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'ACME_DEV', value: true }] }, sites);
+    const report = await readAura({ config: t.config, exec: fakeExec().exec, localConstants: [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'WANDWORKS_DEV', value: true }] }, sites);
     expect(report.items.map((i) => [i.domain, i.path, i.text])).toEqual([
-      ['local.a.com', undefined, 'wp-config.php sets ACME_DEV to false, not true as Settings asks'],
+      ['local.a.com', undefined, 'wp-config.php sets WANDWORKS_DEV to false, not true as Settings asks'],
       ['local.b.com', '/learn', "wp-config.php has no WP_ENVIRONMENT_TYPE, which every local site should set to 'local'"],
-      ['local.b.com', '/learn', 'wp-config.php has no ACME_DEV, which every local site should set to true'],
+      ['local.b.com', '/learn', 'wp-config.php has no WANDWORKS_DEV, which every local site should set to true'],
     ]);
-    expect(report.items[0]?.fix).toEqual({ action: 'site.setConstant', input: { domain: 'local.a.com', name: 'ACME_DEV', value: true }, label: 'Set ACME_DEV' });
+    expect(report.items[0]?.fix).toEqual({ action: 'site.setConstant', input: { domain: 'local.a.com', name: 'WANDWORKS_DEV', value: true }, label: 'Set WANDWORKS_DEV' });
   });
 
   it('warns when sites use Local mode and Mailpit is not listening', async () => {

@@ -14,8 +14,8 @@ export interface RepoWeb {
 }
 
 /**
- * Hosts whose kind their name does not tell (git.acme.test runs GitLab,
- * gitlab.acme.test says so), and SSH aliases from ~/.ssh/config
+ * Hosts whose kind their name does not tell (git.wandworks.test runs GitLab,
+ * gitlab.wandworks.test says so), and SSH aliases from ~/.ssh/config
  * (gitlab-work for gitlab.com). The panel registers them on the server and in
  * the browser, by source: the GitLab hosts in its settings, and the ones it
  * found by asking each host once over SSH. Every link helper below knows them
@@ -68,7 +68,7 @@ export function providerOfHost(host: string, except?: string): WebProvider {
   return 'Git';
 }
 
-/** git@github.com:AcmeCo/northwind.git, ssh://..., https://... to https://github.com/AcmeCo/northwind */
+/** git@github.com:WandworksCo/spellbook.git, ssh://..., https://... to https://github.com/WandworksCo/spellbook */
 export function repoWeb(remote: string): RepoWeb | null {
   const trimmed = remote.trim();
   let host: string;
@@ -76,7 +76,7 @@ export function repoWeb(remote: string): RepoWeb | null {
   let path: string;
   const scp = /^[\w.-]+@([\w.-]+):(.+)$/.exec(trimmed);
   if (scp?.[1] && scp[2] && !trimmed.includes('://')) {
-    // An SSH alias (git@gitlab-work:acme/site.git) links to its real host.
+    // An SSH alias (git@gitlab-work:wandworks/site.git) links to its real host.
     host = realHost(scp[1]);
     webHost = host;
     path = scp[2];
@@ -89,7 +89,7 @@ export function repoWeb(remote: string): RepoWeb | null {
     }
     if (!['ssh:', 'https:', 'http:', 'git:'].includes(url.protocol)) return null;
     host = url.protocol === 'ssh:' ? realHost(url.hostname) : url.hostname;
-    // An HTTPS port is the web's port too (gitlab.acme.test:8443); an SSH port is not.
+    // An HTTPS port is the web's port too (gitlab.wandworks.test:8443); an SSH port is not.
     webHost = url.protocol === 'https:' || url.protocol === 'http:' ? url.host : host;
     path = url.pathname;
   }
@@ -151,7 +151,7 @@ export function subjectLinks(remote: string | undefined, subject: string): Array
 
 /**
  * True when two remotes point at the same repository, whatever their form:
- * git@github.com:AcmeCo/site.git and https://github.com/acmeco/site match.
+ * git@github.com:WandworksCo/site.git and https://github.com/wandworksco/site match.
  */
 /** One key for every way to write a repo's URL (SSH or HTTPS, with or without .git), or null for an unknown host. */
 export function repoKey(url: string): string | null {

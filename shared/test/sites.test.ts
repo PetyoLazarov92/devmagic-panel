@@ -3,17 +3,17 @@ import { databaseNameFor, localDomainFor } from '../src/sites.js';
 
 describe('databaseNameFor', () => {
   it.each([
-    ['local.northwind.com', 'northwind_com'],
-    ['local.learn.northwind.com', 'learn_northwind_com'],
+    ['local.spellbook.example', 'spellbook_example'],
+    ['local.learn.spellbook.example', 'learn_spellbook_example'],
     ['www.local.shop-pms.com', 'shop_pms_com'],
-    ['local.northwind.co.jp', 'northwind_co_jp'],
+    ['local.spellbook.co.jp', 'spellbook_co_jp'],
     ['app.test', 'app_test'],
   ])('%s gives %s', (domain, name) => {
     expect(databaseNameFor(domain)).toBe(name);
   });
 
   it('labels copies with a double underscore', () => {
-    expect(databaseNameFor('local.biketours.com', [], 'prod 2026-03-29')).toBe('biketours_com__prod_2026_03_29');
+    expect(databaseNameFor('local.biketours.example', [], 'prod 2026-03-29')).toBe('biketours_example__prod_2026_03_29');
   });
 
   it('adds a counter when the name is taken', () => {
@@ -39,8 +39,8 @@ describe('databaseNameFor', () => {
 
 describe('localDomainFor', () => {
   it.each([
-    ['northwind.de', 'local.northwind.de'],
-    ['https://www.northwind.com/', 'local.northwind.com'],
+    ['spellbook.de', 'local.spellbook.de'],
+    ['https://www.spellbook.example/', 'local.spellbook.example'],
     ['local.already.com', 'local.already.com'],
   ])('%s gives %s', (prod, local) => {
     expect(localDomainFor(prod)).toBe(local);

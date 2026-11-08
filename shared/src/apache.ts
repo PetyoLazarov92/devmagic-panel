@@ -42,7 +42,7 @@ export interface ApacheModule {
 
 /** One vhost file of Apache's sites-available, as the Apache tab lists it. */
 export interface ApacheVhost {
-  /** The file name in sites-available, like local.acme.com-ssl.conf. */
+  /** The file name in sites-available, like local.wandworks.example-ssl.conf. */
   file: string;
   /** Linked from sites-enabled, so Apache serves it. */
   enabled: boolean;

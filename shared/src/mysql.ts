@@ -10,10 +10,10 @@ export const isSystemDatabase = (name: string) => (SYSTEM_DATABASES as readonly 
 export const isSystemMysqlUser = (user: string) => (SYSTEM_MYSQL_USERS as readonly string[]).includes(user);
 
 /** A database the panel may name in SQL, always in backticks. */
-export const mysqlDatabaseName = z.string().regex(/^[A-Za-z0-9_$-]{1,64}$/, 'A database name like acme_com');
+export const mysqlDatabaseName = z.string().regex(/^[A-Za-z0-9_$-]{1,64}$/, 'A database name like wandworks_example');
 /** A MySQL account, user and host, the panel may name in SQL, always in quotes. */
 export const mysqlAccount = z.object({
-  user: z.string().regex(/^[A-Za-z0-9_.$-]{1,32}$/, 'A user name like acme_com'),
+  user: z.string().regex(/^[A-Za-z0-9_.$-]{1,32}$/, 'A user name like wandworks_example'),
   host: z.string().regex(/^[A-Za-z0-9_.%:-]{1,255}$/, 'A host like localhost'),
 });
 export type MysqlAccountRef = z.infer<typeof mysqlAccount>;

@@ -3,14 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { draftHref, draftProgress, keptUntil, landingStep, stepsFor } from '../src/lib/drafts.js';
 
 const draft = (step: string, state: unknown): InstallDraft => ({
-  id: 'd1e2f3a4-0000-4000-8000-000000000001', kind: 'manual', title: 'local.acme.com', step, state, uploads: [], status: 'open',
+  id: 'd1e2f3a4-0000-4000-8000-000000000001', kind: 'manual', title: 'local.wandworks.example', step, state, uploads: [], status: 'open',
   createdAt: '2026-10-26T08:00:00Z', updatedAt: '2026-10-26T09:00:00Z',
 });
 
 describe('a draft in the lists', () => {
   it('says which step of its kind it stopped at', () => {
     expect(draftProgress(draft('domains', { source: 'repo' }))).toEqual({ kind: 'repo', at: 3, total: 5, step: 'domains', label: 'Domains' });
-    expect(draftProgress(draft('access', { source: 'repo', org: { name: 'acme' } }))).toEqual({ kind: 'org', at: 4, total: 7, step: 'access', label: 'Links and dump' });
+    expect(draftProgress(draft('access', { source: 'repo', org: { name: 'wandworks' } }))).toEqual({ kind: 'org', at: 4, total: 7, step: 'access', label: 'Links and dump' });
     expect(draftProgress(draft('wordpress', { source: 'wordpress' }))).toMatchObject({ kind: 'wordpress', at: 3, total: 4 });
   });
 

@@ -123,9 +123,9 @@ describe('the crontab block', () => {
 
   it("checks that the site has its own WP-CLI command before it saves the task", async () => {
     const t = setup(HAND, {
-      wp: (call) => (call.args.includes('has-command') && call.args.at(-1) === 'acme' ? {} : { code: 1 }),
+      wp: (call) => (call.args.includes('has-command') && call.args.at(-1) === 'wandworks' ? {} : { code: 1 }),
     });
-    expect((await add(t, { task: { kind: 'wp-cli', domain: 'local.shop.com', command: ['acme', 'sync'] } })).ok).toBe(true);
+    expect((await add(t, { task: { kind: 'wp-cli', domain: 'local.shop.com', command: ['wandworks', 'sync'] } })).ok).toBe(true);
     await expect(add(t, { task: { kind: 'wp-cli', domain: 'local.shop.com', command: ['other', 'sync'] } })).rejects.toThrow(/has no WP-CLI command other/);
   });
 
@@ -143,7 +143,7 @@ describe('task lines', () => {
   it('reads back every kind it writes', () => {
     const tasks = [
       { kind: 'wp-cron', domain: 'local.shop.com', path: '/learn' },
-      { kind: 'wp-cli', domain: 'local.shop.com', command: ['cron', 'event', 'run', 'acme_sync'] },
+      { kind: 'wp-cli', domain: 'local.shop.com', command: ['cron', 'event', 'run', 'wandworks_sync'] },
       { kind: 'php-script', domain: 'local.shop.com', file: 'wp-content/cron/sync.php' },
       { kind: 'url', url: 'https://local.shop.com/wp-cron.php?doing_wp_cron=1&a=%20' },
       { kind: 'program', program: '/home/alex/bin/sync.sh', args: ['two words', "it's $HOME; rm -rf / %"] },

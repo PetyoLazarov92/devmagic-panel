@@ -7,12 +7,12 @@ import { type FakeCall, fakeExec, wpSiteTree } from './helpers.js';
 
 const mysql = { user: 'devmagic_panel', host: 'localhost', password: 'adminpw' };
 const json = (...rows: unknown[][]) => rows.map((r) => JSON.stringify(r)).join('\n');
-const TABLES = ['wp_options', 'wp_posts', 'wp_postmeta', 'wp_users', 'wp_usermeta', 'wp_wc_orders', 'wp_yoast_indexable', 'wp_acme_tools_log', 'wp_mystery', 'wp_2_options'];
+const TABLES = ['wp_options', 'wp_posts', 'wp_postmeta', 'wp_users', 'wp_usermeta', 'wp_wc_orders', 'wp_yoast_indexable', 'wp_wandworks_tools_log', 'wp_mystery', 'wp_2_options'];
 
-/** shop_com with WooCommerce on, Acme Tools installed and off, and Yoast SEO gone but for its tables and options. */
+/** shop_com with WooCommerce on, Wandworks Tools installed and off, and Yoast SEO gone but for its tables and options. */
 function shop() {
   const tree = wpSiteTree();
-  for (const folder of ['woocommerce', 'acme-tools']) mkdirSync(join(tree.docroot, 'wp-content', 'plugins', folder), { recursive: true });
+  for (const folder of ['woocommerce', 'wandworks-tools']) mkdirSync(join(tree.docroot, 'wp-content', 'plugins', folder), { recursive: true });
   const fake = fakeExec({
     mysqldump: () => ({ stdout: "REPLACE INTO `wp_options` VALUES (9,'wpseo','x','yes');\n" }),
     mysql: (call: FakeCall) => {
@@ -25,7 +25,7 @@ function shop() {
             ['pa', 'a:1:{i:0;s:27:"woocommerce/woocommerce.php";}'],
             ['po', 'wpseo', 2_000],
             ['po', 'wpseo_titles', 9_000],
-            ['po', 'acme_tools_settings', 500],
+            ['po', 'wandworks_tools_settings', 500],
             ['po', 'woocommerce_queue_flush', 40],
             ['po', 'widget_text', 300],
             ['po', 'rewrite_rules', 90_000],
@@ -45,7 +45,7 @@ describe("tables found in the site's code", () => {
   /** A site whose tables no name explains: one in the theme in use, one in another theme, one in a must-use plugin, one in a plugin by another name, one nobody names. */
   function coded() {
     const tree = wpSiteTree();
-    mkdirSync(join(tree.docroot, 'wp-content', 'plugins', 'acme-tools'), { recursive: true });
+    mkdirSync(join(tree.docroot, 'wp-content', 'plugins', 'wandworks-tools'), { recursive: true });
     const content = join(tree.docroot, 'wp-content');
     const tables = ['wp_options', 'wp_posts', 'wp_brand_quotes', 'wp_old_slides', 'wp_shop_queue', 'wp_toolbox_cache', 'wp_mystery', 'wp_log'];
     const fake = fakeExec({
@@ -53,18 +53,18 @@ describe("tables found in the site's code", () => {
         if (call.args.includes('-e')) return { stdout: '8.0.43\n' };
         const sql = call.input ?? '';
         if (sql.includes("JSON_ARRAY('pa'")) {
-          return { stdout: json(['pa', 'a:0:{}'], ['th', 'acme-child'], ['th', 'acme-theme'], ...tables.map((t) => ['pt', t, 1_000_000, 100])) };
+          return { stdout: json(['pa', 'a:0:{}'], ['th', 'wandworks-child'], ['th', 'wandworks-theme'], ...tables.map((t) => ['pt', t, 1_000_000, 100])) };
         }
         return { stdout: '' };
       },
       grep: {
         code: 0,
         stdout: [
-          `${content}/themes/acme-theme/inc/quotes.php:brand_quotes`,
-          `${content}/themes/acme-theme/inc/quotes.php:brand_quotes`,
+          `${content}/themes/wandworks-theme/inc/quotes.php:brand_quotes`,
+          `${content}/themes/wandworks-theme/inc/quotes.php:brand_quotes`,
           `${content}/themes/old-theme/functions.php:old_slides`,
           `${content}/mu-plugins/shop-queue.php:wp_shop_queue`,
-          `${content}/plugins/acme-tools/src/cache.php:toolbox_cache`,
+          `${content}/plugins/wandworks-tools/src/cache.php:toolbox_cache`,
         ].join('\n'),
       },
     });
@@ -75,10 +75,10 @@ describe("tables found in the site's code", () => {
     const { tree, fake, content, tables } = coded();
     const r = await wordpressPlugins({ config: tree.config, exec: fake.exec, mysql, kept: () => [] }, { domain: 'local.shop.com', path: undefined, database: 'shop_com', names: new Set(tables), prefix: 'wp_', blogPrefix: 'wp_', blog: 1, network: false });
     const by = Object.fromEntries((r?.tables ?? []).map((t) => [t.table, t]));
-    expect(by.wp_brand_quotes).toMatchObject({ plugin: 'acme-theme', kind: 'theme', by: 'code', state: 'active' });
+    expect(by.wp_brand_quotes).toMatchObject({ plugin: 'wandworks-theme', kind: 'theme', by: 'code', state: 'active' });
     expect(by.wp_old_slides).toMatchObject({ plugin: 'old-theme', kind: 'theme', by: 'code', state: 'inactive' });
     expect(by.wp_shop_queue).toMatchObject({ plugin: 'must-use plugins', kind: 'muPlugin', by: 'code', state: 'active' });
-    expect(by.wp_toolbox_cache).toMatchObject({ plugin: 'acme-tools', by: 'code', state: 'inactive' });
+    expect(by.wp_toolbox_cache).toMatchObject({ plugin: 'wandworks-tools', by: 'code', state: 'inactive' });
     expect(by.wp_mystery).toMatchObject({ state: 'unknown', unused: true });
     expect(by.wp_mystery?.plugin).toBeUndefined();
     expect(by.wp_log).toMatchObject({ state: 'unknown' });
@@ -108,7 +108,7 @@ describe('what plugins leave', () => {
     const r = await wordpressPlugins({ config: tree.config, exec: fake.exec, mysql, kept: () => [] }, { domain: 'local.shop.com', path: undefined, database: 'shop_com', names: new Set(TABLES), prefix: 'wp_', blogPrefix: 'wp_', blog: 1, network: false });
     expect(r?.tables.map((t) => [t.table, t.plugin ?? null, t.state])).toEqual([
       ['wp_mystery', null, 'unknown'],
-      ['wp_acme_tools_log', 'acme-tools', 'inactive'],
+      ['wp_wandworks_tools_log', 'wandworks-tools', 'inactive'],
       ['wp_yoast_indexable', 'Yoast SEO', 'missing'],
       ['wp_wc_orders', 'WooCommerce', 'active'],
     ]);
@@ -119,7 +119,7 @@ describe('what plugins leave', () => {
     const r = await wordpressPlugins({ config: tree.config, exec: fake.exec, mysql, kept: () => [] }, { domain: 'local.shop.com', path: undefined, database: 'shop_com', names: new Set(TABLES), prefix: 'wp_', blogPrefix: 'wp_', blog: 1, network: false });
     expect(r?.autoload).toEqual([
       { plugin: 'Yoast SEO', slug: 'wordpress-seo', state: 'missing', count: 2, bytes: 11_000, options: ['wpseo_titles', 'wpseo'] },
-      { plugin: 'acme-tools', slug: 'acme-tools', state: 'inactive', count: 1, bytes: 500, options: ['acme_tools_settings'] },
+      { plugin: 'wandworks-tools', slug: 'wandworks-tools', state: 'inactive', count: 1, bytes: 500, options: ['wandworks_tools_settings'] },
     ]);
   });
 

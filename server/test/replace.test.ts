@@ -45,8 +45,8 @@ function fakeWp(
 }
 
 const PASSES = [
-  ['//acme.com', '//local.acme.com'],
-  ['\\/\\/acme.com', '\\/\\/local.acme.com'],
+  ['//wandworks.example', '//local.wandworks.example'],
+  ['\\/\\/wandworks.example', '\\/\\/local.wandworks.example'],
 ] as const;
 
 describe('groups of tables', () => {
@@ -82,44 +82,44 @@ describe('groups of tables', () => {
 
 describe('the tables a search and replace looks at', () => {
   const tables = ['wp_options', 'wp_posts', 'wp_actionscheduler_logs', 'wp_leftover', 'wp_links'].map((name) => ({ name, bytes: MB }));
-  const hosts = { wp_options: ['acme.com'], wp_posts: ['cdn.Acme.com', 'acme.com.au'], wp_actionscheduler_logs: [], wp_links: [ANY_HOST] };
+  const hosts = { wp_options: ['wandworks.example'], wp_posts: ['cdn.Wandworks.example', 'wandworks.example.au'], wp_actionscheduler_logs: [], wp_links: [ANY_HOST] };
 
   it('reads the host a pass looks for, whatever the form', () => {
-    expect(['//acme.com', '\\/\\/acme.com', 'http://acme.com', 'http:\\/\\/Acme.com:8080', '//acme.com/fr/'].map(searchedHost)).toEqual(['acme.com', 'acme.com', 'acme.com', 'acme.com', 'acme.com']);
-    expect(searchedHost('acme.com')).toBeUndefined();
+    expect(['//wandworks.example', '\\/\\/wandworks.example', 'http://wandworks.example', 'http:\\/\\/Wandworks.example:8080', '//wandworks.example/fr/'].map(searchedHost)).toEqual(['wandworks.example', 'wandworks.example', 'wandworks.example', 'wandworks.example', 'wandworks.example']);
+    expect(searchedHost('wandworks.example')).toBeUndefined();
   });
 
   it('leaves out a table the dump made with none of the hosts, and keeps one it did not make or cannot list', () => {
     expect(tablesToSearch(tables, PASSES, hosts).map((t) => t.name)).toEqual(['wp_options', 'wp_posts', 'wp_leftover', 'wp_links']);
     // Hosts are compared in lower case, so a table is never left out for case alone.
-    expect(tablesToSearch(tables, [['//cdn.acme.com', '//cdn.local.acme.com']], hosts).map((t) => t.name)).toEqual(['wp_posts', 'wp_leftover', 'wp_links']);
+    expect(tablesToSearch(tables, [['//cdn.wandworks.example', '//cdn.local.wandworks.example']], hosts).map((t) => t.name)).toEqual(['wp_posts', 'wp_leftover', 'wp_links']);
   });
 
   it('looks at every table without the scan, or for a search that is no address', () => {
     expect(tablesToSearch(tables, PASSES, undefined)).toHaveLength(5);
-    expect(tablesToSearch(tables, [['acme.com', 'local.acme.com']], hosts)).toHaveLength(5);
+    expect(tablesToSearch(tables, [['wandworks.example', 'local.wandworks.example']], hosts)).toHaveLength(5);
   });
 
   it('finds the hosts a pass would only change because they start like its address', () => {
-    expect(longerHosts(PASSES, { a: ['acme.com', 'acme.com.au', 'acme.community', 'shop.acme.com', 'Acme.com.br'], b: ['acme.com.au.cdn.net', ANY_HOST] })).toEqual([
-      'acme.com.au.cdn.net',
-      'acme.community',
-      'acme.com.au',
+    expect(longerHosts(PASSES, { a: ['wandworks.example', 'wandworks.example.au', 'wandworks.examples', 'shop.wandworks.example', 'Wandworks.example.br'], b: ['wandworks.example.au.cdn.net', ANY_HOST] })).toEqual([
+      'wandworks.example.au.cdn.net',
+      'wandworks.example.au',
+      'wandworks.examples',
     ]);
     // Replaced on purpose, or only a path that starts the same: nothing to keep.
-    expect(longerHosts([...PASSES, ['//acme.com.au', '//local.acme.com.au']], { a: ['acme.com.au'] })).toEqual([]);
-    expect(longerHosts([['//acme.com/fr/', '//fr.local.acme.com/']], { a: ['acme.com.au'] })).toEqual([]);
+    expect(longerHosts([...PASSES, ['//wandworks.example.au', '//local.wandworks.example.au']], { a: ['wandworks.example.au'] })).toEqual([]);
+    expect(longerHosts([['//wandworks.example/fr/', '//fr.local.wandworks.example/']], { a: ['wandworks.example.au'] })).toEqual([]);
   });
 });
 
 describe('running the passes', () => {
   it('runs the groups at once, each table getting every pass in order, only on the tables that could change', async () => {
     const f = fakeWp({ wp_postmeta: 6 * GB, wp_posts: 2 * GB, wp_options: MB, wp_comments: 3 * GB });
-    const tableHosts = { wp_postmeta: ['acme.com'], wp_posts: ['acme.com'], wp_options: ['acme.com'], wp_comments: [] };
+    const tableHosts = { wp_postmeta: ['wandworks.example'], wp_posts: ['wandworks.example'], wp_options: ['wandworks.example'], wp_comments: [] };
     const notes: string[] = [];
     const results = await runPasses(f.wp, PASSES, { flag: '--all-tables-with-prefix', tableHosts, groups: 3, job: { onUndo: () => undefined, progress: () => undefined, activity: (l) => notes.push(l) } });
     expect(results.every((r) => r.code === 0)).toBe(true);
-    for (const table of ['wp_postmeta', 'wp_posts', 'wp_options']) expect(f.on(table)).toEqual(['//acme.com //local.acme.com', '\\/\\/acme.com \\/\\/local.acme.com']);
+    for (const table of ['wp_postmeta', 'wp_posts', 'wp_options']) expect(f.on(table)).toEqual(['//wandworks.example //local.wandworks.example', '\\/\\/wandworks.example \\/\\/local.wandworks.example']);
     expect(f.on('wp_comments')).toEqual([]);
     expect(f.most()).toBe(3);
     // The flag stays: WP-CLI only keeps plugin tables named with it.
@@ -130,23 +130,23 @@ describe('running the passes', () => {
 
   it('sets a longer host aside before the passes and puts it back after, in the tables that have it', async () => {
     const f = fakeWp({ wp_posts: GB, wp_options: MB, wp_leftover: MB });
-    const tableHosts = { wp_posts: ['acme.com', 'acme.com.au'], wp_options: ['acme.com'] };
+    const tableHosts = { wp_posts: ['wandworks.example', 'wandworks.example.au'], wp_options: ['wandworks.example'] };
     const results = await runPasses(f.wp, PASSES, { flag: '--all-tables', tableHosts, groups: 1 });
     const posts = f.on('wp_posts');
-    const token = /^\/\/acme\.com\.au \/\/(dmp-keep-[0-9a-f]{8}-0000)$/.exec(posts[0] ?? '')?.[1] as string;
+    const token = /^\/\/wandworks\.example\.au \/\/(dmp-keep-[0-9a-f]{8}-0000)$/.exec(posts[0] ?? '')?.[1] as string;
     expect(token).toBeDefined();
     expect(posts).toEqual([
-      `//acme.com.au //${token}`,
-      `\\/\\/acme.com.au \\/\\/${token}`,
-      '//acme.com //local.acme.com',
-      '\\/\\/acme.com \\/\\/local.acme.com',
-      `//${token} //acme.com.au`,
-      `\\/\\/${token} \\/\\/acme.com.au`,
+      `//wandworks.example.au //${token}`,
+      `\\/\\/wandworks.example.au \\/\\/${token}`,
+      '//wandworks.example //local.wandworks.example',
+      '\\/\\/wandworks.example \\/\\/local.wandworks.example',
+      `//${token} //wandworks.example.au`,
+      `\\/\\/${token} \\/\\/wandworks.example.au`,
     ]);
-    // wp_options has no acme.com.au; a table the dump did not make might.
-    expect(f.on('wp_options')).toEqual(['//acme.com //local.acme.com', '\\/\\/acme.com \\/\\/local.acme.com']);
+    // wp_options has no wandworks.example.au; a table the dump did not make might.
+    expect(f.on('wp_options')).toEqual(['//wandworks.example //local.wandworks.example', '\\/\\/wandworks.example \\/\\/local.wandworks.example']);
     expect(f.on('wp_leftover')).toHaveLength(6);
-    expect(results[0]?.stdout).toBe('kept as they are: acme.com.au (they start like a replaced host)');
+    expect(results[0]?.stdout).toBe('kept as they are: wandworks.example.au (they start like a replaced host)');
   });
 
   it('lets the other groups finish when one fails, and fails the step', async () => {
@@ -165,8 +165,8 @@ describe('running the passes', () => {
     };
     await runPasses(wp, PASSES, { flag: '--all-tables', tableHosts: { wp_posts: [] } });
     expect(calls.filter((a) => a[0] === 'search-replace')).toEqual([
-      ['search-replace', '//acme.com', '//local.acme.com', '--all-tables', '--skip-columns=guid', '--report-changed-only'],
-      ['search-replace', '\\/\\/acme.com', '\\/\\/local.acme.com', '--all-tables', '--skip-columns=guid', '--report-changed-only'],
+      ['search-replace', '//wandworks.example', '//local.wandworks.example', '--all-tables', '--skip-columns=guid', '--report-changed-only'],
+      ['search-replace', '\\/\\/wandworks.example', '\\/\\/local.wandworks.example', '--all-tables', '--skip-columns=guid', '--report-changed-only'],
     ]);
   });
 
@@ -205,10 +205,10 @@ describe('big tables WP-CLI would go through a row at a time', () => {
     );
     const results = await runPasses(f.wp, PASSES, { flag: '--all-tables', groups: 1, job: { onUndo: () => undefined, progress: () => undefined, activity: (l) => notes.push(l) } });
     expect(log).toEqual([
-      "sql '//acme.com'",
-      'wp //acme.com wp_postmeta,wp_options',
-      "sql '\\\\/\\\\/acme.com'",
-      'wp \\/\\/acme.com wp_postmeta,wp_options',
+      "sql '//wandworks.example'",
+      'wp //wandworks.example wp_postmeta,wp_options',
+      "sql '\\\\/\\\\/wandworks.example'",
+      'wp \\/\\/wandworks.example wp_postmeta,wp_options',
     ]);
     const batch = f.queries.find((q) => q.input)?.input as string;
     expect(batch.split('\n')).toEqual(
@@ -218,7 +218,7 @@ describe('big tables WP-CLI would go through a row at a time', () => {
         [100001, 120000],
       ].map(
         ([lo, hi]) =>
-          `UPDATE \`wp_postmeta\` SET \`meta_value\` = IF(SUBSTRING(\`meta_value\`, 2, 1) = ':' OR LEFT(\`meta_value\`, 2) = 'N;', \`meta_value\`, REPLACE(\`meta_value\`, '//acme.com', '//local.acme.com')) WHERE \`meta_id\` BETWEEN ${lo} AND ${hi}; SELECT ROW_COUNT();`,
+          `UPDATE \`wp_postmeta\` SET \`meta_value\` = IF(SUBSTRING(\`meta_value\`, 2, 1) = ':' OR LEFT(\`meta_value\`, 2) = 'N;', \`meta_value\`, REPLACE(\`meta_value\`, '//wandworks.example', '//local.wandworks.example')) WHERE \`meta_id\` BETWEEN ${lo} AND ${hi}; SELECT ROW_COUNT();`,
       ),
     );
     // Only the big table is looked at, once.
@@ -263,11 +263,11 @@ describe('big tables WP-CLI would go through a row at a time', () => {
 describe("WP-CLI's warnings", () => {
   it('about objects of classes it did not load come as one line', () => {
     const warn = (name: string) => `Warning: Skipping an uninitialized class "${name}", replacements might not be complete.`;
-    const stderr = [warn('Acme_Plan'), warn('Acme_Plan'), warn('Acme\\Logger\\Item'), 'Warning: something else'].join('\n');
+    const stderr = [warn('Wandworks_Plan'), warn('Wandworks_Plan'), warn('Wandworks\\Logger\\Item'), 'Warning: something else'].join('\n');
     expect(collapseWarnings({ code: 0, stdout: 'Success: Made 4 replacements.', stderr })).toEqual({
       code: 0,
       stdout: 'Success: Made 4 replacements.',
-      stderr: 'Warning: something else\nWarning: 3 serialized objects of plugin classes not loaded during the replace (Acme_Plan, Acme\\Logger\\Item) left as they are; addresses inside them did not change.',
+      stderr: 'Warning: something else\nWarning: 3 serialized objects of plugin classes not loaded during the replace (Wandworks_Plan, Wandworks\\Logger\\Item) left as they are; addresses inside them did not change.',
     });
     expect(collapseWarnings(ok('x'))).toEqual(ok('x'));
   });
@@ -281,22 +281,22 @@ describe('the check after the replace', () => {
   };
 
   it('passes when home and siteurl left the production hosts', async () => {
-    const wp = site({ 'SELECT 1,': '1\thome\thttps://local.acme.com\n1\tsiteurl\thttps://local.acme.com/wp\n' });
-    expect(await checkAddresses(wp, { prefix: 'wp_', multisite: false, from: ['www.acme.com', 'acme.com'] })).toEqual(ok('home and siteurl of the site no longer use www.acme.com, acme.com'));
+    const wp = site({ 'SELECT 1,': '1\thome\thttps://local.wandworks.example\n1\tsiteurl\thttps://local.wandworks.example/wp\n' });
+    expect(await checkAddresses(wp, { prefix: 'wp_', multisite: false, from: ['www.wandworks.example', 'wandworks.example'] })).toEqual(ok('home and siteurl of the site no longer use www.wandworks.example, wandworks.example'));
   });
 
   it("names each network site still on one, in its options or its blogs row, and reads every site's options in one charset", async () => {
     let options = '';
     const wp = async (args: string[]) => {
       const sql = args[2] ?? '';
-      if (sql.startsWith('SELECT blog_id')) return ok('1\tlocal.acme.com\t/\n2\tacme.com.au\t/\n3\tshop.acme.com:8080\t/\n');
+      if (sql.startsWith('SELECT blog_id')) return ok('1\tlocal.wandworks.example\t/\n2\twandworks.example.au\t/\n3\tshop.wandworks.example:8080\t/\n');
       options = sql;
-      return ok('1\thome\thttps://local.acme.com\n2\thome\thttps://acme.com.au\n3\tsiteurl\thttp://shop.acme.com:8080/\n');
+      return ok('1\thome\thttps://local.wandworks.example\n2\thome\thttps://wandworks.example.au\n3\tsiteurl\thttp://shop.wandworks.example:8080/\n');
     };
-    const r = await checkAddresses(wp, { prefix: 'wp_', multisite: true, from: ['acme.com.au', 'shop.acme.com:8080'] });
+    const r = await checkAddresses(wp, { prefix: 'wp_', multisite: true, from: ['wandworks.example.au', 'shop.wandworks.example:8080'] });
     expect(r.code).toBe(1);
     expect(r.stderr).toBe(
-      'still on a production address: site 2 is still at acme.com.au/ in wp_blogs; site 3 is still at shop.acme.com:8080/ in wp_blogs; site 2 home is still https://acme.com.au; site 3 siteurl is still http://shop.acme.com:8080/',
+      'still on a production address: site 2 is still at wandworks.example.au/ in wp_blogs; site 3 is still at shop.wandworks.example:8080/ in wp_blogs; site 2 home is still https://wandworks.example.au; site 3 siteurl is still http://shop.wandworks.example:8080/',
     );
     expect(options).toContain('FROM `wp_options`');
     expect(options).toContain('FROM `wp_2_options`');

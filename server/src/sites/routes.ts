@@ -220,11 +220,11 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     }
   });
 
-  // Branches, recent commits and uncommitted changes of the site's repo, a mounted folder's (?mount=/learn) or a repo inside it (?repo=wp-content/themes/acme).
+  // Branches, recent commits and uncommitted changes of the site's repo, a mounted folder's (?mount=/learn) or a repo inside it (?repo=wp-content/themes/wandworks).
   api.get<{ Params: { domain: string }; Querystring: { mount?: string; repo?: string } }>('/api/sites/:domain/git', async (request, reply): Promise<GitDetails | undefined> => {
     const { mount, repo } = request.query;
     if (mount !== undefined && !mountPath.safeParse(mount).success) return reply.code(400).send({ error: 'mount must be a path like /learn' });
-    if (repo !== undefined && !repoFolder.safeParse(repo).success) return reply.code(400).send({ error: 'repo must be a folder like wp-content/themes/acme' });
+    if (repo !== undefined && !repoFolder.safeParse(repo).success) return reply.code(400).send({ error: 'repo must be a folder like wp-content/themes/wandworks' });
     try {
       return await readGitDetails(deps.exec, gitFolder(deps.config, request.params.domain, mount, repo));
     } catch (error) {
@@ -237,7 +237,7 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
   api.get<{ Params: { domain: string }; Querystring: { mount?: string; repo?: string } }>('/api/sites/:domain/git/pulls', async (request, reply): Promise<GitPullRequest[] | undefined> => {
     const { mount, repo } = request.query;
     if (mount !== undefined && !mountPath.safeParse(mount).success) return reply.code(400).send({ error: 'mount must be a path like /learn' });
-    if (repo !== undefined && !repoFolder.safeParse(repo).success) return reply.code(400).send({ error: 'repo must be a folder like wp-content/themes/acme' });
+    if (repo !== undefined && !repoFolder.safeParse(repo).success) return reply.code(400).send({ error: 'repo must be a folder like wp-content/themes/wandworks' });
     try {
       return await readPullRequests(deps.exec, gitFolder(deps.config, request.params.domain, mount, repo));
     } catch (error) {

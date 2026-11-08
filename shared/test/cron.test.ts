@@ -95,43 +95,43 @@ describe('cronTask', () => {
   };
 
   it('takes each kind with what it needs', () => {
-    expect(parse({ kind: 'wp-cron', domain: 'local.acme.com' }).success).toBe(true);
-    expect(parse({ kind: 'wp-cron', domain: 'local.acme.com', path: '/learn' }).success).toBe(true);
-    expect(parse({ kind: 'wp-cli', domain: 'local.acme.com', command: ['action-scheduler', 'run', '--batch-size=25'] }).success).toBe(true);
-    expect(parse({ kind: 'wp-cli', domain: 'local.acme.com', command: ['acme', 'sync', '--limit=50'] }).success).toBe(true);
-    expect(parse({ kind: 'php-script', domain: 'local.acme.com', file: 'wp-content/cron/sync.php' }).success).toBe(true);
-    expect(parse({ kind: 'url', url: 'https://local.acme.com/wp-cron.php?doing_wp_cron=1&x=%20' }).success).toBe(true);
+    expect(parse({ kind: 'wp-cron', domain: 'local.wandworks.example' }).success).toBe(true);
+    expect(parse({ kind: 'wp-cron', domain: 'local.wandworks.example', path: '/learn' }).success).toBe(true);
+    expect(parse({ kind: 'wp-cli', domain: 'local.wandworks.example', command: ['action-scheduler', 'run', '--batch-size=25'] }).success).toBe(true);
+    expect(parse({ kind: 'wp-cli', domain: 'local.wandworks.example', command: ['wandworks', 'sync', '--limit=50'] }).success).toBe(true);
+    expect(parse({ kind: 'php-script', domain: 'local.wandworks.example', file: 'wp-content/cron/sync.php' }).success).toBe(true);
+    expect(parse({ kind: 'url', url: 'https://local.wandworks.example/wp-cron.php?doing_wp_cron=1&x=%20' }).success).toBe(true);
     expect(parse({ kind: 'program', program: '/home/alex/bin/sync.sh', args: ['--to', 'a b', "it's 100%", '$HOME;rm -rf /'] }).success).toBe(true);
   });
 
   it('refuses sites that are not local, and real domains in a URL', () => {
     expect(parse({ kind: 'wp-cron', domain: 'example.com' }).success).toBe(false);
     expect(message({ kind: 'url', url: 'https://example.com/wp-cron.php' })).toContain('local name');
-    expect(message({ kind: 'url', url: 'https://alex:secret@local.acme.com/' })).toContain('local name');
+    expect(message({ kind: 'url', url: 'https://alex:secret@local.wandworks.example/' })).toContain('local name');
     expect(message({ kind: 'url', url: 'file:///etc/passwd' })).toContain('local name');
   });
 
   it('keeps WP-CLI to the scheduled commands and a site\'s own', () => {
-    expect(message({ kind: 'wp-cli', domain: 'local.acme.com', command: ['eval', 'echo 1;'] })).not.toBe('');
-    expect(message({ kind: 'wp-cli', domain: 'local.acme.com', command: ['db', 'drop', '--yes'] })).toContain('not one a task may run');
-    expect(message({ kind: 'wp-cli', domain: 'local.acme.com', command: ['plugin', 'install', 'acme'] })).toContain('not one a task may run');
-    expect(message({ kind: 'wp-cli', domain: 'local.acme.com', command: ['cron', 'event', 'run'] })).toContain('needs the hook');
-    expect(message({ kind: 'wp-cli', domain: 'local.acme.com', command: ['acme', 'sync', '--exec=system("id");'] })).not.toBe('');
-    expect(wpCliCommandProblem(['acme', 'sync', '--require=/tmp/x.php'])).toContain('--require');
+    expect(message({ kind: 'wp-cli', domain: 'local.wandworks.example', command: ['eval', 'echo 1;'] })).not.toBe('');
+    expect(message({ kind: 'wp-cli', domain: 'local.wandworks.example', command: ['db', 'drop', '--yes'] })).toContain('not one a task may run');
+    expect(message({ kind: 'wp-cli', domain: 'local.wandworks.example', command: ['plugin', 'install', 'wandworks'] })).toContain('not one a task may run');
+    expect(message({ kind: 'wp-cli', domain: 'local.wandworks.example', command: ['cron', 'event', 'run'] })).toContain('needs the hook');
+    expect(message({ kind: 'wp-cli', domain: 'local.wandworks.example', command: ['wandworks', 'sync', '--exec=system("id");'] })).not.toBe('');
+    expect(wpCliCommandProblem(['wandworks', 'sync', '--require=/tmp/x.php'])).toContain('--require');
     expect(wpCliCommandProblem(['--url=https://example.com/', 'cache', 'flush'])).toContain('--url');
-    expect(wpCliCommandProblem(['cron', 'event', 'run', 'acme_sync'])).toBeNull();
+    expect(wpCliCommandProblem(['cron', 'event', 'run', 'wandworks_sync'])).toBeNull();
     expect(wpCliCommandProblem(['transient', 'delete', '--expired'])).toBeNull();
   });
 
   it('allows no shell syntax in a word that goes on the crontab line', () => {
     for (const word of ['a b', 'x;id', '$(id)', '`id`', 'a|b', 'a>b', '%', "'", '"', '#x', 'a&b', '*']) {
-      expect(parse({ kind: 'wp-cli', domain: 'local.acme.com', command: ['acme', word] }).success).toBe(false);
+      expect(parse({ kind: 'wp-cli', domain: 'local.wandworks.example', command: ['wandworks', word] }).success).toBe(false);
     }
   });
 
   it('keeps a PHP file inside the site and a program at a full path', () => {
     for (const file of ['../wp-config.php', '/etc/passwd.php', 'wp-content/../../x.php', 'wp-content//x.php', 'run.sh', './x.php']) {
-      expect(parse({ kind: 'php-script', domain: 'local.acme.com', file }).success).toBe(false);
+      expect(parse({ kind: 'php-script', domain: 'local.wandworks.example', file }).success).toBe(false);
     }
     for (const program of ['bin/sync.sh', '/home/alex/../root/x', '/home/alex/my script', '/home/alex/x;id']) {
       expect(parse({ kind: 'program', program }).success).toBe(false);
@@ -141,8 +141,8 @@ describe('cronTask', () => {
 
   it('keeps titles to one line and ids to six letters', () => {
     const add = actions['cron.add'].input;
-    const base = { schedule: '*/5 * * * *', task: { kind: 'wp-cron', domain: 'local.acme.com' } };
-    expect(add.safeParse({ ...base, title: 'WP-Cron for local.acme.com' }).success).toBe(true);
+    const base = { schedule: '*/5 * * * *', task: { kind: 'wp-cron', domain: 'local.wandworks.example' } };
+    expect(add.safeParse({ ...base, title: 'WP-Cron for local.wandworks.example' }).success).toBe(true);
     expect(add.safeParse({ ...base, title: 'two\nlines' }).success).toBe(false);
     expect(add.safeParse({ ...base, title: '' }).success).toBe(false);
     expect(add.safeParse({ ...base, title: 'x', timeoutMinutes: 61 }).success).toBe(false);
@@ -152,13 +152,13 @@ describe('cronTask', () => {
 
   it('takes WP-Cron hooks and saved copies by their shape only', () => {
     const del = actions['wpcron.delete'].input;
-    const base = { domain: 'local.acme.com', time: 1790000000, sig: '40cd750bba9870f18aada2478b24840a' };
-    expect(del.safeParse({ ...base, hook: 'acme_sync_orders' }).success).toBe(true);
-    expect(del.safeParse({ ...base, hook: 'Acme\\Sync::run' }).success).toBe(true);
+    const base = { domain: 'local.wandworks.example', time: 1790000000, sig: '40cd750bba9870f18aada2478b24840a' };
+    expect(del.safeParse({ ...base, hook: 'wandworks_sync_orders' }).success).toBe(true);
+    expect(del.safeParse({ ...base, hook: 'Wandworks\\Sync::run' }).success).toBe(true);
     expect(del.safeParse({ ...base, hook: '--help' }).success).toBe(false);
     expect(del.safeParse({ ...base, hook: 'x', sig: 'nope' }).success).toBe(false);
     expect(actions['cron.undo'].input.safeParse({ backup: 'crontab-20261106-101500-123.txt' }).success).toBe(true);
     expect(actions['cron.undo'].input.safeParse({ backup: '../secrets.json' }).success).toBe(false);
-    expect(actions['wpcron.undo'].input.safeParse({ domain: 'local.acme.com', backup: 'wp-cron-local.acme.com-learn-20261106-101500-123.json' }).success).toBe(true);
+    expect(actions['wpcron.undo'].input.safeParse({ domain: 'local.wandworks.example', backup: 'wp-cron-local.wandworks.example-learn-20261106-101500-123.json' }).success).toBe(true);
   });
 });

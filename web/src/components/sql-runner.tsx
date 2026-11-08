@@ -235,7 +235,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
           <ResizableBox>
             <EditorBoundary fallback={plain}>
               <Suspense fallback={plain}>
-                <SqlEditor value={sql} onChange={setSql} onRun={go} {...(schema.data ? { schema: schema.data.tables } : {})} label={`SQL on ${database}`} placeholder={writing ? "UPDATE wp_options SET autoload = 'off' WHERE option_name = 'acme_cache'" : hint} />
+                <SqlEditor value={sql} onChange={setSql} onRun={go} {...(schema.data ? { schema: schema.data.tables } : {})} label={`SQL on ${database}`} placeholder={writing ? "UPDATE wp_options SET autoload = 'off' WHERE option_name = 'wandworks_cache'" : hint} />
               </Suspense>
             </EditorBoundary>
           </ResizableBox>

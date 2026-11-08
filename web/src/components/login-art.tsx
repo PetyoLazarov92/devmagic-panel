@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 const HUB = { x: 130, y: 120 };
 const SITES = [
-  { name: 'local.acme.test', x: 70, y: 70, speed: 1.8 },
+  { name: 'local.wandworks.test', x: 70, y: 70, speed: 1.8 },
   { name: 'local.shop.test', x: 190, y: 68, speed: 2.2 },
   { name: 'www.local.blog.test', x: 200, y: 150, speed: 2 },
   { name: 'shop.localhost', x: 66, y: 160, speed: 2.5 },

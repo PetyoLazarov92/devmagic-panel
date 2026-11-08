@@ -161,7 +161,7 @@ dmp_nginx_conf_render() {
 # server its line in /etc/hosts points at. nginx-teardown removes this file.
 
 EOF
-  printf '# Long local names, like local.shop.acme.com.\n'
+  printf '# Long local names, like local.shop.wandworks.example.\n'
   dmp_nginx_http_setting server_names_hash_bucket_size 128
   printf "# No upload limit of nginx's own: PHP's upload_max_filesize and post_max_size apply.\n"
   dmp_nginx_http_setting client_max_body_size 0

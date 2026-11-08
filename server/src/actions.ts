@@ -704,7 +704,7 @@ export async function runAction(ctx: ActionContext, id: ActionId, rawInput: unkn
   }
   // One thing at a time on a site: nothing touches it while a job works on it (an
   // install, a removal, a restore of its Deleted sites entry) or another action runs.
-  // A site under a path meets its domain: local.northwind.com/learn and local.northwind.com.
+  // A site under a path meets its domain: local.spellbook.example/learn and local.spellbook.example.
   const key = lockKey(id, parsed.data);
   const busy = key ? ctx.jobs.busyFor(key) : undefined;
   if (busy) {

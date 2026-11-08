@@ -12,13 +12,13 @@ const mysql = { user: 'devmagic_panel', host: 'localhost', password: 'adminpw' }
 const TABLES = [
   ['t', 'wp_posts', 'BASE TABLE', 'InnoDB', 4096],
   ['t', 'wp_postmeta', 'BASE TABLE', 'InnoDB', 2048],
-  ['t', 'acme_parent', 'BASE TABLE', 'InnoDB', 100],
-  ['t', 'acme_child', 'BASE TABLE', 'InnoDB', 100],
-  ['t', 'acme_log', 'BASE TABLE', 'MyISAM', 100],
+  ['t', 'wandworks_parent', 'BASE TABLE', 'InnoDB', 100],
+  ['t', 'wandworks_child', 'BASE TABLE', 'InnoDB', 100],
+  ['t', 'wandworks_log', 'BASE TABLE', 'MyISAM', 100],
   ['d', 'shop_com'],
   ['d', 'reports'],
   ['d', 'mysql'],
-  ['f', 'acme_child', 'acme_parent'],
+  ['f', 'wandworks_child', 'wandworks_parent'],
 ];
 
 function fakeDb(answer: (sql: string, call: FakeCall) => Partial<{ code: number; stdout: string; stderr: string }> | undefined = () => undefined) {
@@ -31,7 +31,7 @@ function fakeDb(answer: (sql: string, call: FakeCall) => Partial<{ code: number;
       if (special) return special;
       if (sql.includes("JSON_ARRAY('t', TABLE_NAME")) return { stdout: TABLES.map((r) => JSON.stringify(r)).join('\n') };
       if (sql.includes('ROW_COUNT()')) return { stdout: '7\n' };
-      if (sql.includes('SELECT TABLE_NAME, TABLE_TYPE')) return { stdout: 'wp_posts\tBASE TABLE\nwp_postmeta\tBASE TABLE\nacme_parent\tBASE TABLE\nacme_child\tBASE TABLE\nacme_log\tBASE TABLE\n' };
+      if (sql.includes('SELECT TABLE_NAME, TABLE_TYPE')) return { stdout: 'wp_posts\tBASE TABLE\nwp_postmeta\tBASE TABLE\nwandworks_parent\tBASE TABLE\nwandworks_child\tBASE TABLE\nwandworks_log\tBASE TABLE\n' };
       return { stdout: '' };
     },
   });
@@ -42,21 +42,21 @@ describe('what SQL that writes would change', () => {
   it('saves the tables a statement names, aliases and all, and the ones a foreign key cascades into', async () => {
     const ctx = ctxFor(fakeDb());
     expect((await planned(ctx, 'shop_com', "UPDATE wp_posts p SET p.post_status = 'publish' WHERE p.ID IN (SELECT post_id FROM `wp_postmeta`)")).tables.map((t) => t.name)).toEqual(['wp_posts', 'wp_postmeta']);
-    expect((await planned(ctx, 'shop_com', 'DELETE FROM acme_parent WHERE id = 1')).tables.map((t) => t.name)).toEqual(['acme_parent', 'acme_child']);
+    expect((await planned(ctx, 'shop_com', 'DELETE FROM wandworks_parent WHERE id = 1')).tables.map((t) => t.name)).toEqual(['wandworks_parent', 'wandworks_child']);
     // Words inside a string are data, never a table.
     expect((await planned(ctx, 'shop_com', "UPDATE wp_posts SET post_status = 'wp_postmeta'")).tables.map((t) => t.name)).toEqual(['wp_posts']);
-    expect((await planned(ctx, 'shop_com', 'ALTER TABLE wp_posts ADD COLUMN acme_flag int')).rows).toBe(false);
+    expect((await planned(ctx, 'shop_com', 'ALTER TABLE wp_posts ADD COLUMN wandworks_flag int')).rows).toBe(false);
   });
 
   it('refuses another database, accounts and rights, databases, files and statements that name no table', async () => {
     const ctx = ctxFor(fakeDb());
     const refused = (sql: string, why: RegExp) => expect(planned(ctx, 'shop_com', sql)).rejects.toThrow(why);
-    await refused("UPDATE reports.acme SET x = 1", /names the database reports/);
+    await refused("UPDATE reports.wandworks SET x = 1", /names the database reports/);
     await refused('DELETE FROM `mysql`.`user`', /names the database mysql/);
     await refused('GRANT ALL ON *.* TO nobody', /not GRANT ALL/);
-    await refused('CREATE DATABASE acme', /not CREATE DATABASE/);
+    await refused('CREATE DATABASE wandworks', /not CREATE DATABASE/);
     await refused('DROP DATABASE shop_com', /not DROP DATABASE/);
-    await refused('CREATE USER acme', /not CREATE USER/);
+    await refused('CREATE USER wandworks', /not CREATE USER/);
     await refused("LOAD DATA INFILE '/etc/passwd' INTO TABLE wp_posts", /not LOAD DATA/);
     await refused('CREATE DEFINER = root VIEW v AS SELECT 1', /not CREATE DEFINER/);
     await refused('SET GLOBAL general_log = 1', /not SET GLOBAL/);
@@ -79,7 +79,7 @@ describe('what SQL that writes would change', () => {
     expect(tried.input).toContain("START TRANSACTION;\nUPDATE wp_posts SET post_status = 'draft' -- all of them\n;\nSELECT ROW_COUNT();\nROLLBACK;\n");
     expect(tried.args).toEqual(expect.arrayContaining(['--binary-mode', '--database=shop_com']));
     expect(tried.input).not.toContain('COMMIT');
-    expect(await checkWrite(ctx, 'shop_com', { sql: "UPDATE acme_log SET msg = 'x'" })).toMatchObject({ rows: null, why: expect.stringMatching(/acme_log \(MyISAM\) cannot roll back/) });
+    expect(await checkWrite(ctx, 'shop_com', { sql: "UPDATE wandworks_log SET msg = 'x'" })).toMatchObject({ rows: null, why: expect.stringMatching(/wandworks_log \(MyISAM\) cannot roll back/) });
     expect(await checkWrite(ctx, 'shop_com', { sql: 'ALTER TABLE wp_posts ADD COLUMN x int' })).toMatchObject({ rows: null, why: expect.stringMatching(/MySQL commits it at once/) });
     await expect(checkWrite(ctx, 'shop_com', { sql: 'GRANT ALL ON *.* TO x' })).rejects.toMatchObject({ status: 400 });
     await expect(checkWrite(ctxFor(fakeDb((sql) => (sql.includes('ROLLBACK') ? { code: 1, stderr: "ERROR 1054 (42S22) at line 4: Unknown column 'nope'" } : undefined))), 'shop_com', { sql: 'UPDATE wp_posts SET nope = 1' })).rejects.toMatchObject({
@@ -101,7 +101,7 @@ describe('running SQL that writes', () => {
   it('saves its tables whole, runs a change of rows in a transaction, and names it by kind and tables, never its text', async () => {
     const fake = fakeDb();
     const ctx = ctxFor(fake);
-    const { title, steps } = await planWrite(ctx, { database: 'shop_com', sql: "UPDATE wp_posts SET post_status = 'alex.morgan@acme.com'", confirm: 'shop_com' });
+    const { title, steps } = await planWrite(ctx, { database: 'shop_com', sql: "UPDATE wp_posts SET post_status = 'alex.morgan@wandworks.example'", confirm: 'shop_com' });
     expect(title).toBe('UPDATE on wp_posts');
     const { out, undos } = await run(steps);
     expect(out[1]).toMatchObject({ code: 0, stdout: '7 rows changed. Undo puts the tables back as they were before it, for 14 days' });
@@ -109,7 +109,7 @@ describe('running SQL that writes', () => {
     expect(dump.args).not.toContain('--insert-ignore');
     expect(dump.args).not.toContain('--no-create-info');
     expect(dump.args.slice(-3)).toEqual(['--', 'shop_com', 'wp_posts']);
-    expect(fake.calls.find((c) => c.input?.includes('COMMIT'))?.input).toContain("START TRANSACTION;\nUPDATE wp_posts SET post_status = 'alex.morgan@acme.com'\n;\nSELECT ROW_COUNT();\nCOMMIT;\n");
+    expect(fake.calls.find((c) => c.input?.includes('COMMIT'))?.input).toContain("START TRANSACTION;\nUPDATE wp_posts SET post_status = 'alex.morgan@wandworks.example'\n;\nSELECT ROW_COUNT();\nCOMMIT;\n");
     expect(undos).toHaveLength(1);
     expect(withoutPasswords({ database: 'shop_com', sql: 'UPDATE ...', confirm: 'shop_com' })).toEqual({ database: 'shop_com', sql: '(hidden)', confirm: 'shop_com' });
   });
@@ -121,14 +121,14 @@ describe('running SQL that writes', () => {
     expect(out[1]).toMatchObject({ code: 1 });
     expect(existsSync(cleanupsDir(ctx.config)) ? readdirSync(cleanupsDir(ctx.config)) : []).toEqual([]);
 
-    const creating = fakeDb((sql) => (sql.includes('SELECT TABLE_NAME, TABLE_TYPE') ? { stdout: 'wp_posts\tBASE TABLE\nacme_new\tBASE TABLE\nacme_view\tVIEW\n' } : undefined));
+    const creating = fakeDb((sql) => (sql.includes('SELECT TABLE_NAME, TABLE_TYPE') ? { stdout: 'wp_posts\tBASE TABLE\nwandworks_new\tBASE TABLE\nwandworks_view\tVIEW\n' } : undefined));
     const made = ctxFor(creating);
-    const { title, steps } = await planWrite(made, { database: 'shop_com', sql: 'CREATE TABLE acme_new (id int)', confirm: 'shop_com' });
+    const { title, steps } = await planWrite(made, { database: 'shop_com', sql: 'CREATE TABLE wandworks_new (id int)', confirm: 'shop_com' });
     expect(title).toBe('CREATE on a new table');
     const { out: done, undos } = await run(steps);
-    expect(done[1]).toMatchObject({ stdout: 'done; made acme_new, acme_view. Undo deletes what it made, for 14 days' });
+    expect(done[1]).toMatchObject({ stdout: 'done; made wandworks_new, wandworks_view. Undo deletes what it made, for 14 days' });
     await undos[0]?.();
-    expect(creating.calls.filter((c) => c.input?.includes('DROP ')).map((c) => c.input?.split('\n')[1])).toEqual(['DROP TABLE IF EXISTS `acme_new`;', 'DROP VIEW IF EXISTS `acme_view`;']);
+    expect(creating.calls.filter((c) => c.input?.includes('DROP ')).map((c) => c.input?.split('\n')[1])).toEqual(['DROP TABLE IF EXISTS `wandworks_new`;', 'DROP VIEW IF EXISTS `wandworks_view`;']);
     expect(readdirSync(cleanupsDir(made.config))).toEqual([]);
   });
 

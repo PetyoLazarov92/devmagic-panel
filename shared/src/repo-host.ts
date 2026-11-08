@@ -21,15 +21,15 @@ const GITLAB_PATH = new RegExp(`^${GITLAB_SEGMENT}(?:/${GITLAB_SEGMENT}){0,20}$`
 const isGitlabPath = (path: string) =>
   path.length <= 255 && GITLAB_PATH.test(path) && !path.split('/').some((s) => /\.(git|atom)$/i.test(s) || s.includes('..'));
 
-/** A GitLab group or project path, like acme/web/shop. */
-export const gitlabPath = z.string().max(255).refine(isGitlabPath, 'A GitLab path like acme/web');
+/** A GitLab group or project path, like wandworks/web/shop. */
+export const gitlabPath = z.string().max(255).refine(isGitlabPath, 'A GitLab path like wandworks/web');
 
-/** The hostname of a GitLab server, like gitlab.acme.test; no scheme, port or path. */
+/** The hostname of a GitLab server, like gitlab.wandworks.test; no scheme, port or path. */
 export const gitlabHost = z
   .string()
   .max(253)
   .transform((h) => h.trim().toLowerCase())
-  .refine((h) => HOST.test(h) && h !== GITHUB_HOST, 'A GitLab hostname like gitlab.acme.test');
+  .refine((h) => HOST.test(h) && h !== GITHUB_HOST, 'A GitLab hostname like gitlab.wandworks.test');
 
 export interface Namespace {
   provider: RepoProvider;
@@ -48,8 +48,8 @@ export const isShared = (ns: Pick<Namespace, 'path'>): boolean => ns.path === SH
 
 /**
  * How a namespace is written in settings, the panel's database and how a site
- * was installed: a GitHub organization by its bare name (acme), as before
- * GitLab came, and a GitLab group with its host first (gitlab.com/acme/web).
+ * was installed: a GitHub organization by its bare name (wandworks), as before
+ * GitLab came, and a GitLab group with its host first (gitlab.com/wandworks/web).
  * They never collide: a GitHub name has no dot or slash, a GitLab one always
  * starts with a hostname, which has a dot.
  */
@@ -65,16 +65,16 @@ export function parseNamespaceRef(ref: string): Namespace | null {
 
 export const namespaceRefOf = (ns: Namespace): string => (ns.provider === 'github' ? ns.path : `${ns.host}/${ns.path}`);
 
-export const namespaceRef = z.string().max(300).refine((ref) => parseNamespaceRef(ref) !== null, 'An organization like acme or a GitLab group like gitlab.com/acme/web');
+export const namespaceRef = z.string().max(300).refine((ref) => parseNamespaceRef(ref) !== null, 'An organization like wandworks or a GitLab group like gitlab.com/wandworks/web');
 
-/** A namespace on its own host: acme, acme/web, Shared with you. */
+/** A namespace on its own host: wandworks, wandworks/web, Shared with you. */
 export function namespaceShortLabel(ref: string): string {
   const ns = parseNamespaceRef(ref);
   if (!ns) return ref;
   return isShared(ns) ? 'Shared with you' : ns.path;
 }
 
-/** acme (GitHub), acme/web (gitlab.com), Shared with you (gitlab.com) */
+/** wandworks (GitHub), wandworks/web (gitlab.com), Shared with you (gitlab.com) */
 export function namespaceLabel(ref: string): string {
   const ns = parseNamespaceRef(ref);
   if (!ns) return ref;

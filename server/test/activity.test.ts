@@ -7,7 +7,7 @@ describe("Claude Code's activity", () => {
     expect(toolLine('Glob', { pattern: 'docs/**/*.md' }, '/work')).toBe('Looking for files: docs/**/*.md');
     expect(toolLine('Grep', { pattern: 'dump' }, '/work')).toBe('Searching the files for "dump"');
     expect(toolLine('mcp__claude_ai_Asana__get_task', { task_gid: '1200001' }, '/w')).toBe('Asana: opening the task 1200001');
-    expect(toolLine('mcp__claude_ai_Google_Drive__search_files', { query: 'acme-store' }, '/w')).toBe('Google Drive: searching files acme-store');
+    expect(toolLine('mcp__claude_ai_Google_Drive__search_files', { query: 'wandworks-store' }, '/w')).toBe('Google Drive: searching files wandworks-store');
     expect(toolLine('mcp__claude_ai_Google_Docs__read_doc', {}, '/w')).toBe('Google Docs: reading the document');
     expect(toolLine('StructuredOutput', {}, '/w')).toBe('Writing the answer');
     expect(toolLine('Mystery', {}, '/w')).toBe('Using Mystery');

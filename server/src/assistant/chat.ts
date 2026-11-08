@@ -52,7 +52,7 @@ const readFirst = (file: string, max = 4000) => (existsSync(file) ? readFileSync
 /** The read tools: they run at once and only read. `looked` records each call for the reply. */
 export function readTools(deps: ChatDeps, looked: string[]) {
   const note = (what: string) => looked.push(what);
-  const site = z.object({ domain: localName.describe('The site\'s primary domain, like local.northwind.com') });
+  const site = z.object({ domain: localName.describe('The site\'s primary domain, like local.spellbook.example') });
   return [
     betaZodTool({
       name: 'list_sites',

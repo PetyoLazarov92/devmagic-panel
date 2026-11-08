@@ -14,9 +14,9 @@ const COMMAND = { node: '/usr/bin/node', cli: '/opt/devmagic-panel/cli.js' };
 const NOW = 1_790_000_000;
 const SIG = '40cd750bba9870f18aada2478b24840a';
 const EVENTS = [
-  { hook: 'acme_sync_orders', time: NOW - 3600, schedule: 'hourly', interval: 3600, args: [], sig: SIG },
+  { hook: 'wandworks_sync_orders', time: NOW - 3600, schedule: 'hourly', interval: 3600, args: [], sig: SIG },
   { hook: 'wp_version_check', time: NOW + 600, schedule: 'twicedaily', interval: 43200, args: [], sig: 'b'.repeat(32) },
-  { hook: 'acme_send_receipt', time: NOW + 60, schedule: false, interval: '', args: [42, 'alex@example.com'], sig: 'c'.repeat(32) },
+  { hook: 'wandworks_send_receipt', time: NOW + 60, schedule: false, interval: '', args: [42, 'alex@example.com'], sig: 'c'.repeat(32) },
 ];
 
 function setup(responses: Record<string, FakeResponse> = {}, crontab = '') {
@@ -30,7 +30,7 @@ function setup(responses: Record<string, FakeResponse> = {}, crontab = '') {
     },
     wp: (call) => {
       if (call.args.includes('event') && call.args.includes('list')) return { stdout: `PHP Notice: a plugin said something\n${JSON.stringify(EVENTS)}\n` };
-      if (call.args.includes('schedule')) return { stdout: JSON.stringify([{ name: 'hourly', display: 'Once Hourly', interval: 3600 }, { name: 'acme_5min', display: 'Every 5 minutes', interval: 300 }]) };
+      if (call.args.includes('schedule')) return { stdout: JSON.stringify([{ name: 'hourly', display: 'Once Hourly', interval: 3600 }, { name: 'wandworks_5min', display: 'Every 5 minutes', interval: 300 }]) };
       return { code: 1, stderr: 'not faked' };
     },
     git: { code: 1 },
@@ -50,13 +50,13 @@ describe("a site's WP-Cron", () => {
     const s = setup();
     const report = await readWpCron(s.cron, siteFor(s.config, 'local.shop.com'));
     expect(report.events.map((e) => [e.hook, e.overdue, e.core])).toEqual([
-      ['acme_sync_orders', true, false],
-      ['acme_send_receipt', false, false],
+      ['wandworks_sync_orders', true, false],
+      ['wandworks_send_receipt', false, false],
       ['wp_version_check', false, true],
     ]);
     expect(report.events[1]).toMatchObject({ recurrence: '', interval: null, args: [42, 'alex@example.com'] });
     expect(report.overdue).toBe(1);
-    expect(report.schedules.map((x) => x.name)).toEqual(['acme_5min', 'hourly']);
+    expect(report.schedules.map((x) => x.name)).toEqual(['wandworks_5min', 'hourly']);
     expect(report).toMatchObject({ disabled: false, alternate: false, configTracked: false, tasks: [] });
     // The events are read with plugins and themes off.
     expect(s.calls.find((c) => c.args.includes('list') && c.args.includes('event'))?.args).toContain('--skip-plugins');
@@ -69,8 +69,8 @@ describe("a site's WP-Cron", () => {
   it('runs one hook now, for a network site when asked', async () => {
     const runs: string[] = [];
     const s2 = setup({ wp: (call) => (runs.push(call.args.join(' ')), { stdout: 'Success\n' }) });
-    expect((await runAction(s2.ctx, 'wpcron.run', { domain: 'local.shop.com', hook: 'acme_sync_orders', url: 'https://local.shop.com/de/' })).ok).toBe(true);
-    expect(runs).toEqual([`--path=${s2.docroot} --url=https://local.shop.com/de/ cron event run acme_sync_orders`]);
+    expect((await runAction(s2.ctx, 'wpcron.run', { domain: 'local.shop.com', hook: 'wandworks_sync_orders', url: 'https://local.shop.com/de/' })).ok).toBe(true);
+    expect(runs).toEqual([`--path=${s2.docroot} --url=https://local.shop.com/de/ cron event run wandworks_sync_orders`]);
     await expect(runAction(s2.ctx, 'wpcron.run', { domain: 'local.shop.com', hook: '--due-now' })).rejects.toThrow(ActionInputError);
   });
 
@@ -79,17 +79,17 @@ describe("a site's WP-Cron", () => {
     const s = setup({
       wp: (call) => (call.input?.includes('unset( $dmp_cron') ? { stdout: `${saved}\n` } : call.input?.includes('DMP_WPCRON_EVENT') ? { stdout: 'put back\n' } : { code: 1 }),
     });
-    const del = await runAction(s.ctx, 'wpcron.delete', { domain: 'local.shop.com', hook: 'acme_sync_orders', time: NOW - 3600, sig: SIG });
+    const del = await runAction(s.ctx, 'wpcron.delete', { domain: 'local.shop.com', hook: 'wandworks_sync_orders', time: NOW - 3600, sig: SIG });
     expect(del.ok).toBe(true);
     const call = s.calls[0];
     // The event's time, hook and sig only ever arrive in $args; the PHP is the panel's own.
-    expect(call?.args.slice(2)).toEqual(['eval-file', '-', String(NOW - 3600), 'acme_sync_orders', SIG, '--skip-plugins', '--skip-themes']);
+    expect(call?.args.slice(2)).toEqual(['eval-file', '-', String(NOW - 3600), 'wandworks_sync_orders', SIG, '--skip-plugins', '--skip-themes']);
     expect(del.data?.backup).toMatch(/^wp-cron-local\.shop\.com-\d{8}-\d{6}-\d{3}\.json$/);
     const file = JSON.parse(readFileSync(join(s.config.BACKUP_DIR, del.data?.backup as string), 'utf8'));
-    expect(file).toMatchObject({ domain: 'local.shop.com', hook: 'acme_sync_orders', sig: SIG, event: saved });
+    expect(file).toMatchObject({ domain: 'local.shop.com', hook: 'wandworks_sync_orders', sig: SIG, event: saved });
 
     const undo = await runAction(s.ctx, 'wpcron.undo', { domain: 'local.shop.com', backup: del.data?.backup as string });
-    expect(undo).toMatchObject({ ok: true, output: 'acme_sync_orders: put back' });
+    expect(undo).toMatchObject({ ok: true, output: 'wandworks_sync_orders: put back' });
     // The saved event goes in the environment, not on the command line.
     expect(s.calls[1]?.env?.DMP_WPCRON_EVENT).toBe(saved);
     expect(s.calls[1]?.args.join(' ')).not.toContain(saved);
@@ -98,7 +98,7 @@ describe("a site's WP-Cron", () => {
 
   it('says so when the event is gone already', async () => {
     const s = setup({ wp: { code: 1, stderr: 'Error: this event is not scheduled any more: it may have run or been changed\n' } });
-    const r = await runAction(s.ctx, 'wpcron.delete', { domain: 'local.shop.com', hook: 'acme_sync_orders', time: NOW, sig: SIG });
+    const r = await runAction(s.ctx, 'wpcron.delete', { domain: 'local.shop.com', hook: 'wandworks_sync_orders', time: NOW, sig: SIG });
     expect(r.ok).toBe(false);
     expect(r.output).toContain('not scheduled any more');
   });

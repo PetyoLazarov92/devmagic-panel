@@ -131,7 +131,7 @@ function AddConstant({ site, busy, onSet }: { site: Site; busy: boolean; onSet: 
   const [text, setText] = useState('true');
   const named = constantName.safeParse(name);
   const exists = site.constants?.some((c) => c.name === name);
-  const problem = !name ? null : !named.success ? 'A name like ACME_FLAG' : !editableConstant(name) ? 'The panel does not set this one' : exists ? 'Already there: change it above' : null;
+  const problem = !name ? null : !named.success ? 'A name like WANDWORKS_FLAG' : !editableConstant(name) ? 'The panel does not set this one' : exists ? 'Already there: change it above' : null;
   const next = typed(kind, text);
   return (
     <form

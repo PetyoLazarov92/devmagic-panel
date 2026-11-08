@@ -3,7 +3,7 @@ import { actions, isActionId, isLocalName, mountFolder, paletteEntries } from '.
 
 // Same cases as scripts/tests/dmp-root.bats, so the UI and dmp-root agree.
 describe('isLocalName', () => {
-  it.each(['local.site.com', 'www.local.site.com', 'shop.test', 'app.localhost', 'local.northwind.co.jp'])('accepts %s', (name) => {
+  it.each(['local.site.com', 'www.local.site.com', 'shop.test', 'app.localhost', 'local.spellbook.co.jp'])('accepts %s', (name) => {
     expect(isLocalName(name)).toBe(true);
   });
 
@@ -36,7 +36,7 @@ describe('command palette entries', () => {
 
   it('builds an input each action takes', () => {
     for (const { id, entry } of entries) {
-      const target = entry.scope === 'machine' ? {} : { domain: 'local.acme.com' };
+      const target = entry.scope === 'machine' ? {} : { domain: 'local.wandworks.example' };
       expect(actions[id].input.safeParse({ ...target, ...entry.input }).success, `${id} ${entry.label}`).toBe(true);
     }
   });
@@ -71,14 +71,14 @@ describe('site.create input', () => {
   });
 
   it.each([
-    'git@github.com:AcmeCo/marketing-northwind.git',
+    'git@github.com:WandworksCo/marketing-spellbook.git',
     'https://github.com/DailyMedia/dailypost.git',
-    'ssh://git@github.com:22/AcmeCo/NewsNow.git',
-    'git@gitlab.com:acme/web/shops/site.git',
-    'ssh://git@git.acme.test:2222/acme/web/site.git',
-    'https://gitlab.acme.test:8443/acme/site.git',
-    'git@bitbucket.org:acme/site.git',
-    'git@codeberg.org:acme/site.git',
+    'ssh://git@github.com:22/WandworksCo/NewsNow.git',
+    'git@gitlab.com:wandworks/web/shops/site.git',
+    'ssh://git@git.wandworks.test:2222/wandworks/web/site.git',
+    'https://gitlab.wandworks.test:8443/wandworks/site.git',
+    'git@bitbucket.org:wandworks/site.git',
+    'git@codeberg.org:wandworks/site.git',
   ])('accepts %s', (url) => {
     expect(parse({ ...base, source: 'repo', repo: { url, branch: 'feature/translation-export', layout: 'site-root' } }).success).toBe(true);
   });
@@ -95,7 +95,7 @@ describe('site.create input', () => {
 
 describe('mountFolder', () => {
   it('names the folder of a site under a path like a local domain', () => {
-    expect(mountFolder('local.northwind.com', '/learn')).toBe('local.learn.northwind.com');
+    expect(mountFolder('local.spellbook.example', '/learn')).toBe('local.learn.spellbook.example');
     expect(mountFolder('www.local.shop.com', '/blog')).toBe('local.blog.shop.com');
     expect(mountFolder('shop.test', '/blog/en')).toBe('blog-en.shop.test');
     expect(mountFolder('shop.localhost', '/Docs_V2')).toBe('docs-v2.shop.localhost');

@@ -11,17 +11,17 @@ import { type InstallHow, type RepoLayout } from './sites.js';
  * stays empty for you to fill in.
  */
 
-/** A GitHub organization or user (acme), or a GitLab group or user with its host (gitlab.com/acme/web). */
+/** A GitHub organization or user (wandworks), or a GitLab group or user with its host (gitlab.com/wandworks/web). */
 export const orgName = namespaceRef;
 
 /** What a repo holds, from its top-level files. */
 export type RepoKind = 'site' | 'wp-content' | 'theme' | 'plugin' | 'other';
 
 export interface OrgRepo {
-  /** The namespace it was listed from (acme, gitlab.com/acme/web). */
+  /** The namespace it was listed from (wandworks, gitlab.com/wandworks/web). */
   org: string;
   name: string;
-  /** Its path on its host: acme/shop, or acme/web/shop in a GitLab subgroup. */
+  /** Its path on its host: wandworks/shop, or wandworks/web/shop in a GitLab subgroup. */
   fullName: string;
   description?: string;
   sshUrl: string;

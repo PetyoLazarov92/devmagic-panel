@@ -28,7 +28,7 @@ describe('a session ending on an open page', () => {
     expect(refused('/api/sites')).toBe(false);
     noteStatus('/api/sites', 401);
     expect(refused('/api/sites')).toBe(true);
-    expect(refused('/api/uploads?name=acme.sql')).toBe(true);
+    expect(refused('/api/uploads?name=wandworks.sql')).toBe(true);
     expect(refused('/api/session')).toBe(false);
     expect(refused('/api/login')).toBe(false);
     expect(refused('/api/logout')).toBe(false);

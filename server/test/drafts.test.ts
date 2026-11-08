@@ -26,7 +26,7 @@ function clocked() {
   return { t, uploads, drafts, advance: (ms: number) => (now += ms) };
 }
 
-const answers = { kind: 'manual' as const, title: 'local.shop.com', step: 'domains', state: { repoUrl: 'git@github.com:acme/shop.git' }, uploads: [UP] };
+const answers = { kind: 'manual' as const, title: 'local.shop.com', step: 'domains', state: { repoUrl: 'git@github.com:wandworks/shop.git' }, uploads: [UP] };
 
 async function settle(jobs: Jobs, id: string): Promise<JobView> {
   for (let i = 0; i < 500; i++) {

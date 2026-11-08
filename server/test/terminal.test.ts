@@ -14,7 +14,7 @@ function bin(...names: string[]) {
   return dir;
 }
 
-const SITE = '/var/www/local.acme.com';
+const SITE = '/var/www/local.wandworks.example';
 
 describe('terminalFor', () => {
   it("runs the desktop's default terminal with its own folder option", () => {
@@ -24,13 +24,13 @@ describe('terminalFor', () => {
   });
 
   it('takes the first known terminal installed when the default is one it does not know, or there is none', () => {
-    expect(terminalFor(SITE, { path: bin('x-terminal-emulator', 'kitty'), resolve: () => '/usr/bin/acme-term' })?.args).toEqual(['--directory', SITE]);
+    expect(terminalFor(SITE, { path: bin('x-terminal-emulator', 'kitty'), resolve: () => '/usr/bin/wandworks-term' })?.args).toEqual(['--directory', SITE]);
     expect(terminalFor(SITE, { path: bin('alacritty') })?.args).toEqual(['--working-directory', SITE]);
   });
 
   it('starts an unknown default without a folder option, as it opens where it is started; none at all is null', () => {
     const path = bin('x-terminal-emulator');
-    expect(terminalFor(SITE, { path, resolve: () => '/usr/bin/acme-term' })).toEqual({ file: join(path, 'x-terminal-emulator'), args: [] });
+    expect(terminalFor(SITE, { path, resolve: () => '/usr/bin/wandworks-term' })).toEqual({ file: join(path, 'x-terminal-emulator'), args: [] });
     expect(terminalFor(SITE, { path: bin() })).toBeNull();
   });
 });

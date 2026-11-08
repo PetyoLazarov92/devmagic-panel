@@ -81,10 +81,10 @@ async function runSteps(steps: JobStep[]) {
 
 describe('nginx sites read from the system', () => {
   it('parses the panel nginx file: names, folder, certificate, log, kind and uploads redirect', () => {
-    const info = parseNginxSite(nginxFile('/srv', 'local.acme.com', 'local.acme.com www.local.acme.com', 'subdirectory', 'www.acme.com'), '/x/local.acme.com.conf');
+    const info = parseNginxSite(nginxFile('/srv', 'local.wandworks.example', 'local.wandworks.example www.local.wandworks.example', 'subdirectory', 'www.wandworks.example'), '/x/local.wandworks.example.conf');
     expect(info).toMatchObject({
-      server: 'nginx', managed: true, names: ['local.acme.com', 'www.local.acme.com'], docroot: '/srv/www/local.acme.com',
-      certFile: '/srv/certs/local.acme.com/local.acme.com.crt', errorLog: '/srv/nginx/log/local.acme.com-error.log', kind: 'subdirectory', uploadsProxy: 'www.acme.com', mounts: [],
+      server: 'nginx', managed: true, names: ['local.wandworks.example', 'www.local.wandworks.example'], docroot: '/srv/www/local.wandworks.example',
+      certFile: '/srv/certs/local.wandworks.example/local.wandworks.example.crt', errorLog: '/srv/nginx/log/local.wandworks.example-error.log', kind: 'subdirectory', uploadsProxy: 'www.wandworks.example', mounts: [],
     });
   });
 
@@ -105,7 +105,7 @@ describe('nginx sites read from the system', () => {
 
   it('names what nginx leaves out of an .htaccess, never WordPress own rules or comments', () => {
     expect(htaccessIgnored('# BEGIN WordPress\nRewriteEngine On\n# END WordPress\n')).toEqual([]);
-    expect(htaccessIgnored('# a note\nRedirect 301 /old /new\nHeader set X-Acme 1\n# BEGIN W3TC Browser Cache\nExpiresActive On\n# END W3TC Browser Cache\n# BEGIN WordPress\n# END WordPress\n')).toEqual(['W3TC Browser Cache', '2 lines of your own']);
+    expect(htaccessIgnored('# a note\nRedirect 301 /old /new\nHeader set X-Wandworks 1\n# BEGIN W3TC Browser Cache\nExpiresActive On\n# END W3TC Browser Cache\n# BEGIN WordPress\n# END WordPress\n')).toEqual(['W3TC Browser Cache', '2 lines of your own']);
   });
 });
 
@@ -191,9 +191,9 @@ describe('site.setServer', () => {
 
   it('needs a tick when nginx would leave .htaccess rules out, and the site page shows why a move cannot run', () => {
     const t = tree();
-    t.write('www/local.shop.com/.htaccess', '# BEGIN Acme Redirects\nRedirect 301 /old /new\n# END Acme Redirects\n');
+    t.write('www/local.shop.com/.htaccess', '# BEGIN Wandworks Redirects\nRedirect 301 /old /new\n# END Wandworks Redirects\n');
     const { c } = ctx(t);
-    expect(() => planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: false })).toThrow(/Acme Redirects/);
+    expect(() => planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: false })).toThrow(/Wandworks Redirects/);
     expect(planSetServer(c, { domain: 'local.shop.com', server: 'nginx', acceptIgnored: true })).toHaveLength(4);
     const vhost = readSiteVhosts(t.config)[0];
     expect(vhost && moveRefusal(t.config, vhost, 'local.shop.com')).toBeNull();
@@ -232,7 +232,7 @@ describe('sites.setServerAll', () => {
 
   it('leaves sites with .htaccess rules nginx ignores unless ticked, and refuses when nothing can move', () => {
     const t = tree();
-    t.write('www/local.shop.com/.htaccess', 'Header set X-Acme 1\n');
+    t.write('www/local.shop.com/.htaccess', 'Header set X-Wandworks 1\n');
     expect(() => planSetServerAll(ctx(t).c, { server: 'nginx', acceptIgnored: false })).toThrow(/No site can move to nginx: local.shop.com: nginx would not read/);
     expect(planSetServerAll(ctx(t).c, { server: 'nginx', acceptIgnored: true })).toHaveLength(5);
     expect(() => planSetServerAll(ctx(t).c, { server: 'apache', acceptIgnored: false })).toThrow(/Every site runs on Apache already/);
@@ -278,7 +278,7 @@ describe('a site on nginx elsewhere in the panel', () => {
 
   it('tells the site page what moving it to nginx means', async () => {
     const t = tree();
-    t.write('www/local.shop.com/.htaccess', 'Header set X-Acme 1\n');
+    t.write('www/local.shop.com/.htaccess', 'Header set X-Wandworks 1\n');
     const [site] = await discoverSites({ config: t.config, exec: fakeExec().exec, secrets: null, wpcoreConf: t.wpcoreConf });
     expect(site?.server).toBe('apache');
     expect(site?.move).toEqual({ ignored: ['1 line of your own'], php: '8.3' });

@@ -84,7 +84,7 @@ export interface WizardState {
   npm: boolean;
   /** What the panel remembers about the repo, read when the URL is pasted. */
   inspection: Inspection;
-  /** Install under a path of an existing site, like /learn on local.northwind.com; null for a site of its own. */
+  /** Install under a path of an existing site, like /learn on local.spellbook.example; null for a site of its own. */
   under: { domain: string; path: string } | null;
   /** The primary domain is installed already: archive that site first and install again. */
   replaceExisting: boolean;
@@ -1139,7 +1139,7 @@ function SourceStep({ state, setState, sites, cores, assistantOn }: {
       <div className="grid gap-5">
         <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
           <Field label="Git repository" htmlFor="repo" hint={urlInvalid ? <span className="text-danger">Use an SSH or HTTPS URL, like git@github.com:team/repo.git or git@gitlab.com:group/sub/repo.git</span> : <>SSH or HTTPS, from GitHub, GitLab or any git host. Cloned as you, so your SSH key works for private repos.{web && <> <WebLink href={web.repoUrl}>Open on {web.name}</WebLink></>}</>}>
-            <Input id="repo" value={state.repoUrl} onChange={(e) => set('repoUrl', e.target.value)} placeholder="git@github.com:AcmeCo/northwind.git" className="font-mono text-[13px]" spellCheck={false} aria-invalid={urlInvalid || undefined} />
+            <Input id="repo" value={state.repoUrl} onChange={(e) => set('repoUrl', e.target.value)} placeholder="git@github.com:WandworksCo/spellbook.git" className="font-mono text-[13px]" spellCheck={false} aria-invalid={urlInvalid || undefined} />
           </Field>
           <Field label="Branch" htmlFor="branch" hint={(state.branches && state.branch === state.defaultBranch) || branchUrl ? <>{state.branches && state.branch === state.defaultBranch ? 'The default branch' : ''}{branchUrl && <> <WebLink href={branchUrl}>Open</WebLink></>}</> : undefined}>
             {state.branches && state.branches.length > 0 ? (
@@ -1461,7 +1461,7 @@ function UnderPath({ state, set, sites, error, folder }: { state: WizardState; s
         checked={state.under !== null}
         onChange={(on) => set('under', on ? { domain: '', path: '' } : null)}
         label="Install under a path of an existing site"
-        hint="Like Northwind Learn at local.northwind.com/learn: its own folder, database and git, served by that site's vhost."
+        hint="Like Spellbook Learn at local.spellbook.example/learn: its own folder, database and git, served by that site's vhost."
       />
       {state.under && (
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
@@ -2063,7 +2063,7 @@ function ClaudeFill({ state, setState, cores }: { state: WizardState; setState: 
         id="claude-describe"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        placeholder="Acme main site plus its shop.acme.com subdomain, repo above, develop branch. Same setup as BikeTours."
+        placeholder="Wandworks main site plus its shop.wandworks.example subdomain, repo above, develop branch. Same setup as BikeTours."
         rows={3}
         disabled={busy}
       />

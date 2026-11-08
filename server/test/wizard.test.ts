@@ -9,16 +9,16 @@ import { fakeExec, wpSiteTree } from './helpers.js';
 
 const OUT = {
   domains: [
-    { production: 'www.acme.com', local: 'local.acme.com' },
-    { production: 'not a host', local: 'local.shop.acme.com' },
-    { local: 'www.acme.com' },
-    { local: 'local.acme.com' },
+    { production: 'www.wandworks.example', local: 'local.wandworks.example' },
+    { production: 'not a host', local: 'local.shop.wandworks.example' },
+    { local: 'www.wandworks.example' },
+    { local: 'local.wandworks.example' },
   ],
   layout: 'wp-content' as const,
   branch: 'develop',
   core: { mode: 'wpcore' as const, version: '7.1.3' },
   deactivate: ['wp-rocket', 'Bad Slug!'],
-  uploadsFrom: 'www.acme.com',
+  uploadsFrom: 'www.wandworks.example',
   build: { composer: true, npm: false },
   notes: 'Assumed the shop subdomain.',
 };
@@ -26,16 +26,16 @@ const OUT = {
 describe('toPreset', () => {
   it('keeps only what the panel accepts: local names, real hosts, installed cores, plugin slugs', () => {
     expect(toPreset(OUT, ['7.1.3'])).toEqual({
-      domains: [{ production: 'www.acme.com', local: 'local.acme.com' }, { local: 'local.shop.acme.com' }],
+      domains: [{ production: 'www.wandworks.example', local: 'local.wandworks.example' }, { local: 'local.shop.wandworks.example' }],
       layout: 'wp-content',
       core: { mode: 'wpcore', version: '7.1.3' },
       deactivate: ['wp-rocket'],
       activate: [],
-      uploadsFrom: 'www.acme.com',
+      uploadsFrom: 'www.wandworks.example',
       build: { composer: true, npm: false },
     });
     expect(toPreset(OUT, ['6.8.3']).core).toBeUndefined();
-    expect(() => toPreset({ ...OUT, domains: [{ local: 'www.acme.com' }] }, [])).toThrow(/usable local domain/);
+    expect(() => toPreset({ ...OUT, domains: [{ local: 'www.wandworks.example' }] }, [])).toThrow(/usable local domain/);
   });
 });
 
@@ -56,14 +56,14 @@ describe('conventions.md', () => {
 describe('suggestWizard', () => {
   it('sends the description, conventions, repo docs, dump facts and similar sites, all redacted', async () => {
     const t = wpSiteTree();
-    const url = 'git@github.com:acme/site.git';
+    const url = 'git@github.com:wandworks/site.git';
     const { exec } = fakeExec({
       'git ls-remote': { stdout: 'ref: refs/heads/main\tHEAD\n' },
       'git clone': { stdout: '' },
-      'git -C': (call) => (call.args.at(-1) === 'HEAD:README.md' ? { stdout: '# Acme\nDB password=hunter2\n' } : { code: 128, stderr: 'fatal: path does not exist' }),
+      'git -C': (call) => (call.args.at(-1) === 'HEAD:README.md' ? { stdout: '# Wandworks\nDB password=hunter2\n' } : { code: 128, stderr: 'fatal: path does not exist' }),
     });
     const uploadsDir = join(t.root, 'uploads');
-    const upload = await saveUpload(exec, uploadsDir, 'acme.sql', Readable.from(["CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://www.acme.com','yes');\n"]));
+    const upload = await saveUpload(exec, uploadsDir, 'wandworks.sql', Readable.from(["CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://www.wandworks.example','yes');\n"]));
     let sent = '';
     const claude = () =>
       ({
@@ -77,11 +77,11 @@ describe('suggestWizard', () => {
     const result = await suggestWizard(claude, undefined, 'claude-opus-5-5', {
       exec, workDir: join(t.root, 'tmp'), uploadsDir,
       sites: async () => [], cores: () => ['7.1.3'], conventions: () => '# Ours: local. prefix',
-      preset: () => ({ domains: [{ local: 'local.acme.com' }], layout: 'wp-content', deactivate: [], build: { composer: false, npm: false } }),
-    }, { description: 'Acme with its shop', repoUrl: url, uploadId: upload.id });
+      preset: () => ({ domains: [{ local: 'local.wandworks.example' }], layout: 'wp-content', deactivate: [], build: { composer: false, npm: false } }),
+    }, { description: 'Wandworks with its shop', repoUrl: url, uploadId: upload.id });
 
     const context = JSON.parse(sent);
-    expect(context).toMatchObject({ description: 'Acme with its shop', conventions: '# Ours: local. prefix', repo: { url, branch: 'main', lastInstallHere: { layout: 'wp-content' } }, dump: { name: 'acme.sql', facts: { hosts: ['www.acme.com'] } }, installedCores: ['7.1.3'] });
+    expect(context).toMatchObject({ description: 'Wandworks with its shop', conventions: '# Ours: local. prefix', repo: { url, branch: 'main', lastInstallHere: { layout: 'wp-content' } }, dump: { name: 'wandworks.sql', facts: { hosts: ['www.wandworks.example'] } }, installedCores: ['7.1.3'] });
     expect(sent).toContain('password=[redacted]');
     expect(sent).not.toContain('hunter2');
     expect(result.sent).toBe(sent);

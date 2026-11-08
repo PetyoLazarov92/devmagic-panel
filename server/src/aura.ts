@@ -34,7 +34,7 @@ export interface AuraContext {
   now?: () => number;
   /** The constants every local site should have, from Settings. */
   localConstants?: readonly LocalConstant[];
-  /** A site's compatibility scans (by its key, like local.acme.com@learn), kept by the panel. */
+  /** A site's compatibility scans (by its key, like local.wandworks.example@learn), kept by the panel. */
   compatScans?: (key: string) => CompatScan[];
   /** The sites (domain and path) cron runs the WP-Cron of; null when the crontab cannot be read. */
   wpCronTasks?: () => Promise<Set<string> | null>;

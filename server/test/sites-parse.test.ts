@@ -8,31 +8,31 @@ import { siteConstants } from '../src/sites/discover.js';
 import { legacySaltNames, saltNames, saltStatus } from '../src/sites/salts.js';
 import { parseWpConfig, parseWpVersion } from '../src/sites/wpconfig.js';
 
-const northwindVhost = `# Northwind Localhost - Apache Configuration
+const spellbookVhost = `# Spellbook Localhost - Apache Configuration
 <VirtualHost *:443>
-    ServerName local.northwind.com
-    ServerAlias local.northwind.de local.northwind.fr
+    ServerName local.spellbook.example
+    ServerAlias local.spellbook.de local.spellbook.fr
     # ServerAlias local.commented.com
-    DocumentRoot /var/www/local.northwind.com
-    Alias /learn /var/www/local.learn.northwind.com
-    SSLCertificateFile /etc/ssl/localcerts/local.northwind.com/local.northwind.com.crt
+    DocumentRoot /var/www/local.spellbook.example
+    Alias /learn /var/www/local.learn.spellbook.example
+    SSLCertificateFile /etc/ssl/localcerts/local.spellbook.example/local.spellbook.example.crt
     ErrorLog \${APACHE_LOG_DIR}/error.log
 </VirtualHost>
 <VirtualHost *:80>
-    ServerName local.northwind.com
-    ServerAlias www.local.northwind.com
+    ServerName local.spellbook.example
+    ServerAlias www.local.spellbook.example
     RewriteEngine On
 </VirtualHost>
 `;
 
 describe('parseVhost', () => {
   it('reads names from both blocks, the 443 docroot, cert, log and aliases', () => {
-    const v = parseVhost(northwindVhost, '/etc/apache2/sites-available/x.conf', '/var/log/apache2');
-    expect(v.names).toEqual(['local.northwind.com', 'local.northwind.de', 'local.northwind.fr', 'www.local.northwind.com']);
-    expect(v.docroot).toBe('/var/www/local.northwind.com');
-    expect(v.certFile).toBe('/etc/ssl/localcerts/local.northwind.com/local.northwind.com.crt');
+    const v = parseVhost(spellbookVhost, '/etc/apache2/sites-available/x.conf', '/var/log/apache2');
+    expect(v.names).toEqual(['local.spellbook.example', 'local.spellbook.de', 'local.spellbook.fr', 'www.local.spellbook.example']);
+    expect(v.docroot).toBe('/var/www/local.spellbook.example');
+    expect(v.certFile).toBe('/etc/ssl/localcerts/local.spellbook.example/local.spellbook.example.crt');
     expect(v.errorLog).toBe('/var/log/apache2/error.log');
-    expect(v.mounts).toEqual([{ path: '/learn', docroot: '/var/www/local.learn.northwind.com' }]);
+    expect(v.mounts).toEqual([{ path: '/learn', docroot: '/var/www/local.learn.spellbook.example' }]);
     expect(v.managed).toBe(false);
   });
 
@@ -43,7 +43,7 @@ describe('parseVhost', () => {
   it("reads the uploads host from the rule dmp-root writes, and nothing from other vhosts", () => {
     const rule = '    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f\n    RewriteRule ^/?(.*)$ https://www.a.com/$1 [R=302,L]\n';
     expect(parseVhost(`${VHOST_MARKER}\nServerName local.a.com\n${rule}`, 'f', '/l').uploadsProxy).toBe('www.a.com');
-    expect(parseVhost(northwindVhost, 'f', '/l').uploadsProxy).toBeNull();
+    expect(parseVhost(spellbookVhost, 'f', '/l').uploadsProxy).toBeNull();
   });
 });
 
@@ -60,8 +60,8 @@ if ( ! defined( 'WP_DEBUG' ) ) {
 define( 'WP_DEBUG_LOG', '/tmp/wp-errors.log' );
 define( 'MULTISITE', true );
 define( 'SUBDOMAIN_INSTALL', false );
-define( 'DOMAIN_CURRENT_SITE', 'local.arcade.bet' );
-define( 'WP_HOME', 'https://local.arcade.bet' ); // URL with // inside
+define( 'DOMAIN_CURRENT_SITE', 'local.arcade.example' );
+define( 'WP_HOME', 'https://local.arcade.example' ); // URL with // inside
 define( 'DB_NAME', 'second_one_is_ignored' );
 `;
   it('skips comments, takes the first definition and reads the network settings', () => {
@@ -71,7 +71,7 @@ define( 'DB_NAME', 'second_one_is_ignored' );
       tablePrefix: 'xyz_',
       multisite: true,
       subdomainInstall: false,
-      domainCurrentSite: 'local.arcade.bet',
+      domainCurrentSite: 'local.arcade.example',
       debug: true,
       debugLog: '/tmp/wp-errors.log',
       debugConstants: { WP_DEBUG: true, WP_DEBUG_LOG: true },
@@ -82,27 +82,27 @@ define( 'DB_NAME', 'second_one_is_ignored' );
         { name: 'WP_DEBUG_LOG', value: '/tmp/wp-errors.log' },
         { name: 'MULTISITE', value: true },
         { name: 'SUBDOMAIN_INSTALL', value: false },
-        { name: 'DOMAIN_CURRENT_SITE', value: 'local.arcade.bet' },
-        { name: 'WP_HOME', value: 'https://local.arcade.bet' },
+        { name: 'DOMAIN_CURRENT_SITE', value: 'local.arcade.example' },
+        { name: 'WP_HOME', value: 'https://local.arcade.example' },
       ],
     });
   });
 
   it('lists every constant, digits in names too, with the PHP of a value that is not a plain one, and never the value of a secret', () => {
-    const config = parseWpConfig("<?php\ndefine( 'ACME_2FA', 3 );\ndefine( 'ABSPATH', __DIR__ . '/' );\ndefine( 'DB_PASSWORD', 'hunter2' );\ndefine( 'NONCE_SALT', 'x' );\ndefine( 'ACME_API_KEY', 'k' );\n");
+    const config = parseWpConfig("<?php\ndefine( 'WANDWORKS_2FA', 3 );\ndefine( 'ABSPATH', __DIR__ . '/' );\ndefine( 'DB_PASSWORD', 'hunter2' );\ndefine( 'NONCE_SALT', 'x' );\ndefine( 'WANDWORKS_API_KEY', 'k' );\n");
     expect(config.constants).toEqual([
-      { name: 'ACME_2FA', value: 3 },
+      { name: 'WANDWORKS_2FA', value: 3 },
       { name: 'ABSPATH', code: "__DIR__ . '/'" },
       { name: 'DB_PASSWORD', value: 'hunter2' },
       { name: 'NONCE_SALT', value: 'x' },
-      { name: 'ACME_API_KEY', value: 'k' },
+      { name: 'WANDWORKS_API_KEY', value: 'k' },
     ]);
     expect(siteConstants(config)).toEqual([
-      { name: 'ACME_2FA', value: 3 },
+      { name: 'WANDWORKS_2FA', value: 3 },
       { name: 'ABSPATH', code: "__DIR__ . '/'" },
       { name: 'DB_PASSWORD', hidden: true },
       { name: 'NONCE_SALT', hidden: true },
-      { name: 'ACME_API_KEY', hidden: true },
+      { name: 'WANDWORKS_API_KEY', hidden: true },
     ]);
   });
 
@@ -151,7 +151,7 @@ describe('parseApacheErrorLog', () => {
 describe('saltStatus', () => {
   it('tells missing keys, placeholders and copies apart, as wp_salt() does, with legacy SECRET_KEY counted for copies', () => {
     const config = parseWpConfig(
-      "<?php\ndefine( 'AUTH_KEY', 'one' );\ndefine( 'SECURE_AUTH_KEY', 'put your unique phrase here' );\ndefine( 'LOGGED_IN_KEY', 'two' );\ndefine( 'NONCE_KEY', getenv( 'ACME_NONCE' ) );\ndefine( 'AUTH_SALT', 'three' );\ndefine( 'SECURE_AUTH_SALT', 'four' );\ndefine( 'LOGGED_IN_SALT', 'five' );\ndefine( 'SECRET_KEY', 'two' );\n",
+      "<?php\ndefine( 'AUTH_KEY', 'one' );\ndefine( 'SECURE_AUTH_KEY', 'put your unique phrase here' );\ndefine( 'LOGGED_IN_KEY', 'two' );\ndefine( 'NONCE_KEY', getenv( 'WANDWORKS_NONCE' ) );\ndefine( 'AUTH_SALT', 'three' );\ndefine( 'SECURE_AUTH_SALT', 'four' );\ndefine( 'LOGGED_IN_SALT', 'five' );\ndefine( 'SECRET_KEY', 'two' );\n",
     );
     expect(saltStatus(config, '/nowhere')).toEqual({
       names: ['AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT'],
@@ -179,13 +179,13 @@ describe('the key names a site asks for', () => {
     const docroot = mkdtempSync(join(tmpdir(), 'dmp-salts-'));
     expect(saltNames(docroot)).toHaveLength(8);
     expect(legacySaltNames(docroot, saltNames(docroot))).toEqual(['SECRET_KEY', 'SECRET_SALT']);
-    writeFileSync(join(docroot, 'wp-config-sample.php'), "<?php\ndefine( 'AUTH_KEY', 'put your unique phrase here' );\ndefine( 'ACME_SALT', 'put your unique phrase here' );\n");
+    writeFileSync(join(docroot, 'wp-config-sample.php'), "<?php\ndefine( 'AUTH_KEY', 'put your unique phrase here' );\ndefine( 'WANDWORKS_SALT', 'put your unique phrase here' );\n");
     mkdirSync(join(docroot, 'wp-includes'));
     writeFileSync(
       join(docroot, 'wp-includes', 'pluggable.php'),
-      "<?php\nif ( ! function_exists( 'wp_salt' ) ) :\n\tfunction wp_salt( $scheme = 'auth' ) {\n\t\tif ( defined( \"{$first}_{$second}\" ) ) {}\n\t\tif ( defined( 'ACME_OLD_KEY' ) && defined( 'AUTH_KEY' ) ) {}\n\t}\nendif;\nif ( ! function_exists( 'wp_hash' ) ) :\n\tfunction wp_hash() { defined( 'NOT_A_KEY' ); }\nendif;\n",
+      "<?php\nif ( ! function_exists( 'wp_salt' ) ) :\n\tfunction wp_salt( $scheme = 'auth' ) {\n\t\tif ( defined( \"{$first}_{$second}\" ) ) {}\n\t\tif ( defined( 'WANDWORKS_OLD_KEY' ) && defined( 'AUTH_KEY' ) ) {}\n\t}\nendif;\nif ( ! function_exists( 'wp_hash' ) ) :\n\tfunction wp_hash() { defined( 'NOT_A_KEY' ); }\nendif;\n",
     );
-    expect(saltNames(docroot)).toEqual(['AUTH_KEY', 'ACME_SALT']);
-    expect(legacySaltNames(docroot, saltNames(docroot))).toEqual(['ACME_OLD_KEY']);
+    expect(saltNames(docroot)).toEqual(['AUTH_KEY', 'WANDWORKS_SALT']);
+    expect(legacySaltNames(docroot, saltNames(docroot))).toEqual(['WANDWORKS_OLD_KEY']);
   });
 });

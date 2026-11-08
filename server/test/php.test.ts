@@ -152,7 +152,7 @@ describe('php.ini changes', () => {
     writeFileSync(join(lib, 'php.ini-production.cli'), 'memory_limit = -1\n');
     writeFileSync(join(base, 'apache2/php.ini'), 'memory_limit = 512M\nmax_execution_time = 30\n');
     writeFileSync(join(base, 'cli/php.ini'), 'memory_limit = -1\n');
-    writeFileSync(join(base, 'apache2/conf.d/50-acme.ini'), 'upload_max_filesize=64M\n');
+    writeFileSync(join(base, 'apache2/conf.d/50-wandworks.ini'), 'upload_max_filesize=64M\n');
     writeFileSync(join(base, 'apache2/conf.d', XDEBUG_INI), 'xdebug.mode=debug\n');
     expect(readIniReport(t.config, '8.3')).toEqual({
       version: '8.3',
@@ -162,7 +162,7 @@ describe('php.ini changes', () => {
           file: join(base, 'apache2/php.ini'),
           original: join(lib, 'php.ini-production'),
           changes: [{ key: 'memory_limit', original: '128M', current: '512M' }],
-          extraFiles: [{ name: '50-acme.ini', panel: false }, { name: XDEBUG_INI, panel: true }],
+          extraFiles: [{ name: '50-wandworks.ini', panel: false }, { name: XDEBUG_INI, panel: true }],
         },
         { sapi: 'cli', file: join(base, 'cli/php.ini'), original: join(lib, 'php.ini-production.cli'), changes: [], extraFiles: [] },
       ],
@@ -223,22 +223,22 @@ describe('before sites move to PHP-FPM', () => {
 
   it('finds php_value in sites and Apache, .user.ini, phpMyAdmin, and Apache and FPM differences', () => {
     const t = tempTree();
-    mkdirSync(join(t.config.WEB_DIR, 'local.shop.com/wp-content/plugins/acme'), { recursive: true });
+    mkdirSync(join(t.config.WEB_DIR, 'local.shop.com/wp-content/plugins/wandworks'), { recursive: true });
     mkdirSync(join(t.config.WEB_DIR, 'local.shop.com/node_modules/x'), { recursive: true });
     writeFileSync(join(t.config.WEB_DIR, 'local.shop.com/.htaccess'), 'php_value upload_max_filesize 64M\n');
-    writeFileSync(join(t.config.WEB_DIR, 'local.shop.com/wp-content/plugins/acme/.htaccess'), '<IfModule mod_php7.c>\nphp_value a 1\n</IfModule>\n');
+    writeFileSync(join(t.config.WEB_DIR, 'local.shop.com/wp-content/plugins/wandworks/.htaccess'), '<IfModule mod_php7.c>\nphp_value a 1\n</IfModule>\n');
     writeFileSync(join(t.config.WEB_DIR, 'local.shop.com/.user.ini'), 'auto_prepend_file=x.php\n');
     writeFileSync(join(t.config.WEB_DIR, 'local.shop.com/node_modules/x/.user.ini'), '');
     mkdirSync(join(t.root, 'conf-enabled'), { recursive: true });
     writeFileSync(join(t.root, 'conf-enabled/phpmyadmin.conf'), '<IfModule mod_php.c>\nphp_admin_value open_basedir /x\n</IfModule>\n');
-    writeFileSync(join(t.root, 'sites-enabled/local.acme.com-ssl.conf'), '<VirtualHost *:443>\nphp_admin_value memory_limit 1G\n</VirtualHost>\n');
+    writeFileSync(join(t.root, 'sites-enabled/local.wandworks.example-ssl.conf'), '<VirtualHost *:443>\nphp_admin_value memory_limit 1G\n</VirtualHost>\n');
     const base = addVersion(t, '8.3', { apache2: ['mysqli', 'soap'], fpm: ['mysqli'] });
     writeFileSync(join(base, 'apache2/php.ini'), 'memory_limit = 512M\n');
     writeFileSync(join(base, 'fpm/php.ini'), 'memory_limit = 128M\n');
 
     const findings = readFpmFindings(t.config);
     const by = (id: string) => findings.find((f) => f.id === id);
-    expect(by('apache-php-value')).toMatchObject({ status: 'warn', files: [join(t.root, 'sites-enabled/local.acme.com-ssl.conf')] });
+    expect(by('apache-php-value')).toMatchObject({ status: 'warn', files: [join(t.root, 'sites-enabled/local.wandworks.example-ssl.conf')] });
     expect(by('htaccess-php-value')).toMatchObject({ status: 'warn', files: ['local.shop.com/.htaccess'] });
     expect(by('user-ini')).toMatchObject({ status: 'warn', files: ['local.shop.com/.user.ini'] });
     expect(by('phpmyadmin')?.status).toBe('info');
@@ -298,7 +298,7 @@ describe('settings, modules and Xdebug per version', () => {
     const t = tempTree();
     const base = addVersion(t, '8.3', { apache2: [], cli: [] });
     writeFileSync(join(base, 'apache2/php.ini'), 'memory_limit = 512M\nmax_execution_time = 300\nauto_prepend_file =\n');
-    writeFileSync(join(base, 'apache2/conf.d/50-acme.ini'), 'upload_max_filesize = 32M\n');
+    writeFileSync(join(base, 'apache2/conf.d/50-wandworks.ini'), 'upload_max_filesize = 32M\n');
     writeFileSync(join(base, 'apache2/conf.d/99-devmagic-panel.ini'), '; Managed\nupload_max_filesize = 64M\n');
     writeFileSync(join(base, 'cli/php.ini'), 'memory_limit = -1\n');
     expect(readPhpSettings(t.config, '8.3')).toEqual({

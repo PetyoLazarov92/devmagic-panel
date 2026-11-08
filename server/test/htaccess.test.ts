@@ -27,9 +27,9 @@ describe('hasNetworkRules', () => {
     expect(hasNetworkRules(htaccessFor('subdomain'))).toBe(true);
     // As a repo may have it: the folders in another order, after a plugin's own block.
     const byHand = [
-      '# BEGIN Acme Images',
+      '# BEGIN Wandworks Images',
       'AddType image/webp .webp',
-      '# END Acme Images',
+      '# END Wandworks Images',
       '# BEGIN WordPress',
       'RewriteEngine On',
       'RewriteBase /',

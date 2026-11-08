@@ -93,13 +93,13 @@ describe('site routes', () => {
       expect((await get(`/api/sites/local.shop.com/git?repo=${encodeURIComponent(repo)}`)).statusCode).toBe(400);
       expect((await get(`/api/sites/local.shop.com/git/pulls?repo=${encodeURIComponent(repo)}`)).statusCode).toBe(400);
     }
-    expect((await get('/api/sites/local.shop.com/git?repo=wp-content%2Fthemes%2Facme')).statusCode).toBe(404);
+    expect((await get('/api/sites/local.shop.com/git?repo=wp-content%2Fthemes%2Fwandworks')).statusCode).toBe(404);
   });
 
   it('say what an organization install needs, keep its settings per step, and start no read without Claude Code', async () => {
     const send = (method: 'PUT' | 'POST', url: string, payload: Record<string, unknown>) => app.inject({ method, url, headers: { host: HOST, origin: ORIGIN, cookie }, payload });
     expect((await get('/api/org/status')).json()).toMatchObject({ claude: { found: false }, gh: { installed: false }, glab: { installed: false, hosts: [{ host: 'gitlab.com', installed: false }] }, rclone: { installed: false }, settings: { selected: [] } });
-    const settings = { selected: ['acme', 'gitlab.com/acme/web'], gitlabHosts: ['git.acme.test'], read: { model: 'haiku', effort: 'high', budgetUsd: 0.2 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } };
+    const settings = { selected: ['wandworks', 'gitlab.com/wandworks/web'], gitlabHosts: ['git.wandworks.test'], read: { model: 'haiku', effort: 'high', budgetUsd: 0.2 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } };
     expect((await send('PUT', '/api/org/settings', settings)).json()).toEqual({ ...settings, accountHosts: [] });
     expect((await send('PUT', '/api/org/settings', { selected: ['-bad'] })).statusCode).toBe(400);
     expect((await get('/api/org/status')).json().settings).toEqual({ ...settings, accountHosts: [] });
@@ -108,18 +108,18 @@ describe('site routes', () => {
     expect((await send('PUT', '/api/org/settings', settings)).json().accountHosts).toEqual(['github.com']);
     await send('PUT', '/api/org/settings', settings);
     // Links to your own GitLab hosts come out as GitLab's in the browser too.
-    expect((await get('/api/git-hosts')).json()).toEqual({ gitlab: ['git.acme.test'], detected: {}, aliases: {} });
-    expect((await get('/api/org/status')).json().glab.hosts.map((h: { host: string }) => h.host)).toEqual(['gitlab.com', 'git.acme.test']);
+    expect((await get('/api/git-hosts')).json()).toEqual({ gitlab: ['git.wandworks.test'], detected: {}, aliases: {} });
+    expect((await get('/api/org/status')).json().glab.hosts.map((h: { host: string }) => h.host)).toEqual(['gitlab.com', 'git.wandworks.test']);
     // Reading a repo is a job started through its action; without Claude Code it does not start.
-    const input = { draftId: '11111111-2222-4333-8444-555555555555', url: 'git@github.com:acme/site.git', branch: 'main', fullName: 'acme/site', settings: settings.read };
+    const input = { draftId: '11111111-2222-4333-8444-555555555555', url: 'git@github.com:wandworks/site.git', branch: 'main', fullName: 'wandworks/site', settings: settings.read };
     const read = await send('POST', '/api/actions/org.readRepo', input);
     expect(read.json()).toMatchObject({ ok: false, output: expect.stringContaining('Claude Code is not installed') });
     expect((await send('POST', '/api/actions/org.readRepo', { ...input, url: 'nope' })).statusCode).toBe(400);
     expect((await send('POST', '/api/org/read', input)).statusCode).toBe(404);
     // The stored list needs no GitHub CLI; a scan without one says why and still answers with it.
-    expect((await get('/api/org/repos?org=acme')).json()).toEqual({ repos: [] });
-    expect((await get('/api/org/repos?org=acme&scan=auto')).json()).toEqual({ repos: [], problem: expect.stringContaining('the GitHub CLI cannot list the repos of acme') });
-    expect((await get('/api/org/repos?org=acme&scan=everything')).statusCode).toBe(400);
+    expect((await get('/api/org/repos?org=wandworks')).json()).toEqual({ repos: [] });
+    expect((await get('/api/org/repos?org=wandworks&scan=auto')).json()).toEqual({ repos: [], problem: expect.stringContaining('the GitHub CLI cannot list the repos of wandworks') });
+    expect((await get('/api/org/repos?org=wandworks&scan=everything')).statusCode).toBe(400);
   });
 
   it('keep install drafts: saved, read, refused when malformed, and discarded', async () => {
@@ -283,15 +283,15 @@ describe('site routes', () => {
 
   it('marks a skipped install step done, keeping the rest of the record, and lists runs with steps skipped', async () => {
     const todo = (label: string) => ({ label, todo: `${label} by hand` });
-    store.setInstall('local.shop.com', undefined, { how: 'repo', repo: 'git@github.com:acme/shop.git', at: '2026-10-25T08:00:00Z', skipped: [todo('Run the build'), todo('Flush caches')] });
+    store.setInstall('local.shop.com', undefined, { how: 'repo', repo: 'git@github.com:wandworks/shop.git', at: '2026-10-25T08:00:00Z', skipped: [todo('Run the build'), todo('Flush caches')] });
     const done = (payload: Record<string, unknown>) => app.inject({ method: 'POST', url: '/api/actions/site.skippedDone', headers: { host: HOST, origin: ORIGIN, cookie }, payload });
     expect((await done({ domain: 'local.shop.com', label: 'Run the build' })).json()).toMatchObject({ ok: true, output: 'Run the build: marked done on local.shop.com' });
-    expect(store.installs().get('local.shop.com')).toEqual({ how: 'repo', repo: 'git@github.com:acme/shop.git', at: '2026-10-25T08:00:00Z', skipped: [todo('Flush caches')] });
+    expect(store.installs().get('local.shop.com')).toEqual({ how: 'repo', repo: 'git@github.com:wandworks/shop.git', at: '2026-10-25T08:00:00Z', skipped: [todo('Flush caches')] });
     expect((await done({ domain: 'local.shop.com', label: 'Run the build' })).json()).toMatchObject({ ok: false, output: expect.stringContaining('local.shop.com has no skipped step called Run the build') });
     expect((await done({ domain: 'www.shop.com', label: 'Flush caches' })).statusCode).toBe(400);
     await done({ domain: 'local.shop.com', label: 'Flush caches' });
     // The last one leaves no empty list behind.
-    expect(store.installs().get('local.shop.com')).toEqual({ how: 'repo', repo: 'git@github.com:acme/shop.git', at: '2026-10-25T08:00:00Z' });
+    expect(store.installs().get('local.shop.com')).toEqual({ how: 'repo', repo: 'git@github.com:wandworks/shop.git', at: '2026-10-25T08:00:00Z' });
 
     store.finish(store.start('site.create', { domain: 'local.shop.com' }), 0, 'done, 2 steps skipped', 2);
     const listed = (await get('/api/runs')).json().runs as Array<{ action: string; skipped?: number }>;

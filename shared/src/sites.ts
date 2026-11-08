@@ -10,8 +10,8 @@ import type { AccessResult, ReadResult } from './org.js';
 /**
  * Database name for a new site, from its primary domain: drop the local./www.
  * prefix, dots and dashes become underscores, lowercase a-z 0-9 _ only,
- * at most 64 characters (MySQL's limit). local.learn.northwind.com gives
- * learn_northwind_com. A copy of a site adds `__label`; taken names get `_2`.
+ * at most 64 characters (MySQL's limit). local.learn.spellbook.example gives
+ * learn_spellbook_example. A copy of a site adds `__label`; taken names get `_2`.
  * Its user is the first 32 characters (MySQL's limit for users), so a name
  * whose user is among `users` counts as taken too.
  */
@@ -75,7 +75,7 @@ export type SiteRepoKind = 'wp-content' | 'theme' | 'plugin' | 'mu-plugin';
 
 /** A repo inside a site's own folder: wp-content, or a theme or plugin folder. */
 export interface SiteRepo {
-  /** From the site's folder: wp-content, wp-content/themes/acme. */
+  /** From the site's folder: wp-content, wp-content/themes/wandworks. */
   folder: string;
   kind: SiteRepoKind;
   /** The theme or plugin folder's name; wp-content for wp-content. */
@@ -85,7 +85,7 @@ export interface SiteRepo {
 
 const REPO_KIND_NAMES: Record<SiteRepoKind, string> = { 'wp-content': 'wp-content', theme: 'Theme', plugin: 'Plugin', 'mu-plugin': 'Must-use plugin' };
 
-/** wp-content, Theme: acme, Plugin: acme-blocks */
+/** wp-content, Theme: wandworks, Plugin: wandworks-blocks */
 export const siteRepoLabel = (repo: Pick<SiteRepo, 'kind' | 'name'>): string => (repo.kind === 'wp-content' ? 'wp-content' : `${REPO_KIND_NAMES[repo.kind]}: ${repo.name}`);
 
 /** The site's repos in the order the Git card shows them: its own, those inside it, then mounted folders'. */
@@ -287,7 +287,7 @@ export interface Site {
   uploadsFrom?: { host: string; via: 'apache' | 'local-mode' | 'plugin' };
   /** BE Media from Production, when the site has it: on in the database (null when it cannot be read), and the host its constant names. */
   mediaPlugin?: { active: boolean | null; host?: string };
-  /** Extra docroots served under a path, like Northwind's /learn; each can be its own repo. */
+  /** Extra docroots served under a path, like Spellbook's /learn; each can be its own repo. */
   mounts?: Array<{ path: string; docroot: string; git?: SiteGit }>;
   prodUrl?: string;
   notes?: string;
@@ -520,7 +520,7 @@ export interface CoresReport {
   ready: boolean;
   /** The newest WordPress release, when WordPress.org could be asked. */
   latest?: string;
-  /** Sites by name: local.shop.com, or local.northwind.com/learn for one under a path. */
+  /** Sites by name: local.shop.com, or local.spellbook.example/learn for one under a path. */
   cores: Array<{ version: string; status?: CoreSecurity; sites: string[] }>;
   /** Sites with their own copy of WordPress, which wpcore does not manage. */
   standalone: Array<{ domain: string; version: string; status?: CoreSecurity }>;
@@ -573,7 +573,7 @@ export interface CleanCopyInfo {
 export interface InstallDraft {
   id: string;
   kind: 'manual' | 'organization';
-  /** What it installs, like local.shop.com or acme/shop. */
+  /** What it installs, like local.shop.com or wandworks/shop. */
   title: string;
   /** The wizard step it is on. */
   step: string;

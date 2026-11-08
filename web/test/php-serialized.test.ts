@@ -20,17 +20,17 @@ describe('PHP serialized values', () => {
   });
 
   it('reads an object as its class name and properties, without making it', () => {
-    expect(parsePhpSerialized('O:8:"stdClass":1:{s:4:"name";s:4:"Acme";}')).toEqual({
+    expect(parsePhpSerialized('O:8:"stdClass":1:{s:4:"name";s:9:"Wandworks";}')).toEqual({
       type: 'object',
       className: 'stdClass',
-      entries: [[{ type: 'string', value: 'name' }, { type: 'string', value: 'Acme' }]],
+      entries: [[{ type: 'string', value: 'name' }, { type: 'string', value: 'Wandworks' }]],
     });
   });
 
   it('refuses a value whose lengths do not add up, or that has more after it', () => {
     // What a plain-text search and replace leaves: the length still counts the old address.
-    expect(parsePhpSerialized('a:1:{s:4:"home";s:23:"https://local.acme.com";}')).toBeNull();
-    expect(parsePhpSerialized('a:1:{s:4:"home";s:22:"https://local.acme.com";}')).not.toBeNull();
+    expect(parsePhpSerialized('a:1:{s:4:"home";s:32:"https://local.wandworks.example";}')).toBeNull();
+    expect(parsePhpSerialized('a:1:{s:4:"home";s:31:"https://local.wandworks.example";}')).not.toBeNull();
     expect(parsePhpSerialized('i:1;i:2;')).toBeNull();
     expect(parsePhpSerialized('plain text')).toBeNull();
     expect(parsePhpSerialized('a:99999999999:{}')).toBeNull();
@@ -45,10 +45,10 @@ describe('PHP serialized values', () => {
 
 describe('fixing serialized lengths after an edit', () => {
   it('counts each string again in UTF-8 bytes', () => {
-    const edited = 'a:2:{s:4:"home";s:22:"https://local.acme-bikes.com";s:4:"name";s:4:"Café Acme";}';
+    const edited = 'a:2:{s:4:"home";s:22:"https://local.wandworks-bikes.example";s:4:"name";s:4:"Café Wandworks";}';
     expect(parsePhpSerialized(edited)).toBeNull();
     const fixed = fixSerializedLengths(edited);
-    expect(fixed).toBe('a:2:{s:4:"home";s:28:"https://local.acme-bikes.com";s:4:"name";s:10:"Café Acme";}');
+    expect(fixed).toBe('a:2:{s:4:"home";s:37:"https://local.wandworks-bikes.example";s:4:"name";s:15:"Café Wandworks";}');
     expect(parsePhpSerialized(fixed as string)).not.toBeNull();
   });
 
@@ -59,14 +59,14 @@ describe('fixing serialized lengths after an edit', () => {
 
 describe('protected and private properties', () => {
   // As PHP writes them: protected as \0*\0name, private as \0Class\0name.
-  const text = 'O:18:"Acme_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:25:"\0Acme_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}';
+  const text = 'O:23:"Wandworks_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:30:"\0Wandworks_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}';
 
   it('reads the object, with the NUL bytes counted in the lengths', () => {
     const v = parsePhpSerialized(text);
     expect(v?.type).toBe('object');
     expect(v?.type === 'object' && v.entries.map(([k]) => (k.type === 'string' ? propertyName(k.value) : null))).toEqual([
       { name: 'recurs', visibility: 'protected' },
-      { name: 'start', visibility: 'private', owner: 'Acme_Task_Schedule' },
+      { name: 'start', visibility: 'private', owner: 'Wandworks_Task_Schedule' },
       { name: 'name', visibility: 'public' },
     ]);
   });
@@ -87,7 +87,7 @@ describe('protected and private properties', () => {
 });
 
 describe('editing values with NUL bytes', () => {
-  const original = 'O:18:"Acme_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:25:"\0Acme_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}';
+  const original = 'O:23:"Wandworks_Task_Schedule":3:{s:9:"\0*\0recurs";i:86400;s:30:"\0Wandworks_Task_Schedule\0start";i:1780000000;s:4:"name";s:5:"daily";}';
 
   it('picks the exact editor for control characters and carriage returns, not for tabs and line breaks', () => {
     expect(needsExactEditor(original)).toBe(true);
@@ -110,22 +110,22 @@ describe('editing values with NUL bytes', () => {
   });
 
   it('names a private property taken out, with the class it belongs to', () => {
-    const taken = original.replace('s:25:"\0Acme_Task_Schedule\0start";i:1780000000;', '').replace(':3:{', ':2:{');
-    expect(lostPropertyMarks(original, taken)).toEqual([{ name: 'start', visibility: 'private', owner: 'Acme_Task_Schedule' }]);
+    const taken = original.replace('s:30:"\0Wandworks_Task_Schedule\0start";i:1780000000;', '').replace(':3:{', ':2:{');
+    expect(lostPropertyMarks(original, taken)).toEqual([{ name: 'start', visibility: 'private', owner: 'Wandworks_Task_Schedule' }]);
   });
 });
 
 describe('typing \\0 for a NUL byte', () => {
-  const real = 'O:18:"Acme_Task_Schedule":2:{s:9:"\0*\0recurs";i:86400;s:25:"\0Acme_Task_Schedule\0start";i:1780000000;}';
+  const real = 'O:23:"Wandworks_Task_Schedule":2:{s:9:"\0*\0recurs";i:86400;s:30:"\0Wandworks_Task_Schedule\0start";i:1780000000;}';
 
   it('turns typed marks into NUL bytes when the lengths count them as one byte', () => {
-    const typed = 'O:18:"Acme_Task_Schedule":2:{s:9:"\\0*\\0recurs";i:86400;s:25:"\\0Acme_Task_Schedule\\0start";i:1780000000;}';
+    const typed = 'O:23:"Wandworks_Task_Schedule":2:{s:9:"\\0*\\0recurs";i:86400;s:30:"\\0Wandworks_Task_Schedule\\0start";i:1780000000;}';
     expect(parsePhpSerialized(typed)).toBeNull();
     expect(withNulMarks(typed)).toBe(real);
   });
 
   it('counts the lengths again when they were written for the typed text', () => {
-    const typed = 'O:18:"Acme_Task_Schedule":2:{s:11:"\\0*\\0recurs";i:86400;s:27:"\\0Acme_Task_Schedule\\0start";i:1780000000;}';
+    const typed = 'O:23:"Wandworks_Task_Schedule":2:{s:11:"\\0*\\0recurs";i:86400;s:32:"\\0Wandworks_Task_Schedule\\0start";i:1780000000;}';
     expect(withNulMarks(typed)).toBe(real);
   });
 
@@ -134,13 +134,13 @@ describe('typing \\0 for a NUL byte', () => {
     expect(withNulMarks(regex)).toBeNull();
     expect(withNulMarks('a:1:{s:4:"text";s:5:"plain";}')).toBeNull();
     // A mark in a value that still does not read is not offered.
-    expect(withNulMarks('O:18:"Acme_Task_Schedule":1:{s:9:"\\0*\\0recurs";i:86400')).toBeNull();
+    expect(withNulMarks('O:23:"Wandworks_Task_Schedule":1:{s:9:"\\0*\\0recurs";i:86400')).toBeNull();
   });
 
   it('knows a serialized array or object by its start', () => {
-    expect(looksSerialized('O:18:"Acme_Task_Schedule":1:{')).toBe(true);
+    expect(looksSerialized('O:23:"Wandworks_Task_Schedule":1:{')).toBe(true);
     expect(looksSerialized('a:2:{i:0;')).toBe(true);
-    expect(looksSerialized('Acme')).toBe(false);
+    expect(looksSerialized('Wandworks')).toBe(false);
     expect(looksSerialized('{"theme":"dark"}')).toBe(false);
   });
 });

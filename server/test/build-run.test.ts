@@ -7,7 +7,7 @@ import { fakeExec } from './helpers.js';
 
 function clone() {
   const root = mkdtempSync(join(tmpdir(), 'dmp-build-'));
-  const theme = join(root, 'wp-content/themes/acme');
+  const theme = join(root, 'wp-content/themes/wandworks');
   mkdirSync(theme, { recursive: true });
   writeFileSync(join(theme, 'package.json'), JSON.stringify({ scripts: { prod: 'webpack --mode production' } }));
   writeFileSync(join(theme, 'package-lock.json'), '{}');
@@ -19,7 +19,7 @@ describe('running the builds of an install', () => {
   it('runs each tool in its folder: npm ci with a lock file, then the script; composer install', async () => {
     const root = clone();
     const fake = fakeExec({ npm: { stdout: 'ok' }, composer: { stdout: 'ok' } });
-    await runBuild(fake.exec, root, { dir: 'wp-content/themes/acme', tool: 'npm', script: 'prod' }, { home: root });
+    await runBuild(fake.exec, root, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'prod' }, { home: root });
     await runBuild(fake.exec, root, { dir: '', tool: 'composer' });
     expect(fake.calls.map((c) => [c.file, ...c.args])).toEqual([
       ['npm', 'ci', '--no-audit', '--no-fund'],
@@ -35,7 +35,7 @@ describe('running the builds of an install', () => {
     symlinkSync(outside, join(root, 'wp-content/themes/linked'));
     const fake = fakeExec({ npm: { stdout: 'ok' } });
     expect((await runBuild(fake.exec, root, { dir: 'wp-content/plugins/none', tool: 'npm', script: 'build' }))[0]?.stdout).toContain('no package.json, skipped');
-    expect((await runBuild(fake.exec, root, { dir: 'wp-content/themes/acme', tool: 'npm', script: 'build' }))[0]?.stdout).toContain('has no build script, skipped');
+    expect((await runBuild(fake.exec, root, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'build' }))[0]?.stdout).toContain('has no build script, skipped');
     expect((await runBuild(fake.exec, root, { dir: 'wp-content/themes/linked', tool: 'npm', script: 'build' }))[0]?.stdout).toContain('skipped');
     expect(fake.calls).toEqual([]);
   });
@@ -44,7 +44,7 @@ describe('running the builds of an install', () => {
     const root = clone();
     const out = ['[theme] <s> [webpack.Progress] 9% setup compilation NoEmitOnErrorsPlugin', '[theme] compiled', '<s> [webpack.Progress] 100%'].join('\n');
     const fake = fakeExec({ 'npm ci': { stdout: 'ok' }, 'npm run': { stdout: out } });
-    const results = await runBuild(fake.exec, root, { dir: 'wp-content/themes/acme', tool: 'npm', script: 'prod' }, { home: root });
+    const results = await runBuild(fake.exec, root, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'prod' }, { home: root });
     expect(results.at(-1)?.stdout).toBe('[theme] compiled');
   });
 
@@ -52,9 +52,9 @@ describe('running the builds of an install', () => {
     const root = clone();
     const out = ['[blocks] compiled successfully', '--> Sending SIGTERM to other processes..', '[theme] webpack exited with code SIGTERM'].join('\n');
     const fake = fakeExec({ 'npm ci': { stdout: 'ok' }, 'npm run': { code: 1, stdout: out } });
-    const results = await runBuild(fake.exec, root, { dir: 'wp-content/themes/acme', tool: 'npm', script: 'prod' }, { home: root });
+    const results = await runBuild(fake.exec, root, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'prod' }, { home: root });
     expect(results.at(-1)?.stderr).toBe(
-      'wp-content/themes/acme: the build failed: prod runs its builds with concurrently --kill-others, so the first to finish stopped the others; run one of its parts instead, or change it to --kill-others-on-fail in package.json',
+      'wp-content/themes/wandworks: the build failed: prod runs its builds with concurrently --kill-others, so the first to finish stopped the others; run one of its parts instead, or change it to --kill-others-on-fail in package.json',
     );
   });
 

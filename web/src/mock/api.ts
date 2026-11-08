@@ -9,6 +9,16 @@ import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, m
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
+/**
+ * The panel's own version, so the mockup and the demo show the release they come from, with two
+ * newer ones to update to. Vite sets it from package.json; tests run without it.
+ */
+declare const __PANEL_VERSION__: string | undefined;
+const CURRENT = typeof __PANEL_VERSION__ === 'string' ? __PANEL_VERSION__ : '1.0.0';
+const [MAJOR = 1, MINOR = 0] = CURRENT.split('.').map(Number);
+const NEXT = `${MAJOR}.${MINOR + 1}.0`;
+const AFTER = `${MAJOR}.${MINOR + 2}.0`;
+
 /** The WordPress view's reports the mockup keeps, as the panel keeps the last reads. */
 const keptReports = new Map<string, WpDbReport>();
 
@@ -34,9 +44,9 @@ const environment: EnvironmentReport = {
       fixes: [{ action: 'ca.untrustLegacy', input: {}, label: 'Remove old CA', confirm: 'Open every site first and check it loads without a certificate warning.' }],
     },
     {
-      id: 'hosts.local.dailypost.com', group: 'hosts', label: 'local.dailypost.com', status: 'fail',
-      detail: 'not in hosts: www.local.dailypost.com, local.dailywishlist.com',
-      fixes: [{ action: 'hosts.add', input: { domain: 'local.dailypost.com', aliases: [] }, label: 'Add to hosts' }],
+      id: 'hosts.local.dailypost.example', group: 'hosts', label: 'local.dailypost.example', status: 'fail',
+      detail: 'not in hosts: www.local.dailypost.example, local.dailywishlist.example',
+      fixes: [{ action: 'hosts.add', input: { domain: 'local.dailypost.example', aliases: [] }, label: 'Add to hosts' }],
     },
     { id: 'mysql.reachable', group: 'database', label: 'MySQL admin account', status: 'ok', detail: 'connected as root@localhost' },
     {
@@ -89,8 +99,8 @@ async function playRun(steps: RunStep[], onUpdate: (steps: RunStep[]) => void, f
 const mockPlugins: SitePlugin[] = [
   { name: 'devmagic-panel-local', title: 'devmagic-panel Local mode', status: 'must-use', version: '3' },
   { name: 'advanced-cache.php', title: 'advanced-cache.php', status: 'dropin', version: '' },
-  { name: 'advanced-custom-fields-pro', title: 'Advanced Custom Fields PRO', status: 'active', version: '6.4.2', requiredBy: ['ACF Blocks for Acme'] },
-  { name: 'acme-acf-blocks', title: 'ACF Blocks for Acme', status: 'active', version: '1.3.0', requires: ['advanced-custom-fields-pro'] },
+  { name: 'advanced-custom-fields-pro', title: 'Advanced Custom Fields PRO', status: 'active', version: '6.4.2', requiredBy: ['ACF Blocks for Wandworks'] },
+  { name: 'wandworks-acf-blocks', title: 'ACF Blocks for Wandworks', status: 'active', version: '1.3.0', requires: ['advanced-custom-fields-pro'] },
   { name: 'cloudflare', title: 'Cloudflare', status: 'inactive', version: '4.14.4', update: '4.14.5', productionOnly: true },
   { name: 'wp-rocket', title: 'WP Rocket', status: 'inactive', version: '3.19.1', productionOnly: true },
   { name: 'gravityforms', title: 'Gravity Forms', status: 'active', version: '2.9.8', update: '2.9.9' },
@@ -102,9 +112,9 @@ const mockPlugins: SitePlugin[] = [
 ];
 
 const mockJobs = new Map<string, JobView>();
-// An install that finished with its build skipped, as on local.acme.test's page and run 40.
+// An install that finished with its build skipped, as on local.wandworks.test's page and run 40.
 mockJobs.set('mock-done-skipped', {
-  id: 'mock-done-skipped', title: 'Create site', target: 'local.acme.test', status: 'done', kind: 'site.create', runId: 40, progress: 1, undo: [], undoable: [],
+  id: 'mock-done-skipped', title: 'Create site', target: 'local.wandworks.test', status: 'done', kind: 'site.create', runId: 40, progress: 1, undo: [], undoable: [],
   startedAt: new Date(Date.now() - 5 * 3_600_000).toISOString(),
   steps: [
     { id: 'clone', label: 'Clone the repo', status: 'done' },
@@ -116,7 +126,7 @@ mockJobs.set('mock-done-skipped', {
 let failNextAtDb = true;
 let failNextAtBuild = true;
 const MOCK_SKIPPABLE: Record<string, string> = {
-  build: 'The build did not run, so built theme or plugin files may be missing. Run it in a terminal: cd /var/www/local.acme.com/wp-content/themes/acme && npm install && npm run build',
+  build: 'The build did not run, so built theme or plugin files may be missing. Run it in a terminal: cd /var/www/local.wandworks.example/wp-content/themes/wandworks && npm install && npm run build',
   htaccess: 'The site may have no .htaccess, so pages other than the home page can answer 404: Aura offers to write it.',
   flush: "Caches and rewrite rules were not flushed: use Clear caches and Flush rewrite rules on the site's page.",
 };
@@ -155,7 +165,7 @@ function advance(job: JobView, list: 'steps' | 'undo', failAt?: string, outputs:
       running.durationMs = 400 + Math.round(Math.random() * 600);
       if (running.id === failAt) {
         running.status = 'failed';
-        running.output = outputs[`${running.id}-failed`] ?? (running.id === 'build' ? 'wp-content/themes/acme: Node 20.18.0 from nvm (.nvmrc asks for 20)\nnpm error code ELIFECYCLE\nnpm error command failed: webpack --mode production' : "ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)");
+        running.output = outputs[`${running.id}-failed`] ?? (running.id === 'build' ? 'wp-content/themes/wandworks: Node 20.18.0 from nvm (.nvmrc asks for 20)\nnpm error code ELIFECYCLE\nnpm error command failed: webpack --mode production' : "ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)");
         job.status = 'failed';
         return;
       }
@@ -177,24 +187,24 @@ function advance(job: JobView, list: 'steps' | 'undo', failAt?: string, outputs:
 
 // An organization in the mockup: its repos, what Claude reads from one, and the dumps its links point to.
 const MOCK_DUMP_UPLOAD = '00000000-0000-4000-8000-0000000000d1';
-let mockOrgSettings: OrgSettings = { selected: ['acme', 'gitlab.com/acme-web', 'gitlab.com/~shared'], gitlabHosts: ['git.acme.test'], accountHosts: ['github.com', 'gitlab.com'], ...structuredClone(DEFAULT_CLAUDE_STEPS) };
+let mockOrgSettings: OrgSettings = { selected: ['wandworks', 'gitlab.com/wandworks-web', 'gitlab.com/~shared'], gitlabHosts: ['git.wandworks.test'], accountHosts: ['github.com', 'gitlab.com'], ...structuredClone(DEFAULT_CLAUDE_STEPS) };
 // A GitLab group in the mockup, its projects in subgroups: two of one name, kept apart by their path.
 const mockGitlabRepos: OrgRepo[] = [
-  { org: 'gitlab.com/acme-web', name: 'site', fullName: 'acme-web/clients/site', description: 'Client site on WordPress', sshUrl: 'git@gitlab.com:acme-web/clients/site.git', url: 'https://gitlab.com/acme-web/clients/site', defaultBranch: 'main', pushedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), archived: false, kind: 'site' },
-  { org: 'gitlab.com/acme-web', name: 'site', fullName: 'acme-web/internal/site', description: 'The agency site', sshUrl: 'git@gitlab.com:acme-web/internal/site.git', url: 'https://gitlab.com/acme-web/internal/site', defaultBranch: 'master', pushedAt: new Date(Date.now() - 12 * 86_400_000).toISOString(), archived: false, kind: 'wp-content' },
+  { org: 'gitlab.com/wandworks-web', name: 'site', fullName: 'wandworks-web/clients/site', description: 'Client site on WordPress', sshUrl: 'git@gitlab.com:wandworks-web/clients/site.git', url: 'https://gitlab.com/wandworks-web/clients/site', defaultBranch: 'main', pushedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), archived: false, kind: 'site' },
+  { org: 'gitlab.com/wandworks-web', name: 'site', fullName: 'wandworks-web/internal/site', description: 'The agency site', sshUrl: 'git@gitlab.com:wandworks-web/internal/site.git', url: 'https://gitlab.com/wandworks-web/internal/site', defaultBranch: 'master', pushedAt: new Date(Date.now() - 12 * 86_400_000).toISOString(), archived: false, kind: 'wp-content' },
 ];
 const mockOrgRepos: OrgRepo[] = [
-  { org: 'acme', name: 'storefront', fullName: 'acme/storefront', description: 'The Acme store, WooCommerce', sshUrl: 'git@github.com:acme/storefront.git', url: 'https://github.com/acme/storefront', defaultBranch: 'main', pushedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), archived: false, kind: 'site' },
-  { org: 'acme', name: 'test-shop', fullName: 'acme/test-shop', description: 'Staging copy of the shop', sshUrl: 'git@github.com:acme/test-shop.git', url: 'https://github.com/acme/test-shop', defaultBranch: 'main', pushedAt: new Date(Date.now() - 5 * 86_400_000).toISOString(), archived: false, kind: 'site', local: { installed: [{ domain: 'local.acme.test', how: 'organization' }] } },
-  { org: 'acme', name: 'old-campaign', fullName: 'acme/old-campaign', sshUrl: 'git@github.com:acme/old-campaign.git', url: 'https://github.com/acme/old-campaign', defaultBranch: 'master', pushedAt: new Date(Date.now() - 40 * 86_400_000).toISOString(), archived: false, kind: 'site', local: { archived: { count: 1, latest: new Date(Date.now() - 86_400_000).toISOString() } } },
-  { org: 'acme', name: 'brand-theme', fullName: 'acme/brand-theme', description: 'Shared theme', sshUrl: 'git@github.com:acme/brand-theme.git', url: 'https://github.com/acme/brand-theme', defaultBranch: 'main', pushedAt: new Date(Date.now() - 9 * 86_400_000).toISOString(), archived: false, kind: 'theme' },
-  { org: 'acme', name: 'design-tokens', fullName: 'acme/design-tokens', sshUrl: 'git@github.com:acme/design-tokens.git', url: 'https://github.com/acme/design-tokens', defaultBranch: 'main', pushedAt: new Date(Date.now() - 20 * 86_400_000).toISOString(), archived: false, kind: 'other' },
+  { org: 'wandworks', name: 'storefront', fullName: 'wandworks/storefront', description: 'The Wandworks store, WooCommerce', sshUrl: 'git@github.com:wandworks/storefront.git', url: 'https://github.com/wandworks/storefront', defaultBranch: 'main', pushedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), archived: false, kind: 'site' },
+  { org: 'wandworks', name: 'test-shop', fullName: 'wandworks/test-shop', description: 'Staging copy of the shop', sshUrl: 'git@github.com:wandworks/test-shop.git', url: 'https://github.com/wandworks/test-shop', defaultBranch: 'main', pushedAt: new Date(Date.now() - 5 * 86_400_000).toISOString(), archived: false, kind: 'site', local: { installed: [{ domain: 'local.wandworks.test', how: 'organization' }] } },
+  { org: 'wandworks', name: 'old-campaign', fullName: 'wandworks/old-campaign', sshUrl: 'git@github.com:wandworks/old-campaign.git', url: 'https://github.com/wandworks/old-campaign', defaultBranch: 'master', pushedAt: new Date(Date.now() - 40 * 86_400_000).toISOString(), archived: false, kind: 'site', local: { archived: { count: 1, latest: new Date(Date.now() - 86_400_000).toISOString() } } },
+  { org: 'wandworks', name: 'brand-theme', fullName: 'wandworks/brand-theme', description: 'Shared theme', sshUrl: 'git@github.com:wandworks/brand-theme.git', url: 'https://github.com/wandworks/brand-theme', defaultBranch: 'main', pushedAt: new Date(Date.now() - 9 * 86_400_000).toISOString(), archived: false, kind: 'theme' },
+  { org: 'wandworks', name: 'design-tokens', fullName: 'wandworks/design-tokens', sshUrl: 'git@github.com:wandworks/design-tokens.git', url: 'https://github.com/wandworks/design-tokens', defaultBranch: 'main', pushedAt: new Date(Date.now() - 20 * 86_400_000).toISOString(), archived: false, kind: 'other' },
 ];
 let mockOrgScan = { checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), listedAt: new Date(Date.now() - 2 * 86_400_000).toISOString() };
 const mockFacts: RepoFacts = {
-  productionUrl: 'https://www.acme-store.com', docsLocalSetup: 'Lando',
-  wordpressVersion: '6.8.3', phpVersion: '8.2', branch: 'develop', composer: true, npm: true, buildCommands: [{ folder: 'wp-content/themes/acme', command: 'npm run prod' }, { folder: 'wp-content/plugins/acme-slider', command: 'npm run prod-bundle' }],
-  asanaLinks: ['https://app.asana.com/0/120000/130000'], googleLinks: ['https://drive.google.com/drive/folders/1AcmeDumpsFolder01', 'https://docs.google.com/document/d/1AcmeSetupDoc0001/edit'],
+  productionUrl: 'https://www.wandworks-store.example', docsLocalSetup: 'Lando',
+  wordpressVersion: '6.8.3', phpVersion: '8.2', branch: 'develop', composer: true, npm: true, buildCommands: [{ folder: 'wp-content/themes/wandworks', command: 'npm run prod' }, { folder: 'wp-content/plugins/wandworks-slider', command: 'npm run prod-bundle' }],
+  asanaLinks: ['https://app.asana.com/0/120000/130000'], googleLinks: ['https://drive.google.com/drive/folders/1WandworksDumpsFolder01', 'https://docs.google.com/document/d/1WandworksSetupDoc0001/edit'],
   dumpHints: ['Weekly dumps are in the Drive folder linked from the Local setup task'], notes: ['WooCommerce with Stripe in test mode for staging'],
   sources: [{ field: 'productionUrl', file: 'README.md' }, { field: 'docsLocalSetup', file: '.lando.yml' }, { field: 'asanaLinks', file: 'docs/local.md' }, { field: 'buildCommands', file: 'README.md' }],
 };
@@ -209,45 +219,45 @@ async function mockUpload(file: File, onProgress: (fraction: number) => void): P
   // Enough plugins for the WordPress step's plugin search to show.
   const plugins = ['advanced-custom-fields-pro', 'wordfence', 'wp-rocket', 'yoast-seo', 'gravityforms', 'wp-mail-smtp', 'akismet', 'classic-editor', 'contact-form-7', 'duplicate-post', 'mailchimp-for-wp', 'redirection', 'regenerate-thumbnails', 'safe-svg', 'wp-mail-logging', 'user-switching'];
   const suggest = (hosts: string[]) => hosts.map((from) => ({ from, to: isLocalName(from) ? from : localDomainFor(from) }));
-  // The file name picks the mockup's dump: a local network under paths, a Daily Post network, a copy already on local names, or Northwind from production.
+  // The file name picks the mockup's dump: a local network under paths, a Daily Post network, a copy already on local names, or Spellbook from production.
   if (/paths/i.test(file.name)) {
-    const hosts = ['local.acme-group.com'];
+    const hosts = ['local.wandworks-group.example'];
     const sites = [
-      { id: 1, domain: 'local.acme-group.com', path: '/', name: 'Acme Group Network' },
-      { id: 3, domain: 'local.acme-group.com', path: '/acme-repairs/', name: 'Acme Repairs' },
-      { id: 4, domain: 'local.acme-group.com', path: '/flood-help/', name: 'Flood Help' },
-      { id: 10, domain: 'local.acme-group.com', path: '/north-cleanup/', name: 'North Cleanup & Dry' },
-      { id: 12, domain: 'local.acme-group.com', path: '/first-call/', name: '1st Call Restoration' },
+      { id: 1, domain: 'local.wandworks-group.example', path: '/', name: 'Wandworks Group Network' },
+      { id: 3, domain: 'local.wandworks-group.example', path: '/wandworks-repairs/', name: 'Wandworks Repairs' },
+      { id: 4, domain: 'local.wandworks-group.example', path: '/flood-help/', name: 'Flood Help' },
+      { id: 10, domain: 'local.wandworks-group.example', path: '/wandworks-cleaning/', name: 'Wandworks Cleaning & Dry' },
+      { id: 12, domain: 'local.wandworks-group.example', path: '/first-call/', name: '1st Call Restoration' },
     ];
-    return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://local.acme-group.com', home: 'https://local.acme-group.com', dbVersion: 61833, multisite: true, subdomainInstall: false, networkPath: '/', sites, hosts, activePlugins: plugins, partial: false, httpHosts: [], admins: ['admin'], superAdmins: ['admin'] }, suggestions: { replace: suggest(hosts) } };
+    return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://local.wandworks-group.example', home: 'https://local.wandworks-group.example', dbVersion: 61833, multisite: true, subdomainInstall: false, networkPath: '/', sites, hosts, activePlugins: plugins, partial: false, httpHosts: [], admins: ['admin'], superAdmins: ['admin'] }, suggestions: { replace: suggest(hosts) } };
   }
   if (/dailypost|network/i.test(file.name)) {
-    const hosts = ['dailypost.com', 'www.dailypost.com', 'deals.dailypost.com', 'dailypost.com.br', 'dailylists.com', 'dailycats.com'];
+    const hosts = ['dailypost.example', 'www.dailypost.example', 'deals.dailypost.example', 'dailypost.example.br', 'dailylists.example', 'dailycats.example'];
     const sites = [
-      { id: 1, domain: 'dailypost.com', path: '/', name: 'Daily Post' }, { id: 2, domain: 'dailypost.com', path: '/stories/', name: 'Daily Post Stories' }, { id: 3, domain: 'dailylists.com', path: '/', name: 'Daily Lists' },
-      { id: 4, domain: 'dailypost.com', path: '/ca/', name: 'Daily Post Canada' }, { id: 5, domain: 'dailycats.com', path: '/', name: 'Daily Cats' }, { id: 6, domain: 'deals.dailypost.com', path: '/', name: 'Daily Deals' }, { id: 7, domain: 'dailypost.com.br', path: '/', name: 'Daily Post Brasil' },
+      { id: 1, domain: 'dailypost.example', path: '/', name: 'Daily Post' }, { id: 2, domain: 'dailypost.example', path: '/stories/', name: 'Daily Post Stories' }, { id: 3, domain: 'dailylists.example', path: '/', name: 'Daily Lists' },
+      { id: 4, domain: 'dailypost.example', path: '/ca/', name: 'Daily Post Canada' }, { id: 5, domain: 'dailycats.example', path: '/', name: 'Daily Cats' }, { id: 6, domain: 'deals.dailypost.example', path: '/', name: 'Daily Deals' }, { id: 7, domain: 'dailypost.example.br', path: '/', name: 'Daily Post Brasil' },
     ];
-    return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://dailypost.com', home: 'https://dailypost.com', dbVersion: 61833, multisite: true, subdomainInstall: false, sites, hosts, activePlugins: plugins, partial: false, httpHosts: ['dailycats.com'], admins: ['admin'], superAdmins: ['admin', 'netadmin'] }, suggestions: { replace: suggest(hosts) } };
+    return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://dailypost.example', home: 'https://dailypost.example', dbVersion: 61833, multisite: true, subdomainInstall: false, sites, hosts, activePlugins: plugins, partial: false, httpHosts: ['dailycats.example'], admins: ['admin'], superAdmins: ['admin', 'netadmin'] }, suggestions: { replace: suggest(hosts) } };
   }
   if (/local/i.test(file.name)) {
-    const hosts = ['local.northwind.com'];
-    return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'http://local.northwind.com', home: 'http://local.northwind.com', dbVersion: 61833, multisite: false, hosts, activePlugins: [...plugins, 'query-monitor'], partial: false, httpHosts: ['local.northwind.com'], admins: [] }, suggestions: { replace: suggest(hosts) } };
+    const hosts = ['local.spellbook.example'];
+    return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'http://local.spellbook.example', home: 'http://local.spellbook.example', dbVersion: 61833, multisite: false, hosts, activePlugins: [...plugins, 'query-monitor'], partial: false, httpHosts: ['local.spellbook.example'], admins: [] }, suggestions: { replace: suggest(hosts) } };
   }
-  const hosts = ['www.northwind.com', 'www.northwind.de', 'www.northwind.fr'];
+  const hosts = ['www.spellbook.example', 'www.spellbook.de', 'www.spellbook.fr'];
   // The tables a production shop dump makes, for what a clean copy finds in it.
   const tableHosts = Object.fromEntries(
-    ['wp_options', 'wp_posts', 'wp_postmeta', 'wp_users', 'wp_usermeta', 'wp_comments', 'wp_wc_orders', 'wp_wc_orders_meta', 'wp_woocommerce_order_items', 'wp_woocommerce_sessions', 'wp_gf_entry', 'wp_gf_entry_meta', 'wp_actionscheduler_logs', 'wp_wfHits', 'wp_redirection_404'].map((t) => [t, ['www.northwind.com']]),
+    ['wp_options', 'wp_posts', 'wp_postmeta', 'wp_users', 'wp_usermeta', 'wp_comments', 'wp_wc_orders', 'wp_wc_orders_meta', 'wp_woocommerce_order_items', 'wp_woocommerce_sessions', 'wp_gf_entry', 'wp_gf_entry_meta', 'wp_actionscheduler_logs', 'wp_wfHits', 'wp_redirection_404'].map((t) => [t, ['www.spellbook.example']]),
   );
-  return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://www.northwind.com', home: 'https://www.northwind.com', dbVersion: 61833, multisite: false, hosts, activePlugins: plugins, partial: false, httpHosts: [], tableHosts, storedObjects: false, admins: ['admin', 'northwindadmin'] }, suggestions: { replace: suggest(hosts) } };
+  return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://www.spellbook.example', home: 'https://www.spellbook.example', dbVersion: 61833, multisite: false, hosts, activePlugins: plugins, partial: false, httpHosts: [], tableHosts, storedObjects: false, admins: ['admin', 'spellbookadmin'] }, suggestions: { replace: suggest(hosts) } };
 }
 
 /** The store dump an organization's links find in the mockup. */
 async function mockStoreUpload(id: string): Promise<UploadResult> {
   await wait(150);
   return {
-    id, name: 'acme-store-2026-10-24.sql.gz', size: 432_000_000,
-    facts: { tablePrefix: 'wp_', siteUrl: 'https://www.acme-store.com', home: 'https://www.acme-store.com', dbVersion: 58975, multisite: false, hosts: ['www.acme-store.com', 'acme-store.de'], activePlugins: ['woocommerce', 'woocommerce-gateway-stripe', 'wp-rocket'], partial: false, admins: ['admin', 'acmeshop'] },
-    suggestions: { replace: [{ from: 'www.acme-store.com', to: 'local.acme-store.com' }, { from: 'acme-store.de', to: 'local.acme-store.de' }] },
+    id, name: 'wandworks-store-2026-10-24.sql.gz', size: 432_000_000,
+    facts: { tablePrefix: 'wp_', siteUrl: 'https://www.wandworks-store.example', home: 'https://www.wandworks-store.example', dbVersion: 58975, multisite: false, hosts: ['www.wandworks-store.example', 'wandworks-store.de'], activePlugins: ['woocommerce', 'woocommerce-gateway-stripe', 'wp-rocket'], partial: false, admins: ['admin', 'wandworksshop'] },
+    suggestions: { replace: [{ from: 'www.wandworks-store.example', to: 'local.wandworks-store.example' }, { from: 'wandworks-store.de', to: 'local.wandworks-store.de' }] },
   };
 }
 
@@ -256,13 +266,13 @@ const mockUploads = new Map<string, UploadResult>();
 const mockAccess: AccessReport = {
   links: [
     { url: 'https://app.asana.com/0/120000/130000', status: 'ok', title: 'Local setup for the store' },
-    { url: 'https://drive.google.com/drive/folders/1AcmeDumpsFolder01', status: 'ok', title: 'Store database dumps' },
-    { url: 'https://docs.google.com/document/d/1AcmeSetupDoc0001/edit', status: 'no-access', title: null },
+    { url: 'https://drive.google.com/drive/folders/1WandworksDumpsFolder01', status: 'ok', title: 'Store database dumps' },
+    { url: 'https://docs.google.com/document/d/1WandworksSetupDoc0001/edit', status: 'no-access', title: null },
   ],
-  facts: [{ text: 'Uploads are served from www.acme-store.com', source: 'Asana task Local setup for the store' }, { text: 'Deactivate the payment gateway plugin locally', source: 'Asana task comment' }],
+  facts: [{ text: 'Uploads are served from www.wandworks-store.example', source: 'Asana task Local setup for the store' }, { text: 'Deactivate the payment gateway plugin locally', source: 'Asana task comment' }],
   dumps: [
-    { fileId: '1AcmeDump20261024x', name: 'acme-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: '2026-10-24T03:00:00Z', foundIn: 'Store database dumps folder' },
-    { fileId: '1AcmeDump20261017x', name: 'acme-store-2026-10-17.sql.gz', sizeBytes: 428_000_000, modifiedAt: '2026-10-17T03:00:00Z', foundIn: 'Store database dumps folder' },
+    { fileId: '1WandworksDump20261024x', name: 'wandworks-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: '2026-10-24T03:00:00Z', foundIn: 'Store database dumps folder' },
+    { fileId: '1WandworksDump20261017x', name: 'wandworks-store-2026-10-17.sql.gz', sizeBytes: 428_000_000, modifiedAt: '2026-10-17T03:00:00Z', foundIn: 'Store database dumps folder' },
   ],
 };
 
@@ -271,8 +281,8 @@ const mockDrafts = new Map<string, InstallDraft>([
   [
     'd1e2f3a4-0000-4000-8000-000000000002',
     {
-      id: 'd1e2f3a4-0000-4000-8000-000000000002', kind: 'manual', title: 'local.northwind.test', step: 'wordpress',
-      state: { source: 'wordpress', domains: [{ prod: '', local: 'local.northwind.test' }] },
+      id: 'd1e2f3a4-0000-4000-8000-000000000002', kind: 'manual', title: 'local.spellbook.test', step: 'wordpress',
+      state: { source: 'wordpress', domains: [{ prod: '', local: 'local.spellbook.test' }] },
       uploads: [], status: 'open', createdAt: new Date(Date.now() - 16 * 3_600_000).toISOString(), updatedAt: new Date(Date.now() - 15 * 3_600_000).toISOString(),
       expiresAt: new Date(Date.now() + 9 * 3_600_000).toISOString(),
     },
@@ -281,7 +291,7 @@ const mockDrafts = new Map<string, InstallDraft>([
     'd1e2f3a4-0000-4000-8000-000000000001',
     {
       id: 'd1e2f3a4-0000-4000-8000-000000000001', kind: 'manual', title: 'local.shop.com', step: 'domains',
-      state: { source: 'repo', repoUrl: 'git@github.com:acme/shop.git', branch: 'main', domains: [{ prod: 'www.shop.com', local: 'local.shop.com' }] },
+      state: { source: 'repo', repoUrl: 'git@github.com:wandworks/shop.git', branch: 'main', domains: [{ prod: 'www.shop.com', local: 'local.shop.com' }] },
       uploads: [], status: 'open', createdAt: new Date(Date.now() - 2.2 * 3_600_000).toISOString(), updatedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
       expiresAt: new Date(Date.now() + 22 * 3_600_000).toISOString(),
     },
@@ -290,10 +300,10 @@ const mockDrafts = new Map<string, InstallDraft>([
 
 // The archive in the mockup: a site removed yesterday, one about to be purged, and two copies of a site that is installed again.
 const mockTrash: TrashEntry[] = [
-  { id: 'local.old-campaign.test-20261023-101500', domain: 'local.old-campaign.test', deletedAt: new Date(Date.now() - 86_400_000).toISOString(), purgeAt: new Date(Date.now() + 13 * 86_400_000).toISOString(), sizeBytes: 640_000_000, panelMade: true, dbName: 'old_campaign_test', reason: 'deleted', hasDump: true, install: { how: 'repo', at: '2026-10-02T09:00:00Z', repo: 'git@github.com:acme/old-campaign.git' } },
-  { id: 'local.biketours.com-20261024-171200', domain: 'local.biketours.com', deletedAt: new Date(Date.now() - 5 * 3_600_000).toISOString(), purgeAt: new Date(Date.now() + 14 * 86_400_000).toISOString(), sizeBytes: 920_000_000, panelMade: false, dbName: 'biketoursdb', reason: 'reinstall', hasDump: true, replaces: { refusal: null } },
-  { id: 'local.biketours.com-20261020-110000', domain: 'local.biketours.com', deletedAt: new Date(Date.now() - 4 * 86_400_000).toISOString(), purgeAt: new Date(Date.now() + 10 * 86_400_000).toISOString(), sizeBytes: 900_000_000, panelMade: false, dbName: 'biketoursdb', reason: 'restore', hasDump: true, replaces: { refusal: null } },
-  { id: 'local.newsnow-legacy.com-20261011-090000', domain: 'local.newsnow-legacy.com', deletedAt: new Date(Date.now() - 13 * 86_400_000).toISOString(), purgeAt: new Date(Date.now() + 86_400_000).toISOString(), sizeBytes: 1_100_000_000, panelMade: false, dbName: 'newsnowdb_old', reason: 'deleted', hasDump: true },
+  { id: 'local.old-campaign.test-20261023-101500', domain: 'local.old-campaign.test', deletedAt: new Date(Date.now() - 86_400_000).toISOString(), purgeAt: new Date(Date.now() + 13 * 86_400_000).toISOString(), sizeBytes: 640_000_000, panelMade: true, dbName: 'old_campaign_test', reason: 'deleted', hasDump: true, install: { how: 'repo', at: '2026-10-02T09:00:00Z', repo: 'git@github.com:wandworks/old-campaign.git' } },
+  { id: 'local.biketours.example-20261024-171200', domain: 'local.biketours.example', deletedAt: new Date(Date.now() - 5 * 3_600_000).toISOString(), purgeAt: new Date(Date.now() + 14 * 86_400_000).toISOString(), sizeBytes: 920_000_000, panelMade: false, dbName: 'biketoursdb', reason: 'reinstall', hasDump: true, replaces: { refusal: null } },
+  { id: 'local.biketours.example-20261020-110000', domain: 'local.biketours.example', deletedAt: new Date(Date.now() - 4 * 86_400_000).toISOString(), purgeAt: new Date(Date.now() + 10 * 86_400_000).toISOString(), sizeBytes: 900_000_000, panelMade: false, dbName: 'biketoursdb', reason: 'restore', hasDump: true, replaces: { refusal: null } },
+  { id: 'local.newsnow-legacy.example-20261011-090000', domain: 'local.newsnow-legacy.example', deletedAt: new Date(Date.now() - 13 * 86_400_000).toISOString(), purgeAt: new Date(Date.now() + 86_400_000).toISOString(), sizeBytes: 1_100_000_000, panelMade: false, dbName: 'newsnowdb_old', reason: 'deleted', hasDump: true },
 ];
 
 // Mailpit starts stopped in the mockup; installing it there "starts" it and the sample mail appears.
@@ -305,14 +315,14 @@ const mockUserLabel = (input: Record<string, unknown>) => {
   return user.keep ? `Keep ${user.keep} as the only user, the author of every post` : `Make ${user.login ?? 'admin'} the only user, the author of every post`;
 };
 const mockMail: Array<MailSummary & { text: string; html: string }> = [
-  { id: 'm1', from: 'BikeTours <bookings@local.biketours.com>', to: ['anna@example.com'], subject: 'Your booking: Mountain Lakes Tour, July 2027', date: new Date(Date.now() - 4 * 60_000).toISOString(), snippet: 'Thanks for booking with Bike Tours. Your guides will contact you...', site: 'local.biketours.com', read: false, text: 'Thanks for booking with Bike Tours.', html: '<h2 style="font-family:sans-serif">Thanks for booking!</h2><p style="font-family:sans-serif">Your guides will contact you two weeks before the trip.</p>' },
-  { id: 'm2', from: 'WordPress <wordpress@local.northwind.com>', to: ['acmeco@local.test'], subject: '[Northwind] Password Reset', date: new Date(Date.now() - 50 * 60_000).toISOString(), snippet: 'Someone has requested a password reset for the following account...', site: 'local.northwind.com', read: true, text: 'Someone has requested a password reset for the following account:\n\nSite Name: Northwind\n\nUsername: acmeco\n\nIf this was a mistake, ignore this email and nothing will happen.\n\nTo reset your password, visit the following address:\n\nhttps://local.northwind.com/wp-login.php?action=rp&key=mockkey&login=acmeco&wp_lang=en_US\n', html: '' },
-  { id: 'm3', from: 'Gravity Forms <noreply@local.crmblog.com>', to: ['editors@crmblog.com'], subject: 'New submission: Newsletter signup', date: new Date(Date.now() - 3 * 3600_000).toISOString(), snippet: 'Email: test@example.com', site: 'local.crmblog.com', read: true, text: 'Email: test@example.com', html: '<p>Email: <b>test@example.com</b></p>' },
+  { id: 'm1', from: 'BikeTours <bookings@local.biketours.example>', to: ['anna@example.com'], subject: 'Your booking: Mountain Lakes Tour, July 2027', date: new Date(Date.now() - 4 * 60_000).toISOString(), snippet: 'Thanks for booking with Bike Tours. Your guides will contact you...', site: 'local.biketours.example', read: false, text: 'Thanks for booking with Bike Tours.', html: '<h2 style="font-family:sans-serif">Thanks for booking!</h2><p style="font-family:sans-serif">Your guides will contact you two weeks before the trip.</p>' },
+  { id: 'm2', from: 'WordPress <wordpress@local.spellbook.example>', to: ['wandworksco@local.test'], subject: '[Spellbook] Password Reset', date: new Date(Date.now() - 50 * 60_000).toISOString(), snippet: 'Someone has requested a password reset for the following account...', site: 'local.spellbook.example', read: true, text: 'Someone has requested a password reset for the following account:\n\nSite Name: Spellbook\n\nUsername: wandworksco\n\nIf this was a mistake, ignore this email and nothing will happen.\n\nTo reset your password, visit the following address:\n\nhttps://local.spellbook.example/wp-login.php?action=rp&key=mockkey&login=wandworksco&wp_lang=en_US\n', html: '' },
+  { id: 'm3', from: 'Gravity Forms <noreply@local.crmblog.example>', to: ['editors@crmblog.example'], subject: 'New submission: Newsletter signup', date: new Date(Date.now() - 3 * 3600_000).toISOString(), snippet: 'Email: test@example.com', site: 'local.crmblog.example', read: true, text: 'Email: test@example.com', html: '<p>Email: <b>test@example.com</b></p>' },
 ];
 
 const snapshots = new Map<string, SnapshotInfo[]>([
   [
-    'local.dailypost.com',
+    'local.dailypost.example',
     [
       { name: '20261023-174210-before-import.sql.gz', label: 'before-import', sizeBytes: 412_000_000, createdAt: '2026-10-23T17:42:10Z' },
       { name: '20261020-090500.sql.gz', sizeBytes: 405_300_000, createdAt: '2026-10-20T09:05:00Z' },
@@ -322,19 +332,19 @@ const snapshots = new Map<string, SnapshotInfo[]>([
 
 const cleanCopies = new Map<string, CleanCopyInfo[]>([
   [
-    'local.northwind.com',
+    'local.spellbook.example',
     [
       {
-        name: 'northwind.com-local-clean-2026.10.27.sql.gz', sizeBytes: 96_400_000, createdAt: '2026-10-27T16:20:00Z',
-        leftoverEmails: { total: 214, tables: [{ table: 'wp_postmeta', count: 201, samples: ['j***@customer.net', 'm***@gmail.com', 'a***@northwind-partner.de'] }, { table: 'wp_acme_leads', count: 13, samples: ['s***@outlook.com'] }] },
+        name: 'spellbook.example-local-clean-2026.10.27.sql.gz', sizeBytes: 96_400_000, createdAt: '2026-10-27T16:20:00Z',
+        leftoverEmails: { total: 214, tables: [{ table: 'wp_postmeta', count: 201, samples: ['j***@customer.net', 'm***@gmail.com', 'a***@spellbook-partner.de'] }, { table: 'wp_wandworks_leads', count: 13, samples: ['s***@outlook.com'] }] },
       },
-      { name: 'northwind.com-local-clean-2026.10.20.sql.gz', sizeBytes: 94_100_000, createdAt: '2026-10-20T11:02:00Z', leftoverEmails: { total: 0, tables: [] } },
+      { name: 'spellbook.example-local-clean-2026.10.20.sql.gz', sizeBytes: 94_100_000, createdAt: '2026-10-20T11:02:00Z', leftoverEmails: { total: 0, tables: [] } },
     ],
   ],
 ]);
 
 const keptDatabases = new Map<string, KeptDatabaseInfo[]>([
-  ['local.northwind.com', [{ name: 'northwind_com__keep261024101500', reason: 'before northwind-prod.sql.gz from production', createdAt: '2026-10-24T10:15:00Z', purgeAt: '2026-10-31T10:15:00Z', sizeBytes: 1_840_000_000 }]],
+  ['local.spellbook.example', [{ name: 'spellbook_example__keep261024101500', reason: 'before spellbook-prod.sql.gz from production', createdAt: '2026-10-24T10:15:00Z', purgeAt: '2026-10-31T10:15:00Z', sizeBytes: 1_840_000_000 }]],
 ]);
 
 const stamp = (at: Date) => at.toISOString().replace(/\D/g, '').slice(2, 14);
@@ -353,7 +363,7 @@ const mockMysqlExtra = {
   ],
 };
 
-const MOCK_BACKUPS_DIR = '/home/acmeco/.local/share/devmagic-panel/mysql-backups';
+const MOCK_BACKUPS_DIR = '/home/wandworksco/.local/share/devmagic-panel/mysql-backups';
 const savedAgo = (days: number) => new Date(Date.now() - days * 86_400_000);
 let mockBackups: MysqlBackup[] = [
   { name: 'oldblog_com-20261022-091500.sql.gz', kind: 'database', subject: 'oldblog_com', sizeBytes: 48_200_000, savedAt: savedAgo(7).toISOString(), purgeAt: savedAgo(-7).toISOString() },
@@ -490,7 +500,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
             { id: 'trial', label: `Open the home page and wp-admin on PHP ${String(input.version ?? '8.3')} and read the new lines in its logs` },
           ],
     'php.checkCompatAll': [
-      ...['local.northwind.com', 'local.northwind.com/learn', 'local.dailypost.com', 'local.biketours.com'].map((host) => ({ id: `site-${host}`, label: `Scan ${host}` })),
+      ...['local.spellbook.example', 'local.spellbook.example/learn', 'local.dailypost.example', 'local.biketours.example'].map((host) => ({ id: `site-${host}`, label: `Scan ${host}` })),
       { id: 'summary', label: 'Sum up' },
     ],
     'php.checkCompat': [
@@ -677,26 +687,26 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
   }
   // The mockup's sudo password is anything but "wrong".
   advance(job, 'steps', id === 'panel.installRelease' && input.password === 'wrong' ? 'start' : undefined, {
-    'start-failed': 'sudo did not accept the password: nothing was changed. Log: /home/acmeco/.local/state/devmagic-panel/logs/install-20261031-120000.log',
+    'start-failed': 'sudo did not accept the password: nothing was changed. Log: /home/wandworksco/.local/state/devmagic-panel/logs/install-20261031-120000.log',
     start: `install.sh --from-panel runs as devmagic-panel-install-20261031120000`,
-    install: `${String(input.release)} installed, replacing v0.6.0`,
+    install: `${String(input.release)} installed, replacing v${CURRENT}`,
     preview: `+------------+--------------+--------------+------+\n| Table      | Column       | Replacements | Type |\n+------------+--------------+--------------+------+\n| wp_options | option_value | 4            | PHP  |\n| wp_posts   | post_content | 37           | SQL  |\n+------------+--------------+--------------+------+\nSuccess: 41 replacements to be made.`,
     replace: 'Success: Made 41 replacements.',
-    download: `downloaded ${String(input.name)} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.acme-store.com`,
-    take: `took ${String(input.file).split('/').pop()} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.acme-store.com; your file stays in /home/acmeco/Downloads`,
+    download: `downloaded ${String(input.name)} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example`,
+    take: `took ${String(input.file).split('/').pop()} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example; your file stays in /home/wandworksco/Downloads`,
     clean: 'Users\n  wp_users removed, all but admin: about 18,239 rows\n  wp_usermeta removed with them: about 402,113 rows\nWooCommerce orders and customers\n  wp_wc_orders emptied: about 51,320 rows\n  wp_comments order notes: 88,412\nForm entries\n  wp_gf_entry emptied: about 9,804 rows\nLogs\n  wp_actionscheduler_logs emptied: about 1,204,511 rows\n  wp_wfHits emptied: about 603,220 rows\nPayment, mail and API keys\n  wp_options settings with keys: 7\nSettings: done',
     plugins: 'turned off: wp-mail-smtp, mailchimp-for-wp, wordfence, wp-rocket',
-    copy: 'copied 12 tables into northwind_com__import',
-    trial: 'Opened home page 200, wp-login.php 200, wp-admin 200. New in the logs: 2 deprecations.\n  PHP Deprecated:  Creation of dynamic property Acme_Forms_Entry::$meta is deprecated in /var/www/local.northwind.com/wp-content/plugins/acme-forms/includes/class-entries.php on line 64 (2 times)',
-    scan: `PHP ${String(input.version)}: 3 errors and 5 warnings in 1843 files; errors in Acme Forms`,
-    summary: `4 sites checked against PHP ${String(input.version)}: errors in local.northwind.com (3 errors), local.northwind.com/learn (3 errors), local.dailypost.com (3 errors), local.biketours.com (3 errors).`,
+    copy: 'copied 12 tables into spellbook_example__import',
+    trial: 'Opened home page 200, wp-login.php 200, wp-admin 200. New in the logs: 2 deprecations.\n  PHP Deprecated:  Creation of dynamic property Wandworks_Forms_Entry::$meta is deprecated in /var/www/local.spellbook.example/wp-content/plugins/wandworks-forms/includes/class-entries.php on line 64 (2 times)',
+    scan: `PHP ${String(input.version)}: 3 errors and 5 warnings in 1843 files; errors in Wandworks Forms`,
+    summary: `4 sites checked against PHP ${String(input.version)}: errors in local.spellbook.example (3 errors), local.spellbook.example/learn (3 errors), local.dailypost.example (3 errors), local.biketours.example (3 errors).`,
 
     members: `${String(input.user)} is administrator on 2 more sites: #3, #4`,
     admin: 'admin is the only user, an administrator, and the author of every post and link; comments keep who wrote them',
     drop: id === 'mysql.dropDatabase' ? `deleted ${String(input.database)}` : `deleted ${accounts.join(', ')}`,
-    save: 'saved to /home/acmeco/.local/share/devmagic-panel/mysql-backups/users-20261029-101500.sql, kept 14 days',
+    save: 'saved to /home/wandworksco/.local/share/devmagic-panel/mysql-backups/users-20261029-101500.sql, kept 14 days',
     optimize: `optimized 58 tables of ${String(input.database)}: 342 MB before, 118 MB now`,
-    export: id === 'mysql.dropDatabase' ? `saved /home/acmeco/.local/share/devmagic-panel/mysql-backups/${String(input.database)}-20261029-101500.sql.gz (61 MB gzipped), kept 14 days` : 'saved /home/acmeco/devmagic-panel-backups/clean/local.northwind.com/northwind.com-local-clean-2026.10.28.sql.gz (95 MB gzipped, 1.1 GB of SQL)\nno email addresses left in it, apart from local and example ones',
+    export: id === 'mysql.dropDatabase' ? `saved /home/wandworksco/.local/share/devmagic-panel/mysql-backups/${String(input.database)}-20261029-101500.sql.gz (61 MB gzipped), kept 14 days` : 'saved /home/wandworksco/devmagic-panel-backups/clean/local.spellbook.example/spellbook.example-local-clean-2026.10.28.sql.gz (95 MB gzipped, 1.1 GB of SQL)\nno email addresses left in it, apart from local and example ones',
   });
   // What each finished job leaves for the Database tab's lists.
   if (id === 'db.cleanCopy' || id === 'db.cleanCurrent') {
@@ -730,9 +740,9 @@ const MOCK_READ_LINES = ['Reading README.md', 'Reading docs/local.md', 'Reading 
 const MOCK_ACCESS_LINES = [
   'Asana: opening the task 1200001',
   "Asana: reading the task's comments 1200001",
-  'Google Drive: searching files acme-store',
-  'Google Drive: reading the file details 1AcmeDump20261024',
-  'Google Docs: reading the document 1AcmeSetupDoc0001',
+  'Google Drive: searching files wandworks-store',
+  'Google Drive: reading the file details 1WandworksDump20261024',
+  'Google Docs: reading the document 1WandworksSetupDoc0001',
   'The setup doc is not shared with this account.',
   'Writing the answer',
 ];
@@ -794,15 +804,17 @@ let conventionsText = '# Local site conventions\n\nHow sites are set up on this 
 
 let queued: QueuedProposal[] = [
   {
-    id: 'q1', action: 'site.setDebug', title: 'Set debug constants', description: '', input: { domain: 'local.biketours.com', constants: { WP_DEBUG: true, WP_DEBUG_LOG: true, WP_DEBUG_DISPLAY: false } },
+    id: 'q1', action: 'site.setDebug', title: 'Set debug constants', description: '', input: { domain: 'local.biketours.example', constants: { WP_DEBUG: true, WP_DEBUG_LOG: true, WP_DEBUG_DISPLAY: false } },
     why: 'Turn on WP_DEBUG_LOG to catch the checkout notice you are chasing.', source: 'claude-code', createdAt: new Date(Date.now() - 4 * 60_000).toISOString(),
   },
 ];
+// ?proposals=none starts with nothing suggested, as for screenshots.
+if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('proposals') === 'none') queued = [];
 
 /** What a wp-config.php from a repo usually defines, as the panel reads it. */
 const mockConstants: SiteConstant[] = [
-  { name: 'DB_NAME', value: 'acme_local' },
-  { name: 'DB_USER', value: 'acme' },
+  { name: 'DB_NAME', value: 'wandworks_local' },
+  { name: 'DB_USER', value: 'wandworks' },
   { name: 'DB_PASSWORD', hidden: true },
   { name: 'DB_HOST', value: 'localhost' },
   { name: 'DB_CHARSET', value: 'utf8mb4' },
@@ -825,7 +837,7 @@ function mockSalts(constants: SiteConstant[]): SiteSalts {
   return { names: [...WP_SALT_KEYS], missing: WP_SALT_KEYS.filter((k) => !has(k)), placeholder: [], duplicate: [], legacy: LEGACY_SALT_KEYS.filter(has) };
 }
 
-let mockLocalConstants: LocalConstant[] = [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'ACME_DEV', value: true }];
+let mockLocalConstants: LocalConstant[] = [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'WANDWORKS_DEV', value: true }];
 
 // Kept for the browser session, as the panel keeps them in its database.
 const mockPreferences: Preferences = (() => {
@@ -847,17 +859,17 @@ function mockUpdateVariant(): Partial<UpdateStatus> {
   const variant: Partial<UpdateStatus> = {};
   if (query.has('terminal')) {
     variant.mode = 'terminal';
-    variant.command = '/home/acmeco/.local/share/devmagic-panel/releases/v0.8.0/install.sh';
-    variant.reason = 'v0.8.0 changes the root scripts (dmp-root, php.sh), which only its install.sh may put in place, with your sudo password.';
+    variant.command = `/home/wandworksco/.local/share/devmagic-panel/releases/v${AFTER}/install.sh`;
+    variant.reason = `v${AFTER} changes the root scripts (dmp-root, php.sh), which only its install.sh may put in place, with your sudo password.`;
     // Spread over mockUpdate, so it must be there to clear it.
     variant.installerChanged = undefined as never;
     // ?terminal=new: not downloaded yet, so Install downloads it first in the same job.
-    variant.releases = query.get('terminal') === 'new' ? mockUpdate.releases : [{ name: 'v0.8.0', version: '0.8.0', current: false, installedAt: new Date().toISOString(), built: '2026-10-31T10:00:00Z', mode: 'terminal', command: variant.command, fromPanel: true }, ...mockUpdate.releases];
+    variant.releases = query.get('terminal') === 'new' ? mockUpdate.releases : [{ name: `v${AFTER}`, version: `${AFTER}`, current: false, installedAt: new Date().toISOString(), built: '2026-10-31T10:00:00Z', mode: 'terminal', command: variant.command, fromPanel: true }, ...mockUpdate.releases];
   }
   const install = query.get('install');
   if (install === 'done' || install === 'failed' || install === 'interrupted') {
-    const log = '/home/acmeco/.local/state/devmagic-panel/logs/install-20261031-120000.log';
-    const base = { release: 'v0.8.0', previous: 'v0.6.0', started: new Date(Date.now() - 600_000).toISOString(), finished: new Date(Date.now() - 300_000).toISOString(), log, rolledBack: false, message: '' };
+    const log = '/home/wandworksco/.local/state/devmagic-panel/logs/install-20261031-120000.log';
+    const base = { release: `v${AFTER}`, previous: `v${CURRENT}`, started: new Date(Date.now() - 600_000).toISOString(), finished: new Date(Date.now() - 300_000).toISOString(), log, rolledBack: false, message: '' };
     variant.install =
       install === 'done' ? { ...base, state: 'done', step: 'finish' }
       : install === 'failed' ? { ...base, state: 'failed', step: 'system', message: 'the update stopped at system', rolledBack: true }
@@ -869,33 +881,33 @@ function mockUpdateVariant(): Partial<UpdateStatus> {
 let mockPasswordChangedAt = new Date(Date.now() - 40 * 86_400_000).toISOString();
 
 const mockUpdate: UpdateStatus = {
-  current: '0.6.0',
-  release: 'v0.6.0',
-  latest: 'v0.8.0',
+  current: `${CURRENT}`,
+  release: `v${CURRENT}`,
+  latest: `v${AFTER}`,
   source: 'git',
   access: [
-    { way: 'https', problem: 'acme/devmagic-panel is not public' },
+    { way: 'https', problem: 'wandworks/devmagic-panel is not public' },
     { way: 'gh', problem: 'the GitHub CLI (gh) is not installed' },
   ],
   available: true,
   checkedAt: new Date().toISOString(),
   mode: 'panel',
   installerChanged: true,
-  command: '/home/acmeco/.local/share/devmagic-panel/current/install.sh',
+  command: '/home/wandworksco/.local/share/devmagic-panel/current/install.sh',
   packageBytes: 10_725_138,
   releases: [
     {
-      name: 'v0.6.0', version: '0.6.0', current: true, installedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), built: '2026-10-25T09:03:09Z', mode: 'panel',
-      changes: { kind: 'running', sections: [{ version: 'v0.6.0', date: '2026-10-25', items: ['**Panel:** runs from a release, with the newest others kept to switch back to', '**Updates:** a page for new releases'] }] },
+      name: `v${CURRENT}`, version: `${CURRENT}`, current: true, installedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), built: '2026-10-25T09:03:09Z', mode: 'panel',
+      changes: { kind: 'running', sections: [{ version: `v${CURRENT}`, date: '2026-10-25', items: ['**Panel:** runs from a release, with the newest others kept to switch back to', '**Updates:** a page for new releases'] }] },
     },
-    { name: 'v0.6.0-dev.89b2be1', version: '0.6.0', current: false, installedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), built: '2026-10-25T08:40:00Z', mode: 'panel' },
+    { name: `v${CURRENT}-dev.89b2be1`, version: `${CURRENT}`, current: false, installedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), built: '2026-10-25T08:40:00Z', mode: 'panel' },
     {
       name: 'v0.5.2', version: '0.5.2', current: false, installedAt: new Date(Date.now() - 6 * 86_400_000).toISOString(), built: '2026-10-21T10:00:00Z', mode: 'terminal',
       command: '/home/alex/.local/share/devmagic-panel/releases/v0.5.2/install.sh',
       changes: {
         kind: 'removes',
         sections: [
-          { version: 'v0.6.0', date: '2026-10-25', items: ['**Panel:** runs from a release, with the newest others kept to switch back to', '**Updates:** a page for new releases'] },
+          { version: `v${CURRENT}`, date: '2026-10-25', items: ['**Panel:** runs from a release, with the newest others kept to switch back to', '**Updates:** a page for new releases'] },
           { version: 'v0.5.3', date: '2026-10-23', items: ['**Sites:** the list shows each site\'s branch'] },
         ],
       },
@@ -903,7 +915,7 @@ const mockUpdate: UpdateStatus = {
   ],
   changelog: [
     {
-      version: 'v0.8.0',
+      version: `v${AFTER}`,
       date: '2026-10-29',
       items: [
         '**Updates:** what is new shows right under the update, the newest release open and the ones before it closed',
@@ -916,10 +928,10 @@ const mockUpdate: UpdateStatus = {
       items: ['**Mail:** a site\'s mail can be deleted from its page'],
     },
     {
-      version: 'v0.7.0',
+      version: `v${NEXT}`,
       date: '2026-10-27',
       items: [
-        '**Sites:** sites under a path, like Northwind Learn at /learn, show as sites of their own',
+        '**Sites:** sites under a path, like Spellbook Learn at /learn, show as sites of their own',
         '**Panel:** the update page shows what is new before you update',
         '**Mail:** search the caught mail by subject or address',
       ],
@@ -932,9 +944,9 @@ const assistantSettings: AssistantSettings = { enabled: true, model: 'claude-opu
 let healthCalls = 0;
 
 export const mockApi: Api = {
-  session: async () => ({ authenticated: true, user: 'acmeco', version: '0.2.0-mockup', setupRequired: false }),
+  session: async () => ({ authenticated: true, user: 'wandworksco', version: `${CURRENT}`, setupRequired: false }),
   // Down every third call, so the wait for a restart after an update ends in a few seconds.
-  health: async () => (++healthCalls % 3 === 2 ? null : '0.2.0-mockup'),
+  health: async () => (++healthCalls % 3 === 2 ? null : `${CURRENT}`),
   login: async () => undefined,
   logout: async () => undefined,
   // The mockup's current panel password and computer password are "correct horse"; anything else is wrong.
@@ -973,7 +985,7 @@ export const mockApi: Api = {
     }
     if (id === 'mysql.killQuery') {
       killedProcesses.add(Number(input.id));
-      return { runId: 42, ok: true, exitCode: 0, output: `stopped the statement ${String(input.id)} ran for northwinddb` };
+      return { runId: 42, ok: true, exitCode: 0, output: `stopped the statement ${String(input.id)} ran for spellbookdb` };
     }
     if (id === 'git.pull') {
       // As git answers with color.ui = always: a diffstat with its colors.
@@ -981,9 +993,9 @@ export const mockApi: Api = {
       const output = [
         'Updating 1a2b3c4..5d6e7f8',
         'Fast-forward',
-        ` wp-content/plugins/acme-forms/includes/class-acme-forms-submission-handler.php | 48 ${g}++++++++++++++++++++++++++++++++++++${x}${r}------------${x}`,
-        ` .../acme-forms/languages/acme-forms-es_ES.mo | Bin ${r}166583${x} -> ${g}166590${x} bytes`,
-        ` wp-content/themes/acme/style.css | 2 ${g}+${x}${r}-${x}`,
+        ` wp-content/plugins/wandworks-forms/includes/class-wandworks-forms-submission-handler.php | 48 ${g}++++++++++++++++++++++++++++++++++++${x}${r}------------${x}`,
+        ` .../wandworks-forms/languages/wandworks-forms-es_ES.mo | Bin ${r}166583${x} -> ${g}166590${x} bytes`,
+        ` wp-content/themes/wandworks/style.css | 2 ${g}+${x}${r}-${x}`,
         ' 3 files changed, 37 insertions(+), 13 deletions(-)',
       ].join('\n');
       return { runId: 42, ok: true, exitCode: 0, output };
@@ -1071,7 +1083,7 @@ export const mockApi: Api = {
       if (!plugin || plugin.status === 'must-use' || plugin.status === 'dropin') return { runId: 42, ok: false, exitCode: 1, output: `Error: no plugin called ${String(input.plugin)} (mockup)` };
       plugin.status = input.active ? 'active' : 'inactive';
       const needs = mockPlugins.find((p) => p.name === 'advanced-custom-fields-pro');
-      const blocks = mockPlugins.find((p) => p.name === 'acme-acf-blocks');
+      const blocks = mockPlugins.find((p) => p.name === 'wandworks-acf-blocks');
       if (needs && blocks) {
         if (blocks.status === 'active') needs.requiredBy = [blocks.title];
         else delete needs.requiredBy;
@@ -1130,11 +1142,11 @@ export const mockApi: Api = {
     await wait(600);
     return { ok: true };
   },
-  conventions: async () => ({ text: conventionsText, saved: false, path: '/home/acmeco/.config/devmagic-panel/conventions.md' }),
+  conventions: async () => ({ text: conventionsText, saved: false, path: '/home/wandworksco/.config/devmagic-panel/conventions.md' }),
   saveConventions: async (text) => {
     await wait(200);
     conventionsText = text;
-    return { text, saved: true, path: '/home/acmeco/.config/devmagic-panel/conventions.md' };
+    return { text, saved: true, path: '/home/wandworksco/.config/devmagic-panel/conventions.md' };
   },
   suggestWizard: async (input): Promise<WizardSuggestion> => {
     await wait(2200);
@@ -1142,17 +1154,17 @@ export const mockApi: Api = {
       branch: 'develop',
       preset: {
         domains: [
-          { production: 'www.acme.com', local: 'local.acme.com' },
-          { production: 'shop.acme.com', local: 'local.shop.acme.com' },
+          { production: 'www.wandworks.example', local: 'local.wandworks.example' },
+          { production: 'shop.wandworks.example', local: 'local.shop.wandworks.example' },
         ],
         layout: 'wp-content',
         activate: [],
         core: { mode: 'wpcore', version: '7.1.3' },
         deactivate: ['wp-rocket', 'wordfence'],
-        uploadsFrom: 'www.acme.com',
+        uploadsFrom: 'www.wandworks.example',
         build: { composer: true, npm: true },
       },
-      notes: `Took the shop subdomain from your description${input.uploadId ? ' and the dump' : ''}; the repo holds wp-content like local.biketours.com. No dump yet, so the core is the newest installed one.`,
+      notes: `Took the shop subdomain from your description${input.uploadId ? ' and the dump' : ''}; the repo holds wp-content like local.biketours.example. No dump yet, so the core is the newest installed one.`,
       sent: JSON.stringify({ description: input.description, repo: input.repoUrl ?? 'none given' }, null, 1),
     };
   },
@@ -1160,29 +1172,29 @@ export const mockApi: Api = {
   closeProposal: async (id) => {
     queued = queued.filter((p) => p.id !== id);
   },
-  mcpCommand: async () => ({ command: 'claude mcp add devmagic-panel -- /home/acmeco/.nvm/versions/node/v22.13.1/bin/node --disable-warning=ExperimentalWarning /home/acmeco/.local/share/devmagic-panel/current/server/dist/cli.js mcp' }),
+  mcpCommand: async () => ({ command: 'claude mcp add devmagic-panel -- /home/wandworksco/.nvm/versions/node/v22.13.1/bin/node --disable-warning=ExperimentalWarning /home/wandworksco/.local/share/devmagic-panel/current/server/dist/cli.js mcp' }),
   chat: async (messages): Promise<ChatReply> => {
     await wait(1500);
     const last = messages.at(-1)?.content.toLowerCase() ?? '';
     if (/cert|ssl|https/.test(last)) {
       return {
-        reply: 'DailyPost has a cert that misses www.local.dailypost.com, and Northwind still uses the old LocalhostCA. Reissuing both from their vhosts fixes it.',
-        looked: ['aura_findings', 'site_details local.dailypost.com'],
+        reply: 'DailyPost has a cert that misses www.local.dailypost.example, and Spellbook still uses the old LocalhostCA. Reissuing both from their vhosts fixes it.',
+        looked: ['aura_findings', 'site_details local.dailypost.example'],
         proposals: [
-          { id: 'p1', action: 'cert.reissue', title: 'Reissue certificate', description: '', input: { domain: 'local.dailypost.com' }, why: 'The cert misses www.local.dailypost.com.' },
-          { id: 'p2', action: 'cert.reissue', title: 'Reissue certificate', description: '', input: { domain: 'local.northwind.com' }, why: 'Moves Northwind off the old LocalhostCA.' },
+          { id: 'p1', action: 'cert.reissue', title: 'Reissue certificate', description: '', input: { domain: 'local.dailypost.example' }, why: 'The cert misses www.local.dailypost.example.' },
+          { id: 'p2', action: 'cert.reissue', title: 'Reissue certificate', description: '', input: { domain: 'local.spellbook.example' }, why: 'Moves Spellbook off the old LocalhostCA.' },
         ],
       };
     }
     if (/fatal|error|log/.test(last)) {
       return {
-        reply: 'local.arcade.bet logged 3 fatals in the last hour, all "Call to undefined function wc_get_product()" from the arcade-bonus plugin: it runs before WooCommerce loads. Clearing caches will not help; the plugin needs a function_exists check.',
-        looked: ['read_log local.arcade.bet debug'],
-        proposals: [{ id: 'p3', action: 'site.clearDebugLog', title: 'Clear debug.log', description: '', input: { domain: 'local.arcade.bet' }, why: 'Start from an empty log to see whether the fatal comes back after the fix.' }],
+        reply: 'local.arcade.example logged 3 fatals in the last hour, all "Call to undefined function wc_get_product()" from the arcade-bonus plugin: it runs before WooCommerce loads. Clearing caches will not help; the plugin needs a function_exists check.',
+        looked: ['read_log local.arcade.example debug'],
+        proposals: [{ id: 'p3', action: 'site.clearDebugLog', title: 'Clear debug.log', description: '', input: { domain: 'local.arcade.example' }, why: 'Start from an empty log to see whether the fatal comes back after the fix.' }],
       };
     }
     return {
-      reply: 'You have 7 local sites. 2 need attention: local.arcade.bet (PHP fatals, outdated WordPress) and local.dailypost.com (cert and hosts). Ask me about either.',
+      reply: 'You have 7 local sites. 2 need attention: local.arcade.example (PHP fatals, outdated WordPress) and local.dailypost.example (cert and hosts). Ask me about either.',
       looked: ['list_sites'],
       proposals: [],
     };
@@ -1196,9 +1208,9 @@ export const mockApi: Api = {
       status: 'ready',
       headline: 'One site throws PHP fatals and two need small fixes.',
       points: [
-        { text: 'local.arcade.bet logged 3 PHP fatal errors in the last hour and runs an outdated WordPress. Check the Logs tab first.', items: [...find('php.fatals'), ...find('core.outdated')] },
+        { text: 'local.arcade.example logged 3 PHP fatal errors in the last hour and runs an outdated WordPress. Check the Logs tab first.', items: [...find('php.fatals'), ...find('core.outdated')] },
         { text: 'DailyPost: www is missing from the cert and two names from /etc/hosts. Reissue the cert and add the hosts line.', items: [...find('cert.uncovered'), ...find('hosts.missing')] },
-        { text: 'Northwind still uses the old LocalhostCA cert; reissue it.', items: find('cert.legacy') },
+        { text: 'Spellbook still uses the old LocalhostCA cert; reissue it.', items: find('cert.legacy') },
       ],
       model: assistantSettings.model,
       generatedAt: new Date().toISOString(),
@@ -1406,7 +1418,7 @@ export const mockApi: Api = {
       exists: true,
       lines: [
         { time: new Date(Date.now() - 3_600_000).toISOString(), level: 'notice', message: 'AH00489: Apache/2.4.58 (Ubuntu) OpenSSL/3.0.13 configured -- resuming normal operations' },
-        { time: new Date(Date.now() - 1_800_000).toISOString(), level: 'error', message: "[client 127.0.0.1:51234] PHP Warning:  Undefined array key \"acme_option\" in /var/www/local.northwind.com/wp-content/themes/northwind/functions.php on line 42" },
+        { time: new Date(Date.now() - 1_800_000).toISOString(), level: 'error', message: "[client 127.0.0.1:51234] PHP Warning:  Undefined array key \"wandworks_option\" in /var/www/local.spellbook.example/wp-content/themes/spellbook/functions.php on line 42" },
       ],
     };
   },
@@ -1513,7 +1525,7 @@ export const mockApi: Api = {
   },
   wpCronTest: async (domain) => {
     await wait(600);
-    return domain === 'local.biketours.com'
+    return domain === 'local.biketours.example'
       ? { ok: false, output: 'Error: WP-Cron spawn returned HTTP status code: 401 Unauthorized' }
       : { ok: true, output: 'Success: WP-Cron spawning is working as expected.' };
   },
@@ -1536,44 +1548,44 @@ export const mockApi: Api = {
   cleanPreview: async (domain): Promise<CleanPreview> => {
     await wait(200);
     const tables = ['wp_options', 'wp_posts', 'wp_postmeta', 'wp_users', 'wp_usermeta', 'wp_comments', 'wp_wc_orders', 'wp_wc_orders_meta', 'wp_gf_entry', 'wp_gf_entry_meta', 'wp_actionscheduler_logs', 'wp_wfHits'];
-    return { tables, prefix: 'wp_', multisite: false, admins: domain === 'local.northwind.com' ? ['admin', 'northwindadmin'] : ['shopowner'], sizeBytes: 1_740_000_000, leftOutBytes: 310_000_000 };
+    return { tables, prefix: 'wp_', multisite: false, admins: domain === 'local.spellbook.example' ? ['admin', 'spellbookadmin'] : ['shopowner'], sizeBytes: 1_740_000_000, leftOutBytes: 310_000_000 };
   },
   inspectRepo: async (url): Promise<RepoInspection> => {
     await wait(900);
-    // Northwind was installed here before in the mockup, so the wizard remembers its answers; others start empty.
-    if (!/northwind/i.test(url)) return { defaultBranch: 'main', branch: 'main', branches: ['main', 'develop', 'feature/checkout-redesign', 'hotfix/cart-totals'] };
+    // Spellbook was installed here before in the mockup, so the wizard remembers its answers; others start empty.
+    if (!/spellbook/i.test(url)) return { defaultBranch: 'main', branch: 'main', branches: ['main', 'develop', 'feature/checkout-redesign', 'hotfix/cart-totals'] };
     return {
       defaultBranch: 'develop',
       branch: 'develop',
       branches: ['develop', 'feature/ts-editor', 'feature/pricing-page', 'master', 'release/2026.10'],
       preset: {
         domains: [
-          { production: 'www.northwind.com', local: 'local.northwind.com' },
-          { production: 'www.northwind.de', local: 'local.northwind.de' },
-          { production: 'www.northwind.fr', local: 'local.northwind.fr' },
+          { production: 'www.spellbook.example', local: 'local.spellbook.example' },
+          { production: 'www.spellbook.de', local: 'local.spellbook.de' },
+          { production: 'www.spellbook.fr', local: 'local.spellbook.fr' },
         ],
         layout: 'site-root',
         activate: ['query-monitor'],
         core: { mode: 'wpcore', version: '7.1.3' },
         deactivate: ['wp-rocket', 'wordfence', 'cloudflare'],
-        uploadsFrom: 'www.northwind.com',
+        uploadsFrom: 'www.spellbook.example',
         build: { composer: true, npm: true },
       },
     };
   },
   repoHelpers: async (url, branch) => {
     await wait(1200);
-    // Northwind's develop branch carries Query Monitor and User Switching in the mockup; other branches and repos only Query Monitor.
+    // Spellbook's develop branch carries Query Monitor and User Switching in the mockup; other branches and repos only Query Monitor.
     // Every repo in the mockup has BE Media from Production, as the client repos here do.
     // Like the repos here: one theme to build, a custom plugin with Composer, and plugins that ship their built files.
     const builds: RepoBuild[] = [
-      { dir: 'wp-content/themes/acme', tool: 'npm', scripts: ['build', 'build-all', 'prod', 'dev'], script: 'build', needed: true, why: 'dist/ is ignored by git', stopsOthers: ['build-all'] },
-      { dir: 'wp-content/plugins/acme-api', tool: 'composer', scripts: [], needed: true, why: 'vendor/ is ignored by git' },
-      { dir: 'wp-content/plugins/acme-slider', tool: 'npm', scripts: ['prod', 'prod-bundle', 'dev'], script: 'prod', needed: false, why: 'its built files are in the repo', builtInRepo: true },
-      { dir: 'wp-content/plugins/acme-forms', tool: 'npm', scripts: ['build'], script: 'build', needed: false, why: 'a wordpress.org plugin, built already', builtInRepo: true },
-      { dir: 'wp-content/plugins/acme-maps', tool: 'composer', scripts: [], needed: false, why: 'its vendor/ is in the repo', builtInRepo: true },
+      { dir: 'wp-content/themes/wandworks', tool: 'npm', scripts: ['build', 'build-all', 'prod', 'dev'], script: 'build', needed: true, why: 'dist/ is ignored by git', stopsOthers: ['build-all'] },
+      { dir: 'wp-content/plugins/wandworks-api', tool: 'composer', scripts: [], needed: true, why: 'vendor/ is ignored by git' },
+      { dir: 'wp-content/plugins/wandworks-slider', tool: 'npm', scripts: ['prod', 'prod-bundle', 'dev'], script: 'prod', needed: false, why: 'its built files are in the repo', builtInRepo: true },
+      { dir: 'wp-content/plugins/wandworks-forms', tool: 'npm', scripts: ['build'], script: 'build', needed: false, why: 'a wordpress.org plugin, built already', builtInRepo: true },
+      { dir: 'wp-content/plugins/wandworks-maps', tool: 'composer', scripts: [], needed: false, why: 'its vendor/ is in the repo', builtInRepo: true },
     ];
-    return { helpers: /northwind/i.test(url) && branch === 'develop' ? ['query-monitor', 'user-switching'] : ['query-monitor'], mediaPlugin: true, builds };
+    return { helpers: /spellbook/i.test(url) && branch === 'develop' ? ['query-monitor', 'user-switching'] : ['query-monitor'], mediaPlugin: true, builds };
   },
   startJob: async (id, input) => {
     await wait(300);
@@ -1601,7 +1613,7 @@ export const mockApi: Api = {
       file: `${site?.docroot ?? `/var/www/${domain}`}/wp-content/debug.log`,
       shared: false,
       exists: true,
-      lines: debugLog.map((l) => ({ ...l, message: l.message.replaceAll('local.arcade.bet', domain) })),
+      lines: debugLog.map((l) => ({ ...l, message: l.message.replaceAll('local.arcade.example', domain) })),
     };
   },
   runs: async (page = 1) => ({ runs: runs.slice((page - 1) * 50, page * 50), page, pageSize: 50, total: runs.length }),
@@ -1616,22 +1628,22 @@ export const mockApi: Api = {
       ['file', '/usr/local/lib/devmagic-panel/bin/dmp-root', 'remove', 'root script', 28_412],
       ['file', '/usr/local/lib/devmagic-panel/bin/dmp-restore', 'remove', 'root script', 3_920],
       ['file', '/etc/sudoers.d/devmagic-panel', 'remove', 'lets you run dmp-root and wpcore without a password', 167],
-      ['dir', '/home/acmeco/devmagic-panel-backups', 'ask', 'backups of certs, vhosts and hosts, and database snapshots'],
+      ['dir', '/home/wandworksco/devmagic-panel-backups', 'ask', 'backups of certs, vhosts and hosts, and database snapshots'],
       ['dir', '/var/lib/devmagic-panel', 'ask', 'the registry of panel-made sites and the deleted sites'],
       ['modules', 'apache:ssl rewrite headers proxy proxy_http proxy_wstunnel', 'keep', 'Apache modules the panel turned on; sites use them too'],
       ['dir', '/etc/ssl/localcerts/devmagic-panel-ca', 'ask', 'the local CA, its key and certificate; every site certificate is signed with it'],
       ['file', '/usr/local/share/ca-certificates/devmagic-panel-ca.crt', 'remove', 'the local CA in the system trust store', 1_294],
-      ['store', '/home/acmeco/.pki/nssdb', 'remove', 'the local CA in this browser certificate store, as devmagic-panel Local CA'],
+      ['store', '/home/wandworksco/.pki/nssdb', 'remove', 'the local CA in this browser certificate store, as devmagic-panel Local CA'],
       ['line', '/etc/hosts', 'remove', 'local.devmagic in the devmagic-panel block'],
-      ['file', '/home/acmeco/.config/systemd/user/devmagic-panel.service', 'remove', "the panel's systemd user service", 302],
+      ['file', '/home/wandworksco/.config/systemd/user/devmagic-panel.service', 'remove', "the panel's systemd user service", 302],
       ['file', '/var/lib/devmagic-panel/installed-files', 'remove', 'this list', 2_410],
     ];
     return {
       version: '0.5.0',
       commit: 'v0.4.0-12-g73cfec1',
       node: 'v22.20.0',
-      repo: '/home/acmeco/projects/devmagic-panel',
-      server: { pid: 930032, startedAt: at(95), memoryBytes: 118_000_000, nodePath: '/home/acmeco/.nvm/versions/node/v22.23.3/bin/node', port: 4710, runningJobs: 0 },
+      repo: '/home/wandworksco/projects/devmagic-panel',
+      server: { pid: 930032, startedAt: at(95), memoryBytes: 118_000_000, nodePath: '/home/wandworksco/.nvm/versions/node/v22.23.3/bin/node', port: 4710, runningJobs: 0 },
       services: [
         { unit: 'devmagic-panel.service', label: 'Panel', scope: 'user', active: 'active', enabled: 'enabled', since: at(95) },
         { unit: 'devmagic-panel-mailpit.service', label: 'Mailpit', scope: 'user', active: mailpitRunning ? 'active' : 'inactive', enabled: 'enabled', ...(mailpitRunning ? { since: at(2000) } : {}) },
@@ -1639,14 +1651,14 @@ export const mockApi: Api = {
         { unit: 'mysql.service', label: 'MySQL', scope: 'system', active: 'active', enabled: 'enabled', since: at(3000) },
       ],
       linger: false,
-      config: [['PANEL_USER', 'acmeco'], ['PANEL_PORT', '4710'], ['PANEL_DOMAIN', 'local.devmagic'], ['WEB_DIR', '/var/www'], ['CERTS_DIR', '/etc/ssl/localcerts'], ['BACKUP_DIR', '/home/acmeco/devmagic-panel-backups'], ['STATE_DIR', '/var/lib/devmagic-panel']].map(([key, value]) => ({ key: key as string, value: value as string })),
+      config: [['PANEL_USER', 'wandworksco'], ['PANEL_PORT', '4710'], ['PANEL_DOMAIN', 'local.devmagic'], ['WEB_DIR', '/var/www'], ['CERTS_DIR', '/etc/ssl/localcerts'], ['BACKUP_DIR', '/home/wandworksco/devmagic-panel-backups'], ['STATE_DIR', '/var/lib/devmagic-panel']].map(([key, value]) => ({ key: key as string, value: value as string })),
       installedFiles: listed.map(([kind, path, onUninstall, note, size]) => ({ kind, path, onUninstall, note, exists: true, ...(size ? { sizeBytes: size } : {}) })),
       panelFiles: [
-        { path: '/home/acmeco/.config/devmagic-panel/secrets.json', note: 'panel password hash, MySQL admin account and the Anthropic key (mode 0600)', exists: true, sizeBytes: 412, kind: 'file' },
-        { path: '/home/acmeco/.local/share/devmagic-panel/panel.db', note: "run history, queued proposals and the wizard's answers per repo", exists: true, sizeBytes: 1_843_200, kind: 'file' },
-        { path: '/home/acmeco/.local/share/devmagic-panel/uploads', note: 'database dumps waiting for an install or import', exists: true, kind: 'dir' },
-        { path: '/home/acmeco/.local/share/devmagic-panel/mailpit', note: 'Mailpit, when installed from the panel', exists: mailpitRunning, kind: 'dir' },
-        { path: '/home/acmeco/.local/state/devmagic-panel/logs', note: 'install and update logs', exists: true, kind: 'dir' },
+        { path: '/home/wandworksco/.config/devmagic-panel/secrets.json', note: 'panel password hash, MySQL admin account and the Anthropic key (mode 0600)', exists: true, sizeBytes: 412, kind: 'file' },
+        { path: '/home/wandworksco/.local/share/devmagic-panel/panel.db', note: "run history, queued proposals and the wizard's answers per repo", exists: true, sizeBytes: 1_843_200, kind: 'file' },
+        { path: '/home/wandworksco/.local/share/devmagic-panel/uploads', note: 'database dumps waiting for an install or import', exists: true, kind: 'dir' },
+        { path: '/home/wandworksco/.local/share/devmagic-panel/mailpit', note: 'Mailpit, when installed from the panel', exists: mailpitRunning, kind: 'dir' },
+        { path: '/home/wandworksco/.local/state/devmagic-panel/logs', note: 'install and update logs', exists: true, kind: 'dir' },
       ],
       logs: [
         { name: 'install-20261025-091500.log', sizeBytes: 18_204, modifiedAt: at(45) },
@@ -1666,13 +1678,13 @@ export const mockApi: Api = {
       '/usr/local/lib/devmagic-panel/bin': [file('dmp-restore', 3_920), file('dmp-root', 28_412), file('wpcore', 19_640)],
       '/usr/local/lib/devmagic-panel/lib': ['apache.sh', 'backup.sh', 'ca.sh', 'cert.sh', 'config.sh', 'hosts.sh', 'site.sh', 'trash.sh', 'validate.sh'].map((n, i) => file(n, 2_000 + i * 410)),
       '/var/lib/devmagic-panel': [dir('sites', 1), dir('trash', 1), file('installed-files', 2_410)],
-      '/var/lib/devmagic-panel/sites': [file('local.northwind.com', 96, 9), file('local.dailypost.test', 96, 4)],
+      '/var/lib/devmagic-panel/sites': [file('local.spellbook.example', 96, 9), file('local.dailypost.test', 96, 4)],
       '/var/lib/devmagic-panel/trash': 'only root can list this',
       '/etc/ssl/localcerts/devmagic-panel-ca': [file('ca.crt', 1_294, 30), file('ca.key', 3_243, 30), file('ca.srl', 41, 1)],
-      '/home/acmeco/devmagic-panel-backups': [dir('snapshots', 1), file('backup-20261025-091400.tar.gz', 48_210, 1), file('backup-20261024-171200.tar.gz', 47_980, 2)],
-      '/home/acmeco/.local/share/devmagic-panel/uploads': [dir('3f2a91c0-5b6d-4e1f-9a7c-2d4e6f8a0b1c', 0)],
-      '/home/acmeco/.local/share/devmagic-panel/uploads/3f2a91c0-5b6d-4e1f-9a7c-2d4e6f8a0b1c': [file('meta.json', 1_830, 0), file('northwind-2026-10-24.sql.gz', 412_000_000, 0)],
-      '/home/acmeco/.local/state/devmagic-panel/logs': [file('install-20261023-142010.log', 21_877, 3), file('install-20261025-091500.log', 18_204, 1)],
+      '/home/wandworksco/devmagic-panel-backups': [dir('snapshots', 1), file('backup-20261025-091400.tar.gz', 48_210, 1), file('backup-20261024-171200.tar.gz', 47_980, 2)],
+      '/home/wandworksco/.local/share/devmagic-panel/uploads': [dir('3f2a91c0-5b6d-4e1f-9a7c-2d4e6f8a0b1c', 0)],
+      '/home/wandworksco/.local/share/devmagic-panel/uploads/3f2a91c0-5b6d-4e1f-9a7c-2d4e6f8a0b1c': [file('meta.json', 1_830, 0), file('spellbook-2026-10-24.sql.gz', 412_000_000, 0)],
+      '/home/wandworksco/.local/state/devmagic-panel/logs': [file('install-20261023-142010.log', 21_877, 3), file('install-20261025-091500.log', 18_204, 1)],
     };
     const found = folders[path];
     if (typeof found === 'string') return { path, entries: [], more: 0, error: found };
@@ -1780,9 +1792,9 @@ export const mockApi: Api = {
     const found = as !== 'missing';
     const signedIn = found && as !== 'signed-out';
     return {
-      claude: { found, ...(found ? { path: '/home/acmeco/.local/bin/claude', version: '2.1.309' } : {}), signedIn, claudeAi: signedIn && as !== 'api' },
+      claude: { found, ...(found ? { path: '/home/wandworksco/.local/bin/claude', version: '2.1.309' } : {}), signedIn, claudeAi: signedIn && as !== 'api' },
       // ?gh=signed-out in the address shows the stored list without the GitHub CLI.
-      gh: new URLSearchParams(window.location.search).get('gh') === 'signed-out' ? { installed: true, signedIn: false, problem: 'not signed in: run gh auth login' } : { installed: true, signedIn: true, user: 'acmeco' },
+      gh: new URLSearchParams(window.location.search).get('gh') === 'signed-out' ? { installed: true, signedIn: false, problem: 'not signed in: run gh auth login' } : { installed: true, signedIn: true, user: 'wandworksco' },
       // ?glab=missing or signed-out in the address shows the GitLab CLI's other states.
       glab: ((as) =>
         as === 'missing'
@@ -1791,7 +1803,7 @@ export const mockApi: Api = {
               installed: true,
               version: '1.36.0',
               hosts: ['gitlab.com', ...mockOrgSettings.gitlabHosts].map((host) =>
-                as === 'signed-out' || host !== 'gitlab.com' ? { host, installed: true, signedIn: false, problem: `not signed in to ${host}: run glab auth login --hostname ${host}` } : { host, installed: true, signedIn: true, user: 'acmeco' },
+                as === 'signed-out' || host !== 'gitlab.com' ? { host, installed: true, signedIn: false, problem: `not signed in to ${host}: run glab auth login --hostname ${host}` } : { host, installed: true, signedIn: true, user: 'wandworksco' },
               ),
             })(new URLSearchParams(window.location.search).get('glab')),
       // ?rclone=1 in the address shows a Google Drive remote set up, with its Download button.
@@ -1813,19 +1825,19 @@ export const mockApi: Api = {
     const ns = (ref: string, label: string, provider: 'github' | 'gitlab', host: string) => ({ ref, label, provider, host });
     return {
       namespaces: [
-        ns('acme', 'acme (GitHub)', 'github', 'github.com'),
-        ns('acme-labs', 'acme-labs (GitHub)', 'github', 'github.com'),
-        ns('acmeco', 'acmeco (GitHub)', 'github', 'github.com'),
-        ns('gitlab.com/acme-web', 'acme-web (gitlab.com)', 'gitlab', 'gitlab.com'),
-        ns('gitlab.com/partners/acme-team', 'partners/acme-team (gitlab.com)', 'gitlab', 'gitlab.com'),
+        ns('wandworks', 'wandworks (GitHub)', 'github', 'github.com'),
+        ns('wandworks-labs', 'wandworks-labs (GitHub)', 'github', 'github.com'),
+        ns('wandworksco', 'wandworksco (GitHub)', 'github', 'github.com'),
+        ns('gitlab.com/wandworks-web', 'wandworks-web (gitlab.com)', 'gitlab', 'gitlab.com'),
+        ns('gitlab.com/partners/wandworks-team', 'partners/wandworks-team (gitlab.com)', 'gitlab', 'gitlab.com'),
         ns('~shared', 'Shared with you (GitHub)', 'github', 'github.com'),
-        ns('gitlab.com/acmeco', 'acmeco (gitlab.com)', 'gitlab', 'gitlab.com'),
+        ns('gitlab.com/wandworksco', 'wandworksco (gitlab.com)', 'gitlab', 'gitlab.com'),
         ns('gitlab.com/~shared', 'Shared with you (gitlab.com)', 'gitlab', 'gitlab.com'),
       ],
       problems: [],
     };
   },
-  gitHosts: async () => ({ gitlab: mockOrgSettings.gitlabHosts, detected: { 'code.acme.test': 'Gitea' as const }, aliases: { 'gitlab-work': 'gitlab.com' } }),
+  gitHosts: async () => ({ gitlab: mockOrgSettings.gitlabHosts, detected: { 'code.wandworks.test': 'Gitea' as const }, aliases: { 'gitlab-work': 'gitlab.com' } }),
   orgRepos: async (org, scan) => {
     // The stored list comes at once; a check finds one new repo, a full list takes longer. ?scan=fail shows GitHub timing out.
     if (org === 'gitlab.com/~shared') {
@@ -1833,20 +1845,20 @@ export const mockApi: Api = {
       const at = new Date(Date.now() - 6 * 86_400_000).toISOString();
       return { repos: [{ org, name: 'client-site', fullName: 'partner/client-site', description: 'A partner agency site you were added to', sshUrl: 'git@gitlab.com:partner/client-site.git', url: 'https://gitlab.com/partner/client-site', defaultBranch: 'main', pushedAt: at, archived: false, kind: 'site' }], ...mockOrgScan };
     }
-    if (org === 'gitlab.com/acme-web') {
+    if (org === 'gitlab.com/wandworks-web') {
       await wait(scan === 'none' ? 150 : 900);
       return { repos: structuredClone(mockGitlabRepos), ...mockOrgScan };
     }
-    if (org !== 'acme') return { repos: [] };
+    if (org !== 'wandworks') return { repos: [] };
     const due = scan === 'check' || scan === 'full' || (scan === 'auto' && Date.now() - Date.parse(mockOrgScan.checkedAt) > 3_600_000);
     await wait(scan === 'none' ? 150 : !due ? 200 : scan === 'full' ? 2500 : 1500);
     if (due && new URLSearchParams(window.location.search).get('scan') === 'fail') {
-      return { repos: structuredClone(mockOrgRepos), ...mockOrgScan, problem: 'the GitHub CLI cannot list the repos of acme: HTTP 504: 504 Gateway Timeout (https://api.github.com/orgs/acme/repos)' };
+      return { repos: structuredClone(mockOrgRepos), ...mockOrgScan, problem: 'the GitHub CLI cannot list the repos of wandworks: HTTP 504: 504 Gateway Timeout (https://api.github.com/orgs/wandworks/repos)' };
     }
     if (due) {
       const at = new Date().toISOString();
       if (!mockOrgRepos.some((r) => r.name === 'spring-landing')) {
-        mockOrgRepos.unshift({ org: 'acme', name: 'spring-landing', fullName: 'acme/spring-landing', description: 'Landing pages for the spring sale', sshUrl: 'git@github.com:acme/spring-landing.git', url: 'https://github.com/acme/spring-landing', defaultBranch: 'main', pushedAt: new Date(Date.now() - 40 * 60_000).toISOString(), archived: false, kind: 'site' });
+        mockOrgRepos.unshift({ org: 'wandworks', name: 'spring-landing', fullName: 'wandworks/spring-landing', description: 'Landing pages for the spring sale', sshUrl: 'git@github.com:wandworks/spring-landing.git', url: 'https://github.com/wandworks/spring-landing', defaultBranch: 'main', pushedAt: new Date(Date.now() - 40 * 60_000).toISOString(), archived: false, kind: 'site' });
       }
       mockOrgScan = { checkedAt: at, listedAt: scan === 'full' ? at : mockOrgScan.listedAt };
     }
@@ -1854,7 +1866,7 @@ export const mockApi: Api = {
   },
   downloads: async () => {
     await wait(150);
-    return [{ file: '/home/acmeco/Downloads/acme-store-2026-10-24.sql.gz', name: 'acme-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: new Date(Date.now() - 20 * 60_000).toISOString() }];
+    return [{ file: '/home/wandworksco/Downloads/wandworks-store-2026-10-24.sql.gz', name: 'wandworks-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: new Date(Date.now() - 20 * 60_000).toISOString() }];
   },
   drafts: async () => {
     await wait(150);

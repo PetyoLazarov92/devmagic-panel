@@ -68,7 +68,7 @@ export function LocalConstantsCard() {
           <ul className="grid gap-2">
             {rows.map((row, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2">
-                <Input value={row.name} onChange={(e) => update(i, { name: e.target.value.trim() })} placeholder="ACME_DEV" aria-label="Constant name" className="h-8 w-56 font-mono text-[13px]" />
+                <Input value={row.name} onChange={(e) => update(i, { name: e.target.value.trim() })} placeholder="WANDWORKS_DEV" aria-label="Constant name" className="h-8 w-56 font-mono text-[13px]" />
                 <Select value={row.kind} onChange={(e) => { const kind = e.target.value as Kind; update(i, { kind, text: kind === 'boolean' ? 'true' : '' }); }} aria-label="Kind" className="h-8">
                   <option value="boolean">true or false</option>
                   <option value="number">number</option>

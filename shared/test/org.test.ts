@@ -3,7 +3,7 @@ import { classifyRepo, cleanDumps, cleanLinks, hostOf, prefillFromFacts, type Re
 
 const facts = (over: Partial<RepoFacts> = {}): RepoFacts => ({
   buildCommands: [],
-  productionUrl: 'https://www.acme.com/',
+  productionUrl: 'https://www.wandworks.example/',
   docsLocalSetup: null,
   wordpressVersion: null,
   phpVersion: null,
@@ -18,7 +18,7 @@ const facts = (over: Partial<RepoFacts> = {}): RepoFacts => ({
   ...over,
 });
 
-const repo = { sshUrl: 'git@github.com:acme/site.git', defaultBranch: 'main', kind: 'site' as const };
+const repo = { sshUrl: 'git@github.com:wandworks/site.git', defaultBranch: 'main', kind: 'site' as const };
 
 describe('classifyRepo', () => {
   it('tells sites, wp-content folders, themes and plugins apart by their top-level names', () => {
@@ -26,7 +26,7 @@ describe('classifyRepo', () => {
     expect(classifyRepo(['wp-config-sample.php', 'wp-admin'])).toBe('site');
     expect(classifyRepo(['themes', 'plugins', 'mu-plugins'])).toBe('wp-content');
     expect(classifyRepo(['style.css', 'functions.php', 'inc'])).toBe('theme');
-    expect(classifyRepo(['readme.txt', 'acme-forms.php'])).toBe('plugin');
+    expect(classifyRepo(['readme.txt', 'wandworks-forms.php'])).toBe('plugin');
     expect(classifyRepo(['package.json', 'src'])).toBe('other');
   });
 });
@@ -35,11 +35,11 @@ describe('prefillFromFacts', () => {
   it('takes the build from the docs and the local setup from this machine, and no domains: those come from the dump', () => {
     const p = prefillFromFacts(repo, facts(), ['7.1.3', '6.8.3']);
     expect(p).toMatchObject({
-      repoUrl: 'git@github.com:acme/site.git',
+      repoUrl: 'git@github.com:wandworks/site.git',
       branch: 'main',
       layout: 'site-root',
       coreVersion: '7.1.3',
-      productionHint: 'www.acme.com',
+      productionHint: 'www.wandworks.example',
       composer: true,
       npm: false,
       missing: [],
@@ -81,20 +81,20 @@ describe('what Claude answers is checked before use', () => {
   it('keeps only dumps with a Drive id and a dump name, newest first, with sane sizes and dates', () => {
     expect(
       cleanDumps([
-        { fileId: '1AbCdEfGhIjKlMn', name: 'acme-2026-10-01.sql.gz', sizeBytes: 1234.4, modifiedAt: '2026-10-01T10:00:00Z', foundIn: 'Asana task' },
-        { fileId: '1ZyXwVuTsRqPoNm', name: 'acme-2026-10-20.sql', sizeBytes: -1, modifiedAt: 'yesterday', foundIn: 'Doc' },
+        { fileId: '1AbCdEfGhIjKlMn', name: 'wandworks-2026-10-01.sql.gz', sizeBytes: 1234.4, modifiedAt: '2026-10-01T10:00:00Z', foundIn: 'Asana task' },
+        { fileId: '1ZyXwVuTsRqPoNm', name: 'wandworks-2026-10-20.sql', sizeBytes: -1, modifiedAt: 'yesterday', foundIn: 'Doc' },
         { fileId: '../etc/passwd', name: 'x.sql', sizeBytes: 1, modifiedAt: null, foundIn: 'x' },
         { fileId: '1AbCdEfGhIjKlMx', name: 'notes.txt', sizeBytes: 1, modifiedAt: null, foundIn: 'x' },
       ]),
     ).toEqual([
-      { fileId: '1AbCdEfGhIjKlMn', name: 'acme-2026-10-01.sql.gz', sizeBytes: 1234, modifiedAt: '2026-10-01T10:00:00Z', foundIn: 'Asana task' },
-      { fileId: '1ZyXwVuTsRqPoNm', name: 'acme-2026-10-20.sql', sizeBytes: null, modifiedAt: null, foundIn: 'Doc' },
+      { fileId: '1AbCdEfGhIjKlMn', name: 'wandworks-2026-10-01.sql.gz', sizeBytes: 1234, modifiedAt: '2026-10-01T10:00:00Z', foundIn: 'Asana task' },
+      { fileId: '1ZyXwVuTsRqPoNm', name: 'wandworks-2026-10-20.sql', sizeBytes: null, modifiedAt: null, foundIn: 'Doc' },
     ]);
   });
 
   it('reads production addresses as bare hosts only', () => {
-    expect(hostOf('https://www.acme.com/path?x=1')).toBe('www.acme.com');
-    expect(hostOf('acme.com')).toBe('acme.com');
+    expect(hostOf('https://www.wandworks.example/path?x=1')).toBe('www.wandworks.example');
+    expect(hostOf('wandworks.example')).toBe('wandworks.example');
     expect(hostOf('not a host')).toBeNull();
     expect(hostOf(null)).toBeNull();
   });

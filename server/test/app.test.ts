@@ -281,10 +281,10 @@ describe('local constants', () => {
     const cookie = await login();
     const headers = { host: HOST, origin: ORIGIN, cookie };
     expect((await app.inject({ method: 'GET', url: '/api/local-constants', headers })).json()).toEqual([{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }]);
-    const list = [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'ACME_DEV', value: true }];
+    const list = [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'WANDWORKS_DEV', value: true }];
     expect((await app.inject({ method: 'PUT', url: '/api/local-constants', headers, payload: list })).json()).toEqual(list);
     expect((await app.inject({ method: 'GET', url: '/api/local-constants', headers })).json()).toEqual(list);
-    for (const payload of [[{ name: 'DB_PASSWORD', value: 'x' }], [{ name: 'ACME_DEV', value: true }, { name: 'ACME_DEV', value: false }], [{ name: 'ACME', value: 'a\nb' }]]) {
+    for (const payload of [[{ name: 'DB_PASSWORD', value: 'x' }], [{ name: 'WANDWORKS_DEV', value: true }, { name: 'WANDWORKS_DEV', value: false }], [{ name: 'WANDWORKS', value: 'a\nb' }]]) {
       expect((await app.inject({ method: 'PUT', url: '/api/local-constants', headers, payload })).statusCode).toBe(400);
     }
   });

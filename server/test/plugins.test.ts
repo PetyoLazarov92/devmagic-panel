@@ -15,20 +15,20 @@ const LIST = [
   row('devmagic-panel-local', 'must-use', { file: 'devmagic-panel-local.php' }),
   row('advanced-cache.php', 'dropin', { title: '', file: 'advanced-cache.php' }),
   row('acf', 'active'),
-  row('acme-blocks', 'active'),
-  row('acme-old', 'inactive'),
+  row('wandworks-blocks', 'active'),
+  row('wandworks-old', 'inactive'),
   row('wp-rocket', 'inactive', { update: 'available', update_version: '3.20' }),
   row('query-monitor', 'active'),
   row('odd', 'recently-active'),
 ];
 
-/** local.shop.com with plugin files: acme-blocks and acme-old need acf, but only acme-blocks is on. */
+/** local.shop.com with plugin files: wandworks-blocks and wandworks-old need acf, but only wandworks-blocks is on. */
 function setup(responses: Record<string, FakeResponse> = {}, options: { multisite?: boolean } = {}) {
   const t = wpSiteTree(options);
-  for (const name of ['acf', 'acme-blocks', 'acme-old']) mkdirSync(join(t.docroot, 'wp-content/plugins', name), { recursive: true });
+  for (const name of ['acf', 'wandworks-blocks', 'wandworks-old']) mkdirSync(join(t.docroot, 'wp-content/plugins', name), { recursive: true });
   writeFileSync(join(t.docroot, 'wp-content/plugins/acf/acf.php'), '<?php\n/**\n * Plugin Name: ACF\n */\n');
-  writeFileSync(join(t.docroot, 'wp-content/plugins/acme-blocks/acme-blocks.php'), '<?php\n/**\n * Plugin Name: Acme Blocks\n * Requires Plugins: acf, not a slug!\n */\n');
-  writeFileSync(join(t.docroot, 'wp-content/plugins/acme-old/acme-old.php'), '<?php\n/*\nPlugin Name: Acme Old\nRequires Plugins: acf\n*/\n');
+  writeFileSync(join(t.docroot, 'wp-content/plugins/wandworks-blocks/wandworks-blocks.php'), '<?php\n/**\n * Plugin Name: Wandworks Blocks\n * Requires Plugins: acf, not a slug!\n */\n');
+  writeFileSync(join(t.docroot, 'wp-content/plugins/wandworks-old/wandworks-old.php'), '<?php\n/*\nPlugin Name: Wandworks Old\nRequires Plugins: acf\n*/\n');
   const fake = fakeExec({ 'wp': { stdout: JSON.stringify(LIST) }, ...responses });
   const store = new RunStore(':memory:');
   const ctx: ActionContext = {
@@ -56,10 +56,10 @@ describe('readPlugins', () => {
     expect(list.network).toBe(false);
     expect(list.plugins.map((p) => p.name)).not.toContain('odd');
     const by = Object.fromEntries(list.plugins.map((p) => [p.name, p]));
-    // Only the active acme-blocks counts: acme-old is off.
-    expect(by.acf).toEqual({ name: 'acf', title: 'ACF', status: 'active', version: '1.0', requiredBy: ['ACME-BLOCKS'] });
-    expect(by['acme-blocks']?.requires).toEqual(['acf']);
-    expect(by['acme-old']?.requires).toEqual(['acf']);
+    // Only the active wandworks-blocks counts: wandworks-old is off.
+    expect(by.acf).toEqual({ name: 'acf', title: 'ACF', status: 'active', version: '1.0', requiredBy: ['WANDWORKS-BLOCKS'] });
+    expect(by['wandworks-blocks']?.requires).toEqual(['acf']);
+    expect(by['wandworks-old']?.requires).toEqual(['acf']);
     expect(by['wp-rocket']).toMatchObject({ update: '3.20', productionOnly: true });
     expect(by['query-monitor']?.localHelper).toBe(true);
     expect(by['advanced-cache.php']).toEqual({ name: 'advanced-cache.php', title: 'advanced-cache.php', status: 'dropin', version: '1.0' });
@@ -75,9 +75,9 @@ describe('productionOnlyFor', () => {
   it("takes the production-only plugins from the wizard's answers for the site's repo", () => {
     const store = new RunStore(':memory:');
     expect(productionOnlyFor(store, 'local.shop.com')).toEqual([]);
-    store.setInstall('local.shop.com', undefined, { how: 'repo', repo: 'git@github.com:acme/shop.git' });
+    store.setInstall('local.shop.com', undefined, { how: 'repo', repo: 'git@github.com:wandworks/shop.git' });
     expect(productionOnlyFor(store, 'local.shop.com')).toEqual([]);
-    store.savePreset(repoKey('git@github.com:acme/shop.git') as string, { domains: [{ local: 'local.shop.com' }], layout: 'site-root', deactivate: ['wp-rocket', 'cloudflare'], activate: [], build: { composer: false, npm: true } });
+    store.savePreset(repoKey('git@github.com:wandworks/shop.git') as string, { domains: [{ local: 'local.shop.com' }], layout: 'site-root', deactivate: ['wp-rocket', 'cloudflare'], activate: [], build: { composer: false, npm: true } });
     expect(productionOnlyFor(store, 'local.shop.com')).toEqual(['wp-rocket', 'cloudflare']);
   });
 });
@@ -87,20 +87,20 @@ describe('site.pluginSet', () => {
 
   it('turns a plugin on or off with its hooks running, and does nothing when it already is', async () => {
     const { ctx, fake } = setup({ 'wp': (call) => ({ stdout: call.args.includes('list') ? JSON.stringify(LIST) : 'Success: done' }) });
-    expect((await runAction(ctx, 'site.pluginSet', { domain: 'local.shop.com', plugin: 'acme-old', active: true })).ok).toBe(true);
+    expect((await runAction(ctx, 'site.pluginSet', { domain: 'local.shop.com', plugin: 'wandworks-old', active: true })).ok).toBe(true);
     expect((await runAction(ctx, 'site.pluginSet', { domain: 'local.shop.com', plugin: 'acf', active: false })).ok).toBe(true);
     const already = await runAction(ctx, 'site.pluginSet', { domain: 'local.shop.com', plugin: 'query-monitor', active: true });
     expect(already.output).toBe('QUERY-MONITOR is already on');
-    expect(wpCalls(fake.calls)).toEqual(['plugin activate acme-old', 'plugin deactivate acf']);
+    expect(wpCalls(fake.calls)).toEqual(['plugin activate wandworks-old', 'plugin deactivate acf']);
     // Activation loads the other plugins, as wp-admin does.
     expect(fake.calls.find((c) => c.args.includes('activate'))?.args).not.toContain('--skip-plugins');
   });
 
   it('turns plugins on network-wide on a multisite network', async () => {
     const { ctx, fake } = setup({ 'wp': (call) => ({ stdout: call.args.includes('list') ? JSON.stringify(LIST) : 'Success: done' }) }, { multisite: true });
-    await runAction(ctx, 'site.pluginSet', { domain: 'local.shop.com', plugin: 'acme-old', active: true });
+    await runAction(ctx, 'site.pluginSet', { domain: 'local.shop.com', plugin: 'wandworks-old', active: true });
     await runAction(ctx, 'site.pluginSet', { domain: 'local.shop.com', plugin: 'acf', active: false });
-    expect(wpCalls(fake.calls)).toEqual(['plugin activate acme-old --network', 'plugin deactivate acf']);
+    expect(wpCalls(fake.calls)).toEqual(['plugin activate wandworks-old --network', 'plugin deactivate acf']);
   });
 
   it('refuses must-use plugins, unknown ones and names that are not slugs', async () => {

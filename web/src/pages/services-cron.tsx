@@ -323,7 +323,7 @@ export function TaskForm({ task, site, onClose, onSaved }: { task: CronTaskView 
               <span className="flex flex-wrap items-center gap-1.5">
                 One of these, or a command of the site&apos;s own (a plugin&apos;s or the theme&apos;s):
                 {WP_CLI_SCHEDULED.map((c) => (
-                  <button key={c.join(' ')} type="button" className="rounded-full border px-2 py-0.5 font-mono hover:bg-muted" onClick={() => set('command', `${c.join(' ')}${c[0] === 'cron' ? ' acme_hook' : c[0] === 'transient' ? ' --expired' : ''}`)}>
+                  <button key={c.join(' ')} type="button" className="rounded-full border px-2 py-0.5 font-mono hover:bg-muted" onClick={() => set('command', `${c.join(' ')}${c[0] === 'cron' ? ' wandworks_hook' : c[0] === 'transient' ? ' --expired' : ''}`)}>
                     {c.join(' ')}
                   </button>
                 ))}
@@ -340,7 +340,7 @@ export function TaskForm({ task, site, onClose, onSaved }: { task: CronTaskView 
         )}
         {form.kind === 'url' && (
           <Field label="Address" htmlFor={`${id}-url`} hint="On a local name only. curl opens it, trusting the panel's certificates." className="sm:col-span-2">
-            <Input id={`${id}-url`} className="font-mono" value={form.url} onChange={(e) => set('url', e.target.value)} placeholder="https://local.acme.com/?acme-feed=refresh" />
+            <Input id={`${id}-url`} className="font-mono" value={form.url} onChange={(e) => set('url', e.target.value)} placeholder="https://local.wandworks.example/?wandworks-feed=refresh" />
           </Field>
         )}
         {form.kind === 'program' && (

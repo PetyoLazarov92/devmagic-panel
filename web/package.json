@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "mockup": "VITE_MOCK=1 vite"
+    "mockup": "VITE_MOCK=1 vite",
+    "build:demo": "tsc -p tsconfig.json --noEmit && VITE_MOCK=1 VITE_DEMO=1 vite build --outDir ../dist-demo --emptyOutDir"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",

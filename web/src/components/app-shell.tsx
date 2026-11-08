@@ -8,7 +8,7 @@ import { AssistantDrawer } from '@/components/assistant-drawer';
 import { JobsIndicator } from '@/components/jobs-indicator';
 import { UpdateIndicator, updateDot, useUpdateStatus } from '@/components/update-indicator';
 import { QueuedProposals } from '@/components/queued-proposals';
-import { api, isMockup } from '@/lib/api';
+import { api, DEMO_HOME, isDemo, isMockup } from '@/lib/api';
 import { loadGitHosts } from '@/lib/git-hosts';
 import { setAssistantOpen } from '@/lib/assistant';
 import { useDeveloper, useVersionTaps } from '@/lib/developer';
@@ -111,7 +111,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
               className={cn('flex items-center gap-2.5 rounded-md bg-warning/12 px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-warning transition-colors hover:bg-warning/20', path === '/mockup' && 'bg-warning/20')}
             >
               <FlaskConical className="size-4" />
-              Mockup
+              {isDemo ? 'Demo' : 'Mockup'}
               <span className="ml-auto pl-2 text-[11px] font-normal">sample data</span>
             </Link>
           </div>
@@ -164,6 +164,15 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
         <ChangePasswordDialog open={changingPassword} onClose={() => setChangingPassword(false)} user={user} />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* The public demo says on every page what it is, since a link can open any of them first. */}
+        {isDemo && (
+          <p className="border-b bg-warning/12 px-6 py-2 text-center text-sm text-warning md:px-10">
+            A demo on made-up sample data: nothing you do here runs anywhere.{' '}
+            <a href={DEMO_HOME} data-mockup-exit className="font-medium whitespace-nowrap underline underline-offset-2">
+              Get devmagic-panel
+            </a>
+          </p>
+        )}
         {/* Lined up with the page below: the search centered over it while the indicators on the right leave room, else just left of them. */}
         <header className="mx-auto flex w-full max-w-7xl items-center gap-2 px-6 pt-4 md:px-10">
           <div className="hidden min-w-0 flex-1 basis-0 sm:block" />

@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.24.1-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.24.2-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -75,7 +75,7 @@ listens on localhost.
 <details>
 <summary><b>More screenshots</b></summary>
 
-**Aura**: every problem in one list, with its fix
+**Aura**: every problem in one list, with its fix, and the machine checks behind it
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/aura-dark.png">
@@ -89,30 +89,51 @@ listens on localhost.
   <img src="assets/screenshots/new-site-light.png" alt="The new site wizard: from an organization, from a git repo and a database dump, fresh WordPress or an empty site">
 </picture>
 
-**A site**: core, debug constants, quick actions, Local mode and uploads
+**A site's server and PHP**: Apache or nginx, and a PHP version and settings of its own
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/site-dark.png">
-  <img src="assets/screenshots/site-light.png" alt="A site's page: WordPress core, debug constants, quick actions, Local mode and uploads">
+  <img src="assets/screenshots/site-light.png" alt="A site's Server and PHP tab: its web server with a move to nginx, its PHP version and settings">
 </picture>
 
-**Removed sites**: copies by site and date, to restore or delete
+**Database**: what needs a look in the WordPress view, with clean-ups and table health
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/archive-dark.png">
-  <img src="assets/screenshots/archive-light.png" alt="Removed sites: copies of removed or replaced sites by date, each with Restore and Delete now">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/database-dark.png">
+  <img src="assets/screenshots/database-light.png" alt="The Database tab: autoloaded options, transients and clean-ups, and table health with fixes">
 </picture>
 
-**Machine checks**: the checks behind it all, in Aura
+**SQL runner**: read-only by default, with suggestions, Explain, history and CSV
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/environment-dark.png">
-  <img src="assets/screenshots/environment-light.png" alt="Aura's Machine checks: Apache, certificates, hosts, MySQL, PHP, tools and access">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/sql-dark.png">
+  <img src="assets/screenshots/sql-light.png" alt="The SQL runner: a query with suggestions for tables and columns, and its result rows">
+</picture>
+
+**Performance**: Xdebug profiles with time per plugin, and slow queries
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/performance-dark.png">
+  <img src="assets/screenshots/performance-light.png" alt="The Performance tab: Xdebug profiles of a site by request, and its top queries">
+</picture>
+
+**Command palette**: every page and quick action from the keyboard, with Ctrl+K
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/palette-dark.png">
+  <img src="assets/screenshots/palette-light.png" alt="The command palette: actions like Ask Claude and New site, and every page to jump to">
+</picture>
+
+**Activity**: the jobs running now and every action the panel ran
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/activity-dark.png">
+  <img src="assets/screenshots/activity-light.png" alt="The Activity page: run history with each action, its site, when and how long it took">
 </picture>
 
 </details>
 
-The screenshots use the mockup's sample data (`npm run mockup`).
+The screenshots use the mockup's sample data: `npm run screenshots` takes them all again, in light and dark.
 
 [⬆️ Back to top](#-table-of-contents)
 

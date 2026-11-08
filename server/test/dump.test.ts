@@ -10,9 +10,9 @@ import { setConstant, setTablePrefix } from '../src/sites/wpconfig-edit.js';
 
 const dump = `-- MySQL dump
 CREATE TABLE \`xyz_options\` (option_id bigint);
-INSERT INTO \`xyz_options\` VALUES (1,'siteurl','https://www.arcade.bet','yes'),(2,'home','https://www.arcade.bet','yes'),(55,'db_version','60717','yes');
+INSERT INTO \`xyz_options\` VALUES (1,'siteurl','https://www.arcade.example','yes'),(2,'home','https://www.arcade.example','yes'),(55,'db_version','60717','yes');
 CREATE TABLE \`xyz_blogs\` (blog_id bigint);
-INSERT INTO \`xyz_blogs\` VALUES (1,1,'www.arcade.bet','/','2020-01-01','2020-01-01',1,0,0,0,0,0),(2,1,'de.arcade.bet','/','2020-01-01','2020-01-01',1,0,0,0,0,0);
+INSERT INTO \`xyz_blogs\` VALUES (1,1,'www.arcade.example','/','2020-01-01','2020-01-01',1,0,0,0,0,0),(2,1,'de.arcade.example','/','2020-01-01','2020-01-01',1,0,0,0,0,0);
 `;
 
 describe('dump analysis', () => {
@@ -21,13 +21,13 @@ describe('dump analysis', () => {
     scanSql(dump, facts);
     expect(facts).toEqual({
       tablePrefix: 'xyz_',
-      siteUrl: 'https://www.arcade.bet',
-      home: 'https://www.arcade.bet',
+      siteUrl: 'https://www.arcade.example',
+      home: 'https://www.arcade.example',
       dbVersion: 60717,
       multisite: true,
       subdomainInstall: true,
-      sites: [{ id: 1, domain: 'www.arcade.bet', path: '/' }, { id: 2, domain: 'de.arcade.bet', path: '/' }],
-      hosts: ['www.arcade.bet', 'de.arcade.bet'],
+      sites: [{ id: 1, domain: 'www.arcade.example', path: '/' }, { id: 2, domain: 'de.arcade.example', path: '/' }],
+      hosts: ['www.arcade.example', 'de.arcade.example'],
       partial: false,
     });
   });
@@ -62,29 +62,29 @@ describe('dump analysis', () => {
   // As MariaDB's dump writes a network: each row on a line of its own, and the subsites' tables (wp_10_) before the main site's.
   const mariadb = `CREATE TABLE \`wp_10_options\` (x int);
 INSERT INTO \`wp_10_options\` VALUES
-(1,'siteurl','http://local.acme.com/outlet','yes'),
-(2,'home','http://local.acme.com/outlet','yes'),
-(3,'blogname','Acme Outlet','yes'),
+(1,'siteurl','http://local.wandworks.example/outlet','yes'),
+(2,'home','http://local.wandworks.example/outlet','yes'),
+(3,'blogname','Wandworks Outlet','yes'),
 (4,'active_plugins','a:1:{i:0;s:21:\\"outlet-only/outlet.php\\";}','yes');
 CREATE TABLE \`wp_2_options\` (x int);
 INSERT INTO \`wp_2_options\` VALUES
-(1,'siteurl','http://local.acme.com/repairs','yes'),
-(3,'blogname','Acme Repairs &amp; Rescue','yes');
+(1,'siteurl','http://local.wandworks.example/repairs','yes'),
+(3,'blogname','Wandworks Repairs &amp; Rescue','yes');
 CREATE TABLE \`wp_blogs\` (x int);
 INSERT INTO \`wp_blogs\` VALUES
-(1,1,'local.acme.com','/','x','x',1,0,0,0,0,0),
-(2,1,'local.acme.com','/repairs/','x','x',1,0,0,0,0,0),
-(10,1,'local.acme.com','/outlet/','x','x',1,0,0,0,0,0);
+(1,1,'local.wandworks.example','/','x','x',1,0,0,0,0,0),
+(2,1,'local.wandworks.example','/repairs/','x','x',1,0,0,0,0,0),
+(10,1,'local.wandworks.example','/outlet/','x','x',1,0,0,0,0,0);
 CREATE TABLE \`wp_options\` (x int);
 INSERT INTO \`wp_options\` VALUES
-(1,'siteurl','http://local.acme.com','yes'),
-(2,'home','http://local.acme.com','yes'),
-(3,'blogname','Acme','yes'),
+(1,'siteurl','http://local.wandworks.example','yes'),
+(2,'home','http://local.wandworks.example','yes'),
+(3,'blogname','Wandworks','yes'),
 (4,'db_version','60717','yes'),
 (5,'active_plugins','a:1:{i:0;s:19:\\"akismet/akismet.php\\";}','yes');
 CREATE TABLE \`wp_site\` (x int);
 INSERT INTO \`wp_site\` VALUES
-(1,'local.acme.com','/');
+(1,'local.wandworks.example','/');
 CREATE TABLE \`wp_sitemeta\` (x int);
 INSERT INTO \`wp_sitemeta\` VALUES
 (1,1,'subdomain_install','0'),
@@ -94,7 +94,7 @@ INSERT INTO \`wp_usermeta\` VALUES
 (1,1,'wp_capabilities','a:1:{s:13:\\"administrator\\";b:1;}');
 CREATE TABLE \`wp_users\` (x int);
 INSERT INTO \`wp_users\` VALUES
-(1,'admin','$P$Bx','admin','admin@acme.com','','2020-01-01 00:00:00','',0,'admin');
+(1,'admin','$P$Bx','admin','admin@wandworks.example','','2020-01-01 00:00:00','',0,'admin');
 CREATE TABLE \`wp_yoast_indexable\` (x int);
 `;
 
@@ -104,25 +104,25 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
     writeFileSync(file, mariadb);
     expect(await analyzeDump(file)).toEqual({
       tablePrefix: 'wp_',
-      siteUrl: 'http://local.acme.com',
-      home: 'http://local.acme.com',
+      siteUrl: 'http://local.wandworks.example',
+      home: 'http://local.wandworks.example',
       dbVersion: 60717,
       multisite: true,
       subdomainInstall: false,
       networkPath: '/',
       sites: [
-        { id: 1, domain: 'local.acme.com', path: '/', name: 'Acme' },
-        { id: 2, domain: 'local.acme.com', path: '/repairs/', name: 'Acme Repairs & Rescue' },
-        { id: 10, domain: 'local.acme.com', path: '/outlet/', name: 'Acme Outlet' },
+        { id: 1, domain: 'local.wandworks.example', path: '/', name: 'Wandworks' },
+        { id: 2, domain: 'local.wandworks.example', path: '/repairs/', name: 'Wandworks Repairs & Rescue' },
+        { id: 10, domain: 'local.wandworks.example', path: '/outlet/', name: 'Wandworks Outlet' },
       ],
-      hosts: ['local.acme.com'],
+      hosts: ['local.wandworks.example'],
       // The main site's plugins only: a subsite's are its own.
       activePlugins: ['akismet'],
       partial: false,
-      httpHosts: ['local.acme.com'],
+      httpHosts: ['local.wandworks.example'],
       // The tables the dump creates and the hosts their rows link to: search and replace leaves out the ones without.
       tableHosts: {
-        wp_options: ['local.acme.com'], wp_2_options: ['local.acme.com'], wp_10_options: ['local.acme.com'],
+        wp_options: ['local.wandworks.example'], wp_2_options: ['local.wandworks.example'], wp_10_options: ['local.wandworks.example'],
         wp_blogs: [], wp_site: [], wp_sitemeta: [], wp_usermeta: [], wp_users: [], wp_yoast_indexable: [],
       },
       storedObjects: false,
@@ -134,45 +134,45 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
   it('finds the hosts with http links to the end of the dump, plain, JSON-escaped or escaped again in SQL', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dump-'));
     const file = join(dir, 'http.sql');
-    const filler = `INSERT INTO \`wp_postmeta\` VALUES ${Array.from({ length: 4000 }, (_, i) => `(${i},'k','https://www.acme.com/p/${i}')`).join(',')};\n`;
+    const filler = `INSERT INTO \`wp_postmeta\` VALUES ${Array.from({ length: 4000 }, (_, i) => `(${i},'k','https://www.wandworks.example/p/${i}')`).join(',')};\n`;
     writeFileSync(
       file,
       [
-        "CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://www.acme.com','yes'),(2,'home','https://www.acme.com','yes'),(3,'db_version','60717','yes'),(4,'active_plugins','a:0:{}','yes');\n",
-        "CREATE TABLE `wp_users` (x int);\nINSERT INTO `wp_users` VALUES (1,'admin','x','admin','a@acme.com','','2020-01-01 00:00:00','',0,'admin');\nCREATE TABLE `wp_usermeta` (x int);\nCREATE TABLE `wp_yoast` (x int);\n",
+        "CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://www.wandworks.example','yes'),(2,'home','https://www.wandworks.example','yes'),(3,'db_version','60717','yes'),(4,'active_plugins','a:0:{}','yes');\n",
+        "CREATE TABLE `wp_users` (x int);\nINSERT INTO `wp_users` VALUES (1,'admin','x','admin','a@wandworks.example','','2020-01-01 00:00:00','',0,'admin');\nCREATE TABLE `wp_usermeta` (x int);\nCREATE TABLE `wp_yoast` (x int);\n",
         // After the facts are in: only found by reading on.
         filler,
-        "INSERT INTO `wp_posts` VALUES (1,'{\\\"url\\\":\\\"http:\\\\/\\\\/shop.acme.com\\\\/cart\\\"}'),(2,'<a href=\\\"HTTP://Blog.Acme.com:8080/x\\\">'),(3,'http:\\/\\/cdn.acme.com/a.png');\n",
+        "INSERT INTO `wp_posts` VALUES (1,'{\\\"url\\\":\\\"http:\\\\/\\\\/shop.wandworks.example\\\\/cart\\\"}'),(2,'<a href=\\\"HTTP://Blog.Wandworks.example:8080/x\\\">'),(3,'http:\\/\\/cdn.wandworks.example/a.png');\n",
       ].join(''),
     );
     const facts = await analyzeDump(file);
-    expect(facts.home).toBe('https://www.acme.com');
-    expect(facts.httpHosts?.sort()).toEqual(['blog.acme.com:8080', 'cdn.acme.com', 'shop.acme.com']);
+    expect(facts.home).toBe('https://www.wandworks.example');
+    expect(facts.httpHosts?.sort()).toEqual(['blog.wandworks.example:8080', 'cdn.wandworks.example', 'shop.wandworks.example']);
   });
 
   it('collects http hosts, plain and escaped, and none from https or protocol-relative links', () => {
     const hosts = new Set<string>();
     const scan = new TableHosts(hosts);
-    scan.add('a https://www.acme.com and //cdn.acme.com\n');
+    scan.add('a https://www.wandworks.example and //cdn.wandworks.example\n');
     expect([...hosts]).toEqual([]);
-    scan.add('a http://local.acme.com/ b http:\\/\\/www.acme.com\\/x', true);
-    expect([...hosts]).toEqual(['local.acme.com', 'www.acme.com']);
+    scan.add('a http://local.wandworks.example/ b http:\\/\\/www.wandworks.example\\/x', true);
+    expect([...hosts]).toEqual(['local.wandworks.example', 'www.wandworks.example']);
   });
 
   const TABLES = [
-    '-- Host: localhost    Database: acme',
+    '-- Host: localhost    Database: wandworks',
     'DROP TABLE IF EXISTS `wp_options`;',
     'CREATE TABLE `wp_options` (',
     '  `option_id` bigint unsigned NOT NULL',
     ');',
-    "INSERT INTO `wp_options` VALUES (1,'siteurl','https://www.acme.com','yes'),(2,'x','{\\\"u\\\":\\\"https:\\\\/\\\\/cdn.acme.com\\\\/a\\\"}','no');",
+    "INSERT INTO `wp_options` VALUES (1,'siteurl','https://www.wandworks.example','yes'),(2,'x','{\\\"u\\\":\\\"https:\\\\/\\\\/cdn.wandworks.example\\\\/a\\\"}','no');",
     'CREATE TABLE `wp_posts` (`ID` bigint);',
-    "INSERT INTO `wp_posts` VALUES (1,'How to write INSERT INTO `wp_users` VALUES in a post, see //Shop.Acme.com/help');",
+    "INSERT INTO `wp_posts` VALUES (1,'How to write INSERT INTO `wp_users` VALUES in a post, see //Shop.Wandworks.example/help');",
     'CREATE TABLE `wp_actionscheduler_logs` (`log_id` bigint);',
     "INSERT INTO `wp_actionscheduler_logs` VALUES (1,'action complete'),(2,'retry in 5 min');",
     'CREATE TABLE IF NOT EXISTS `wp_kept` (`id` int);',
     "INSERT INTO `wp_kept` VALUES (1,'plain');",
-    "INSERT INTO `wp_not_created` VALUES (1,'//www.acme.com');",
+    "INSERT INTO `wp_not_created` VALUES (1,'//www.wandworks.example');",
     'CREATE TABLE `wp_last` (`id` int);',
   ].join('\n');
 
@@ -180,9 +180,9 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
     const scan = new TableHosts();
     scan.add(TABLES, true);
     expect(scan.result()).toEqual({
-      wp_options: ['cdn.acme.com', 'www.acme.com'],
+      wp_options: ['cdn.wandworks.example', 'www.wandworks.example'],
       // Words in a row that look like a statement belong to the row; the host keeps its case.
-      wp_posts: ['Shop.Acme.com'],
+      wp_posts: ['Shop.Wandworks.example'],
       wp_actionscheduler_logs: [],
       // Created at the very end: still the dump's.
       wp_last: [],
@@ -202,7 +202,7 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
 
   it('says nothing per table when a statement names its table in a way it cannot read', () => {
     const scan = new TableHosts();
-    scan.add('CREATE TABLE `wp_options` (`id` int);\nINSERT INTO acme.wp_posts VALUES (1);\n', true);
+    scan.add('CREATE TABLE `wp_options` (`id` int);\nINSERT INTO wandworks.wp_posts VALUES (1);\n', true);
     expect(scan.result()).toBeUndefined();
   });
 
@@ -216,34 +216,34 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
     expect(made('/*!50001 CREATE VIEW `wp_top` AS SELECT 1 AS `x`*/;\n')).toBe(true);
     expect(made('/*!50001 CREATE ALGORITHM=UNDEFINED */\n/*!50013 DEFINER=`root`@`localhost` SQL SECURITY DEFINER */\n/*!50001 VIEW `wp_top` AS select 1 */;\n')).toBe(true);
     expect(made('DELIMITER ;;\n/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `wp_t` BEFORE INSERT ON `wp_posts` FOR EACH ROW SET @x = 1 */;;\nDELIMITER ;\n')).toBe(true);
-    expect(made('CREATE DEFINER=`root`@`localhost` PROCEDURE `acme_cleanup`()\nBEGIN\nEND\n')).toBe(true);
+    expect(made('CREATE DEFINER=`root`@`localhost` PROCEDURE `wandworks_cleanup`()\nBEGIN\nEND\n')).toBe(true);
   });
 
   it('counts a table with too many hosts as having every host', () => {
     const scan = new TableHosts();
-    const rows = Array.from({ length: 600 }, (_, i) => `(${i},'//site${i}.acme.com')`).join(',');
+    const rows = Array.from({ length: 600 }, (_, i) => `(${i},'//site${i}.wandworks.example')`).join(',');
     scan.add(`CREATE TABLE \`wp_links\` (x int);\nINSERT INTO \`wp_links\` VALUES ${rows};\n`, true);
     expect(scan.result()).toEqual({ wp_links: [ANY_HOST] });
   });
 
   it('takes the network setting over what its sites suggest, and a plugin table is not taken for the main options', () => {
     const facts = emptyFacts();
-    scanSql("CREATE TABLE `wp_aaa_options` (x int);\nINSERT INTO `wp_aaa_options` VALUES (1,'mode','x');\nCREATE TABLE `wp_blogs` (x int);\nINSERT INTO `wp_blogs` VALUES (1,1,'acme.com','/','x','x',1,0,0,0,0,0),(2,1,'shop.acme.com','/','x','x',1,0,0,0,0,0);\nCREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://acme.com','yes');\nCREATE TABLE `wp_sitemeta` (x int);\nINSERT INTO `wp_sitemeta` VALUES (1,1,'subdomain_install','0');\n", facts);
-    expect(facts).toMatchObject({ tablePrefix: 'wp_', siteUrl: 'https://acme.com', subdomainInstall: false });
+    scanSql("CREATE TABLE `wp_aaa_options` (x int);\nINSERT INTO `wp_aaa_options` VALUES (1,'mode','x');\nCREATE TABLE `wp_blogs` (x int);\nINSERT INTO `wp_blogs` VALUES (1,1,'wandworks.example','/','x','x',1,0,0,0,0,0),(2,1,'shop.wandworks.example','/','x','x',1,0,0,0,0,0);\nCREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://wandworks.example','yes');\nCREATE TABLE `wp_sitemeta` (x int);\nINSERT INTO `wp_sitemeta` VALUES (1,1,'subdomain_install','0');\n", facts);
+    expect(facts).toMatchObject({ tablePrefix: 'wp_', siteUrl: 'https://wandworks.example', subdomainInstall: false });
   });
 
   it("takes a site's domain from a domain mapping plugin's table, and keeps its subdomain among the hosts to replace", () => {
     const facts = emptyFacts();
     scanSql(
-      "CREATE TABLE `wp_blogs` (x int);\nINSERT INTO `wp_blogs` VALUES\n(1,1,'acme.com','/','x','x',1,0,0,0,0,0),\n(2,1,'cats.acme.com','/','x','x',1,0,0,0,0,0),\n(3,1,'acme.com','/old/','x','x',1,0,0,0,0,0);\n" +
-        "CREATE TABLE `wp_domain_mapping` (x int);\nINSERT INTO `wp_domain_mapping` VALUES\n(1,2,'DailyCats.com',1),\n(2,3,'old-acme.com',0);\n" +
-        "CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://acme.com','yes'),(2,'home','https://acme.com','yes');\n",
+      "CREATE TABLE `wp_blogs` (x int);\nINSERT INTO `wp_blogs` VALUES\n(1,1,'wandworks.example','/','x','x',1,0,0,0,0,0),\n(2,1,'cats.wandworks.example','/','x','x',1,0,0,0,0,0),\n(3,1,'wandworks.example','/old/','x','x',1,0,0,0,0,0);\n" +
+        "CREATE TABLE `wp_domain_mapping` (x int);\nINSERT INTO `wp_domain_mapping` VALUES\n(1,2,'DailyCats.example',1),\n(2,3,'old-wandworks.example',0);\n" +
+        "CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://wandworks.example','yes'),(2,'home','https://wandworks.example','yes');\n",
       facts,
     );
     expect(facts).toMatchObject({
       domainMapping: true,
-      sites: [{ id: 1, domain: 'acme.com', path: '/' }, { id: 2, domain: 'dailycats.com', path: '/', mapped: true }, { id: 3, domain: 'acme.com', path: '/old/' }],
-      hosts: ['acme.com', 'cats.acme.com', 'dailycats.com'],
+      sites: [{ id: 1, domain: 'wandworks.example', path: '/' }, { id: 2, domain: 'dailycats.example', path: '/', mapped: true }, { id: 3, domain: 'wandworks.example', path: '/old/' }],
+      hosts: ['wandworks.example', 'cats.wandworks.example', 'dailycats.example'],
     });
   });
 
@@ -271,20 +271,20 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
 
   // As mysqldump writes them: tables in name order, the role serialized with escaped quotes.
   const site = (users: string, extra = '') => `CREATE TABLE \`wp_options\` (x int);
-INSERT INTO \`wp_options\` VALUES (1,'siteurl','https://www.acme.com','yes'),(2,'home','https://www.acme.com','yes'),(3,'db_version','60717','yes'),(4,'active_plugins','a:0:{}','yes');
+INSERT INTO \`wp_options\` VALUES (1,'siteurl','https://www.wandworks.example','yes'),(2,'home','https://www.wandworks.example','yes'),(3,'db_version','60717','yes'),(4,'active_plugins','a:0:{}','yes');
 ${extra}CREATE TABLE \`wp_usermeta\` (x int);
 INSERT INTO \`wp_usermeta\` VALUES (1,1,'wp_capabilities','a:1:{s:13:\\"administrator\\";b:1;}'),(2,2,'wp_capabilities','a:1:{s:6:\\"editor\\";b:1;}'),(3,3,'wp_capabilities','a:1:{s:13:\\"administrator\\";b:1;}'),(4,3,'wp_2_capabilities','a:1:{s:13:\\"administrator\\";b:1;}');
 CREATE TABLE \`wp_users\` (x int);
 INSERT INTO \`wp_users\` VALUES ${users};
 CREATE TABLE \`wp_yoast_indexable\` (x int);
 `;
-  const users = "(1,'admin','$P$Bx','admin','admin@acme.com','','2020-01-01 00:00:00','',0,'admin'),(2,'editor','$P$By','editor','e@acme.com','','2020-01-01 00:00:00','',0,'Ed'),(3,'dev@acme','$P$Bz','dev','d@acme.com','','2020-01-01 00:00:00','',0,'Dev')";
+  const users = "(1,'admin','$P$Bx','admin','admin@wandworks.example','','2020-01-01 00:00:00','',0,'admin'),(2,'editor','$P$By','editor','e@wandworks.example','','2020-01-01 00:00:00','',0,'Ed'),(3,'dev@wandworks','$P$Bz','dev','d@wandworks.example','','2020-01-01 00:00:00','',0,'Dev')";
 
   it('finds the administrators of the main site by login, oldest first', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dump-'));
     const file = join(dir, 'site.sql');
     writeFileSync(file, site(users));
-    expect(await analyzeDump(file)).toMatchObject({ tablePrefix: 'wp_', admins: ['admin', 'dev@acme'], partial: false });
+    expect(await analyzeDump(file)).toMatchObject({ tablePrefix: 'wp_', admins: ['admin', 'dev@wandworks'], partial: false });
   });
 
   it('says how much of a large dump it has read on the way to its users', async () => {
@@ -294,7 +294,7 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
     const posts = `CREATE TABLE \`wp_postmeta\` (x int);\n${Array.from({ length: 20 }, () => `INSERT INTO \`wp_postmeta\` VALUES ${Array.from({ length: 1000 }, (_, i) => `(${i},1,'_edit_lock','1700000000:1')`).join(',')};\n`).join('')}`;
     writeFileSync(file, site(users, posts));
     const seen: number[] = [];
-    expect(await analyzeDump(file, (f) => seen.push(f))).toMatchObject({ admins: ['admin', 'dev@acme'] });
+    expect(await analyzeDump(file, (f) => seen.push(f))).toMatchObject({ admins: ['admin', 'dev@wandworks'] });
     expect(seen.length).toBeGreaterThan(3);
     expect(seen).toEqual([...seen].sort((a, b) => a - b));
     expect(seen.every((f) => f > 0 && f <= 1)).toBe(true);
@@ -309,20 +309,20 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
     scanSql(text.slice(0, cut), facts, state, 20);
     scanSql(text.slice(cut - 20), facts, state, 0);
     expect([...state.adminIds].sort()).toEqual([1, 3]);
-    expect(state.logins.get(3)).toBe('dev@acme');
+    expect(state.logins.get(3)).toBe('dev@wandworks');
 
     const dir = mkdtempSync(join(tmpdir(), 'dump-'));
     const file = join(dir, 'options-only.sql');
-    writeFileSync(file, "CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://www.acme.com','yes');\n");
+    writeFileSync(file, "CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://www.wandworks.example','yes');\n");
     expect((await analyzeDump(file)).admins).toBeUndefined();
   });
 
   it('lists the super admins of a network', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dump-'));
     const file = join(dir, 'network.sql.gz');
-    const network = "CREATE TABLE `wp_blogs` (x int);\nINSERT INTO `wp_blogs` VALUES (1,1,'www.acme.com','/','x','x',1,0,0,0,0,0);\nCREATE TABLE `wp_sitemeta` (x int);\nINSERT INTO `wp_sitemeta` VALUES (1,1,'site_admins','a:2:{i:0;s:5:\\\"admin\\\";i:1;s:10:\\\"acme.super\\\";}');\n";
+    const network = "CREATE TABLE `wp_blogs` (x int);\nINSERT INTO `wp_blogs` VALUES (1,1,'www.wandworks.example','/','x','x',1,0,0,0,0,0);\nCREATE TABLE `wp_sitemeta` (x int);\nINSERT INTO `wp_sitemeta` VALUES (1,1,'site_admins','a:2:{i:0;s:5:\\\"admin\\\";i:1;s:10:\\\"wandworks.super\\\";}');\n";
     writeFileSync(file, gzipSync(site(users, network)));
-    expect(await analyzeDump(file)).toMatchObject({ multisite: true, admins: ['admin', 'dev@acme'], superAdmins: ['admin', 'acme.super'] });
+    expect(await analyzeDump(file)).toMatchObject({ multisite: true, admins: ['admin', 'dev@wandworks'], superAdmins: ['admin', 'wandworks.super'] });
   });
 });
 
@@ -341,10 +341,10 @@ describe('wp-config edits', () => {
   });
 
   it('replaces a define whose value holds ; or ), instead of adding a second one', () => {
-    const text = "<?php\ndefine( 'ACME_DEV', 'a;b)' );\n/* That's all, stop editing! */\n";
-    const out = setConstant(text, 'ACME_DEV', true);
-    expect(out).toContain("define( 'ACME_DEV', true );");
-    expect(out.match(/ACME_DEV/g)).toHaveLength(1);
+    const text = "<?php\ndefine( 'WANDWORKS_DEV', 'a;b)' );\n/* That's all, stop editing! */\n";
+    const out = setConstant(text, 'WANDWORKS_DEV', true);
+    expect(out).toContain("define( 'WANDWORKS_DEV', true );");
+    expect(out.match(/WANDWORKS_DEV/g)).toHaveLength(1);
   });
 
   it('quotes values safely and writes booleans raw', () => {

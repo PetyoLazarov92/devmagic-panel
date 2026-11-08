@@ -21,7 +21,7 @@ describe('the cleanup statements', () => {
   );
 
   it("empties the tables that only hold private data, for the tables the dump has, Wordfence's capitals included", () => {
-    const sql = sqlOf(cleanupPlan(shop, 'wp_', 'admin@local.acme.com'));
+    const sql = sqlOf(cleanupPlan(shop, 'wp_', 'admin@local.wandworks.example'));
     expect(sql.users).toContain('TRUNCATE TABLE `wp_users`;');
     expect(sql.users).toContain('TRUNCATE TABLE `wp_usermeta`;');
     expect(sql.users).not.toContain('dmp_keep_user');
@@ -39,7 +39,7 @@ describe('the cleanup statements', () => {
   });
 
   it('keeps the counter past the ids that went, so no new user takes the id comments still name', () => {
-    const sql = sqlOf(cleanupPlan(shop, 'wp_', 'admin@local.acme.com'));
+    const sql = sqlOf(cleanupPlan(shop, 'wp_', 'admin@local.wandworks.example'));
     const users = sql.users as string;
     expect(users.indexOf('SELECT COALESCE(MAX(ID), 0) + 1 INTO @dmp_next_id FROM `wp_users`;')).toBeLessThan(users.indexOf('TRUNCATE TABLE `wp_users`;'));
     expect(users).toContain("SET @dmp_ai = CONCAT('ALTER TABLE `wp_users` AUTO_INCREMENT = ', @dmp_next_id);");
@@ -47,7 +47,7 @@ describe('the cleanup statements', () => {
   });
 
   it('keeps one administrator with its meta, at the local admin address, and every other user goes', () => {
-    const users = sqlOf(cleanupPlan(shop, 'wp_', 'admin@local.acme.com', 'alex'));
+    const users = sqlOf(cleanupPlan(shop, 'wp_', 'admin@local.wandworks.example', 'alex'));
     expect((users.users as string).split('\n').filter((l) => !l.startsWith('SELECT \'')).slice(0, 7)).toEqual([
       'SELECT COALESCE(MAX(ID), 0) + 1 INTO @dmp_next_id FROM `wp_users`;',
       "CREATE TEMPORARY TABLE dmp_keep_user AS SELECT * FROM `wp_users` WHERE user_login = 'alex';",
@@ -57,11 +57,11 @@ describe('the cleanup statements', () => {
       'INSERT INTO `wp_users` SELECT * FROM dmp_keep_user;',
       'INSERT INTO `wp_usermeta` SELECT * FROM dmp_keep_meta;',
     ]);
-    expect(users.users).toContain("UPDATE `wp_users` SET user_email = 'admin@local.acme.com';");
+    expect(users.users).toContain("UPDATE `wp_users` SET user_email = 'admin@local.wandworks.example';");
   });
 
   it('removes orders stored as posts with their meta, order notes, product reviews, Flamingo messages and keys, and leaves comments as they are', () => {
-    const sql = sqlOf(cleanupPlan(shop, 'wp_', 'admin@local.acme.com'));
+    const sql = sqlOf(cleanupPlan(shop, 'wp_', 'admin@local.wandworks.example'));
     expect(sql.woocommerce).toContain(
       "DELETE m FROM `wp_postmeta` m JOIN `wp_posts` o ON o.ID = m.post_id WHERE o.post_type IN ('shop_order', 'shop_order_refund', 'shop_order_placehold', 'shop_subscription');",
     );
@@ -72,25 +72,25 @@ describe('the cleanup statements', () => {
     expect(sql.secrets).toContain("option_name LIKE 'woocommerce\\_stripe\\_%'");
     expect(Object.values(sql).join('\n')).not.toMatch(/comment_author|UPDATE `wp_comments`/);
     expect(sql.settings).toContain("UPDATE `wp_options` SET option_value = '0' WHERE option_name = 'blog_public';");
-    expect(sql.settings).toContain("SET option_value = 'admin@local.acme.com' WHERE option_name IN ('admin_email', 'new_admin_email', ");
+    expect(sql.settings).toContain("SET option_value = 'admin@local.wandworks.example' WHERE option_name IN ('admin_email', 'new_admin_email', ");
   });
 
   it('leaves WooCommerce and reviews alone on a site without WooCommerce', () => {
-    const groups = cleanupPlan(tables('wp_users', 'wp_usermeta', 'wp_options', 'wp_posts', 'wp_postmeta', 'wp_comments'), 'wp_', 'admin@local.acme.com');
+    const groups = cleanupPlan(tables('wp_users', 'wp_usermeta', 'wp_options', 'wp_posts', 'wp_postmeta', 'wp_comments'), 'wp_', 'admin@local.wandworks.example');
     expect(groups.map((g) => g.id)).toEqual(['users', 'forms', 'logs', 'secrets', 'settings']);
   });
 
   it("cleans each site of a network, and users, signups and the network's own tables once", () => {
     const network = tables('wp_users', 'wp_usermeta', 'wp_signups', 'wp_sitemeta', 'wp_options', 'wp_posts', 'wp_comments', 'wp_2_options', 'wp_2_posts', 'wp_2_comments', 'wp_2_wc_orders');
-    const sql = sqlOf(cleanupPlan(network, 'wp_', 'admin@local.acme.com'));
+    const sql = sqlOf(cleanupPlan(network, 'wp_', 'admin@local.wandworks.example'));
     expect(sql.users).toContain('TRUNCATE TABLE `wp_signups`;');
     expect(sql.users).toContain("UPDATE `wp_sitemeta` SET meta_value = 'a:0:{}' WHERE meta_key = 'site_admins';");
     expect(sql.users).not.toContain('wp_2_');
     expect(sql.woocommerce).toContain('TRUNCATE TABLE `wp_2_wc_orders`;');
     // A kept user stays the network's only super admin.
-    expect(sqlOf(cleanupPlan(network, 'wp_', 'admin@local.acme.com', 'alex')).users).toContain(`UPDATE \`wp_sitemeta\` SET meta_value = 'a:1:{i:0;s:4:"alex";}' WHERE meta_key = 'site_admins';`);
+    expect(sqlOf(cleanupPlan(network, 'wp_', 'admin@local.wandworks.example', 'alex')).users).toContain(`UPDATE \`wp_sitemeta\` SET meta_value = 'a:1:{i:0;s:4:"alex";}' WHERE meta_key = 'site_admins';`);
     expect(sql.settings).toContain("UPDATE `wp_2_options` SET option_value = '0' WHERE option_name = 'blog_public';");
-    expect(sql.settings).toContain("UPDATE `wp_sitemeta` SET meta_value = 'admin@local.acme.com' WHERE meta_key = 'admin_email';");
+    expect(sql.settings).toContain("UPDATE `wp_sitemeta` SET meta_value = 'admin@local.wandworks.example' WHERE meta_key = 'admin_email';");
   });
 
   it('reports what went, estimates marked, and leaves out what had nothing to remove', async () => {

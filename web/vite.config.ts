@@ -1,13 +1,24 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+
+/** The public demo (npm run build:demo) leaves out what only a running panel needs. */
+const demoHtml = (): Plugin => ({
+  name: 'dmp-demo-html',
+  transformIndexHtml: (html) => (process.env.VITE_DEMO === '1' ? html.replace(/\s*<!-- panel-only:[\s\S]*?<!-- \/panel-only -->/, '') : html),
+});
 
 // In development the API runs on 127.0.0.1:4710 (npm run dev:server).
 const api = 'http://127.0.0.1:4710';
 
+/** The panel's version, which the mockup shows as its own. */
+const version = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  define: { __PANEL_VERSION__: JSON.stringify(version) },
+  plugins: [react(), tailwindcss(), demoHtml()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

@@ -31,35 +31,35 @@ function php(t: Tree, versions: Record<string, string[]>) {
 /** A site with a theme, its parent, an active and an inactive plugin, mu-plugins (the panel's two among them) and a vendor folder. */
 function site(t: Tree) {
   const content = join(t.docroot, 'wp-content');
-  for (const dir of ['themes/acme-child', 'themes/acme', 'plugins/acme-forms', 'plugins/acme-old', 'mu-plugins', '../vendor']) mkdirSync(join(content, dir), { recursive: true });
-  writeFileSync(join(content, 'themes/acme/style.css'), '/*\nTheme Name: Acme\nRequires PHP: 8.1\n*/');
-  writeFileSync(join(content, 'plugins/acme-forms/acme-forms.php'), '<?php\n/**\n * Plugin Name: Acme Forms\n * Requires PHP: 7.4\n */');
+  for (const dir of ['themes/wandworks-child', 'themes/wandworks', 'plugins/wandworks-forms', 'plugins/wandworks-old', 'mu-plugins', '../vendor']) mkdirSync(join(content, dir), { recursive: true });
+  writeFileSync(join(content, 'themes/wandworks/style.css'), '/*\nTheme Name: Wandworks\nRequires PHP: 8.1\n*/');
+  writeFileSync(join(content, 'plugins/wandworks-forms/wandworks-forms.php'), '<?php\n/**\n * Plugin Name: Wandworks Forms\n * Requires PHP: 7.4\n */');
   writeFileSync(join(content, 'hello.php'), '<?php');
 }
 
 const PLUGINS = [
-  { name: 'acme-forms', title: 'Acme Forms', status: 'active', version: '1.2.0', update: 'available', update_version: '1.4.1', file: 'acme-forms/acme-forms.php' },
-  { name: 'acme-old', title: 'Acme Old', status: 'inactive', version: '0.9', update: 'none', update_version: '', file: 'acme-old/acme-old.php' },
+  { name: 'wandworks-forms', title: 'Wandworks Forms', status: 'active', version: '1.2.0', update: 'available', update_version: '1.4.1', file: 'wandworks-forms/wandworks-forms.php' },
+  { name: 'wandworks-old', title: 'Wandworks Old', status: 'inactive', version: '0.9', update: 'none', update_version: '', file: 'wandworks-old/wandworks-old.php' },
   { name: 'hello', title: 'Hello', status: 'active', version: '1.7', update: 'none', update_version: '', file: 'hello.php' },
   { name: 'loader', title: 'Loader', status: 'must-use', version: '', update: 'none', update_version: '', file: 'loader.php' },
   { name: 'object-cache.php', title: 'Object cache', status: 'dropin', version: '', update: 'none', update_version: '', file: 'object-cache.php' },
 ];
 const THEMES = [
-  { name: 'acme-child', title: 'Acme Child', status: 'active', version: '1.0', update: 'none', update_version: '' },
-  { name: 'acme', title: 'Acme', status: 'parent', version: '2.4.0', update: 'none', update_version: '' },
+  { name: 'wandworks-child', title: 'Wandworks Child', status: 'active', version: '1.0', update: 'none', update_version: '' },
+  { name: 'wandworks', title: 'Wandworks', status: 'parent', version: '2.4.0', update: 'none', update_version: '' },
   { name: 'spare', title: 'Spare', status: 'inactive', version: '1.0', update: 'none', update_version: '' },
 ];
 
-/** What phpcs reports for a folder: two findings in acme-forms, nothing elsewhere. */
+/** What phpcs reports for a folder: two findings in wandworks-forms, nothing elsewhere. */
 function phpcs(call: FakeCall) {
   const path = call.args.at(-1) as string;
-  if (path.endsWith('acme-forms')) {
+  if (path.endsWith('wandworks-forms')) {
     return { code: 2, stdout: JSON.stringify({ files: {
       [join(path, 'lib/parser.php')]: { errors: 1, warnings: 1, messages: [
         { message: 'The constant "E_STRICT" is deprecated since PHP 8.4', source: 'PHPCompatibility.Constants.RemovedConstants.e_strictDeprecated', type: 'WARNING', line: 9 },
         { message: 'Function each() is removed since PHP 8.0', source: 'PHPCompatibility.FunctionUse.RemovedFunctions.eachDeprecatedRemoved', type: 'ERROR', line: 40 },
       ] },
-      [join(path, 'acme-forms.php')]: { errors: 0, warnings: 0, messages: [] },
+      [join(path, 'wandworks-forms.php')]: { errors: 0, warnings: 0, messages: [] },
     } }) };
   }
   return { code: 0, stdout: JSON.stringify({ files: { [join(path.endsWith('.php') ? path : join(path, 'index.php'))]: { errors: 0, warnings: 0, messages: [] } } }) };
@@ -109,9 +109,9 @@ describe('php.checkCompat', () => {
     const scanned = s.calls.filter((c) => c.file === 'php8.4').map((c) => c.args.at(-1));
     const content = join(s.t.docroot, 'wp-content');
     expect(scanned).toEqual([
-      join(content, 'themes/acme-child'),
-      join(content, 'themes/acme'),
-      join(content, 'plugins/acme-forms'),
+      join(content, 'themes/wandworks-child'),
+      join(content, 'themes/wandworks'),
+      join(content, 'plugins/wandworks-forms'),
       join(content, 'plugins/hello.php'),
       join(content, 'object-cache.php'),
       join(content, 'mu-plugins'),
@@ -125,18 +125,18 @@ describe('php.checkCompat', () => {
 
     const [scan] = s.store.compatScans(s.site.key) as CompatScan[];
     expect(scan).toMatchObject({ version: '8.4', scope: 'active', errors: 1, warnings: 1, tool: 'PHPCompatibilityWP 3.0.0-alpha2, PHPCompatibility 10.0.0-alpha2, PHP_CodeSniffer 4.0.4' });
-    const forms = scan?.components.find((c) => c.name === 'acme-forms');
+    const forms = scan?.components.find((c) => c.name === 'wandworks-forms');
     expect(forms).toMatchObject({ kind: 'plugin', update: '1.4.1', requiresPhp: '7.4', files: 2, errors: 1, warnings: 1 });
     // Errors first, paths relative to the plugin.
     expect(forms?.issues.map((i) => `${i.type} ${i.file}:${i.line}`)).toEqual(['error lib/parser.php:40', 'warning lib/parser.php:9']);
-    expect(scan?.components.find((c) => c.name === 'acme')).toMatchObject({ status: 'parent', requiresPhp: '8.1' });
+    expect(scan?.components.find((c) => c.name === 'wandworks')).toMatchObject({ status: 'parent', requiresPhp: '8.1' });
   });
 
   it('adds inactive plugins and themes with scope all', async () => {
     const s = setup();
     const [list] = planCheckCompat(s.ctx, s.site, { version: '8.4', scope: 'all' });
     const out = (await list?.run(job)) as { stdout: string };
-    expect(out.stdout).toContain('Acme Old');
+    expect(out.stdout).toContain('Wandworks Old');
     expect(out.stdout).toContain('Spare');
   });
 
@@ -177,7 +177,7 @@ describe('php.checkCompat', () => {
     const r = await steps[1]?.run(job);
     expect(r).toMatchObject({ code: 1 });
     const [scan] = s.store.compatScans(s.site.key) as CompatScan[];
-    expect(scan?.components.find((c) => c.name === 'acme')?.failed).toBe('ERROR: Referenced sniff does not exist');
+    expect(scan?.components.find((c) => c.name === 'wandworks')?.failed).toBe('ERROR: Referenced sniff does not exist');
   });
 
   it('counts a folder with nothing left to scan as clean, not as failed', async () => {
@@ -237,7 +237,7 @@ describe('php.checkCompatAll', () => {
     expect(report).toMatchObject({ version: '8.4', cli: true, installed: true });
     expect(report.sites).toEqual([
       { domain: 'local.blog.com', host: 'local.blog.com', runs: '8.5' },
-      { domain: 'local.shop.com', host: 'local.shop.com', runs: '8.5', scan: expect.objectContaining({ errors: 1, warnings: 1, withErrors: ['Acme Forms'], failed: 0, stale: false }) },
+      { domain: 'local.shop.com', host: 'local.shop.com', runs: '8.5', scan: expect.objectContaining({ errors: 1, warnings: 1, withErrors: ['Wandworks Forms'], failed: 0, stale: false }) },
     ]);
   });
 
@@ -304,12 +304,12 @@ describe('phpcs report', () => {
   });
 
   it('points phpcs at the standards in the scanner folder and a cache per folder', () => {
-    const args = phpcsArgs('/data/tools/php-compat', '8.4', { component: { kind: 'theme', name: 'acme', title: 'Acme', status: 'active' }, path: '/w/acme' }, '/c/theme-acme.json', 2);
+    const args = phpcsArgs('/data/tools/php-compat', '8.4', { component: { kind: 'theme', name: 'wandworks', title: 'Wandworks', status: 'active' }, path: '/w/wandworks' }, '/c/theme-wandworks.json', 2);
     expect(args).toEqual(expect.arrayContaining([
       '/data/tools/php-compat/vendor/bin/phpcs',
       '/data/tools/php-compat/vendor/phpcompatibility/php-compatibility,/data/tools/php-compat/vendor/phpcompatibility/phpcompatibility-paragonie,/data/tools/php-compat/vendor/phpcompatibility/phpcompatibility-wp,/data/tools/php-compat/vendor/phpcsstandards/phpcsutils',
       '--parallel=2',
-      '--cache=/c/theme-acme.json',
+      '--cache=/c/theme-wandworks.json',
     ]));
   });
 });

@@ -20,7 +20,7 @@ describe('findSiteRepo', () => {
 });
 
 describe('inspectRepo', () => {
-  const URL = 'git@github.com:AcmeCo/shop.git';
+  const URL = 'git@github.com:WandworksCo/shop.git';
 
   it('reads the default branch and every branch with one ls-remote, and never looks for a file in the repo', async () => {
     const s = wpSiteTree();
@@ -54,10 +54,10 @@ describe('inspectRepo', () => {
       ['themes/wp-crontrol/style.css', 3],
       ['wp-content/plugins/be-media-from-production/plugin.php', 4],
       ['composer.json', 5],
-      ['wp-content/themes/acme/package.json', 6],
-      ['wp-content/themes/acme/package-lock.json', 7],
-      ['wp-content/themes/acme/.gitignore', 8],
-      ['wp-content/plugins/acme-blocks/vendor/x/package.json', 9],
+      ['wp-content/themes/wandworks/package.json', 6],
+      ['wp-content/themes/wandworks/package-lock.json', 7],
+      ['wp-content/themes/wandworks/.gitignore', 8],
+      ['wp-content/plugins/wandworks-blocks/vendor/x/package.json', 9],
       ['.gitignore', 10],
     ] as const;
     const files: Record<string, string> = {
@@ -83,7 +83,7 @@ describe('inspectRepo', () => {
       builds: [
         // The root composer.json brings WP Crontrol in from WordPress Packagist: it needs composer install.
         { dir: '', tool: 'composer', scripts: [], needed: true, why: 'vendor/ is ignored by git' },
-        { dir: 'wp-content/themes/acme', tool: 'npm', scripts: ['build'], script: 'build', needed: true, why: 'build/ is ignored by git' },
+        { dir: 'wp-content/themes/wandworks', tool: 'npm', scripts: ['build'], script: 'build', needed: true, why: 'build/ is ignored by git' },
       ],
     });
     // A big repo's file list fits: far more than the usual 8 MB.
@@ -140,10 +140,10 @@ describe('repo presets', () => {
 
   it('are stored by one key for the SSH and HTTPS forms of a repo', () => {
     const store = new RunStore(':memory:');
-    expect(repoKey('git@github.com:AcmeCo/Shop.git')).toBe(repoKey('https://github.com/acmeco/shop'));
-    store.savePreset(repoKey('git@github.com:AcmeCo/Shop.git') as string, { layout: 'theme' });
-    store.savePreset(repoKey('https://github.com/AcmeCo/shop.git') as string, { layout: 'site-root' });
-    expect(store.preset(repoKey('git@github.com:acmeco/shop.git') as string)).toEqual({ layout: 'site-root' });
-    expect(store.preset('https://github.com/acmeco/other')).toBeUndefined();
+    expect(repoKey('git@github.com:WandworksCo/Shop.git')).toBe(repoKey('https://github.com/wandworksco/shop'));
+    store.savePreset(repoKey('git@github.com:WandworksCo/Shop.git') as string, { layout: 'theme' });
+    store.savePreset(repoKey('https://github.com/WandworksCo/shop.git') as string, { layout: 'site-root' });
+    expect(store.preset(repoKey('git@github.com:wandworksco/shop.git') as string)).toEqual({ layout: 'site-root' });
+    expect(store.preset('https://github.com/wandworksco/other')).toBeUndefined();
   });
 });

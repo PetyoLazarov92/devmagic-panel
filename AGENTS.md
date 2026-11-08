@@ -17,6 +17,10 @@ npm run build         # shared, server (dist/), web (web/dist/)
 npm run package       # pack the build into dist/devmagic-panel-<name>.tar.gz, as a release ships it
 npm run dev:server    # API on 127.0.0.1:4710 (needs /etc/devmagic-panel/config.env or DEVMAGIC_PANEL_CONFIG)
 npm run dev:web       # Vite on 127.0.0.1:5173, proxies /api to the server
+npm run mockup        # the UI alone on sample data from web/src/mock/, no server
+npm run build:demo    # the mockup as the public demo in dist-demo/, with its .htaccess
+npm run demo:serve    # serve dist-demo/ with the same headers, on 127.0.0.1:4180
+npm run screenshots   # assets/screenshots/ from the mockup, light and dark, through the system's Chrome
 ./install.sh --dry-run  # print every system change the installer would make
 ./install.sh --uninstall --dry-run  # print what an uninstall removes, asks about and keeps
 ```
@@ -212,9 +216,19 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       backup. It is not in the sudoers rule (it writes Apache config, which can
       run programs as root), so it always asks for a password.
 13. **Made-up names only.** Examples, tests, mock data, comments, UI text,
-    docs, the changelog and commit messages use made-up names
-    (`local.acme.com`, `git@github.com:acme/site.git`), never a real client,
-    project, company or person, including the sites on this machine.
+    docs, the changelog and commit messages use made-up names, never a real
+    client, project, company or person, including the sites on this machine.
+    The set, shared with the other webtimeless tools and webtimeless.cloud:
+    **Spellbook** for the main example site (`local.spellbook.example`, a
+    network with `/learn`), **Wandworks** for the agency, its org, theme,
+    plugins and sibling sites (`git@github.com:wandworks/site.git`,
+    `wp-content/themes/wandworks`, `local.wandworks-store.example`), and
+    Alex Morgan and Sam Lee for people. A production address ends in the
+    reserved `.example` (`www.spellbook.example`), so it is never someone's
+    real site; local-only names end in `.test` or `.localhost`. Plain words
+    as names (`local.shop.com`) are fine. The one exception: a test of the
+    leftover email check needs addresses on an ordinary ending, since it skips
+    `.example` on purpose; use a plain word there (`someone@supplier.net`).
 
 ## Commit messages
 

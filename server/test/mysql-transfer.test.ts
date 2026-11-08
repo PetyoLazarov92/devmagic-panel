@@ -103,9 +103,9 @@ const UPLOAD = '11111111-1111-1111-1111-111111111111';
 function withUpload(root: string): string {
   const uploads = join(root, 'uploads');
   mkdirSync(join(uploads, UPLOAD), { recursive: true });
-  const file = join(uploads, UPLOAD, 'acme.sql');
+  const file = join(uploads, UPLOAD, 'wandworks.sql');
   writeFileSync(file, 'USE `shop_com`;\nCREATE TABLE t (x int);\nINSERT INTO t VALUES (1);\n');
-  writeFileSync(join(uploads, UPLOAD, 'meta.json'), JSON.stringify({ id: UPLOAD, name: 'acme.sql', size: 60, facts: {}, file }));
+  writeFileSync(join(uploads, UPLOAD, 'meta.json'), JSON.stringify({ id: UPLOAD, name: 'wandworks.sql', size: 60, facts: {}, file }));
   return uploads;
 }
 
@@ -122,16 +122,16 @@ describe('import', () => {
     const tree = tempTree();
     const fake = fakeDb();
     const ctx: TransferContext = { config: tree.config, exec: fake.exec, mysql, kept: () => [], uploadsDir: withUpload(tree.root), backupsDir: join(tree.root, 'mysql-backups') };
-    const steps = await planImportDump(ctx, { database: 'acme_copy', uploadId: UPLOAD, mode: 'new' });
-    expect(steps.map((s) => s.label)).toEqual(['Make database acme_copy', 'Import acme.sql']);
+    const steps = await planImportDump(ctx, { database: 'wandworks_copy', uploadId: UPLOAD, mode: 'new' });
+    expect(steps.map((s) => s.label)).toEqual(['Make database wandworks_copy', 'Import wandworks.sql']);
     const { out, undos } = await run(steps);
-    expect(out.map((r) => (Array.isArray(r) ? r[0] : r)?.stdout)).toEqual(['made acme_copy', "imported acme.sql into acme_copy: 2 tables; left out 1 line that would change another database (USE, CREATE DATABASE)"]);
-    expect(fake.calls.some((c) => c.input === 'CREATE DATABASE `acme_copy`;\n')).toBe(true);
+    expect(out.map((r) => (Array.isArray(r) ? r[0] : r)?.stdout)).toEqual(['made wandworks_copy', "imported wandworks.sql into wandworks_copy: 2 tables; left out 1 line that would change another database (USE, CREATE DATABASE)"]);
+    expect(fake.calls.some((c) => c.input === 'CREATE DATABASE `wandworks_copy`;\n')).toBe(true);
     const imported = fake.calls.find((c) => c.inputText?.includes('CREATE TABLE t')) as FakeCall;
-    expect(imported.args).toEqual(expect.arrayContaining(['--binary-mode', '--database=acme_copy']));
+    expect(imported.args).toEqual(expect.arrayContaining(['--binary-mode', '--database=wandworks_copy']));
     expect(imported.inputText).not.toContain('USE `shop_com`');
     await undos[0]?.();
-    expect(fake.calls.some((c) => c.input === 'DROP DATABASE IF EXISTS `acme_copy`;\n')).toBe(true);
+    expect(fake.calls.some((c) => c.input === 'DROP DATABASE IF EXISTS `wandworks_copy`;\n')).toBe(true);
   });
 
   it('saves a database no site uses before replacing it, and Undo puts it back from that copy', async () => {
@@ -139,7 +139,7 @@ describe('import', () => {
     const fake = fakeDb((sql) => (sql.includes('information_schema.SCHEMATA') ? { stdout: '1\n' } : undefined));
     const ctx: TransferContext = { config: tree.config, exec: fake.exec, mysql, kept: () => [], uploadsDir: withUpload(tree.root), backupsDir: join(tree.root, 'mysql-backups') };
     const steps = await planImportDump(ctx, { database: 'reports', uploadId: UPLOAD, mode: 'replace', confirm: 'reports' });
-    expect(steps.map((s) => s.label)).toEqual(['Save reports to the MySQL backups', 'Empty reports', 'Import acme.sql']);
+    expect(steps.map((s) => s.label)).toEqual(['Save reports to the MySQL backups', 'Empty reports', 'Import wandworks.sql']);
     const { undos } = await run(steps);
     const saved = fake.calls.find((c) => c.file === 'mysqldump') as FakeCall;
     expect(saved.args.slice(-2)).toEqual(['--databases', 'reports']);

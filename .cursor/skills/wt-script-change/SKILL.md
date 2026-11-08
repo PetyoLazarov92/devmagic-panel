@@ -47,7 +47,7 @@ run it; never edit the installed copy directly.
 ## Names
 
 Examples in code, comments, tests, mock data, UI text and placeholders, docs,
-the changelog and commit messages use made-up names only: `local.acme.com`,
-`local.shop.com`, `git@github.com:acme/site.git`, a person like Alex Morgan.
+the changelog and commit messages use made-up names only: `local.wandworks.example`,
+`local.shop.com`, `git@github.com:wandworks/site.git`, a person like Alex Morgan (the full set is in AGENTS.md, rule 13).
 Never a real client, project, company or person, including the sites on this
 machine and their repos, branches, commits and authors.

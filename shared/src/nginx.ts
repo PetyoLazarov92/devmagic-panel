@@ -6,7 +6,7 @@
 
 /** One config file of nginx's sites-available, as the nginx tab lists it. */
 export interface NginxConfig {
-  /** The file name in sites-available, like default or local.acme.com.conf. */
+  /** The file name in sites-available, like default or local.wandworks.example.conf. */
   file: string;
   /** Linked from sites-enabled, so nginx serves it. */
   enabled: boolean;

@@ -62,7 +62,7 @@ function Problems() {
   const items = report?.items ?? [];
   const groups = new Map<string, AuraItem[]>();
   for (const item of items) {
-    // A site under a path is its own group: local.northwind.com/learn.
+    // A site under a path is its own group: local.spellbook.example/learn.
     const key = item.domain ? `${item.domain}${item.path ?? ''}` : MACHINE;
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }

@@ -87,11 +87,11 @@ fake_release() {
 
 @test "a second run keeps the repository the panel updates from, like a fork" {
   mkdir -p "$DMP_INSTALL_CONFIG_DIR"
-  printf 'PANEL_PORT=4799\nUPDATE_REPO=acme/devmagic-panel\nUPDATE_GIT_URL=git@github.com:acme/devmagic-panel.git\n' > "$DMP_INSTALL_CONFIG_DIR/config.env"
+  printf 'PANEL_PORT=4799\nUPDATE_REPO=wandworks/devmagic-panel\nUPDATE_GIT_URL=git@github.com:wandworks/devmagic-panel.git\n' > "$DMP_INSTALL_CONFIG_DIR/config.env"
   run "$INSTALL" --dry-run --yes
   [ "$status" -eq 0 ]
-  [[ "$output" == *"| UPDATE_REPO=acme/devmagic-panel"* ]]
-  [[ "$output" == *"| UPDATE_GIT_URL=git@github.com:acme/devmagic-panel.git"* ]]
+  [[ "$output" == *"| UPDATE_REPO=wandworks/devmagic-panel"* ]]
+  [[ "$output" == *"| UPDATE_GIT_URL=git@github.com:wandworks/devmagic-panel.git"* ]]
   [[ "$output" == *"| PANEL_PORT=4799"* ]]
 }
 
@@ -607,14 +607,14 @@ nginx_tree() {
 @test "uninstall moves sites on nginx back to Apache before it turns nginx off" {
   installed_machine
   nginx_tree set-up
-  printf '# Managed by devmagic-panel. Edits here are overwritten.\nserver {\n    server_name local.acme.com local.acme.de;\n    location @dmp_uploads {\n        return 302 https://www.acme.com$request_uri;\n    }\n}\n' > "$NGINX/sites-available/local.acme.com.conf"
+  printf '# Managed by devmagic-panel. Edits here are overwritten.\nserver {\n    server_name local.wandworks.example local.wandworks.de;\n    location @dmp_uploads {\n        return 302 https://www.wandworks.example$request_uri;\n    }\n}\n' > "$NGINX/sites-available/local.wandworks.example.conf"
   run "$INSTALL" --uninstall --dry-run --yes
   [ "$status" -eq 0 ]
   [[ "$output" == *"1 site(s) on nginx go back to Apache"* ]]
-  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root vhost-write local.acme.com --uploads-proxy www.acme.com local.acme.de"* ]]
-  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root nginx-site-remove local.acme.com"* ]]
-  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root hosts-add local.acme.com local.acme.de"* ]]
-  back_line="$(grep -n 'nginx-site-remove local.acme.com' <<< "$output" | cut -d: -f1)"
+  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root vhost-write local.wandworks.example --uploads-proxy www.wandworks.example local.wandworks.de"* ]]
+  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root nginx-site-remove local.wandworks.example"* ]]
+  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root hosts-add local.wandworks.example local.wandworks.de"* ]]
+  back_line="$(grep -n 'nginx-site-remove local.wandworks.example' <<< "$output" | cut -d: -f1)"
   teardown_line="$(grep -n 'dmp-root nginx-teardown' <<< "$output" | cut -d: -f1)"
   [ "$back_line" -lt "$teardown_line" ]
 }

@@ -74,7 +74,7 @@ linked tasks and files.
 
 1. **Organization or group**: the GitHub CLI (`gh auth login`, its own browser
    sign-in) lists the GitHub organizations you belong to, and the GitLab CLI
-   (`glab auth login`, `--hostname gitlab.acme.test` for your own GitLab) the
+   (`glab auth login`, `--hostname gitlab.wandworks.test` for your own GitLab) the
    GitLab groups you can clone from, on gitlab.com and on the hosts you add
    under **Your own GitLab hosts**; tick the ones to scan.
    - A GitLab group is scanned with its subgroups, so only the top group you
@@ -98,7 +98,7 @@ linked tasks and files.
      you paste a repo URL from any git host.
    - Installed sites need none of this: their Git card reads the site's own
      `.git` and the repos inside it, whatever the host. A host whose name does
-     not say what it runs (`git.acme.test`, or an SSH alias like `gitlab-work`)
+     not say what it runs (`git.wandworks.test`, or an SSH alias like `gitlab-work`)
      is found once a week with `ssh -G` and the same SSH hello `git fetch`
      makes, so its links and merge requests are right without a setting.
 2. **Read the repo**: Claude Code reads only the repo's docs and build files

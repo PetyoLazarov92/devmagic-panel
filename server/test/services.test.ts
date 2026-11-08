@@ -27,7 +27,7 @@ describe('servicesReport', () => {
       'php -r': { stdout: '8.3.6' },
       'ss -ltnH': { stdout: 'LISTEN 0 511 *:80 *:*\n' },
       'systemctl is-active cron': { stdout: 'active\n' },
-      'crontab -l': { stdout: 'MAILTO=alex@example.com\n0 4 * * * /home/alex/bin/backup.sh\n\n# BEGIN devmagic-panel (managed by the panel, edit tasks there)\n# task k3f9q2: WP-Cron\n*/5 * * * * /usr/bin/node --disable-warning=ExperimentalWarning /opt/cli.js cron-run --id=k3f9q2 --timeout=10 wp-cron --site=local.acme.com\n# END devmagic-panel\n' },
+      'crontab -l': { stdout: 'MAILTO=alex@example.com\n0 4 * * * /home/alex/bin/backup.sh\n\n# BEGIN devmagic-panel (managed by the panel, edit tasks there)\n# task k3f9q2: WP-Cron\n*/5 * * * * /usr/bin/node --disable-warning=ExperimentalWarning /opt/cli.js cron-run --id=k3f9q2 --timeout=10 wp-cron --site=local.wandworks.example\n# END devmagic-panel\n' },
     });
     const report = await servicesReport(t.config, exec, () => 0);
     expect(report.services).toEqual([

@@ -86,7 +86,7 @@ export function siteSubtitle(site: Site): string {
   return [site.title, site.aliases.length > 0 ? `${site.aliases.length + 1} domains` : null].filter(Boolean).join(' · ');
 }
 
-/** How a site came here, in a few words: "From a repo, 12 Oct 2026, acme/shop" or "Made by hand". */
+/** How a site came here, in a few words: "From a repo, 12 Oct 2026, wandworks/shop" or "Made by hand". */
 export function installLabel(install: SiteInstall | undefined): string {
   if (!install) return INSTALL_HOW_LABELS.hand;
   const repo = install.repo ? (repoWeb(install.repo)?.repoUrl.replace(/^https?:\/\/[^/]+\//, '') ?? install.repo) : null;

@@ -14,7 +14,7 @@ const compare = (a: string, b: string) => a.localeCompare(b, undefined, { numeri
 /**
  * Which site uses which core, read from each site's wp-includes: the vhost's
  * own and every WordPress install it serves under a path, named
- * local.northwind.com/learn.
+ * local.spellbook.example/learn.
  */
 function sitesByCore(config: SystemConfig): Array<{ domain: string; core: ReturnType<typeof readCore> }> {
   return readSiteVhosts(config).flatMap((v) => {

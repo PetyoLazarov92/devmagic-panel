@@ -24,15 +24,15 @@ function fakeWp(tables: string[], override: (sql: string) => Partial<{ code: num
       if (sql.includes('SELECT TABLE_ROWS FROM information_schema.TABLES')) return { stdout: '1200\n' };
       // The health check: tables MySQL does not list are not checked; health.test.ts answers these in full.
       if (sql.includes("JSON_ARRAY('ht'") || sql.includes('DATA_FREE') || sql.includes("JSON_ARRAY('pa'")) return { stdout: '' };
-      if (sql.includes('GROUP BY post_type')) return { stdout: json(['post', 900], ['product', 40], ['elementor_library', 1240], ['acme_portfolio', 12]) };
+      if (sql.includes('GROUP BY post_type')) return { stdout: json(['post', 900], ['product', 40], ['elementor_library', 1240], ['wandworks_portfolio', 12]) };
       if (sql.includes('SELECT JSON_ARRAY(blog_id')) return { stdout: json([1, 'local.shop.com', '/', 0, 0, 0], [2, 'local.shop.com', '/outlet/', 0, 0, 0], [3, 'local.shop.com', '/old/', 1, 0, 0]) };
-      if (sql.includes("JSON_ARRAY('a'")) return { stdout: json(['a', 412, 912_000], ['o', 'acme_big_cache', 400_000], ['o', 'rewrite_rules', 90_000]) };
+      if (sql.includes("JSON_ARRAY('a'")) return { stdout: json(['a', 412, 912_000], ['o', 'wandworks_big_cache', 400_000], ['o', 'rewrite_rules', 90_000]) };
       if (sql.includes("JSON_ARRAY('t'")) return { stdout: json(['t', 40, 52_000], ['tx', 7], ['s', 3, 900], ['sx', 1]) };
       if (sql.includes("JSON_ARRAY('p'")) return { stdout: json(['p', '1200', '3', '5'], ['c', '80', '2']) };
       if (sql.includes("JSON_ARRAY('pm'")) return { stdout: json(['pm', 31], ['cm', 0], ['tm', 2], ['tr', 4], ...(sql.includes("'um'") ? [['um', 6]] : [])) };
-      if (sql.includes('GROUP BY meta_key') && sql.includes('LENGTH(meta_value)')) return { stdout: json(['_acme_gallery', 900, 4_000_000], [null, 3, 10]) };
-      if (sql.includes('GROUP BY meta_key')) return { stdout: json(['_edit_lock', 300_000], ['_acme_gallery', 900]) };
-      if (sql.includes("JSON_ARRAY('n'")) return { stdout: json(['n', 2], ['u', 1, 'alex', 'alex.morgan@acme.com', '2024-03-02 10:15:00', 'a:1:{s:13:"administrator";b:1;}'], ['u', 2, 'sam', 'sam.lee@acme.com', '2025-07-19 16:40:00', null]) };
+      if (sql.includes('GROUP BY meta_key') && sql.includes('LENGTH(meta_value)')) return { stdout: json(['_wandworks_gallery', 900, 4_000_000], [null, 3, 10]) };
+      if (sql.includes('GROUP BY meta_key')) return { stdout: json(['_edit_lock', 300_000], ['_wandworks_gallery', 900]) };
+      if (sql.includes("JSON_ARRAY('n'")) return { stdout: json(['n', 2], ['u', 1, 'alex', 'alex.morgan@wandworks.example', '2024-03-02 10:15:00', 'a:1:{s:13:"administrator";b:1;}'], ['u', 2, 'sam', 'sam.lee@wandworks.example', '2025-07-19 16:40:00', null]) };
       return { code: 1, stderr: `unexpected: ${sql.slice(0, 200)}` };
     },
   });
@@ -51,11 +51,11 @@ describe('the WordPress view of a database', () => {
       blog: 1,
       blogPrefix: 'wp_',
       missingTables: ['wp_termmeta'],
-      autoload: { count: 412, bytes: 912_000, limitBytes: 800_000, top: [{ name: 'acme_big_cache', bytes: 400_000 }, { name: 'rewrite_rules', bytes: 90_000 }] },
+      autoload: { count: 412, bytes: 912_000, limitBytes: 800_000, top: [{ name: 'wandworks_big_cache', bytes: 400_000 }, { name: 'rewrite_rules', bytes: 90_000 }] },
       transients: { count: 40, bytes: 52_000, expired: 7, site: { count: 3, bytes: 900, expired: 1 } },
       content: { revisions: 1200, autoDrafts: 3, trashedPosts: 5, spamComments: 80, trashedComments: 2 },
       orphans: { postmeta: 31, commentmeta: 0, termmeta: 2, termRelationships: 4, usermeta: 6 },
-      metaKeys: { estimatedRows: 1200, sized: true, keys: [{ key: '_acme_gallery', count: 900, bytes: 4_000_000 }, { key: '', count: 3, bytes: 10 }] },
+      metaKeys: { estimatedRows: 1200, sized: true, keys: [{ key: '_wandworks_gallery', count: 900, bytes: 4_000_000 }, { key: '', count: 3, bytes: 10 }] },
       users: { count: 2, list: [{ id: '1', login: 'alex', roles: ['administrator'] }, { id: '2', login: 'sam', roles: [] }] },
       errors: {},
       checkedAt: '2026-11-07T09:00:00.000Z',
@@ -121,11 +121,11 @@ describe('the WordPress view of a database', () => {
     const big = (sql: string) => (sql.includes('SELECT TABLE_ROWS') ? { stdout: '2480000\n' } : undefined);
     const fake = fakeWp(SINGLE, big);
     const r = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['metaKeys'] });
-    expect(r.metaKeys).toEqual({ estimatedRows: 2_480_000, sized: false, keys: [{ key: '_edit_lock', count: 300_000 }, { key: '_acme_gallery', count: 900 }] });
+    expect(r.metaKeys).toEqual({ estimatedRows: 2_480_000, sized: false, keys: [{ key: '_edit_lock', count: 300_000 }, { key: '_wandworks_gallery', count: 900 }] });
     expect(inputs(fake)).not.toContain('LENGTH(meta_value)');
     expect(inputs(fake)).toContain("TABLE_NAME = _utf8mb4 X'" + Buffer.from('wp_postmeta').toString('hex') + "'");
     const sized = await wordpressReport(ctxFor(fakeWp(SINGLE, big)), 'local.shop.com', undefined, 1, Date.now, { sections: ['metaKeys'], sizes: true });
-    expect(sized.metaKeys).toMatchObject({ estimatedRows: 2_480_000, sized: true, keys: [{ key: '_acme_gallery', bytes: 4_000_000 }, { key: '' }] });
+    expect(sized.metaKeys).toMatchObject({ estimatedRows: 2_480_000, sized: true, keys: [{ key: '_wandworks_gallery', bytes: 4_000_000 }, { key: '' }] });
   });
 
   it('refuses a site without a database on this machine', async () => {
@@ -140,20 +140,20 @@ describe('the WordPress view of a database', () => {
   it('gives the assistant names, sizes and counts, never a row value, a user or an email', async () => {
     const fake = fakeWp(SINGLE, (sql) =>
       sql.includes('information_schema.SCHEMATA')
-        ? { stdout: ['1', JSON.stringify(['wp_postmeta', 'BASE TABLE', 'InnoDB', 9000, 3_000_000, 1_000_000, 0, 'utf8mb4_unicode_520_ci', null]), JSON.stringify(['acme_log', 'BASE TABLE', 'MyISAM', 10, 1000, 0, 0, 'latin1_swedish_ci', null])].join('\n') }
+        ? { stdout: ['1', JSON.stringify(['wp_postmeta', 'BASE TABLE', 'InnoDB', 9000, 3_000_000, 1_000_000, 0, 'utf8mb4_unicode_520_ci', null]), JSON.stringify(['wandworks_log', 'BASE TABLE', 'MyISAM', 10, 1000, 0, 0, 'latin1_swedish_ci', null])].join('\n') }
         : undefined,
     );
     const summary = await databaseSummary(ctxFor(fake), 'local.shop.com');
     expect(summary).toMatchObject({
       database: 'shop_com',
       tables: 2,
-      biggestTables: [{ name: 'wp_postmeta', engine: 'InnoDB', rows: 9000, mb: 3.8 }, { name: 'acme_log' }],
-      notInnodb: ['acme_log (MyISAM)'],
-      autoload: { count: 412, kb: 891, siteHealthLimitKb: 781, biggestOptions: [{ name: 'acme_big_cache', kb: 390.6 }, { name: 'rewrite_rules', kb: 87.9 }] },
+      biggestTables: [{ name: 'wp_postmeta', engine: 'InnoDB', rows: 9000, mb: 3.8 }, { name: 'wandworks_log' }],
+      notInnodb: ['wandworks_log (MyISAM)'],
+      autoload: { count: 412, kb: 891, siteHealthLimitKb: 781, biggestOptions: [{ name: 'wandworks_big_cache', kb: 390.6 }, { name: 'rewrite_rules', kb: 87.9 }] },
       users: 2,
     });
     const text = JSON.stringify(summary);
-    expect(text).not.toContain('acme.com');
+    expect(text).not.toContain('wandworks.example');
     expect(text).not.toContain('alex');
   });
 });
@@ -197,12 +197,12 @@ describe('what plugins leave, and revisions past the newest few', () => {
   });
 
   it('looks for duplicate post meta only when asked', async () => {
-    const fake = fakeWp(SINGLE, (sql) => (sql.includes('MD5(meta_value)') ? { stdout: json(['_edit_lock', 400], ['_acme_price', 12]) } : undefined));
+    const fake = fakeWp(SINGLE, (sql) => (sql.includes('MD5(meta_value)') ? { stdout: json(['_edit_lock', 400], ['_wandworks_price', 12]) } : undefined));
     const all = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined);
     expect(all).not.toHaveProperty('duplicates');
     expect(inputs(fake)).not.toContain('MD5(meta_value)');
     const asked = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['duplicates'] });
-    expect(asked.duplicates).toEqual({ rows: 412, keys: [{ key: '_edit_lock', rows: 400 }, { key: '_acme_price', rows: 12 }] });
+    expect(asked.duplicates).toEqual({ rows: 412, keys: [{ key: '_edit_lock', rows: 400 }, { key: '_wandworks_price', rows: 12 }] });
     expect(fake.calls.find((c) => c.input?.includes('MD5(meta_value)'))?.input).toContain('max_execution_time = 120000');
   });
 });
@@ -211,7 +211,7 @@ describe('post types nothing registers any more', () => {
   it("lists the posts of types WP-CLI does not know, with plugins and the theme loaded, the most first", async () => {
     const fake = fakeWp(SINGLE);
     const r = await wordpressReport(ctxFor(fake), 'local.shop.com', undefined, 1, Date.now, { sections: ['postTypes'] });
-    expect(r.postTypes).toEqual({ unregistered: [{ type: 'elementor_library', count: 1240 }, { type: 'acme_portfolio', count: 12 }] });
+    expect(r.postTypes).toEqual({ unregistered: [{ type: 'elementor_library', count: 1240 }, { type: 'wandworks_portfolio', count: 12 }] });
     const wp = fake.calls.find((c) => c.file === 'wp');
     expect(wp?.args).toEqual([expect.stringMatching(/^--path=.*local\.shop\.com$/), '--url=https://local.shop.com/', 'post-type', 'list', '--field=name']);
   });

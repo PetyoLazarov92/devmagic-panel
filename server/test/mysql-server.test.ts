@@ -298,11 +298,11 @@ describe('optimizing some tables', () => {
       },
     });
     const ctx = { config: tempTree().config, exec: fake.exec, mysql: { user: 'devmagic_panel', host: 'localhost', password: 'adminpw' }, kept: () => [], backupsDir: tempTree().root };
-    const [step] = await planOptimize(ctx, { database: 'shop_com', tables: ['wp_postmeta', 'wp_acme_gone'] }, () => false);
+    const [step] = await planOptimize(ctx, { database: 'shop_com', tables: ['wp_postmeta', 'wp_wandworks_gone'] }, () => false);
     expect(step?.label).toBe('Optimize wp_postmeta of shop_com');
     await step?.run({ onUndo: () => undefined, progress: () => undefined });
     const optimized = fake.calls.map((c) => [...c.args, c.input ?? ''].join(' ')).filter((t) => t.includes('OPTIMIZE TABLE'));
     expect(optimized).toEqual([expect.stringContaining('OPTIMIZE TABLE `shop_com`.`wp_postmeta`;')]);
-    await expect(planOptimize(ctx, { database: 'shop_com', tables: ['wp_acme_gone'] }, () => false)).rejects.toThrow('shop_com has none of those tables');
+    await expect(planOptimize(ctx, { database: 'shop_com', tables: ['wp_wandworks_gone'] }, () => false)).rejects.toThrow('shop_com has none of those tables');
   });
 });

@@ -85,12 +85,12 @@ describe('what a site\'s code needs', () => {
     const t = wpSiteTree({ ownCore: true });
     writeFileSync(join(t.docroot, 'wp-includes/version.php'), "<?php $wp_version = '6.8.1'; $required_php_version = '7.2.24';");
     writeFileSync(join(t.docroot, 'composer.json'), JSON.stringify({ require: { php: '>=7.4' } }));
-    mkdirSync(join(t.docroot, 'wp-content/themes/acme'), { recursive: true });
-    writeFileSync(join(t.docroot, 'wp-content/themes/acme/style.css'), '/*\nTheme Name: Acme\nRequires PHP: 8.1\n*/');
+    mkdirSync(join(t.docroot, 'wp-content/themes/wandworks'), { recursive: true });
+    writeFileSync(join(t.docroot, 'wp-content/themes/wandworks/style.css'), '/*\nTheme Name: Wandworks\nRequires PHP: 8.1\n*/');
     mkdirSync(join(t.docroot, 'wp-content/plugins/shop'), { recursive: true });
     writeFileSync(join(t.docroot, 'wp-content/plugins/shop/helpers.php'), '<?php // Requires PHP: 9.9 (not a header)');
     writeFileSync(join(t.docroot, 'wp-content/plugins/shop/shop.php'), '<?php\n/**\n * Plugin Name: Shop\n * Requires PHP: 8.1\n */');
-    expect(readPhpRequirements(t.docroot)).toEqual({ version: '8.1', sources: ['theme acme', 'plugin shop'] });
+    expect(readPhpRequirements(t.docroot)).toEqual({ version: '8.1', sources: ['theme wandworks', 'plugin shop'] });
   });
 });
 

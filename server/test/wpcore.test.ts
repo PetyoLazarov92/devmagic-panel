@@ -29,7 +29,7 @@ describe('keepRepoIndex', () => {
   /** A site folder whose index.php is wpcore's link to a core, or a file. */
   function site(index: 'link' | 'file') {
     const root = mkdtempSync(join(tmpdir(), 'dmp-index-'));
-    const docroot = join(root, 'local.acme.com');
+    const docroot = join(root, 'local.wandworks.example');
     mkdirSync(join(root, 'wp-cores/7.1.4'), { recursive: true });
     mkdirSync(docroot);
     writeFileSync(join(root, 'wp-cores/7.1.4/index.php'), '<?php\n');

@@ -223,7 +223,7 @@ describe('the database browser', () => {
       }
       return { code: 1, stderr: 'unexpected' };
     });
-    const page = await dbRows(ctxFor(fake), 'shop_com', 'wp_options', { pageSize: 25, filters: [{ column: 'option_name', op: 'contains', value: 'alex.morgan@acme.com' }] });
+    const page = await dbRows(ctxFor(fake), 'shop_com', 'wp_options', { pageSize: 25, filters: [{ column: 'option_name', op: 'contains', value: 'alex.morgan@wandworks.example' }] });
     expect(page).toMatchObject({ total: 3, totalExact: true, hasMore: false, primaryKey: ['option_id'], page: 1, pageSize: 25 });
     expect(page.columns.map((c) => [c.name, c.numeric, c.binary])).toEqual([['option_id', true, false], ['option_name', false, false], ['option_value', false, false], ['autoload', false, false]]);
     expect(page.rows[2]).toEqual({ cells: ['3', 'c', 'z', 'no'], key: ['3'] });

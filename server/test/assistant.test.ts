@@ -14,13 +14,13 @@ import { DMP, fakeExec, tempTree } from './helpers.js';
 const REPORT: AuraReport = {
   checkedAt: '2026-10-24T09:00:00Z',
   items: [
-    { id: 'php.fatals', status: 'fail', text: '3 PHP fatal errors in the last hour', domain: 'local.arcade.bet' },
-    { id: 'cert.legacy', status: 'warn', text: 'Cert still signed by the old LocalhostCA', domain: 'local.northwind.com', fix: { action: 'cert.reissue', input: { domain: 'local.northwind.com' }, label: 'Reissue cert' } },
+    { id: 'php.fatals', status: 'fail', text: '3 PHP fatal errors in the last hour', domain: 'local.arcade.example' },
+    { id: 'cert.legacy', status: 'warn', text: 'Cert still signed by the old LocalhostCA', domain: 'local.spellbook.example', fix: { action: 'cert.reissue', input: { domain: 'local.spellbook.example' }, label: 'Reissue cert' } },
   ],
 };
 
 /** A stand-in for the Anthropic client: records calls and answers with a fixed briefing. */
-function fakeClaude(output: unknown = { headline: 'Two things.', points: [{ text: 'Fix arcade.', items: [1, 9] }, { text: 'Reissue Northwind.', items: [2, 2] }] }) {
+function fakeClaude(output: unknown = { headline: 'Two things.', points: [{ text: 'Fix arcade.', items: [1, 9] }, { text: 'Reissue Spellbook.', items: [2, 2] }] }) {
   const calls: Array<{ apiKey: string | undefined; params: Record<string, unknown> }> = [];
   const factory: ClaudeFactory = (apiKey) =>
     ({
@@ -64,7 +64,7 @@ describe('redact', () => {
   });
 
   it('keeps what a briefing needs: domains, paths and messages', () => {
-    const line = 'PHP Fatal error: Uncaught Error in /var/www/local.dailypost.com/wp-content/themes/dailypost-child/inc/integrations/newsletter.php:42';
+    const line = 'PHP Fatal error: Uncaught Error in /var/www/local.dailypost.example/wp-content/themes/dailypost-child/inc/integrations/newsletter.php:42';
     expect(redact(line)).toBe(line);
   });
 });
@@ -77,7 +77,7 @@ describe('Briefings', () => {
     if (briefing.status !== 'ready') throw new Error('not ready');
     expect(briefing.points.map((p) => p.items.map((i) => i.id))).toEqual([['php.fatals'], ['cert.legacy']]);
     expect(briefing.sent).toBe(briefingContext(REPORT));
-    expect(JSON.parse(briefing.sent)[1]).toEqual({ n: 2, site: 'local.northwind.com', status: 'warn', problem: 'Cert still signed by the old LocalhostCA', fix: 'Reissue cert' });
+    expect(JSON.parse(briefing.sent)[1]).toEqual({ n: 2, site: 'local.spellbook.example', status: 'warn', problem: 'Cert still signed by the old LocalhostCA', fix: 'Reissue cert' });
     expect(claude.calls[0]).toMatchObject({ apiKey: 'sk-ant-test', params: { model: 'claude-opus-5-5', messages: [{ role: 'user', content: briefing.sent }] } });
   });
 
@@ -185,9 +185,9 @@ describe('assistant routes', () => {
     const before = (await call('GET', '/api/assistant/conventions')).json();
     expect(before).toMatchObject({ saved: false, text: expect.stringContaining('# Local site conventions') });
     expect((await call('PUT', '/api/assistant/conventions', { text: '# Ours' })).json()).toMatchObject({ saved: true, text: '# Ours\n' });
-    expect((await call('POST', '/api/assistant/wizard', { description: 'Acme' })).statusCode).toBe(409);
+    expect((await call('POST', '/api/assistant/wizard', { description: 'Wandworks' })).statusCode).toBe(409);
     await call('PUT', '/api/assistant', { enabled: true });
-    expect((await call('POST', '/api/assistant/wizard', { description: 'Acme', repoUrl: 'ext::sh -c id' })).statusCode).toBe(400);
+    expect((await call('POST', '/api/assistant/wizard', { description: 'Wandworks', repoUrl: 'ext::sh -c id' })).statusCode).toBe(400);
   });
 
   it('refuse settings changes from another origin', async () => {

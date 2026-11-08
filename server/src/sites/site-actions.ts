@@ -40,9 +40,9 @@ export interface SiteRef {
   domain: string;
   /** Set for a WordPress install under a path of the domain, like /learn. */
   path?: string;
-  /** The domain and path, for WP-CLI's --url: local.northwind.com/learn. */
+  /** The domain and path, for WP-CLI's --url: local.spellbook.example/learn. */
   host: string;
-  /** A folder-safe name for the site's snapshots: local.northwind.com or local.northwind.com@learn. */
+  /** A folder-safe name for the site's snapshots: local.spellbook.example or local.spellbook.example@learn. */
   key: string;
   docroot: string;
   names: string[];

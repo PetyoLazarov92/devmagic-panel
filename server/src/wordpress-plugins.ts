@@ -136,7 +136,7 @@ const MIN_SEARCH = 4;
  * The owner of each table the code names: one grep over the site's themes,
  * must-use plugins and plugins (PHP files only, whole words, the names as
  * fixed strings, no shell), for each table's name after the prefix (as in
- * $wpdb->prefix . 'acme_log') and its full name. The active theme and its
+ * $wpdb->prefix . 'wandworks_log') and its full name. The active theme and its
  * parent, and must-use plugins, count as on. Null when the search could not
  * run, so no table is said to be named nowhere.
  */

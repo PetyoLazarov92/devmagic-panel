@@ -106,7 +106,7 @@ export async function read(ctx: BrowseContext, sql: string, { limitMs = READ_LIM
 const CONNECTION_MARK = 'dmp-connection';
 
 export function checkDatabase(database: string): string {
-  if (!mysqlDatabaseName.safeParse(database).success) throw new BrowseError('A database name like acme_com');
+  if (!mysqlDatabaseName.safeParse(database).success) throw new BrowseError('A database name like wandworks_example');
   return database;
 }
 

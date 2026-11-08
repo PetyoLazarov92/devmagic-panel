@@ -32,7 +32,7 @@ function StatusBadge({ status }: { status: CoreSecurity | undefined }) {
   return <Badge tone={STATUS[status].tone}>{STATUS[status].label}</Badge>;
 }
 
-// Sites come by name: local.shop.com, or local.northwind.com/learn under a path.
+// Sites come by name: local.shop.com, or local.spellbook.example/learn under a path.
 const siteHref = (name: string) => siteRefHref(siteFromName(name));
 
 /** The newest installed core without known security issues; sites on older cores are offered a switch to it. */

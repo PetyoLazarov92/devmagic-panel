@@ -17,8 +17,8 @@ import type { RunStore } from './store.js';
  * database only keeps the runs.
  *
  *   # BEGIN devmagic-panel (managed by the panel, edit tasks there)
- *   # task k3f9q2: WP-Cron for local.acme.com
- *   0 * * * * /usr/bin/node /home/alex/.local/share/devmagic-panel/current/server/dist/cli.js cron-run --id=k3f9q2 --timeout=10 wp-cron --site=local.acme.com
+ *   # task k3f9q2: WP-Cron for local.wandworks.example
+ *   0 * * * * /usr/bin/node /home/alex/.local/share/devmagic-panel/current/server/dist/cli.js cron-run --id=k3f9q2 --timeout=10 wp-cron --site=local.wandworks.example
  *   # END devmagic-panel
  *
  * No text from a person goes on the command part: titles go on the comment

@@ -430,6 +430,12 @@ export const dbExportUrl = (database: string, tables: readonly string[] = []) =>
 /** `npm run mockup` serves the UI on sample data, with no server behind it. */
 export const isMockup = import.meta.env.VITE_MOCK === '1';
 
+/** The mockup built for the public demo (npm run build:demo): it speaks to visitors and links to the real panel. */
+export const isDemo = isMockup && import.meta.env.VITE_DEMO === '1';
+
+/** Where the demo sends a visitor for the real panel. */
+export const DEMO_HOME = 'https://webtimeless.cloud/devmagic-panel/';
+
 /**
  * The mockup's own session: logging out and in works, ?session=ends ends
  * it 15 seconds after the page opens, to show the login dialog, and
@@ -477,7 +483,7 @@ const base: Api = isMockup ? withMockSession(mockApi) : realApi;
 /** Fired when an action starts a job, so the header shows it without waiting for its next poll. */
 export const JOB_STARTED = 'dmp:job-started';
 
-/** ?mount=/learn&repo=wp-content/themes/acme for one repo of a site; empty for its own. */
+/** ?mount=/learn&repo=wp-content/themes/wandworks for one repo of a site; empty for its own. */
 function gitQuery(mount?: string, repo?: string): string {
   const q = new URLSearchParams({ ...(mount ? { mount } : {}), ...(repo ? { repo } : {}) }).toString();
   return q ? `?${q}` : '';

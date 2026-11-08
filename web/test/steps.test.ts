@@ -10,7 +10,7 @@ function wizard(answers: Record<S, unknown>, passed: Partial<Record<S, unknown>>
   return (current: S) => stepViews(flow, current, hashes, (s) => answersHash(answers[s]), (s) => !blocked.includes(s));
 }
 const opened = (views: ReturnType<ReturnType<typeof wizard>>) => flow.filter((s) => views[s].open);
-const answers = { start: 'repo', source: ['git@github.com:acme/site.git', 'main'], domains: ['local.acme.com'], wordpress: ['admin'], review: null };
+const answers = { start: 'repo', source: ['git@github.com:wandworks/site.git', 'main'], domains: ['local.wandworks.example'], wordpress: ['admin'], review: null };
 
 describe('the step list', () => {
   it('opens only the steps up to the current one on a new install', () => {
@@ -30,7 +30,7 @@ describe('the step list', () => {
 
   it('closes the steps after a changed answer, and opens them again when it is put back', () => {
     const passed = { start: 'repo', source: answers.source, domains: answers.domains, wordpress: answers.wordpress };
-    const changed = wizard({ ...answers, source: ['git@github.com:acme/shop.git', 'main'] }, passed)('source');
+    const changed = wizard({ ...answers, source: ['git@github.com:wandworks/shop.git', 'main'] }, passed)('source');
     expect(opened(changed)).toEqual(['start', 'source']);
     expect(changed.domains).toEqual({ open: false, done: false, stale: true });
     expect(changed.review.stale).toBe(false);
@@ -38,7 +38,7 @@ describe('the step list', () => {
   });
 
   it('after continuing with a change, opens only up to the first step whose own answers changed too', () => {
-    const passed = { start: 'repo', source: ['git@github.com:acme/shop.git', 'main'], domains: answers.domains, wordpress: answers.wordpress };
+    const passed = { start: 'repo', source: ['git@github.com:wandworks/shop.git', 'main'], domains: answers.domains, wordpress: answers.wordpress };
     // The new repo left the domains as they were: everything opens again.
     expect(opened(wizard({ ...answers, source: passed.source }, passed)('domains'))).toEqual(flow);
     // It rewrote the domains: WordPress and Review wait for Continue on Domains.
@@ -53,7 +53,7 @@ describe('the step list', () => {
 
   it('hashes answers the same way every time, and different answers differently', () => {
     expect(answersHash({ a: [1, 'x'] })).toBe(answersHash({ a: [1, 'x'] }));
-    expect(answersHash(['local.acme.com'])).not.toBe(answersHash(['local.shop.com']));
+    expect(answersHash(['local.wandworks.example'])).not.toBe(answersHash(['local.shop.com']));
     expect(answersHash(undefined)).toBe(answersHash(undefined));
   });
 });

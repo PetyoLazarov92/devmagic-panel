@@ -248,7 +248,7 @@ export function OrgStep({ state, setState, status, blank, onRecheck }: { state: 
       <details className="rounded-lg border bg-card px-4 py-3 text-sm" open={!signedIn && !stored}>
         <summary className="cursor-pointer font-medium">Paste a repo URL instead</summary>
         <div className="mt-3 flex gap-2">
-          <Input value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="git@gitlab.com:acme/web/site.git" className="font-mono text-[13px]" spellCheck={false} aria-label="Repo URL" />
+          <Input value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="git@gitlab.com:wandworks/web/site.git" className="font-mono text-[13px]" spellCheck={false} aria-label="Repo URL" />
           <Button variant="outline" disabled={!pastedRepo(pasted.trim())} onClick={pickPasted}>Use it</Button>
         </div>
       </details>
@@ -314,7 +314,7 @@ function cliSignedIn(status: OrgStatus, ref: string): boolean {
 
 /**
  * A pasted URL as a repo of the list: its whole path on the host, so a
- * project in a GitLab subgroup (acme/web/site) keeps its groups. Null for
+ * project in a GitLab subgroup (wandworks/web/site) keeps its groups. Null for
  * anything that is not a git URL.
  */
 function pastedRepo(url: string): OrgRepo | null {
@@ -421,7 +421,7 @@ function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?: () =>
   async function saveHosts() {
     const hosts = hostsText.split(/[\s,]+/).map((h) => h.trim().toLowerCase()).filter(Boolean);
     const bad = hosts.find((h) => !gitlabHost.safeParse(h).success);
-    if (bad) return setHostsError(`${bad} is not a hostname like gitlab.acme.test`);
+    if (bad) return setHostsError(`${bad} is not a hostname like gitlab.wandworks.test`);
     setHostsError(null);
     await save({ ...settings, gitlabHosts: [...new Set(hosts)].filter((h) => h !== 'gitlab.com') });
     orgs.reload();
@@ -449,10 +449,10 @@ function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?: () =>
       <Field
         htmlFor="gitlab-hosts"
         label="Your own GitLab hosts"
-        hint={hostsError ? <span className="text-danger">{hostsError}</span> : <>One per line, like gitlab.acme.test; gitlab.com is always listed. Sign in to each once with <code className="font-mono whitespace-nowrap">glab auth login --hostname gitlab.acme.test</code>.</>}
+        hint={hostsError ? <span className="text-danger">{hostsError}</span> : <>One per line, like gitlab.wandworks.test; gitlab.com is always listed. Sign in to each once with <code className="font-mono whitespace-nowrap">glab auth login --hostname gitlab.wandworks.test</code>.</>}
       >
         <div className="flex max-w-md items-start gap-2">
-          <Textarea id="gitlab-hosts" value={hostsText} onChange={(e) => setHostsText(e.target.value)} rows={2} spellCheck={false} placeholder="gitlab.acme.test" className="min-h-16 flex-1 font-mono text-[13px]" />
+          <Textarea id="gitlab-hosts" value={hostsText} onChange={(e) => setHostsText(e.target.value)} rows={2} spellCheck={false} placeholder="gitlab.wandworks.test" className="min-h-16 flex-1 font-mono text-[13px]" />
           <Button variant="outline" size="sm" disabled={saving || hostsText.trim() === settings.gitlabHosts.join('\n')} onClick={() => void saveHosts()}>Save hosts</Button>
         </div>
       </Field>

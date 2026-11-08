@@ -15,6 +15,7 @@
         document.documentElement.classList.toggle('dark', dark);
       })();
     </script>
+    <!-- panel-only: the demo has no panel to wait for, so its build leaves this out. -->
     <script>
       // A tab the browser restores before the panel has started can get this page
       // from its cache but not the app's script or styles, which leaves it blank.
@@ -51,6 +52,7 @@
         }, true);
       })();
     </script>
+    <!-- /panel-only -->
   </head>
   <body>
     <div id="root"></div>

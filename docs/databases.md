@@ -64,8 +64,8 @@ page's history, never its address.
 - **What plugins and themes keep**: the tables that are not WordPress's own,
   each with what it likely belongs to and whether that is on, off or gone.
   First by the table's name (known plugins, then the plugins folder); a table
-  no name explains is looked for in the site's PHP code, as `acme_log` in
-  `$wpdb->prefix . 'acme_log'` or its full name: one `grep` over the themes,
+  no name explains is looked for in the site's PHP code, as `wandworks_log` in
+  `$wpdb->prefix . 'wandworks_log'` or its full name: one `grep` over the themes,
   must-use plugins and plugins finds the theme in use, another theme, a
   must-use plugin (always on) or a plugin by another name. A table nothing
   in the code names says so. **Delete** (type the name; saved whole first) is

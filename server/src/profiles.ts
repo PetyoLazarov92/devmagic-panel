@@ -72,7 +72,7 @@ export function parseProfileName(version: string, name: string, known: readonly 
 
 /** The file of a profile, checked: a version and a name that Xdebug wrote, in the panel's folder. */
 export function profileFile(config: SystemConfig, version: string, name: string): string {
-  if (!PHP_VERSION_PATTERN.test(version) || !PROFILE_NAME.test(name)) throw new ProfileError('A PHP version like 8.3 and a profile name like cachegrind.out.1762500000_123456.local.acme.com_');
+  if (!PHP_VERSION_PATTERN.test(version) || !PROFILE_NAME.test(name)) throw new ProfileError('A PHP version like 8.3 and a profile name like cachegrind.out.1762500000_123456.local.wandworks.example_');
   const file = join(profilesDir(config), version, name);
   if (!existsSync(file)) throw new ProfileError(`No profile ${name} for PHP ${version}`, 404);
   return file;

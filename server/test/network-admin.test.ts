@@ -7,8 +7,8 @@ import { SiteActionRefused, type SiteRef } from '../src/sites/site-actions.js';
 import { fakeExec } from './helpers.js';
 
 const site = (multisite = true) =>
-  ({ domain: 'local.acme.com', host: 'local.acme.com', key: 'local.acme.com', docroot: '/var/www/local.acme.com', names: ['local.acme.com'], wp: { multisite, subdomainInstall: false } }) as unknown as SiteRef;
-const WP = 'wp --path=/var/www/local.acme.com --url=https://local.acme.com/ eval-file -';
+  ({ domain: 'local.wandworks.example', host: 'local.wandworks.example', key: 'local.wandworks.example', docroot: '/var/www/local.wandworks.example', names: ['local.wandworks.example'], wp: { multisite, subdomainInstall: false } }) as unknown as SiteRef;
+const WP = 'wp --path=/var/www/local.wandworks.example --url=https://local.wandworks.example/ eval-file -';
 
 /** A job runtime that keeps what a step registers for Undo. */
 function runtime() {
@@ -27,7 +27,7 @@ describe('readNetworkAdmins', () => {
   });
 
   it('refuses a site that is not a network, and says what WP-CLI answered when it fails', async () => {
-    await expect(readNetworkAdmins(fakeExec().exec, site(false))).rejects.toThrow('local.acme.com is not a network');
+    await expect(readNetworkAdmins(fakeExec().exec, site(false))).rejects.toThrow('local.wandworks.example is not a network');
     const failing = fakeExec({ [WP]: { code: 1, stderr: 'Error: Error establishing a database connection.\n' } });
     await expect(readNetworkAdmins(failing.exec, site())).rejects.toThrow(new SiteActionRefused('WP-CLI could not read the super admins: Error: Error establishing a database connection.'));
   });
@@ -60,9 +60,9 @@ describe('planAddNetworkAdmin', () => {
 
   it('takes no login WP-CLI would read as one of its own options', () => {
     const input = actions['network.addAdmin'].input;
-    expect(input.safeParse({ domain: 'local.acme.com', user: 'admin' }).success).toBe(true);
-    expect(input.safeParse({ domain: 'local.acme.com', user: 'Alex Morgan' }).success).toBe(true);
-    expect(input.safeParse({ domain: 'local.acme.com', user: '--skip-plugins' }).success).toBe(false);
-    expect(input.safeParse({ domain: 'local.acme.com', user: 'admin;id' }).success).toBe(false);
+    expect(input.safeParse({ domain: 'local.wandworks.example', user: 'admin' }).success).toBe(true);
+    expect(input.safeParse({ domain: 'local.wandworks.example', user: 'Alex Morgan' }).success).toBe(true);
+    expect(input.safeParse({ domain: 'local.wandworks.example', user: '--skip-plugins' }).success).toBe(false);
+    expect(input.safeParse({ domain: 'local.wandworks.example', user: 'admin;id' }).success).toBe(false);
   });
 });

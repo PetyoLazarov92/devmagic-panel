@@ -18,7 +18,7 @@ function machine(versions: string[], alias?: string) {
     writeFileSync(join(home, '.nvm/alias/default'), `${alias}\n`);
   }
   const clone = join(home, 'clone');
-  const theme = join(clone, 'wp-content/themes/acme');
+  const theme = join(clone, 'wp-content/themes/wandworks');
   mkdirSync(theme, { recursive: true });
   writeFileSync(join(theme, 'package.json'), JSON.stringify({ scripts: { build: 'webpack' } }));
   // A panel node with no npm next to it, so the last fallback is plain PATH.
@@ -96,8 +96,8 @@ describe('a build with nvm', () => {
     const m = machine(installed);
     writeFileSync(join(m.theme, '.nvmrc'), '20');
     const fake = fakeExec({ npm: { stdout: 'ok' } });
-    const results = await runBuild(fake.exec, m.clone, { dir: 'wp-content/themes/acme', tool: 'npm', script: 'build' }, { home: m.home, panelNode: m.panelNode });
-    expect(results[0]?.stdout).toContain('wp-content/themes/acme: Node 20.18.0 from nvm (wp-content/themes/acme/.nvmrc asks for 20)');
+    const results = await runBuild(fake.exec, m.clone, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'build' }, { home: m.home, panelNode: m.panelNode });
+    expect(results[0]?.stdout).toContain('wp-content/themes/wandworks: Node 20.18.0 from nvm (wp-content/themes/wandworks/.nvmrc asks for 20)');
     expect(fake.calls.map((c) => [c.file, c.args[0], c.env?.PATH?.split(':')[0]])).toEqual([
       ['npm', 'install', m.bin('v20.18.0')],
       ['npm', 'run', m.bin('v20.18.0')],
@@ -117,9 +117,9 @@ describe('a build with nvm', () => {
       'npm warn EBADENGINE }',
     ].join('\n');
     const fake = fakeExec({ 'npm install': { stderr: warning }, 'npm run': { code: 1, stderr: 'vite failed' } });
-    const results = await runBuild(fake.exec, m.clone, { dir: 'wp-content/themes/acme', tool: 'npm', script: 'build' }, { home: m.home, panelNode: m.panelNode });
+    const results = await runBuild(fake.exec, m.clone, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'build' }, { home: m.home, panelNode: m.panelNode });
     expect(results.at(-1)?.stderr).toBe(
-      'vite failed\nwp-content/themes/acme: a package needs Node ^20.19.0 || >=22.12.0 and this build ran on 20.18.0: run nvm install 20 in a terminal for the newest Node 20 (or set a newer one in .nvmrc), then Retry',
+      'vite failed\nwp-content/themes/wandworks: a package needs Node ^20.19.0 || >=22.12.0 and this build ran on 20.18.0: run nvm install 20 in a terminal for the newest Node 20 (or set a newer one in .nvmrc), then Retry',
     );
     expect(engineHint('added 30 packages in 2s')).toBeUndefined();
   });
@@ -127,7 +127,7 @@ describe('a build with nvm', () => {
   it('gives no Node hint for a package that only lists older Nodes', () => {
     const older = [
       'npm warn EBADENGINE Unsupported engine {',
-      "npm warn EBADENGINE   package: 'eslint-plugin-acme@40.0.0',",
+      "npm warn EBADENGINE   package: 'eslint-plugin-wandworks@40.0.0',",
       "npm warn EBADENGINE   required: { node: '^14 || ^16 || ^17 || ^18 || ^19' },",
       "npm warn EBADENGINE   current: { node: 'v22.23.3', npm: '10.9.2' }",
       'npm warn EBADENGINE }',
@@ -150,15 +150,15 @@ describe('a build with nvm', () => {
         "npm warn EBADENGINE   current: { node: 'v22.23.3', npm: '10.9.2' }",
         'npm warn EBADENGINE }',
       ].join('\n');
-    expect(engineHint(warn('fetch-acme@5.7.1', '>=0.10.0 <7'))).toBeUndefined();
-    expect(engineHint(`${warn('fetch-acme@5.7.1', '>=0.10.0 <7')}\n${warn('build-acme@3.0.0', '>=24')}`)).toContain('a package needs Node >=24 and this build ran on 22.23.3');
+    expect(engineHint(warn('fetch-wandworks@5.7.1', '>=0.10.0 <7'))).toBeUndefined();
+    expect(engineHint(`${warn('fetch-wandworks@5.7.1', '>=0.10.0 <7')}\n${warn('build-wandworks@3.0.0', '>=24')}`)).toContain('a package needs Node >=24 and this build ran on 22.23.3');
   });
 
   it('stops before npm when the repo asks for a Node nvm lacks', async () => {
     const m = machine(installed);
     writeFileSync(join(m.theme, '.nvmrc'), '16');
     const fake = fakeExec();
-    const results = await runBuild(fake.exec, m.clone, { dir: 'wp-content/themes/acme', tool: 'npm', script: 'build' }, { home: m.home, panelNode: m.panelNode });
+    const results = await runBuild(fake.exec, m.clone, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'build' }, { home: m.home, panelNode: m.panelNode });
     expect(results).toEqual([{ code: 1, stdout: '', stderr: expect.stringContaining('run nvm install 16') }]);
     expect(fake.calls).toEqual([]);
   });

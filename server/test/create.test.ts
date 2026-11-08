@@ -85,7 +85,7 @@ async function setup(overrides: Record<string, FakeResponse> | ((wpBase: string)
     source: 'repo',
     domain: 'local.new.com',
     aliases: ['local.new.de'],
-    repo: { url: 'git@github.com:AcmeCo/new-site.git', branch: 'master', layout: 'site-root' },
+    repo: { url: 'git@github.com:WandworksCo/new-site.git', branch: 'master', layout: 'site-root' },
     uploadId: upload.id,
     replace: [{ from: 'www.new.com', to: 'local.new.com' }],
     core: { mode: 'wpcore', version: '7.1.3' },
@@ -228,13 +228,13 @@ describe('site.create from a repo', () => {
 
   it("writes the local constants from Settings into wp-config.php, over the repo's own value", async () => {
     const s = await setup();
-    s.store.setMeta('local-constants', JSON.stringify([{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'ACME_DEV', value: true }, { name: 'WP_MEMORY_LIMIT', value: '512M' }]));
+    s.store.setMeta('local-constants', JSON.stringify([{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'WANDWORKS_DEV', value: true }, { name: 'WP_MEMORY_LIMIT', value: '512M' }]));
     const result = await runAction(s.ctx, 'site.create', s.input);
     const view = await settle(s.jobs, result.data?.jobId ?? '');
     const config = readFileSync(join(s.docroot, 'wp-config.php'), 'utf8');
-    expect(config).toContain("define( 'ACME_DEV', true );");
+    expect(config).toContain("define( 'WANDWORKS_DEV', true );");
     expect(config).toContain("define( 'WP_MEMORY_LIMIT', '512M' );");
-    expect(view.steps.find((x) => x.id === 'config')?.output).toContain("set the local constants from Settings: WP_ENVIRONMENT_TYPE = 'local', ACME_DEV = true, WP_MEMORY_LIMIT = '512M'");
+    expect(view.steps.find((x) => x.id === 'config')?.output).toContain("set the local constants from Settings: WP_ENVIRONMENT_TYPE = 'local', WANDWORKS_DEV = true, WP_MEMORY_LIMIT = '512M'");
   });
 
   it('runs every step and leaves a configured site', async () => {
@@ -246,7 +246,7 @@ describe('site.create from a repo', () => {
     expect(view.steps.map((x) => x.id)).toEqual(['space', 'folder', 'clone', 'content', 'core', 'cert', 'vhost', 'hosts', 'db', 'config', 'import', 'replace', 'check', 'plugins', 'admin', 'build', 'htaccess', 'local', 'flush']);
 
     const all = lines(s.calls);
-    expect(all).toContain(`git clone --progress -c core.fileMode=false --branch master --single-branch -- git@github.com:AcmeCo/new-site.git ${s.docroot}/.dmp-clone`);
+    expect(all).toContain(`git clone --progress -c core.fileMode=false --branch master --single-branch -- git@github.com:WandworksCo/new-site.git ${s.docroot}/.dmp-clone`);
     expect(all).toContain(`sudo -n ${DMP} vhost-write local.new.com --uploads-proxy www.new.com local.new.de`);
     expect(all).toContain(`wp --path=${s.docroot} --url=https://local.new.com/ plugin deactivate wp-rocket --skip-plugins --skip-themes`);
     expect(all.filter((l) => l.includes(' search-replace //www.new.com //local.new.com '))).toHaveLength(1);

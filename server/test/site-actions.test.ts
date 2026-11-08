@@ -106,20 +106,20 @@ describe('site.setDebug and site.clearDebugLog', () => {
 
   it('sets, adds and removes one constant through wp config, and refuses the ones the panel does not set', async () => {
     const s = setup();
-    writeFileSync(join(s.docroot, 'wp-config.php'), "<?php\nif ( ! defined( 'WP_DEBUG' ) ) {\n\tdefine( 'WP_DEBUG', true );\n}\ndefine( 'ACME_FLAG', 'one' );\n");
+    writeFileSync(join(s.docroot, 'wp-config.php'), "<?php\nif ( ! defined( 'WP_DEBUG' ) ) {\n\tdefine( 'WP_DEBUG', true );\n}\ndefine( 'WANDWORKS_FLAG', 'one' );\n");
     await runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', name: 'WP_DEBUG', value: false });
-    await runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', name: 'ACME_DEV', value: true });
+    await runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', name: 'WANDWORKS_DEV', value: true });
     await runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', name: 'WP_MEMORY_LIMIT', value: '256M' });
-    await runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', name: 'ACME_FLAG', value: null });
-    const none = await runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', name: 'ACME_GONE', value: null });
+    await runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', name: 'WANDWORKS_FLAG', value: null });
+    const none = await runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', name: 'WANDWORKS_GONE', value: null });
     expect(none.output).toContain('nothing to remove');
     expect(lines(s.calls).map((l) => l.split(' --url=https://local.shop.com/ ')[1])).toEqual([
       'config set WP_DEBUG false --raw --type=constant',
-      'config set ACME_DEV true --raw --type=constant',
+      'config set WANDWORKS_DEV true --raw --type=constant',
       'config set WP_MEMORY_LIMIT 256M --type=constant',
-      'config delete ACME_FLAG --type=constant',
+      'config delete WANDWORKS_FLAG --type=constant',
     ]);
-    for (const input of [{ name: 'DB_PASSWORD', value: 'x' }, { name: 'AUTH_KEY', value: 'x' }, { name: 'ACME_API_KEY', value: 'x' }, { name: 'MULTISITE', value: null }, { name: 'bad-name', value: true }, { name: 'ACME', value: '--path=/' }, { name: 'ACME', value: 'two\nlines' }]) {
+    for (const input of [{ name: 'DB_PASSWORD', value: 'x' }, { name: 'AUTH_KEY', value: 'x' }, { name: 'WANDWORKS_API_KEY', value: 'x' }, { name: 'MULTISITE', value: null }, { name: 'bad-name', value: true }, { name: 'WANDWORKS', value: '--path=/' }, { name: 'WANDWORKS', value: 'two\nlines' }]) {
       await expect(runAction(s.ctx, 'site.setConstant', { domain: 'local.shop.com', ...input })).rejects.toBeInstanceOf(ActionInputError);
     }
     expect(s.calls).toHaveLength(4);
@@ -142,10 +142,10 @@ describe('site.setDebug and site.clearDebugLog', () => {
 
   it("asks for the keys the site's own wp-config-sample.php lists", async () => {
     const s = setup();
-    writeFileSync(join(s.docroot, 'wp-config-sample.php'), "<?php\ndefine( 'AUTH_KEY', 'put your unique phrase here' );\ndefine( 'ACME_NEW_SALT',   'put your unique phrase here' );\ndefine( 'DB_NAME', 'database_name_here' );\n");
+    writeFileSync(join(s.docroot, 'wp-config-sample.php'), "<?php\ndefine( 'AUTH_KEY', 'put your unique phrase here' );\ndefine( 'WANDWORKS_NEW_SALT',   'put your unique phrase here' );\ndefine( 'DB_NAME', 'database_name_here' );\n");
     writeFileSync(join(s.docroot, 'wp-config.php'), "<?php\ndefine( 'AUTH_KEY', 'a' );\n");
     await runAction(s.ctx, 'site.shuffleSalts', { domain: 'local.shop.com', only: 'missing' });
-    expect(lines(s.calls)[0]?.split(' --url=https://local.shop.com/ ')[1]).toBe('config shuffle-salts ACME_NEW_SALT --force');
+    expect(lines(s.calls)[0]?.split(' --url=https://local.shop.com/ ')[1]).toBe('config shuffle-salts WANDWORKS_NEW_SALT --force');
   });
 
   it('removes SECRET_KEY and SECRET_SALT only once every current key is usable', async () => {

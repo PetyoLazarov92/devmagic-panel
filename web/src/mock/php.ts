@@ -40,7 +40,7 @@ export const mockPhpVersions: PhpVersion[] = [
     apache: false,
     cli: false,
     fpm: 'running',
-    sites: ['local.biketours.com'],
+    sites: ['local.biketours.example'],
     // soap's package went with an apt remove and left its ini on.
     modules: modules('fpm', ['imagick']).map((m) => (m.name === 'soap' ? { ...m, missing: true } : m)),
     xdebug: { installed: false, enabled: false, reason: 'Xdebug is not installed for PHP 8.1: apt install php8.1-xdebug' },
@@ -112,7 +112,7 @@ export const mockPhpIni = (version: string): PhpIniReport => ({
             { sapi: 'cli', file: '/etc/php/8.3/cli/php.ini', original: '/usr/lib/php/8.3/php.ini-production.cli', changes: [], extraFiles: [] },
           ]
         : [
-          { sapi: 'fpm', file: `/etc/php/${version}/fpm/php.ini`, original: `/usr/lib/php/${version}/php.ini-production`, changes: [], extraFiles: [{ name: '50-acme-tuning.ini', panel: false }] },
+          { sapi: 'fpm', file: `/etc/php/${version}/fpm/php.ini`, original: `/usr/lib/php/${version}/php.ini-production`, changes: [], extraFiles: [{ name: '50-wandworks-tuning.ini', panel: false }] },
           { sapi: 'cli', file: `/etc/php/${version}/cli/php.ini`, original: `/usr/lib/php/${version}/php.ini-production.cli`, changes: [], extraFiles: [] },
         ],
 });
@@ -169,7 +169,7 @@ export const mockFpmFindings = (): PhpFpmFinding[] => [
 ];
 
 /** Each mockup site's own PHP, by host; a site not listed runs the default. */
-export const mockSitePools: Record<string, { version: string; values: SitePhp['values'] }> = { 'local.biketours.com': { version: '8.1', values: { memory_limit: '1G' } } };
+export const mockSitePools: Record<string, { version: string; values: SitePhp['values'] }> = { 'local.biketours.example': { version: '8.1', values: { memory_limit: '1G' } } };
 
 export const mockSitePhp = (host: string): SitePhp => {
   const own = mockSitePools[host];
@@ -178,7 +178,7 @@ export const mockSitePhp = (host: string): SitePhp => {
     defaultVersion: '8.3',
     values: { ...(own?.values ?? {}) },
     choices: mockPhpVersions.filter((v) => v.sapis.includes('fpm')).map((v) => v.version),
-    requires: { version: '8.1', sources: ['composer.json', 'plugin acme-shop'] },
+    requires: { version: '8.1', sources: ['composer.json', 'plugin wandworks-shop'] },
   };
 };
 
@@ -245,7 +245,7 @@ export function mockPhpJob(id: string, input: Record<string, unknown>) {
 
 /** The mockup's compatibility scans per site, one already there for PHP 8.4. */
 const mockCompatScans: Record<string, Record<string, CompatScan>> = {
-  'local.northwind.com': {
+  'local.spellbook.example': {
     '8.4': mockCompatScan('8.4', 'active', new Date(Date.now() - 3 * 86_400_000).toISOString()),
   },
 };
@@ -263,13 +263,13 @@ function mockCompatScan(version: string, scope: CompatScan['scope'], checkedAt =
     errors: newer ? 3 : 0,
     warnings: newer ? 5 : 1,
     components: [
-      { kind: 'theme', name: 'acme', title: 'Acme', version: '2.4.0', status: 'active', requiresPhp: '8.1', files: 212, errors: 0, warnings: newer ? 4 : 0, issues: newer ? [
+      { kind: 'theme', name: 'wandworks', title: 'Wandworks', version: '2.4.0', status: 'active', requiresPhp: '8.1', files: 212, errors: 0, warnings: newer ? 4 : 0, issues: newer ? [
         { file: 'inc/helpers.php', line: 88, type: 'warning', message: 'Implicitly marking a parameter as nullable is deprecated since PHP 8.4. Update the type to be explicitly nullable instead. Found implicitly nullable parameter: $args.', source: 'PHPCompatibility.FunctionDeclarations.RemovedImplicitlyNullableParam.Deprecated' },
         { file: 'inc/template-tags.php', line: 41, type: 'warning', message: 'Implicitly marking a parameter as nullable is deprecated since PHP 8.4. Update the type to be explicitly nullable instead. Found implicitly nullable parameter: $post.', source: 'PHPCompatibility.FunctionDeclarations.RemovedImplicitlyNullableParam.Deprecated' },
         { file: 'inc/template-tags.php', line: 77, type: 'warning', message: 'Implicitly marking a parameter as nullable is deprecated since PHP 8.4. Update the type to be explicitly nullable instead. Found implicitly nullable parameter: $term.', source: 'PHPCompatibility.FunctionDeclarations.RemovedImplicitlyNullableParam.Deprecated' },
         { file: 'functions.php', line: 12, type: 'warning', message: 'The constant "E_STRICT" is deprecated since PHP 8.4', source: 'PHPCompatibility.Constants.RemovedConstants.e_strictDeprecated' },
       ] : [] },
-      { kind: 'plugin', name: 'acme-forms', title: 'Acme Forms', version: '1.2.0', status: 'active', update: '1.4.1', files: 318, errors: newer ? 3 : 0, warnings: 1, issues: newer ? [
+      { kind: 'plugin', name: 'wandworks-forms', title: 'Wandworks Forms', version: '1.2.0', status: 'active', update: '1.4.1', files: 318, errors: newer ? 3 : 0, warnings: 1, issues: newer ? [
         { file: 'lib/legacy/parser.php', line: 203, type: 'error', message: 'Function each() is deprecated since PHP 7.2 and removed since PHP 8.0; Use a foreach loop instead', source: 'PHPCompatibility.FunctionUse.RemovedFunctions.eachDeprecatedRemoved' },
         { file: 'lib/legacy/parser.php', line: 251, type: 'error', message: 'Function create_function() is deprecated since PHP 7.2 and removed since PHP 8.0; Use an anonymous function instead', source: 'PHPCompatibility.FunctionUse.RemovedFunctions.create_functionDeprecatedRemoved' },
         { file: 'includes/class-entries.php', line: 64, type: 'error', message: 'Using the curly brace syntax to access array offsets is deprecated since PHP 7.4 and removed since PHP 8.0. Found: $row{0}', source: 'PHPCompatibility.Syntax.RemovedCurlyBraceArrayAccess.Found' },
@@ -277,7 +277,7 @@ function mockCompatScan(version: string, scope: CompatScan['scope'], checkedAt =
       ] : [
         { file: 'includes/class-entries.php', line: 12, type: 'warning', message: 'Since PHP 7.0, functions inspecting arguments, like func_get_args(), no longer report the original value as passed to a parameter, but will instead provide the current value.', source: 'PHPCompatibility.FunctionUse.ArgumentFunctionsReportCurrentValue.NeedsInspection' },
       ] },
-      { kind: 'plugin', name: 'acme-shop', title: 'Acme Shop', version: '9.1.0', status: 'active', requiresPhp: '7.4', files: 1201, errors: 0, warnings: 0, issues: [] },
+      { kind: 'plugin', name: 'wandworks-shop', title: 'Wandworks Shop', version: '9.1.0', status: 'active', requiresPhp: '7.4', files: 1201, errors: 0, warnings: 0, issues: [] },
       { kind: 'mu-plugin', name: 'mu-plugins', title: 'Must-use plugins', status: 'must-use', files: 3, errors: 0, warnings: 0, issues: [] },
       { kind: 'vendor', name: 'vendor', title: 'Composer packages (vendor)', status: 'active', files: 109, errors: 0, warnings: 0, issues: [] },
     ],
@@ -301,7 +301,7 @@ export function mockCheckCompat(host: string, version: string, scope: CompatScan
 
 /** A version's page in the mockup: the mockup's sites with what they have for that version. */
 export function mockVersionCompat(version: string): VersionCompat {
-  const hosts = [{ domain: 'local.northwind.com' }, { domain: 'local.northwind.com', path: '/learn' }, { domain: 'local.dailypost.com' }, { domain: 'local.biketours.com' }];
+  const hosts = [{ domain: 'local.spellbook.example' }, { domain: 'local.spellbook.example', path: '/learn' }, { domain: 'local.dailypost.example' }, { domain: 'local.biketours.example' }];
   return {
     version,
     sites: hosts.map((h) => {
@@ -322,7 +322,7 @@ export function mockVersionCompat(version: string): VersionCompat {
 
 /** Every mockup site gets a scan once the job had time to run. */
 export function mockCheckCompatAll(version: string, scope: CompatScan['scope']) {
-  for (const host of ['local.northwind.com', 'local.northwind.com/learn', 'local.dailypost.com', 'local.biketours.com']) mockCheckCompat(host, version, scope);
+  for (const host of ['local.spellbook.example', 'local.spellbook.example/learn', 'local.dailypost.example', 'local.biketours.example']) mockCheckCompat(host, version, scope);
 }
 
 /** Deletes the mockup's kept scans: one site's (one version or all), or one version's on every site. */

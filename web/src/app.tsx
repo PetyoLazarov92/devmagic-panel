@@ -38,7 +38,7 @@ function Routes({ path }: { path: string }) {
   if (draft?.draft) return <NewSitePage draft={draft.draft} {...(draft.step ? { step: draft.step } : {})} />;
   const site = match('/sites/:domain', path);
   if (site?.domain) return <SiteDetailPage key={site.domain} domain={site.domain} />;
-  // A WordPress install under a path of a domain: /sites/local.northwind.com/learn.
+  // A WordPress install under a path of a domain: /sites/local.spellbook.example/learn.
   const under = match('/sites/:domain/:path', path);
   if (under?.domain && under.path) return <SiteDetailPage key={`${under.domain}/${under.path}`} domain={under.domain} path={`/${under.path}`} />;
   if (path === '/aura') return <AuraPage />;

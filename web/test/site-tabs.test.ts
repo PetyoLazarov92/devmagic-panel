@@ -6,15 +6,15 @@ const OFF: Record<WpDebugConstant, boolean | null> = { WP_DEBUG: false, WP_DEBUG
 
 // undefined takes a field out, as a site without a database or a certificate has it.
 const site = (extra: { [K in keyof Site]?: Site[K] | undefined } = {}): Site => ({
-  domain: 'local.acme.com',
-  aliases: ['local.acme.de'],
-  docroot: '/var/www/local.acme.com',
+  domain: 'local.wandworks.example',
+  aliases: ['local.wandworks.de'],
+  docroot: '/var/www/local.wandworks.example',
   vhostManaged: true,
   removable: true,
   panelMade: true,
   core: { kind: 'wpcore', version: '7.1.3' },
-  cert: { expiresAt: '2028-05-23T00:00:00Z', names: ['local.acme.com', 'local.acme.de'], issuer: 'new' },
-  db: { name: 'acme', sizeBytes: 1000, tables: 12 },
+  cert: { expiresAt: '2028-05-23T00:00:00Z', names: ['local.wandworks.example', 'local.wandworks.de'], issuer: 'new' },
+  db: { name: 'wandworks', sizeBytes: 1000, tables: 12 },
   debug: { enabled: false, logBytes: 0, constants: OFF },
   constants: [],
   health: 'ok',
@@ -69,9 +69,9 @@ describe('siteTabItems', () => {
 describe('uncoveredNames', () => {
   it('names what the certificate or the hosts file leaves out', () => {
     expect(uncoveredNames(site())).toEqual([]);
-    expect(uncoveredNames(site({ cert: { expiresAt: '2028-05-23T00:00:00Z', names: ['local.acme.com'], issuer: 'new' } }))).toEqual(['local.acme.de']);
-    expect(uncoveredNames(site({ notInHosts: ['local.acme.com'] }))).toEqual(['local.acme.com']);
-    expect(uncoveredNames(site({ cert: undefined }))).toEqual(['local.acme.com', 'local.acme.de']);
+    expect(uncoveredNames(site({ cert: { expiresAt: '2028-05-23T00:00:00Z', names: ['local.wandworks.example'], issuer: 'new' } }))).toEqual(['local.wandworks.de']);
+    expect(uncoveredNames(site({ notInHosts: ['local.wandworks.example'] }))).toEqual(['local.wandworks.example']);
+    expect(uncoveredNames(site({ cert: undefined }))).toEqual(['local.wandworks.example', 'local.wandworks.de']);
   });
 });
 

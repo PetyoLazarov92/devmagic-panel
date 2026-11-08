@@ -2,17 +2,24 @@ import { Ban, Check, FlaskConical, Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Notice, PageHeader } from '@/components/page';
+import { DEMO_HOME, isDemo } from '@/lib/api';
 
 /** Only in the mockup (npm run mockup): what it is, what it never touches, and the addresses that show other states. */
 export function MockupPage() {
   return (
     <div className="pt-4">
       <PageHeader
-        title="Mockup"
-        intro="The panel's own screens on made-up sample data, for trying a flow, designing a change or taking screenshots. It looks and clicks like the panel, but nothing behind it is real."
+        title={isDemo ? 'Demo' : 'Mockup'}
+        intro={
+          isDemo
+            ? "devmagic-panel's own screens on made-up sample data, to click through every page before you install it. It looks and clicks like the panel, but nothing behind it is real."
+            : "The panel's own screens on made-up sample data, for trying a flow, designing a change or taking screenshots. It looks and clicks like the panel, but nothing behind it is real."
+        }
       />
       <Notice tone="info" className="mt-6">
-        Nothing you do here reaches this machine. There is no panel server, no root and no database behind it: every answer comes from sample data in this browser tab.
+        {isDemo
+          ? 'Nothing you do here reaches your computer or this server. There is no panel server, no root and no database behind it: every answer comes from sample data in this browser tab.'
+          : 'Nothing you do here reaches this machine. There is no panel server, no root and no database behind it: every answer comes from sample data in this browser tab.'}
       </Notice>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -38,9 +45,13 @@ export function MockupPage() {
           </CardHeader>
           <ul className="grid gap-2 px-5 pt-4 pb-5 text-sm">
             <Item>
-              <code className="font-mono text-[13px]">npm run mockup</code> starts only the web app. Every call the screens make goes to <code className="font-mono text-[13px]">web/src/mock/</code> instead of the panel server.
+              {isDemo ? (
+                <>This is only the panel&apos;s web app, built with its sample data. Every call the screens make is answered in this tab, from <code className="font-mono text-[13px]">web/src/mock/</code> instead of a panel server.</>
+              ) : (
+                <><code className="font-mono text-[13px]">npm run mockup</code> starts only the web app. Every call the screens make goes to <code className="font-mono text-[13px]">web/src/mock/</code> instead of the panel server.</>
+              )}
             </Item>
-            <Item>The sites, databases, logs and jobs are made up, with names like local.acme.com that are not on this machine.</Item>
+            <Item>The sites, databases, logs and jobs are made up, with names like local.wandworks.example that are not on this machine.</Item>
             <Item>Actions answer as the panel would: a job runs its steps on a timer, a toast offers Undo, and the screen updates.</Item>
             <Item>A link out of the panel (a site, wp-admin, GitHub, your editor) never leaves the mockup: a toast shows the address it would open. Downloads are left out.</Item>
             <Item>
@@ -75,6 +86,15 @@ export function MockupPage() {
 
       <p className="mt-6 text-sm text-muted-foreground">
         The real panel runs at <span className="font-mono text-[13px]">https://local.devmagic</span> once it is installed, and it changes this machine for real, with Undo for each change.
+        {isDemo && (
+          <>
+            {' '}
+            <a href={DEMO_HOME} data-mockup-exit className="text-primary hover:underline">
+              How to install it
+            </a>
+            .
+          </>
+        )}
       </p>
     </div>
   );
@@ -82,6 +102,7 @@ export function MockupPage() {
 
 /** The query, the page it shows on, and what it shows. */
 const STATES: Array<[string, string, string]> = [
+  ['proposals=none', '/sites', 'Nothing waits in the corner from an MCP client, as for screenshots.'],
   ['session=ends', '/sites', 'You are signed out after 15 seconds, as when the session runs out.'],
   ['panel=starting', '/sites', 'The panel answers only after 8 seconds, as right after a login.'],
   ['terminal', '/update', 'The newest release changes the root scripts and needs the installer in a terminal.'],

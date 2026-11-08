@@ -391,7 +391,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     type TableParams = { Params: { database: string; table: string } };
     // A clean-up's rows, for the Tables view: the site's tables read again, and the condition the clean-up itself would use.
     const cleanupWhere: CleanupWhere = async (database, table, view) => {
-      if (!localName.safeParse(view.domain).success || (view.path !== undefined && !mountPath.safeParse(view.path).success)) throw new BrowseError('A local site like local.acme.com, with its path if it has one', 400);
+      if (!localName.safeParse(view.domain).success || (view.path !== undefined && !mountPath.safeParse(view.path).success)) throw new BrowseError('A local site like local.wandworks.example, with its path if it has one', 400);
       const t = await wordpressTables(browse(), view.domain, view.path, view.blog ?? 1);
       if (t.database !== database) throw new BrowseError(`${view.domain} keeps its tables in ${t.database}`, 400);
       try {
@@ -412,13 +412,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     api.get<{ Params: { database: string }; Querystring: { table?: string } }>('/api/mysql/databases/:database/row-changes', async (request, reply): Promise<RowChangeInfo[] | undefined> => {
       const { database } = request.params;
       const { table } = request.query;
-      if (!mysqlDatabaseName.safeParse(database).success || (table !== undefined && !mysqlIdentifier.safeParse(table).success)) return reply.code(400).send({ error: 'A database like acme_com and a table like wp_options' });
+      if (!mysqlDatabaseName.safeParse(database).success || (table !== undefined && !mysqlIdentifier.safeParse(table).success)) return reply.code(400).send({ error: 'A database like wandworks_example and a table like wp_options' });
       return listRowChanges(deps.config, database, table);
     });
     // The clean-ups saved for Undo on a database (or one site of it, ?site=local.shop.com/learn), newest first, without their rows.
     api.get<{ Params: { database: string }; Querystring: { site?: string } }>('/api/mysql/databases/:database/cleanups', async (request, reply): Promise<CleanupInfo[] | undefined> => {
       const { database } = request.params;
-      if (!mysqlDatabaseName.safeParse(database).success) return reply.code(400).send({ error: 'A database like acme_com' });
+      if (!mysqlDatabaseName.safeParse(database).success) return reply.code(400).send({ error: 'A database like wandworks_example' });
       return listCleanups(deps.config, database, request.query.site);
     });
     // What SQL that writes would do, before it runs: its tables, the room for their copy, and the rows it changes, tried and rolled back.
@@ -433,7 +433,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         const { filename, stream } = await exportDatabase(browse(), request.params.database, tables);
         return reply.header('content-type', 'application/gzip').header('content-disposition', `attachment; filename="${filename}"`).send(stream);
       }));
-    // The queries that cost the most time, of one database (?database=acme_com) or every site's: MySQL's statement statistics, or the slow log table.
+    // The queries that cost the most time, of one database (?database=wandworks_example) or every site's: MySQL's statement statistics, or the slow log table.
     api.get<{ Querystring: { database?: string } }>('/api/mysql/slow-queries', async (request, reply): Promise<SlowQueryReport | undefined> =>
       browsing(reply, () => slowQueries(browse(), request.query.database)));
     // What MySQL runs now, for the MySQL tab's Processes.
@@ -469,7 +469,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         keepReport(deps.store, domain, path, site, report, wanted);
         return report;
       }));
-    // Xdebug's profiles: a site's (?domain=local.acme.com, &path=/learn for a site under a path) or all of them, newest first.
+    // Xdebug's profiles: a site's (?domain=local.wandworks.example, &path=/learn for a site under a path) or all of them, newest first.
     const profiling = async <T>(reply: FastifyReply, run: () => Promise<T> | T): Promise<T | undefined> => {
       try {
         return await run();

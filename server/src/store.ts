@@ -400,7 +400,7 @@ export class RunStore {
     return row ? (JSON.parse(row.preset) as unknown) : undefined;
   }
 
-  /** The last compatibility scan of a site (its key, like local.acme.com@learn) against one PHP version. */
+  /** The last compatibility scan of a site (its key, like local.wandworks.example@learn) against one PHP version. */
   saveCompatScan(site: string, version: string, scan: unknown): void {
     this.db
       .prepare('INSERT INTO compat_scans (site, version, scan) VALUES (?, ?, ?) ON CONFLICT(site, version) DO UPDATE SET scan = excluded.scan')

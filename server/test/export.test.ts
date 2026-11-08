@@ -26,7 +26,7 @@ const DUMP = [
   'CREATE TABLE `wp_options` (`option_value` longtext);',
   "INSERT INTO `wp_options` VALUES (1,'admin_email','admin@local.shop.com'),(2,'logo','logo@2x.png'),(3,'docs','you@example.com');",
   "INSERT INTO `wp_postmeta` VALUES (1,5,'_field_email','jane.doe@customer.net'),(2,6,'_field_email','JOHN@Customer.net'),(3,7,'x','a:1:{s:5:\\\"email\\\";s:15:\\\"ann@company.org\\\";}');",
-  "INSERT INTO `wp_comments` VALUES (1,'commenter-1@local.invalid','someone@acme.com');",
+  "INSERT INTO `wp_comments` VALUES (1,'commenter-1@local.invalid','someone@supplier.net');",
   '',
 ].join('\n');
 
@@ -38,7 +38,7 @@ describe('the leftover check', () => {
       total: 4,
       tables: [
         { table: 'wp_postmeta', count: 3, samples: ['j***@customer.net', 'J***@Customer.net', 'a***@company.org'] },
-        { table: 'wp_comments', count: 1, samples: ['s***@acme.com'] },
+        { table: 'wp_comments', count: 1, samples: ['s***@supplier.net'] },
       ],
     });
   });
@@ -59,10 +59,10 @@ describe('the leftover check', () => {
 describe('a clean copy file', () => {
   it('is named after the site and the day, with -2 and up for another that day', () => {
     const at = new Date(2026, 9, 28, 14, 30);
-    expect(cleanCopyFileName('local.acme.com', () => false, at)).toBe('acme.com-local-clean-2026.10.28.sql.gz');
-    expect(cleanCopyFileName('local.acme.com@learn', () => false, at)).toBe('acme.com-learn-local-clean-2026.10.28.sql.gz');
-    const taken = new Set(['acme.test-local-clean-2026.10.28.sql.gz', 'acme.test-local-clean-2026.10.28-2.sql.gz']);
-    expect(cleanCopyFileName('acme.test', (n) => taken.has(n), at)).toBe('acme.test-local-clean-2026.10.28-3.sql.gz');
+    expect(cleanCopyFileName('local.wandworks.example', () => false, at)).toBe('wandworks.example-local-clean-2026.10.28.sql.gz');
+    expect(cleanCopyFileName('local.wandworks.example@learn', () => false, at)).toBe('wandworks.example-learn-local-clean-2026.10.28.sql.gz');
+    const taken = new Set(['wandworks.test-local-clean-2026.10.28.sql.gz', 'wandworks.test-local-clean-2026.10.28-2.sql.gz']);
+    expect(cleanCopyFileName('wandworks.test', (n) => taken.has(n), at)).toBe('wandworks.test-local-clean-2026.10.28-3.sql.gz');
   });
 });
 
@@ -85,7 +85,7 @@ describe('a program whose output streams', () => {
   });
 
   it('says so when the program is not there', async () => {
-    const r = await runCommand('no-such-program-acme', [], { stdoutTo: new PassThrough() });
+    const r = await runCommand('no-such-program-wandworks', [], { stdoutTo: new PassThrough() });
     expect(r.code).toBe(127);
   });
 });

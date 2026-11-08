@@ -33,12 +33,12 @@ const MANAGED = [
   '',
   "SET @@GLOBAL.GTID_PURGED=/*!80000 '+'*/ '3e11fa47-71ca-11e1-9e33-c80aa9429562:1-5,",
   "4f22ab58-82db-22f2-af44-d91bb0530673:1-9';",
-  "INSERT INTO `wp_options` VALUES (1,'siteurl','https://acme.com','yes');",
+  "INSERT INTO `wp_options` VALUES (1,'siteurl','https://wandworks.example','yes');",
   'SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;',
   '-- Dump completed',
 ].join('\n');
 
-const KEPT = ['-- MySQL dump 10.13', '', '--', '-- GTID state at the beginning of the backup', '--', '', "INSERT INTO `wp_options` VALUES (1,'siteurl','https://acme.com','yes');", '-- Dump completed'].join('\n');
+const KEPT = ['-- MySQL dump 10.13', '', '--', '-- GTID state at the beginning of the backup', '--', '', "INSERT INTO `wp_options` VALUES (1,'siteurl','https://wandworks.example','yes');", '-- Dump completed'].join('\n');
 
 describe('a dump on its way into MySQL', () => {
   it("drops a managed host's GTID and binary log lines, the GTID list over several lines included, and keeps the rest", async () => {
@@ -76,7 +76,7 @@ describe('a dump on its way into MySQL', () => {
 
   it('unpacks a gzip on the way, counting the packed bytes read from disk', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dmp-stream-'));
-    const file = join(dir, 'acme.sql.gz');
+    const file = join(dir, 'wandworks.sql.gz');
     writeFileSync(file, gzipSync(MANAGED));
     const seen: Array<[number, number]> = [];
     const text = await readAll(dumpStream(file, { before: 'BEFORE;\n', after: '\nAFTER;\n' }, (read, total) => seen.push([read, total])));
@@ -87,7 +87,7 @@ describe('a dump on its way into MySQL', () => {
 
   it('fails as a stream when the gzip is damaged, so the import cannot look finished', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dmp-stream-'));
-    const file = join(dir, 'acme.sql.gz');
+    const file = join(dir, 'wandworks.sql.gz');
     writeFileSync(file, gzipSync(randomBytes(100_000).toString('hex')).subarray(0, 20_000));
     await expect(readAll(dumpStream(file, { before: '', after: '' }))).rejects.toThrow();
   });

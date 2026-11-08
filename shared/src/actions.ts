@@ -67,7 +67,7 @@ export const gitUrl = z
   .max(500)
   .regex(
     /^(git@[\w.-]+:[\w./-]+|ssh:\/\/[\w.@-]+(:\d+)?\/[\w./-]+|https:\/\/[\w.-]+(:\d+)?\/[\w./-]+)$/,
-    'A git URL like git@github.com:team/repo.git, git@gitlab.com:group/sub/repo.git or https://git.acme.test/team/repo.git',
+    'A git URL like git@github.com:team/repo.git, git@gitlab.com:group/sub/repo.git or https://git.wandworks.test/team/repo.git',
   );
 
 /** A build of the install: composer install, or a package manager's install and one of its scripts, in a folder of the repo. */
@@ -81,12 +81,12 @@ export const buildStep = z.object({
   script: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9:._-]{0,59}$/, 'A script name from package.json').optional(),
 });
 
-/** A repo by its path on its host: acme/shop, or acme/web/shop in a GitLab subgroup. */
+/** A repo by its path on its host: wandworks/shop, or wandworks/web/shop in a GitLab subgroup. */
 export const repoFullName = z
   .string()
   .max(300)
-  .regex(/^[A-Za-z0-9_.-]{1,100}(?:\/[A-Za-z0-9_.-]{1,100}){1,21}$/, 'A repo like acme/shop or acme/web/shop')
-  .refine((p) => !p.split('/').some((s) => s === '.' || s === '..'), 'A repo like acme/shop or acme/web/shop');
+  .regex(/^[A-Za-z0-9_.-]{1,100}(?:\/[A-Za-z0-9_.-]{1,100}){1,21}$/, 'A repo like wandworks/shop or wandworks/web/shop')
+  .refine((p) => !p.split('/').some((s) => s === '.' || s === '..'), 'A repo like wandworks/shop or wandworks/web/shop');
 
 export const CLAUDE_MODELS = ['haiku', 'sonnet', 'opus'] as const;
 export const CLAUDE_EFFORTS = ['low', 'medium', 'high'] as const;
@@ -157,20 +157,20 @@ export const mountPath = z.string().max(200).regex(/^(\/(?!\.\.?(\/|$))[A-Za-z0-
 
 /**
  * A repo inside a site's own folder, as found there: wp-content itself, or
- * one theme, plugin or must-use plugin folder (wp-content/themes/acme).
+ * one theme, plugin or must-use plugin folder (wp-content/themes/wandworks).
  * Nothing else, so an action can never reach another folder.
  */
 export const repoFolder = z
   .string()
   .max(200)
-  .regex(/^wp-content(?:\/(?:themes|plugins|mu-plugins)\/[A-Za-z0-9._-]{1,100})?$/, 'A folder like wp-content/themes/acme')
-  .refine((f) => !f.split('/').some((s) => s === '.' || s === '..'), 'A folder like wp-content/themes/acme');
+  .regex(/^wp-content(?:\/(?:themes|plugins|mu-plugins)\/[A-Za-z0-9._-]{1,100})?$/, 'A folder like wp-content/themes/wandworks')
+  .refine((f) => !f.split('/').some((s) => s === '.' || s === '..'), 'A folder like wp-content/themes/wandworks');
 
 const gitTarget = { domain: localName, mount: mountPath.optional(), repo: repoFolder.optional() };
 
 /**
  * The folder a site under a path gets, named like a domain so dmp-root takes
- * it: /learn on local.northwind.com is local.learn.northwind.com, /blog/en
+ * it: /learn on local.spellbook.example is local.learn.spellbook.example, /blog/en
  * on shop.test is blog-en.shop.test. Null when the name would not be local.
  */
 export function mountFolder(domain: string, path: string): string | null {
@@ -182,7 +182,7 @@ export function mountFolder(domain: string, path: string): string | null {
 
 /**
  * A WordPress install under a path of a site's domain, like /learn on
- * local.northwind.com (an Alias in its vhost); left out for the site at the root.
+ * local.spellbook.example (an Alias in its vhost); left out for the site at the root.
  */
 const sitePath = mountPath.optional();
 
@@ -190,7 +190,7 @@ const sitePath = mountPath.optional();
 export const snapshotName = z.string().regex(/^\d{8}-\d{6}(-[a-z0-9-]{1,40})?\.sql\.gz$/, 'A snapshot file name');
 /** A kept database: a site's tables from before a swap, like shop_com__keep261028143012. */
 export const keptDatabaseName = z.string().regex(/^[A-Za-z0-9_$]{1,46}__keep\d{12}$/, 'A kept database name');
-/** A clean copy's file name: acme.com-local-clean-2026.10.28.sql.gz, with -2 and up for another the same day. */
+/** A clean copy's file name: wandworks.example-local-clean-2026.10.28.sql.gz, with -2 and up for another the same day. */
 export const cleanCopyName = z.string().regex(/^[a-z0-9][a-z0-9.-]{0,200}-local-clean-\d{4}\.\d{2}\.\d{2}(-\d{1,3})?\.sql\.gz$/, 'A clean copy file name');
 
 /** Text for search and replace: one line, and never something wp-cli could read as an option. */
@@ -278,7 +278,7 @@ export const WP_DEBUG_DEFAULTS = { WP_DEBUG: false, WP_DEBUG_LOG: false, WP_DEBU
 export type WpDebugConstant = keyof typeof WP_DEBUG_DEFAULTS;
 export const WP_DEBUG_CONSTANTS = Object.keys(WP_DEBUG_DEFAULTS) as WpDebugConstant[];
 
-/** A constant name as PHP takes it, like WP_DEBUG or ACME_2FA. */
+/** A constant name as PHP takes it, like WP_DEBUG or WANDWORKS_2FA. */
 export const constantName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/, 'A constant name like WP_ENVIRONMENT_TYPE');
 /**
  * A constant's value: true or false, a whole number, or text on one line.
@@ -437,7 +437,7 @@ export const cronTask = z.discriminatedUnion('kind', [
         } catch {
           return false;
         }
-      }, 'An address on a local name, like https://local.acme.com/wp-cron.php'),
+      }, 'An address on a local name, like https://local.wandworks.example/wp-cron.php'),
   }),
   z.object({
     kind: z.literal('program'),
@@ -457,7 +457,7 @@ export const cronBackupName = z.string().regex(/^(crontab|wp-cron-[a-z0-9.-]{1,2
 /** A network site's address, for --url. */
 const wpSiteUrl = z.string().url().max(500).optional();
 /** A hook of a WP-Cron event. */
-export const wpCronHook = z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_.:/\\-]{0,189}$/, 'A hook like acme_sync_orders');
+export const wpCronHook = z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_.:/\\-]{0,189}$/, 'A hook like wandworks_sync_orders');
 
 const cronFields = {
   title: cronTitle,
@@ -701,7 +701,7 @@ export const actions = {
     title: 'Delete Xdebug profiles',
     description: "Deletes profiles Xdebug wrote to the panel's folder for a PHP version, with the panel's summaries of them. They also go by themselves after 3 days.",
     changesSystem: true,
-    input: z.object({ profiles: z.array(z.object({ version: phpVersion, name: z.string().max(500).regex(PROFILE_NAME, 'A profile like cachegrind.out.1762500000_123456.local.acme.com_') })).min(1).max(500) }),
+    input: z.object({ profiles: z.array(z.object({ version: phpVersion, name: z.string().max(500).regex(PROFILE_NAME, 'A profile like cachegrind.out.1762500000_123456.local.wandworks.example_') })).min(1).max(500) }),
   },
   'php.setModule': {
     title: 'Turn a PHP module on or off',

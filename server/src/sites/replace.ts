@@ -11,8 +11,8 @@ import { ANY_HOST } from './dump.js';
  * group runs every pass, in order, on its own tables, so each table ends up
  * as one run over all tables would leave it. After an import, a table the
  * dump scan shows has none of the addresses the passes look for is left
- * out, and a longer host that starts like a replaced one (acme.com.au next
- * to acme.com) is set aside while the passes run and put back after.
+ * out, and a longer host that starts like a replaced one (wandworks.example.au next
+ * to wandworks.example) is set aside while the passes run and put back after.
  */
 
 export type TableFlag = '--all-tables' | '--all-tables-with-prefix';
@@ -73,7 +73,7 @@ export function tablesToSearch(tables: readonly TableSize[], passes: readonly Ad
 
 /**
  * Hosts in the dump that a pass would change only because they start like
- * the address it looks for: //acme.com also matches //acme.com.au. Case is
+ * the address it looks for: //wandworks.example also matches //wandworks.example.au. Case is
  * kept, as WP-CLI's search is. Longest first, so a longer one is set aside
  * before one it starts with.
  */
@@ -227,8 +227,8 @@ export interface RunPassesOptions {
   tableHosts?: Readonly<Record<string, readonly string[]>> | undefined;
   /**
    * Passes an earlier step of the same job ran: the tables they changed may
-   * now hold what these passes look for (http://local.acme.com after
-   * //acme.com became //local.acme.com), so their hosts count too.
+   * now hold what these passes look for (http://local.wandworks.example after
+   * //wandworks.example became //local.wandworks.example), so their hosts count too.
    */
   earlier?: readonly AddressPass[];
   /** Extra WP-CLI options for every pass, like --dry-run. */

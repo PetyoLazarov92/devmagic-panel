@@ -37,7 +37,7 @@ export function personalAddress(domain: string, ending: string): boolean {
   return !isLocalName(d) && !FILE_ENDINGS.has(ending.toLowerCase()) && !/\.(invalid|example|test|localhost|local)$/.test(d) && !EXAMPLE_DOMAIN.test(d);
 }
 
-/** jane@acme.com as j***@acme.com: enough to find it, not the address. */
+/** jane@wandworks.example as j***@wandworks.example: enough to find it, not the address. */
 const mask = (address: string) => {
   const at = address.indexOf('@');
   return `${address.slice(0, 1)}***${address.slice(at)}`;
@@ -115,7 +115,7 @@ export function leftoverReport(found: LeftoverEmails): string {
 /** A site's clean copies folder, by its key. */
 export const cleanDir = (config: SystemConfig, key: string) => join(config.BACKUP_DIR, 'clean', key);
 
-/** acme.com-local-clean-2026.10.28.sql.gz from local.acme.com (local.acme.com@learn gives acme.com-learn), -2 and up when that day has one. */
+/** wandworks.example-local-clean-2026.10.28.sql.gz from local.wandworks.example (local.wandworks.example@learn gives wandworks.example-learn), -2 and up when that day has one. */
 export function cleanCopyFileName(key: string, taken: (name: string) => boolean, at = new Date()): string {
   const base = key.replace(/^(www\.)?local\./, '').replaceAll('@', '-');
   const day = `${at.getFullYear()}.${String(at.getMonth() + 1).padStart(2, '0')}.${String(at.getDate()).padStart(2, '0')}`;

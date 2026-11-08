@@ -224,22 +224,22 @@ describe('replaceDomains', () => {
     const calls: string[][] = [];
     const wp = async (args: string[]) => (calls.push(args), { code: 0, stdout: '', stderr: '' });
     await replaceDomains(wp, [
-      { from: 'dailypost.com', to: 'local.dailypost.com' },
-      { from: 'deals.dailypost.com', to: 'local.deals.dailypost.com' },
-      { from: 'dailypost.com.br', to: 'local.dailypost.com.br' },
+      { from: 'dailypost.example', to: 'local.dailypost.example' },
+      { from: 'deals.dailypost.example', to: 'local.deals.dailypost.example' },
+      { from: 'dailypost.example.br', to: 'local.dailypost.example.br' },
     ], { tables: '--all-tables', multisite: true, prefix: 'wp_' });
-    expect(calls.filter((a) => a[0] === 'search-replace' && a.includes('--all-tables') && !a[1]?.startsWith('\\')).map((a) => a[1])).toEqual(['//deals.dailypost.com', '//dailypost.com.br', '//dailypost.com']);
+    expect(calls.filter((a) => a[0] === 'search-replace' && a.includes('--all-tables') && !a[1]?.startsWith('\\')).map((a) => a[1])).toEqual(['//deals.dailypost.example', '//dailypost.example.br', '//dailypost.example']);
     expect(calls.filter((a) => a.includes('--regex'))).toEqual([
-      ['search-replace', '^deals\\.dailypost\\.com$', 'local.deals.dailypost.com', 'wp_blogs', 'wp_site', '--regex', '--regex-flags=i'],
-      ['search-replace', '^dailypost\\.com\\.br$', 'local.dailypost.com.br', 'wp_blogs', 'wp_site', '--regex', '--regex-flags=i'],
-      ['search-replace', '^dailypost\\.com$', 'local.dailypost.com', 'wp_blogs', 'wp_site', '--regex', '--regex-flags=i'],
+      ['search-replace', '^deals\\.dailypost\\.example$', 'local.deals.dailypost.example', 'wp_blogs', 'wp_site', '--regex', '--regex-flags=i'],
+      ['search-replace', '^dailypost\\.example\\.br$', 'local.dailypost.example.br', 'wp_blogs', 'wp_site', '--regex', '--regex-flags=i'],
+      ['search-replace', '^dailypost\\.example$', 'local.dailypost.example', 'wp_blogs', 'wp_site', '--regex', '--regex-flags=i'],
     ]);
   });
 
   it("replaces whole host names in a domain mapping plugin's table too", async () => {
     const calls: string[][] = [];
     const wp = async (args: string[]) => (calls.push(args), { code: 0, stdout: '', stderr: '' });
-    await replaceDomains(wp, [{ from: 'dailycats.com', to: 'local.dailycats.com' }], { tables: '--all-tables', multisite: true, prefix: 'wp_', domainMapping: true });
-    expect(calls.find((a) => a.includes('--regex'))).toEqual(['search-replace', '^dailycats\\.com$', 'local.dailycats.com', 'wp_blogs', 'wp_site', 'wp_domain_mapping', '--regex', '--regex-flags=i']);
+    await replaceDomains(wp, [{ from: 'dailycats.example', to: 'local.dailycats.example' }], { tables: '--all-tables', multisite: true, prefix: 'wp_', domainMapping: true });
+    expect(calls.find((a) => a.includes('--regex'))).toEqual(['search-replace', '^dailycats\\.example$', 'local.dailycats.example', 'wp_blogs', 'wp_site', 'wp_domain_mapping', '--regex', '--regex-flags=i']);
   });
 });

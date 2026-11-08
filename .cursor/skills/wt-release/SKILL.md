@@ -47,8 +47,8 @@ say so.
 
 ## 8. Names review
 
-Examples use made-up names only: `local.acme.com`, `local.shop.com`,
-`git@github.com:acme/site.git`, a person like Alex Morgan. Never a real
+Examples use made-up names only: `local.wandworks.example`, `local.shop.com`,
+`git@github.com:wandworks/site.git`, a person like Alex Morgan (the full set is in AGENTS.md, rule 13). Never a real
 client, project, company or person, including the sites on this machine and
 their repos, branches, commits and authors.
 

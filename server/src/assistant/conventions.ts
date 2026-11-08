@@ -18,7 +18,7 @@ How sites are set up on this machine. The assistant reads this before it fills i
 
 ## Domains
 
-- The local domain is the production domain with \`local.\` in front, without \`www.\`: \`local.northwind.com\` for \`www.northwind.com\`.
+- The local domain is the production domain with \`local.\` in front, without \`www.\`: \`local.spellbook.example\` for \`www.spellbook.example\`.
 - Every production domain of a site (other languages, network sites) gets its own local name on the same site. One cert, one vhost and one hosts line cover them all.
 - Add \`www.local.\` as an alias only when the site links to it.
 - Local names must be \`local.*\`, \`www.local.*\`, \`*.test\` or \`*.localhost\`.
@@ -31,7 +31,7 @@ How sites are set up on this machine. The assistant reads this before it fills i
 
 ## Database
 
-- The database and its user are named after the primary domain without \`local.\`: \`learn_northwind_com\` for \`local.learn.northwind.com\`.
+- The database and its user are named after the primary domain without \`local.\`: \`learn_spellbook_example\` for \`local.learn.spellbook.example\`.
 - After an import, production URLs become their local names (email addresses keep the production domain unless every mention is replaced), and http:// on the local names becomes https://.
 - The wizard lists the plugins active in the dump to deactivate; these are usually production only: ${PRODUCTION_ONLY_PLUGINS.join(', ')}.
 

@@ -44,16 +44,16 @@ describe('checkEnvironment', () => {
       ...healthyResponses(),
       'glab --version': { stdout: 'glab version 1.36.0 (2024-01-10)\n' },
       'glab api --hostname gitlab.com user': { stdout: JSON.stringify({ username: 'alex' }) },
-      'glab api --hostname git.acme.test user': { code: 1, stderr: '401 Unauthorized' },
+      'glab api --hostname git.wandworks.test user': { code: 1, stderr: '401 Unauthorized' },
       'ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new git@gitlab.com': { stdout: 'Welcome to GitLab, @alex!\n' },
-      'ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new git@git.acme.test': { code: 255, stderr: 'git@git.acme.test: Permission denied (publickey).\n' },
+      'ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new git@git.wandworks.test': { code: 255, stderr: 'git@git.wandworks.test: Permission denied (publickey).\n' },
     });
-    const report = await checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => ['gitlab.com', 'git.acme.test'] });
+    const report = await checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => ['gitlab.com', 'git.wandworks.test'] });
     expect(byId(report, 'access.gitlabCli.gitlab.com')).toMatchObject({ status: 'ok', optional: true, detail: 'glab 1.36.0, signed in as alex; it lists your groups and their projects' });
-    expect(byId(report, 'access.gitlabCli.git.acme.test')).toMatchObject({ status: 'warn', optional: true });
-    expect(byId(report, 'access.gitlabCli.git.acme.test')?.detail).toContain('glab auth login --hostname git.acme.test');
+    expect(byId(report, 'access.gitlabCli.git.wandworks.test')).toMatchObject({ status: 'warn', optional: true });
+    expect(byId(report, 'access.gitlabCli.git.wandworks.test')?.detail).toContain('glab auth login --hostname git.wandworks.test');
     expect(byId(report, 'access.gitlab.gitlab.com')).toMatchObject({ status: 'ok', optional: true });
-    expect(byId(report, 'access.gitlab.git.acme.test')).toMatchObject({ status: 'warn', optional: true, detail: 'cannot authenticate: add your SSH key to git.acme.test, or cloning its private repos will fail' });
+    expect(byId(report, 'access.gitlab.git.wandworks.test')).toMatchObject({ status: 'warn', optional: true, detail: 'cannot authenticate: add your SSH key to git.wandworks.test, or cloning its private repos will fail' });
     expect(byId(report, 'access.github')?.status).toBe('ok');
   });
 

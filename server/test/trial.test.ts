@@ -10,7 +10,7 @@ type Tree = ReturnType<typeof wpSiteTree>;
 const stamp = '[Sat Oct 31 19:40:01.123456 2026]';
 /** A PHP-FPM message as Apache logs it, several PHP messages in one line. */
 const fpm = (docroot: string, ...messages: string[]) =>
-  `${stamp} [proxy_fcgi:error] [pid 42:tid 43] [client 127.0.0.1:5000] AH01071: Got error 'PHP message: ${messages.map((m) => `${m} in ${docroot}/wp-content/plugins/acme-forms/x.php on line 9`).join('\\nPHP message: ')}'\n`;
+  `${stamp} [proxy_fcgi:error] [pid 42:tid 43] [client 127.0.0.1:5000] AH01071: Got error 'PHP message: ${messages.map((m) => `${m} in ${docroot}/wp-content/plugins/wandworks-forms/x.php on line 9`).join('\\nPHP message: ')}'\n`;
 
 function logs(t: Tree) {
   mkdirSync(t.config.APACHE_LOG_DIR, { recursive: true });

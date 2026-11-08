@@ -199,24 +199,24 @@ describe('the saved copy and Undo', () => {
 
   it('makes a deleted table again only while no table of its name is there', async () => {
     let there = '1';
-    const fake = fakeDb(SINGLE, (sql) => (sql.includes('information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()') ? { stdout: `${there}\n` } : sql.includes("SELECT JSON_ARRAY('t'") ? { stdout: JSON.stringify(['t', 'acme_log', 'BASE TABLE', 'InnoDB', 3, 1, 1, 0, null, null]) } : undefined));
+    const fake = fakeDb(SINGLE, (sql) => (sql.includes('information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()') ? { stdout: `${there}\n` } : sql.includes("SELECT JSON_ARRAY('t'") ? { stdout: JSON.stringify(['t', 'wandworks_log', 'BASE TABLE', 'InnoDB', 3, 1, 1, 0, null, null]) } : undefined));
     const ctx = ctxFor(fake);
-    const { out, undos } = await run(await planDropTable(ctx, { database: 'shop_com', table: 'acme_log', confirm: 'acme_log' }));
+    const { out, undos } = await run(await planDropTable(ctx, { database: 'shop_com', table: 'wandworks_log', confirm: 'wandworks_log' }));
     expect(dumps(fake)[0]?.args).toEqual(expect.arrayContaining(['--skip-add-drop-table', '--insert-ignore']));
     expect(dumps(fake)[0]?.args).not.toContain('--no-create-info');
-    expect(fake.calls.some((c) => c.input?.includes('DROP TABLE `acme_log`;'))).toBe(true);
-    expect(out[1]).toBe('acme_log: deleted. Undo puts it back for 14 days');
-    await expect(undos[0]?.()).rejects.toThrow(/table called acme_log is there again/);
+    expect(fake.calls.some((c) => c.input?.includes('DROP TABLE `wandworks_log`;'))).toBe(true);
+    expect(out[1]).toBe('wandworks_log: deleted. Undo puts it back for 14 days');
+    await expect(undos[0]?.()).rejects.toThrow(/table called wandworks_log is there again/);
     there = '0';
-    expect(await undos[0]?.()).toMatchObject({ stdout: 'undid "Delete table acme_log": put back table acme_log' });
+    expect(await undos[0]?.()).toMatchObject({ stdout: 'undid "Delete table wandworks_log": put back table wandworks_log' });
   });
 
   it('empties a table with TRUNCATE after saving all of it', async () => {
-    const fake = fakeDb(SINGLE, (sql) => (sql.includes("SELECT JSON_ARRAY('t'") ? { stdout: JSON.stringify(['t', 'acme_log', 'BASE TABLE', 'InnoDB', 3, 1, 1, 0, null, null]) } : undefined));
-    await run(await planEmptyTable(ctxFor(fake), { database: 'shop_com', table: 'acme_log', confirm: 'acme_log' }));
+    const fake = fakeDb(SINGLE, (sql) => (sql.includes("SELECT JSON_ARRAY('t'") ? { stdout: JSON.stringify(['t', 'wandworks_log', 'BASE TABLE', 'InnoDB', 3, 1, 1, 0, null, null]) } : undefined));
+    await run(await planEmptyTable(ctxFor(fake), { database: 'shop_com', table: 'wandworks_log', confirm: 'wandworks_log' }));
     expect(dumps(fake)[0]?.args).toEqual(expect.arrayContaining(['--no-create-info', '--insert-ignore']));
     expect(dumps(fake)[0]?.args.some((a) => a.startsWith('--where'))).toBe(false);
-    expect(fake.calls.some((c) => c.input?.includes('TRUNCATE TABLE `acme_log`;'))).toBe(true);
+    expect(fake.calls.some((c) => c.input?.includes('TRUNCATE TABLE `wandworks_log`;'))).toBe(true);
   });
 
   it("leaves MySQL's own databases, kept ones, views and a busy site alone", async () => {
@@ -249,15 +249,15 @@ describe('autoload', () => {
       return undefined;
     });
     const ctx = ctxFor(fake);
-    const r = await setAutoload(ctx, { domain: 'local.shop.com', option: "acme's_cache", autoload: 'off' });
-    expect(r.stdout).toBe("acme's_cache: autoload no (was yes); Undo puts it back");
+    const r = await setAutoload(ctx, { domain: 'local.shop.com', option: "wandworks's_cache", autoload: 'off' });
+    expect(r.stdout).toBe("wandworks's_cache: autoload no (was yes); Undo puts it back");
     expect(r.change).toMatch(/^20261107-101500-/);
     const lookup = fake.calls.find((c) => c.input?.includes('SELECT option_id, autoload')) as FakeCall;
-    expect(lookup.input).toContain(`WHERE option_name = _utf8mb4 X'${Buffer.from("acme's_cache").toString('hex')}'`);
+    expect(lookup.input).toContain(`WHERE option_name = _utf8mb4 X'${Buffer.from("wandworks's_cache").toString('hex')}'`);
     current = 'auto';
-    expect((await setAutoload(ctx, { domain: 'local.shop.com', option: 'acme_cache', autoload: 'off' })).stdout).toBe('acme_cache: autoload off (was auto); Undo puts it back');
+    expect((await setAutoload(ctx, { domain: 'local.shop.com', option: 'wandworks_cache', autoload: 'off' })).stdout).toBe('wandworks_cache: autoload off (was auto); Undo puts it back');
     current = 'off';
-    await expect(setAutoload(ctx, { domain: 'local.shop.com', option: 'acme_cache', autoload: 'off' })).rejects.toThrow(/already loaded only when asked for/);
+    await expect(setAutoload(ctx, { domain: 'local.shop.com', option: 'wandworks_cache', autoload: 'off' })).rejects.toThrow(/already loaded only when asked for/);
     const none = fakeDb(SINGLE, (sql) => (sql.includes('SELECT option_id, autoload') ? { stdout: '' } : undefined));
     await expect(setAutoload(ctxFor(none), { domain: 'local.shop.com', option: 'nope', autoload: 'on' })).rejects.toThrow(/no option called nope/);
   });
@@ -275,12 +275,12 @@ describe('autoload', () => {
     const store = new RunStore(':memory:');
     const jobs = new Jobs(store);
     const ctx: ActionContext = { config: tree.config, exec: fake.exec, store, dmpRoot: '/x', wpcoreBin: '/x', wpcoreConf: '/x', home: tree.root, jobs, uploadsDir: join(tree.root, 'uploads'), secrets: { panelPasswordHash: 'x', mysql } };
-    const result = await runAction(ctx, 'db.setAutoload', { domain: 'local.shop.com', option: 'acme_cache', autoload: 'off' });
-    expect(result).toMatchObject({ ok: true, output: 'acme_cache: autoload off (was on); Undo puts it back' });
+    const result = await runAction(ctx, 'db.setAutoload', { domain: 'local.shop.com', option: 'wandworks_cache', autoload: 'off' });
+    expect(result).toMatchObject({ ok: true, output: 'wandworks_cache: autoload off (was on); Undo puts it back' });
 
     let finish = () => {};
     const job = jobs.start([{ id: 'a', label: 'A', run: () => new Promise((done) => { finish = () => done({ code: 0, stdout: '', stderr: '' }); }) }], { runId: store.start('db.cleanContent', {}), title: 'Clean up local.shop.com', target: 'local.shop.com' });
-    await expect(runAction(ctx, 'db.setAutoload', { domain: 'local.shop.com', option: 'acme_cache', autoload: 'off' })).rejects.toThrow(/local.shop.com is busy: Clean up local.shop.com/);
+    await expect(runAction(ctx, 'db.setAutoload', { domain: 'local.shop.com', option: 'wandworks_cache', autoload: 'off' })).rejects.toThrow(/local.shop.com is busy: Clean up local.shop.com/);
     finish();
     expect(job.id).toBeTruthy();
   });
