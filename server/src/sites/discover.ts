@@ -20,6 +20,7 @@ import { saltStatus } from './salts.js';
 import { parseWpConfig, parseWpVersion, type WpConfig } from './wpconfig.js';
 import { removalRefusal } from './remove.js';
 import { apachePaths, moveFacts } from './server-switch.js';
+import { readHtaccessReport } from './htaccess-rules.js';
 
 export interface DiscoverContext {
   config: SystemConfig;
@@ -548,15 +549,41 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
   if (git && 'error' in git) issues.push({ id: 'git.error', status: 'warn', text: git.error });
 
   if (wp && vhost.server === 'nginx') {
-    // nginx reads no .htaccess: the panel's nginx file has WordPress's rules, anything else there does nothing.
-    const ignored = htaccessIgnored(readHtaccess(docroot) ?? '');
-    if (ignored.length) {
-      issues.push({
-        id: 'nginx.htaccess',
-        status: 'warn',
-        text: `nginx does not read .htaccess, so these rules do nothing: ${ignored.join(', ')}`,
-        hint: 'Move the site back to Apache on its Server and PHP tab when it needs them.',
-      });
+    if (!mount) {
+      // nginx reads no .htaccess: the panel translates what it can into the site's nginx file, once you review it.
+      const report = readHtaccessReport(docroot, { rules: vhost.rules ?? [], sums: vhost.htaccessSums ?? {} });
+      const translatable = report.rules.filter((r) => r.status === 'translated').length;
+      if (report.changed) {
+        const recorded = Object.keys(vhost.htaccessSums ?? {}).length > 0;
+        issues.push({
+          id: 'nginx.htaccess.changed',
+          status: 'warn',
+          text: recorded
+            ? 'An .htaccess changed since its rules were applied on nginx, so nginx does not have the change'
+            : `${translatable} .htaccess rule${translatable === 1 ? '' : 's'} the panel can translate ${translatable === 1 ? 'is' : 'are'} not on nginx`,
+          hint: 'Review and apply them on the Server and PHP tab, under .htaccess rules.',
+        });
+      }
+      const left = report.rules.filter((r) => r.status === 'manual' || r.status === 'php');
+      if (left.length) {
+        issues.push({
+          id: 'nginx.htaccess',
+          status: 'warn',
+          text: `nginx does nothing with ${left.length} .htaccess rule${left.length === 1 ? '' : 's'} the panel does not translate`,
+          hint: 'The .htaccess rules card on the Server and PHP tab lists them; put nginx in front of Apache when the site needs them.',
+        });
+      }
+    } else {
+      // A site under a path of a site on nginx: its own .htaccess is not read either.
+      const ignored = htaccessIgnored(readHtaccess(docroot) ?? '');
+      if (ignored.length) {
+        issues.push({
+          id: 'nginx.htaccess',
+          status: 'warn',
+          text: `nginx does not read .htaccess, so these rules do nothing: ${ignored.join(', ')}`,
+          hint: 'Move the site back to Apache on its Server and PHP tab when it needs them.',
+        });
+      }
     }
     if (!mount && siteKind(wp) !== (vhost.kind ?? 'single')) {
       issues.push({

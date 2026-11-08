@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -6,7 +7,8 @@ import { Jobs, type JobStep } from '../src/jobs.js';
 import { discoverSites } from '../src/sites/discover.js';
 import { htaccessFolders, htaccessIgnored, staticRules } from '../src/sites/htaccess.js';
 import { hostsBlockAddress, hostsOutsideBlock, HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
-import { moveRefusal, planSetServer, planSetServerAll } from '../src/sites/server-switch.js';
+import { moveRefusal, planApplyHtaccess, planSetServer, planSetServerAll } from '../src/sites/server-switch.js';
+import { readHtaccessReport } from '../src/sites/htaccess-rules.js';
 import { planNginxTeardown } from '../src/nginx.js';
 import { parseNginxSite, readSiteVhosts, siteAddress, siteServer } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
@@ -191,9 +193,9 @@ describe('site.setServer', () => {
 
   it('needs a tick when nginx would leave .htaccess rules out, and the site page shows why a move cannot run', () => {
     const t = tree();
-    t.write('www/local.shop.com/.htaccess', '# BEGIN Wandworks Redirects\nRedirect 301 /old /new\n# END Wandworks Redirects\n');
+    t.write('www/local.shop.com/.htaccess', '# BEGIN Wandworks Redirects\nRedirect 301 /old /new\nRedirect 410 /gone\n# END Wandworks Redirects\n');
     const { c } = ctx(t);
-    expect(() => planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false })).toThrow(/Wandworks Redirects/);
+    expect(() => planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false })).toThrow(/Wandworks Redirects: Redirect 410 \/gone/);
     expect(planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: true })).toHaveLength(4);
     const vhost = readSiteVhosts(t.config)[0];
     expect(vhost && moveRefusal(t.config, vhost, 'local.shop.com')).toBeNull();
@@ -258,7 +260,7 @@ describe('a site on nginx elsewhere in the panel', () => {
   it('shows the site on nginx, a hosts line on the wrong server, ignored .htaccess rules and rules of another kind', async () => {
     const t = tree();
     onNginx(t, { kind: 'subdirectory' });
-    t.write('www/local.shop.com/.htaccess', '# BEGIN W3TC Browser Cache\nExpiresActive On\n# END W3TC Browser Cache\n');
+    t.write('www/local.shop.com/.htaccess', '# BEGIN W3TC Browser Cache\nExpiresActive On\n# END W3TC Browser Cache\nSetEnv WANDWORKS 1\n');
     t.write('hosts', `${HOSTS_BEGIN}\n127.0.0.1 local.shop.com local.shop.de\n${HOSTS_END}\n`);
     // Halfway through: the hosts line still says Apache, but only nginx has the site now.
     const [site] = await discoverSites({ config: t.config, exec: fakeExec().exec, secrets: null, wpcoreConf: t.wpcoreConf });
@@ -281,7 +283,7 @@ describe('a site on nginx elsewhere in the panel', () => {
     t.write('www/local.shop.com/.htaccess', 'Header set X-Wandworks 1\n');
     const [site] = await discoverSites({ config: t.config, exec: fakeExec().exec, secrets: null, wpcoreConf: t.wpcoreConf });
     expect(site?.server).toBe('apache');
-    expect(site?.move).toEqual({ refusals: {}, ignored: ['1 line of your own'], php: '8.3', front: { apachePaths: [], staticRules: ['Header set X-Wandworks'] } });
+    expect(site?.move).toEqual({ refusals: {}, ignored: ['Header set X-Wandworks 1'], php: '8.3', front: { apachePaths: [], staticRules: ['Header set X-Wandworks'] } });
   });
 });
 
@@ -475,5 +477,66 @@ describe('.htaccess for nginx in front of Apache', () => {
       'Redirect 301 /a /b',
     ].join('\n');
     expect(staticRules(text)).toEqual(['Header always set', 'FilesMatch "\\.(png|jpe?g)$"', 'RewriteRule ^old\\.css$ /new.css']);
+  });
+});
+
+describe('.htaccess rules on nginx', () => {
+  const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+  const HTACCESS = 'Redirect 301 /old /new\nHeader set X-Wandworks 1\n';
+
+  it('takes the translated rules along to nginx with the checksum of each file, and needs the tick for the rest', async () => {
+    const t = tree();
+    t.write('www/local.shop.com/.htaccess', HTACCESS);
+    const { c, lines } = ctx(t);
+    const input = { domain: 'local.shop.com', server: 'nginx' as const, static: true, acceptIgnored: false };
+    expect(() => planSetServer(c, input)).toThrow(/does not translate: X-Wandworks|Header set X-Wandworks/);
+    await runSteps(planSetServer(c, { ...input, acceptIgnored: true }));
+    expect(lines()[0]).toBe(`nginx-site-write local.shop.com --kind single --rule redirect 301 ^/old(/.*)?$ /new$1 --htaccess-sum /=${sha(HTACCESS)} local.shop.de`);
+  });
+
+  it('applies the rules as reviewed, refusing when an .htaccess changed since', async () => {
+    const t = tree();
+    t.write('www/local.shop.com/.htaccess', HTACCESS);
+    const { c, lines } = ctx(t);
+    const report = readHtaccessReport(t.docroot, undefined, 0, true);
+    const id = report.rules.find((r) => r.rule)?.id as string;
+    const input = { domain: 'local.shop.com', server: 'nginx' as const, static: true, acceptIgnored: false };
+    await runSteps(planSetServer(c, { ...input, htaccess: { sums: { '/': sha(HTACCESS) }, skip: [id] } }));
+    expect(lines()[0]).toBe(`nginx-site-write local.shop.com --kind single --htaccess-sum /=${sha(HTACCESS)} local.shop.de`);
+    expect(() => planSetServer(c, { ...input, htaccess: { sums: { '/': sha('older') }, skip: [] } })).toThrow(/changed since you reviewed it/);
+  });
+
+  it('reads the rules and checksums of a site on nginx, and keeps them when its file is written again', async () => {
+    const t = tree();
+    onNginx(t);
+    const file = join(t.config.NGINX_SITES_AVAILABLE, 'local.shop.com.conf');
+    const sum = sha(HTACCESS);
+    writeFileSync(file, nginxFile(t.root, 'local.shop.com', 'local.shop.com local.shop.de').replace('# kind: single', `# kind: single\n# htaccess: / ${sum}\n# rule: deny ^/private/`));
+    const vhost = readSiteVhosts(t.config)[0];
+    expect(vhost).toMatchObject({ rules: ['deny ^/private/'], htaccessSums: { '/': sum } });
+    const { c, lines } = ctx(t);
+    await runSteps(planSetServer(c, { domain: 'local.shop.com', server: 'nginx', static: true, acceptIgnored: false }));
+    expect(lines()[0]).toBe(`nginx-site-write local.shop.com --kind single --rule deny ^/private/ --htaccess-sum /=${sum} local.shop.de`);
+  });
+
+  it('applies changed rules to a site on nginx with Undo, and only to one on nginx alone', async () => {
+    const t = tree();
+    onNginx(t);
+    t.write('www/local.shop.com/.htaccess', HTACCESS);
+    const { c, lines } = ctx(t);
+    const undos = await runSteps(planApplyHtaccess(c, { domain: 'local.shop.com', sums: { '/': sha(HTACCESS) }, skip: [] }));
+    expect(lines()).toEqual([`nginx-site-write local.shop.com --kind single --rule redirect 301 ^/old(/.*)?$ /new$1 --htaccess-sum /=${sha(HTACCESS)} local.shop.de`]);
+    expect(undos).toEqual(['Put the rules back as they were']);
+    expect(() => planApplyHtaccess(c, { domain: 'local.shop.com', sums: {}, skip: [] })).toThrow(/changed since you reviewed it/);
+    expect(() => planApplyHtaccess(ctx(tree()).c, { domain: 'local.shop.com', sums: {}, skip: [] })).toThrow(/Apache reads its .htaccess/);
+  });
+
+  it('tells Aura when a site on nginx has rules to apply, and what nginx leaves out', async () => {
+    const t = tree();
+    onNginx(t);
+    t.write('www/local.shop.com/.htaccess', HTACCESS);
+    const [site] = await discoverSites({ config: t.config, exec: fakeExec().exec, secrets: null, wpcoreConf: t.wpcoreConf });
+    expect(site?.issues.find((i) => i.id === 'nginx.htaccess.changed')?.text).toBe('1 .htaccess rule the panel can translate is not on nginx');
+    expect(site?.issues.find((i) => i.id === 'nginx.htaccess')?.text).toBe('nginx does nothing with 1 .htaccess rule the panel does not translate');
   });
 });

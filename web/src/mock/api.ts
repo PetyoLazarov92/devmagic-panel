@@ -1,4 +1,4 @@
-import type { WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
@@ -1785,6 +1785,10 @@ export const mockApi: Api = {
     advance(job, 'steps', failAt);
     return id;
   },
+  htaccess: async (domain) => {
+    await wait(350);
+    return mockHtaccess(domain, sites.find((s) => s.domain === domain && !s.path)?.server ?? 'apache');
+  },
   removal: async () => {
     await wait(400);
     return { refusal: null, sizeBytes: 1_740_000_000, freeBytes: 102_000_000_000, trashDays: 14 };
@@ -1993,3 +1997,27 @@ export const mockApi: Api = {
   },
   playRun,
 };
+
+/** A site's .htaccess for the mockup: a few rules of every kind, and on nginx a change since they were applied. */
+function mockHtaccess(domain: string, server: Site['server']): HtaccessReport {
+  const sum = (n: number) => String(n).repeat(64).slice(0, 64);
+  const rules: HtaccessRule[] = [
+    { id: 'a1b2c3d4e5f6', file: '/', line: 1, section: 'WordPress', source: '# BEGIN WordPress\nRewriteEngine On\nRewriteRule ^index\\.php$ - [L]\nRewriteCond %{REQUEST_FILENAME} !-f\nRewriteCond %{REQUEST_FILENAME} !-d\nRewriteRule . /index.php [L]\n# END WordPress', status: 'covered', note: "WordPress's own rules: the nginx file has them" },
+    { id: 'b2c3d4e5f6a1', file: '/', line: 12, source: 'Redirect 301 /old-shop /shop', status: 'translated', rule: 'redirect 301 ^/old-shop(/.*)?$ /shop$1', nginx: 'rewrite ^/old-shop(/.*)?$ /shop$1 permanent;' },
+    { id: 'c3d4e5f6a1b2', file: '/', line: 13, source: 'RewriteRule ^Wands/(.*)$ /wands/$1 [R=301,L,NC]', status: 'translated', rule: 'redirect 301 (?i)^/Wands/(.*)$ /wands/$1', nginx: 'rewrite (?i)^/Wands/(.*)$ /wands/$1 permanent;' },
+    { id: 'd4e5f6a1b2c3', file: '/', line: 14, source: 'Header always set X-Frame-Options "SAMEORIGIN"', status: 'translated', rule: 'header set X-Frame-Options SAMEORIGIN', nginx: 'add_header X-Frame-Options "SAMEORIGIN" always;' },
+    { id: 'e5f6a1b2c3d4', file: '/', line: 15, source: '<Files wp-config.php>\n  Require all denied\n</Files>', status: 'translated', note: 'nginx denies the matching files', rule: 'deny ^/(?:.*/)?wp-config\\.php$', nginx: 'location ~ ^/(?:.*/)?wp-config\\.php$ { deny all; }' },
+    { id: 'f6a1b2c3d4e5', file: '/', line: 18, section: 'W3TC Browser Cache', source: '# BEGIN W3TC Browser Cache\nExpiresActive On\nExpiresByType text/css A31536000\n# END W3TC Browser Cache', status: 'local', note: 'Caching and compression: not needed on this computer' },
+    { id: 'a7b8c9d0e1f2', file: '/', line: 22, section: 'Wandworks Firewall', source: "php_value auto_prepend_file '/var/www/" + domain + "/wandworks-waf.php'", status: 'php', note: 'auto_prepend_file = /var/www/' + domain + '/wandworks-waf.php: set it on the PHP tab, as nginx runs PHP through PHP-FPM' },
+    { id: 'b8c9d0e1f2a7', file: '/', line: 24, source: 'RewriteCond %{QUERY_STRING} ^p=([0-9]+)$\nRewriteRule ^$ /?page_id=%1 [R=301,L]', status: 'manual', note: 'Depends on %{QUERY_STRING}, which the panel does not translate' },
+    { id: 'c9d0e1f2a7b8', file: '/wp-content/uploads/wc-logs', line: 1, source: 'Require all denied', status: 'translated', note: 'nginx denies this folder', rule: 'deny ^/wp-content/uploads/wc-logs/', nginx: 'location ~ ^/wp-content/uploads/wc-logs/ { deny all; }' },
+  ];
+  const files = [{ folder: '/', sha256: sum(1) }, { folder: '/wp-content/uploads/wc-logs', sha256: sum(2) }];
+  const report: HtaccessReport = { checkedAt: new Date().toISOString(), files, rules, nginx: rules.filter((r) => r.nginx).map((r) => r.nginx).join('\n') };
+  if (server === 'nginx') {
+    // Applied before the Wands rule came in: the root .htaccess changed since.
+    report.applied = { rules: rules.filter((r) => r.rule && r.id !== 'c3d4e5f6a1b2').map((r) => r.rule as string), sums: { '/': sum(3), '/wp-content/uploads/wc-logs': sum(2) } };
+    report.changed = true;
+  }
+  return report;
+}

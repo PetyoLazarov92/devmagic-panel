@@ -51,6 +51,12 @@ export interface SiteRef {
   php?: string;
 }
 
+/** A site's .htaccess rules on nginx and the checksums they came from, as dmp-root's arguments, so rewriting its file keeps them. */
+export const ruleArgs = (rules: string[] = [], sums: Record<string, string> = {}): string[] => [
+  ...rules.flatMap((r) => ['--rule', r]),
+  ...Object.entries(sums).flatMap(([folder, sum]) => ['--htaccess-sum', `${folder}=${sum}`]),
+];
+
 /** The sites a panel vhost serves under paths, as dmp-root's --mount arguments, so rewriting the vhost keeps them. */
 export function mountArgs(config: SystemConfig, mounts: Array<{ path: string; docroot: string }>): string[] {
   return mounts.filter((m) => dirname(m.docroot) === config.WEB_DIR).flatMap((m) => ['--mount', `${m.path}=${basename(m.docroot)}`]);
@@ -64,7 +70,7 @@ export function mountArgs(config: SystemConfig, mounts: Array<{ path: string; do
 export function siteWriteArgs(config: SystemConfig, vhost: VhostInfo, domain: string, proxy: string | null, aliases: string[], mounts = vhost.mounts): string[] {
   const redirect = proxy ? ['--uploads-proxy', proxy] : [];
   return vhost.server === 'nginx'
-    ? ['nginx-site-write', domain, '--kind', vhost.kind ?? 'single', ...redirect, ...mountArgs(config, mounts), ...aliases]
+    ? ['nginx-site-write', domain, '--kind', vhost.kind ?? 'single', ...redirect, ...ruleArgs(vhost.rules, vhost.htaccessSums), ...mountArgs(config, mounts), ...aliases]
     : ['vhost-write', domain, ...redirect, ...mountArgs(config, mounts), ...aliases];
 }
 

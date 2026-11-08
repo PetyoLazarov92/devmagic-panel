@@ -31,6 +31,10 @@ export interface VhostInfo {
   mode?: 'apache';
   /** For an Apache vhost with nginx in front of it: the panel's nginx file and how it was written. */
   front?: NginxFront;
+  /** For a site on nginx: the .htaccess rules its file has ("# rule:" lines)... */
+  rules?: string[];
+  /** ...and the checksum of each .htaccess they came from, by folder ("# htaccess:" lines). */
+  htaccessSums?: Record<string, string>;
 }
 
 /** nginx in front of an Apache vhost (scripts/lib/nginx.sh dmp_nginx_front_render). */
@@ -117,6 +121,8 @@ export function parseNginxSite(text: string, file: string): VhostInfo {
   }
   const kind = /^# kind: (single|subdirectory|subdomain)$/m.exec(text)?.[1] as SiteKind | undefined;
   const front = /^# mode: apache$/m.test(text);
+  const rules = [...text.matchAll(/^# rule: (.+)$/gm)].map((m) => m[1] as string);
+  const sums = Object.fromEntries([...text.matchAll(/^# htaccess: (\/[A-Za-z0-9._/-]*) ([0-9a-f]{64})$/gm)].map((m) => [m[1] as string, m[2] as string]));
   const docroot = value('root');
   // Sites under its paths: "# mount: /learn=local.learn.shop.com", a folder next to the site's own.
   const mounts = docroot
@@ -135,6 +141,8 @@ export function parseNginxSite(text: string, file: string): VhostInfo {
     uploadsProxy: /^\s*return 302 https:\/\/([a-z0-9.-]+)\$request_uri;\s*$/m.exec(text)?.[1] ?? null,
     ...(kind ? { kind } : {}),
     ...(front ? { mode: 'apache' as const } : {}),
+    ...(rules.length ? { rules } : {}),
+    ...(Object.keys(sums).length ? { htaccessSums: sums } : {}),
   };
 }
 

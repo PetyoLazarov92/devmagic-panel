@@ -20,8 +20,10 @@ phpMyAdmin stay on Apache.
 
 - A site you move to nginx gets `/etc/nginx/sites-available/<domain>.conf`
   with the panel's marker and its PHP through PHP-FPM; nginx reads no
-  `.htaccess`. Sites under its paths go along, each from its own folder with
-  its own PHP.
+  `.htaccess`, so the rules the panel translated from it, once you reviewed
+  them, are in that file as `# rule:` lines with the directives under them,
+  and the checksum of each `.htaccess` as `# htaccess:` lines. Sites under its
+  paths go along, each from its own folder with its own PHP.
 - A site with nginx in front of Apache keeps its Apache vhost and gets the
   same `<domain>.conf`, which passes requests to Apache on `127.0.0.1` over
   HTTPS. The first one adds `conf-available/devmagic-panel-remoteip.conf`

@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry } from '@devmagic-panel/shared';
 import { actions, branchName, cleanCopyName, gitUrl, isActionId, mountPath, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { SystemConfig } from '../config.js';
@@ -21,6 +21,7 @@ import { readLocalConstants } from '../local-constants.js';
 import { gitFolder, readGitDetails, readPullRequests } from './git.js';
 import { parseApacheErrorLog, parseDebugLog, parseNginxErrorLog, tailFile } from './logs.js';
 import { removalRefusal } from './remove.js';
+import { readHtaccessReport } from './htaccess-rules.js';
 import { inspectRepo, repoLookup, RepoRefused } from './repo.js';
 import { currentSite } from './archive.js';
 import { listTrash, TRASH_DAYS, trashFreeBytes } from './trash.js';
@@ -138,6 +139,14 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     const size = du ? Number(du.stdout.split('\t')[0]) : NaN;
     const free = trashFreeBytes(deps.config);
     return { refusal, ...(Number.isFinite(size) ? { sizeBytes: size } : {}), ...(free !== undefined ? { freeBytes: free } : {}), trashDays: TRASH_DAYS };
+  });
+
+  // A site's .htaccess files read for nginx: what each rule is there, and for a site on nginx what its file has.
+  api.get<{ Params: { domain: string } }>('/api/sites/:domain/htaccess', async (request, reply): Promise<HtaccessReport | undefined> => {
+    const vhost = findVhost(deps.config, request.params.domain);
+    if (!vhost?.docroot || vhost.names[0] !== request.params.domain) return reply.code(404).send({ error: `no site called ${request.params.domain}` });
+    const applied = vhost.server === 'nginx' ? { rules: vhost.rules ?? [], sums: vhost.htaccessSums ?? {} } : undefined;
+    return readHtaccessReport(vhost.docroot, applied, Date.now(), true);
   });
 
   // Deleted sites, newest first; dmp-root reads the root-only trash.

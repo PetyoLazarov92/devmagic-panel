@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.26.0 (2026-11-08)
+* **Sites:** moving a site to nginx alone translates its `.htaccess` files for nginx: redirects, rewrites, denied files and folders, security headers and error pages go into the site's nginx file. The dialog lists every rule with what it becomes, or why it stays out (WordPress's own rules, caches, PHP settings, conditions), and a tick leaves one out
+* **Sites:** a site on nginx has an .htaccess rules card: each rule and whether its nginx file has it, Check again, and Copy nginx rules for a host's own settings. When an `.htaccess` changed since, Review and apply writes the rules again with Undo, and refuses a file that changed again during the review
+* **Aura:** a site on nginx gets an issue while `.htaccess` rules wait to be applied, and one for the rules nginx does nothing with
+* **Security:** dmp-root takes `.htaccess` rules of fixed kinds only, checks every field and writes the nginx itself, so nothing from an `.htaccess` reaches nginx as it is; `nginx -t` runs before every reload
+* The root scripts change, so the update finishes with its installer, which asks for your password
+
 ### v1.25.0 (2026-11-08)
 * **Sites:** a third web server for a site, nginx + Apache: nginx answers with the site's certificate and passes requests to its Apache vhost over HTTPS, so Apache still reads every `.htaccess` and runs its PHP, as hosts that put nginx in front of Apache do. No PHP-FPM needed, and the sites under its paths go along
 * **Sites:** nginx serves images, CSS, JS and fonts that exist itself, but folders with an `.htaccess` of their own always go to Apache; a tick sends every request through Apache. The dialog lists the `.htaccess` rules about those files, which would not run otherwise

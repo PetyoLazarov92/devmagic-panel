@@ -116,11 +116,37 @@ const SCAN_FOLDERS = 5000;
  * go to Apache, so their rules run for every file in them. Links are not
  * followed, and only names dmp-root takes (letters, digits, . _ -) count.
  */
-export function htaccessFolders(docroot: string): string[] {
+export function htaccessFolders(docroot: string, fresh = false): string[] {
+  // A folder under another one that goes to Apache goes with it.
+  return scanHtaccess(docroot, fresh).folders.filter((p, i, all) => !all.slice(0, i).some((q) => p.startsWith(`${q}/`)));
+}
+
+/**
+ * Every folder below the site's own with an .htaccess, sorted, and whether
+ * the scan stopped at its limit of folders.
+ */
+export function scanHtaccess(docroot: string, fresh = false): { folders: string[]; partial: boolean } {
+  const hit = scans.get(docroot);
+  if (!fresh && hit && Date.now() - hit.at < SCAN_TTL_MS) return hit.scan;
+  const scan = walkHtaccess(docroot);
+  scans.set(docroot, { at: Date.now(), scan });
+  return scan;
+}
+
+/** Scans of a site's folders, kept a minute: the sites list reads them for every site. */
+const scans = new Map<string, { at: number; scan: { folders: string[]; partial: boolean } }>();
+const SCAN_TTL_MS = 60_000;
+
+function walkHtaccess(docroot: string): { folders: string[]; partial: boolean } {
   const found: string[] = [];
   let seen = 0;
+  let partial = false;
   const walk = (dir: string, at: string, depth: number) => {
-    if (depth > SCAN_DEPTH || seen >= SCAN_FOLDERS) return;
+    if (depth > SCAN_DEPTH) return;
+    if (seen >= SCAN_FOLDERS) {
+      partial = true;
+      return;
+    }
     let entries;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
@@ -135,8 +161,7 @@ export function htaccessFolders(docroot: string): string[] {
     }
   };
   walk(docroot, '', 0);
-  // A folder under another one that goes to Apache goes with it.
-  return found.sort().filter((p, i, all) => !all.slice(0, i).some((q) => p.startsWith(`${q}/`)));
+  return { folders: found.sort(), partial };
 }
 
 /** Files nginx serves itself in front of Apache (DMP_NGINX_STATIC_EXT in scripts/lib/nginx.sh). */

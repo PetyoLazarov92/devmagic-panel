@@ -403,6 +403,106 @@ dmp_nginx_php_socket() {
 # entries, each a folder in WEB_DIR. dmp-root sets them after checking each one.
 DMP_NGINX_MOUNTS=()
 
+# ── .htaccess rules on nginx ─────────────────────────────────
+#
+# The panel translates a site's .htaccess into rules of a few fixed kinds;
+# dmp-root checks every field of each and writes the nginx directives itself,
+# so no text from an .htaccess reaches nginx as it is (nginx opens log files
+# as root: a free-form line could write any file). Each rule is kept in the
+# site's file as a "# rule:" line, and each .htaccess it came from as a
+# "# htaccess: /folder <sha256>" line, so the panel sees when one changed.
+#
+#   redirect <301|302> <regex> <target>   rewrite ... permanent|redirect
+#   rewrite <regex> <path>                 rewrite ... last
+#   deny <regex>                           location ~ <regex> { deny all; }
+#   header set <Name> <value...>           add_header <Name> "<value>" always
+#   header unset <Name>                    fastcgi_hide_header <Name>
+#   error-page <code> <path>               error_page <code> <path>
+DMP_NGINX_RULES=()
+DMP_NGINX_SUMS=()
+# shellcheck disable=SC2034 # read by dmp-root, which caps --rule at it
+DMP_NGINX_MAX_RULES=500
+# Headers a rule may set or unset: security, cross-origin and robots headers.
+DMP_NGINX_HEADERS=(X-Frame-Options X-Content-Type-Options X-XSS-Protection Referrer-Policy Strict-Transport-Security
+  Content-Security-Policy Content-Security-Policy-Report-Only Permissions-Policy Cross-Origin-Opener-Policy
+  Cross-Origin-Embedder-Policy Cross-Origin-Resource-Policy Access-Control-Allow-Origin Access-Control-Allow-Methods
+  Access-Control-Allow-Headers Access-Control-Allow-Credentials Access-Control-Expose-Headers X-Robots-Tag X-Powered-By)
+
+# A regex nginx takes unquoted: no space, quote, brace, ; or #, and no
+# backslash pair nginx would read as an escape of its own.
+dmp_nginx_regex_ok() {
+  local r="$1" re='^[][A-Za-z0-9/._~%^$*+?()|\,=:@!&-]+$'
+  (( ${#r} <= 512 )) && [[ "$r" =~ $re ]] || return 1
+  # shellcheck disable=SC1003 # the backslashes in single quotes are the literal text looked for
+  [[ "$r" != *'\\'* && "$r" != *'\t'* && "$r" != *'\r'* && "$r" != *'\n'* && "$r" != *'\' ]]
+}
+
+# A redirect or rewrite target: a path, or an https or http address, with
+# only $1 to $9 and a few of nginx's own variables in it.
+dmp_nginx_target_ok() {
+  # shellcheck disable=SC2016 # $ is a character of the target here, not an expansion
+  local t="$1" rest re='^(https?://[a-z0-9.$_-]+(:[0-9]{1,5})?)?(/[A-Za-z0-9/._~%?&=+:@!,()*$-]*)?$'
+  (( ${#t} <= 1024 )) && [[ -n "$t" && "$t" =~ $re ]] || return 1
+  [[ "$t" == /* || "$t" == http://* || "$t" == https://* ]] || return 1
+  # shellcheck disable=SC2016 # the $ names nginx variables, not shell ones
+  rest="$(sed -E 's/\$([1-9]|host|scheme|request_uri|args|is_args)//g' <<< "$t")"
+  [[ "$rest" != *'$'* ]]
+}
+
+# True for one rule of the kinds the comment at the top of this part lists.
+dmp_nginx_rule_ok() {
+  local rule="$1" kind a b c name printable='^[ -~]+$' LC_ALL=C
+  [[ "$rule" =~ $printable ]] || return 1
+  read -r kind a b c <<< "$rule"
+  case "$kind" in
+    redirect) [[ "$a" == 301 || "$a" == 302 ]] && dmp_nginx_regex_ok "$b" && dmp_nginx_target_ok "$c" && [[ "$rule" == "redirect $a $b $c" ]] ;;
+    rewrite) [[ -z "$c" ]] && dmp_nginx_regex_ok "$a" && dmp_nginx_target_ok "$b" && [[ "$b" == /* && "$rule" == "rewrite $a $b" ]] ;;
+    deny) [[ -z "$b" && "$rule" == "deny $a" ]] && dmp_nginx_regex_ok "$a" ;;
+    error-page) [[ -z "$c" && "$a" =~ ^[45][0-9]{2}$ && "$b" =~ ^/[A-Za-z0-9/._-]*$ && "$rule" == "error-page $a $b" ]] ;;
+    header)
+      for name in "${DMP_NGINX_HEADERS[@]}"; do
+        [[ "$b" == "$name" ]] || continue
+        if [[ "$a" == unset ]]; then
+          [[ -z "$c" && "$rule" == "header unset $b" ]]
+          return
+        fi
+        # shellcheck disable=SC1003 # a backslash in single quotes is the literal character refused
+        [[ "$a" == set && -n "$c" && "$rule" == "header set $b $c" && ${#c} -le 1024 && "$c" != *'"'* && "$c" != *'\'* && "$c" != *'$'* ]]
+        return
+      done
+      return 1
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# The directives of the rules: DMP_NGINX_RULE_SERVER (server level, in the
+# order of the .htaccess) and DMP_NGINX_RULE_DENY (locations before PHP's).
+dmp_nginx_rules_render() {
+  local rule kind a b c
+  DMP_NGINX_RULE_SERVER=""
+  DMP_NGINX_RULE_DENY=""
+  for rule in "${DMP_NGINX_RULES[@]}"; do
+    read -r kind a b c <<< "$rule"
+    case "$kind" in
+      redirect) DMP_NGINX_RULE_SERVER+=$'\n'"    rewrite $b $c $([[ "$a" == 301 ]] && echo permanent || echo redirect);" ;;
+      rewrite) DMP_NGINX_RULE_SERVER+=$'\n'"    rewrite $a $b last;" ;;
+      deny) DMP_NGINX_RULE_DENY+=$'\n'"    location ~ $a {"$'\n'"        deny all;"$'\n'"    }" ;;
+      error-page) DMP_NGINX_RULE_SERVER+=$'\n'"    error_page $a $b;" ;;
+      header)
+        if [[ "$a" == set ]]; then
+          DMP_NGINX_RULE_SERVER+=$'\n'"    add_header $b \"${rule#"header set $b "}\" always;"
+        else
+          DMP_NGINX_RULE_SERVER+=$'\n'"    fastcgi_hide_header $b;"
+        fi
+        ;;
+    esac
+  done
+  [[ -z "$DMP_NGINX_RULE_SERVER" ]] || DMP_NGINX_RULE_SERVER=$'\n'"    # The site's .htaccess rules, as the panel translated them."$DMP_NGINX_RULE_SERVER$'\n'
+  [[ -z "$DMP_NGINX_RULE_DENY" ]] || DMP_NGINX_RULE_DENY=$'\n'"    # Denied by the site's .htaccess files."$DMP_NGINX_RULE_DENY
+  return 0
+}
+
 # The folders of the sites on nginx: each site's, then the ones it serves
 # under paths (its "# mount:" lines), one per line.
 dmp_nginx_php_folders() {
@@ -497,6 +597,13 @@ dmp_nginx_site_render() {
     mounts+=$'\n'"        rewrite ^ $at/index.php last;"
     mounts+=$'\n'"    }"$'\n'
   done
+  for mount in "${DMP_NGINX_SUMS[@]}"; do
+    headers+=$'\n'"# htaccess: ${mount%=*} ${mount##*=}"
+  done
+  for mount in "${DMP_NGINX_RULES[@]}"; do
+    headers+=$'\n'"# rule: $mount"
+  done
+  dmp_nginx_rules_render
   names="$domain${*:+ $*}"
   version="$(dmp_nginx_version)"
   if [[ -n "$version" ]] && dmp_version_at_least "$version" "$DMP_NGINX_HTTP2_DIRECTIVE"; then
@@ -544,7 +651,7 @@ server {
 
     access_log $NGINX_LOG_DIR/$domain-access.log;
     error_log $NGINX_LOG_DIR/$domain-error.log;
-
+$DMP_NGINX_RULE_SERVER
     # Never served: .htaccess, .git and the like, but .well-known.
     location ~ /\.(?!well-known/) {
         deny all;
@@ -552,7 +659,7 @@ server {
     # PHP never runs from uploads.
     location ~* ^/wp-content/uploads/.*\.php\$ {
         deny all;
-    }
+    }$DMP_NGINX_RULE_DENY
 $uploads$rewrites$mounts
     location / {
         try_files \$uri \$uri/ /index.php?\$args;

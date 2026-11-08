@@ -155,7 +155,12 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       `conf.d/devmagic-panel-php.conf` (its pool or the default version's
       FPM), written with Apache's PHP conf. `site.setServer` moves a site;
       every rewrite of a site's config goes through `siteWriteArgs`, so it
-      lands on the server that has the site. A site can also have nginx in
+      lands on the server that has the site, with its `# rule:` and
+      `# htaccess: /folder <sha256>` lines (`ruleArgs`): rules the panel
+      translated from the site's .htaccess files (`sites/htaccess-rules.ts`)
+      into a few fixed kinds that dmp-root checks field by field and writes
+      itself, never nginx text, and applied only after you review them. A
+      site can also have nginx in
       front of its Apache vhost (`site.setServer` with `nginx-apache`,
       `nginx-site-write --upstream apache`): a file with `# mode: apache`,
       `# static:` and `# apache-path:` lines (folders with an .htaccess of

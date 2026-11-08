@@ -93,15 +93,33 @@ WordPress). The Overview's Server and PHP tile shows both, like
     `Require all denied`) still go to Apache, and the dialog lists the rules
     of the root `.htaccess` about those files, which then do not run. Untick
     it to send every request through Apache.
-  - **nginx**: nginx with PHP-FPM; nginx reads no `.htaccess`, so the rules
-    beyond WordPress's are listed to tick first.
+  - **nginx**: nginx with PHP-FPM. nginx reads no `.htaccess`, so the dialog
+    lists every rule of the site's `.htaccess` files and what it becomes:
+    covered (WordPress's own rules, http to https, no folder listings),
+    translated (redirects, rewrites, denied files and folders, security
+    headers, error pages), not needed here (page caches, compression,
+    production host names), PHP settings for the PHP tab, or not translated
+    (conditions, handlers, environment variables). The translated ones go
+    into the site's nginx file; untick one to leave it out. A rule that is
+    not translated needs a tick, or pick nginx + Apache to keep it working.
 
   A job writes the new server's config and the hosts line, checks the site
   answers, then the old config goes; Undo moves it back. The dialog says why
   a site cannot run on a server when it cannot. A site under a path runs on
   its domain's server and links to it. The command palette (Ctrl+K) has Move
   to nginx, Put nginx in front of Apache and Move to Apache for every site
-  that can move as it is. On Aura, a site with nginx in front of Apache gets
+  that can move as it is.
+- **.htaccess rules**, for a site on nginx: each rule of its `.htaccess` files
+  and whether the nginx file has it, **Check again**, and **Copy nginx rules**
+  (the translated ones, for a host's own nginx settings). When an `.htaccess`
+  changed since its rules were applied, a notice opens **Review and apply**:
+  the same list with ticks, and the job writes the rules after dmp-root checks
+  each one and `nginx -t` passes, with Undo. A file that changed again after
+  you opened the review is refused, so you review it again. Aura has an issue
+  while rules wait. dmp-root takes rules of fixed kinds only and writes the
+  nginx itself, so nothing from an `.htaccess` reaches nginx as it is.
+
+  On Aura, a site with nginx in front of Apache gets
   an issue when its `.htaccess` has rules about files nginx serves (Send
   everything through Apache) or a folder got an `.htaccess` of its own (Write
   its nginx rules again).

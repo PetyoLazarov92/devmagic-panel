@@ -5,6 +5,12 @@ import { PROFILE_NAME } from './profiles.js';
 import { mysqlIdentifier, WP_CONTENT_KINDS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS, WP_TABLE_FIXES } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
 import { SITE_SERVERS } from './nginx.js';
+
+/** A review of a site's .htaccess rules: the checksum of each file as it was read, by folder, and the translated rules left out. */
+const htaccessChoice = z.object({
+  sums: z.record(z.string().regex(/^\/([A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*)?$/), z.string().regex(/^[0-9a-f]{64}$/)),
+  skip: z.array(z.string().regex(/^[0-9a-f]{12}(-\d+)?$/)).max(1000).default([]),
+});
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
 import { cronSchedule } from './cron.js';
 import { namespaceRef } from './repo-host.js';
@@ -532,7 +538,14 @@ export const actions = {
     description:
       "Moves a site to nginx or back to Apache. Both servers answer on ports 80 and 443, each on its own address, and a site goes to the one its hosts line points at. To nginx: writes the site's nginx file (WordPress's rules for a single site or its kind of network, the uploads redirect, PHP through its own PHP-FPM pool or the default version's), points the hosts line at nginx, checks the site answers, then removes the Apache vhost. nginx-apache puts nginx in front of the site's Apache vhost instead: nginx answers with the site's certificate and passes requests to the vhost over HTTPS, so Apache still reads every .htaccess and runs its PHP; with static (the default) nginx serves images, CSS, JS and fonts that exist itself, but in folders with an .htaccess of their own. Back to Apache: the other way round. Its folder, database and certificate stay. Only for a site the panel made the vhost of, in the usual folder, without sites under paths, once nginx is set up; nginx reads no .htaccess, so a site whose .htaccess has rules beyond WordPress's needs acceptIgnored. On nginx already, writes its nginx file again (after it became a network). Starts a job; Undo moves it back.",
     changesSystem: true,
-    input: z.object({ domain: localName, server: z.enum(SITE_SERVERS), static: z.boolean().default(true), acceptIgnored: z.boolean().default(false) }),
+    input: z.object({ domain: localName, server: z.enum(SITE_SERVERS), static: z.boolean().default(true), acceptIgnored: z.boolean().default(false), htaccess: htaccessChoice.optional() }),
+  },
+  'site.applyHtaccessRules': {
+    title: "Apply a site's .htaccess rules on nginx",
+    description:
+      "For a site on nginx with PHP-FPM: reads its .htaccess files again, translates the rules the panel can (redirects, rewrites, denies, security headers, error pages), and writes them into the site's nginx file with the checksum of each .htaccess, so the panel sees when one changes. sums are the checksums of the files as they were reviewed: when a file changed since, nothing is written. skip lists the ids of translated rules to leave out. dmp-root checks every rule, nginx -t runs before the reload, and the site is checked. Starts a job; Undo puts the rules back as they were.",
+    changesSystem: true,
+    input: z.object({ domain: localName, ...htaccessChoice.shape }),
   },
   'sites.setServerAll': {
     title: 'Move every site to one web server',

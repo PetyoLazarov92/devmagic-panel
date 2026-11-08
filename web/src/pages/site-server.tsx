@@ -11,6 +11,8 @@ import { Checkbox } from '@/components/ui/field';
 import { api } from '@/lib/api';
 import { Link } from '@/lib/router';
 import { toast } from '@/lib/toast';
+import { useAsync } from '@/lib/use-async';
+import { HtaccessReview, reviewedSums, ruleCounts } from '@/pages/site-htaccess';
 import { cn } from '@/lib/utils';
 
 /** The badge tone of each web server: both nginx modes stand out from plain Apache. */
@@ -59,6 +61,10 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
   const [target, setTarget] = useState<SiteServer>(site.server);
   const [staticFiles, setStaticFiles] = useState(true);
   const [accepted, setAccepted] = useState(false);
+  const [skip, setSkip] = useState<string[]>([]);
+  // Moving to nginx alone: the .htaccess rules as the panel would translate them, read when the dialog opens.
+  const reviewing = open && target === 'nginx' && site.server !== 'nginx';
+  const htaccess = useAsync(() => (reviewing ? api.htaccess(site.domain) : Promise.resolve(null)), [reviewing, site.domain]);
   const job = useJob();
   const done = useRef<string | null>(null);
   const busy = job.job !== null && !settled(job.job);
@@ -72,23 +78,33 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
   const move = site.move;
   const refusals = move?.refusals ?? {};
   const front = move?.front;
-  const ignored = target === 'nginx' && site.server !== 'nginx' ? (move?.ignored ?? []) : [];
+  const report = reviewing ? (htaccess.data ?? null) : null;
+  const left = report ? ruleCounts(report).manual + ruleCounts(report).php : 0;
   const staticRules = target === 'nginx-apache' && staticFiles ? (front?.staticRules ?? []) : [];
   const anyOpen = SITE_SERVERS.some((s) => s !== site.server && !refusals[s]) || site.server === 'nginx-apache';
   // The same server: only nginx in front of Apache has settings to change.
   const unchanged = target === site.server && (target !== 'nginx-apache' || staticFiles === (front?.static ?? true));
-  const blocked = Boolean(target !== site.server && refusals[target]) || unchanged || (ignored.length > 0 && !accepted);
+  const blocked = Boolean(target !== site.server && refusals[target]) || unchanged || (reviewing && (!report || (left > 0 && !accepted)));
   const nginxRefusal = refusals.nginx ?? refusals['nginx-apache'];
 
   const openDialog = () => {
     setTarget(site.server);
     setStaticFiles(front?.static ?? true);
     setAccepted(false);
+    setSkip([]);
     setOpen(true);
   };
   const start = () => {
     setOpen(false);
-    void job.follow(api.startJob('site.setServer', { domain: site.domain, server: target, static: staticFiles, acceptIgnored: accepted }));
+    void job.follow(
+      api.startJob('site.setServer', {
+        domain: site.domain,
+        server: target,
+        static: staticFiles,
+        acceptIgnored: accepted,
+        ...(report ? { htaccess: { sums: reviewedSums(report), skip } } : {}),
+      }),
+    );
   };
 
   return (
@@ -180,17 +196,23 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
             </div>
           )}
 
-          {ignored.length > 0 && (
-            <div className="grid gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2">
-              <p className="flex gap-2 text-warning">
-                <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                nginx does not read .htaccess. These rules in it would do nothing there:
-              </p>
-              <ul className="list-disc pl-9 text-muted-foreground">
-                {ignored.map((name) => <li key={name}>{name}</li>)}
-              </ul>
-              {!refusals['nginx-apache'] && <p className="pl-6 text-xs text-muted-foreground">To keep them working with nginx, pick nginx + Apache instead.</p>}
-              <Checkbox id="server-accept-ignored" checked={accepted} onChange={setAccepted} label="Move it anyway; I know these rules do nothing on nginx" />
+          {reviewing && (
+            <div className="grid gap-3 rounded-lg border px-3 py-2.5">
+              <p className="font-medium">.htaccess rules on nginx</p>
+              <p className="text-xs text-muted-foreground">nginx reads no .htaccess. The panel writes the translated rules into the site&apos;s nginx file; untick one to leave it out.</p>
+              {htaccess.loading && !report && <p className="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Reading the .htaccess files</p>}
+              {htaccess.error && <p role="alert" className="text-xs text-danger">{htaccess.error}</p>}
+              {report && <div className="max-h-80 overflow-y-auto pr-1"><HtaccessReview report={report} skip={skip} onSkip={setSkip} /></div>}
+              {report && left > 0 && (
+                <div className="grid gap-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2">
+                  <p className="flex gap-2 text-warning">
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                    {left} rule{left === 1 ? '' : 's'} would do nothing on nginx (not translated, or PHP settings for the PHP tab).
+                  </p>
+                  {!refusals['nginx-apache'] && <p className="pl-6 text-xs text-muted-foreground">To keep every rule working with nginx, pick nginx + Apache instead.</p>}
+                  <Checkbox id="server-accept-ignored" checked={accepted} onChange={setAccepted} label="Move it anyway; I know those rules do nothing on nginx" />
+                </div>
+              )}
             </div>
           )}
 

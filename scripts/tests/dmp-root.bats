@@ -1888,3 +1888,64 @@ front_tree() {
   [ -L "$T/sites-enabled/local.wandworks.example-ssl.conf" ]
   grep -qx '127.0.0.2 local.wandworks.example local.wandworks.de' "$T/hosts"
 }
+
+@test "nginx-site-write writes .htaccess rules dmp-root checked, with their checksums" {
+  nginx_site_tree
+  sum="$(printf 'x' | sha256sum | cut -d' ' -f1)"
+  run dmp nginx-site-write local.wandworks.example \
+    --rule 'redirect 301 ^/old(/.*)?$ /new$1' \
+    --rule 'rewrite ^/sitemap\.xml$ /index.php?sitemap=1' \
+    --rule 'deny ^/private/' \
+    --rule 'header set Content-Security-Policy default-src '\''self'\''; img-src *' \
+    --rule 'header unset X-Powered-By' \
+    --rule 'error-page 404 /404.php' \
+    --htaccess-sum "/=$sum" --htaccess-sum "/private=$sum" \
+    local.wandworks.de
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.wandworks.example.conf"
+  grep -qx "# htaccess: / $sum" "$site"
+  grep -qx "# htaccess: /private $sum" "$site"
+  grep -qx '# rule: redirect 301 ^/old(/.*)?$ /new$1' "$site"
+  grep -qx '    rewrite ^/old(/.*)?$ /new$1 permanent;' "$site"
+  grep -qxF "    rewrite ^/sitemap\\.xml$ /index.php?sitemap=1 last;" "$site"
+  grep -qx '    location ~ ^/private/ {' "$site"
+  grep -qxF "    add_header Content-Security-Policy \"default-src 'self'; img-src *\" always;" "$site"
+  grep -qx '    fastcgi_hide_header X-Powered-By;' "$site"
+  grep -qx '    error_page 404 /404.php;' "$site"
+}
+
+@test "nginx-site-write refuses rules that are not of its kinds, or carry nginx syntax" {
+  nginx_site_tree
+  bad=(
+    'redirect 307 ^/a /b'
+    'redirect 301 ^/a{2} /b'
+    'redirect 301 ^/a;b /c'
+    'redirect 301 ^/a /b;access_log'
+    'redirect 301 ^/a /b$document_root'
+    'redirect 301 ^/a ftp://x/'
+    'redirect 301 ^/a\\ /b'
+    'redirect 301 ^/a /b extra'
+    'rewrite ^/a https://elsewhere.example/'
+    'deny ^/a #x'
+    'deny "^/a"'
+    'header set X-Wandworks 1'
+    'header set X-Frame-Options "DENY"'
+    'header set X-Frame-Options $host'
+    'header unset X-Frame-Options again'
+    'error-page 200 /x'
+    'error-page 404 /x?y'
+    'access_log /etc/passwd'
+    "deny ^/a"$'\n'"access_log /etc/x"
+  )
+  for rule in "${bad[@]}"; do
+    run dmp nginx-site-write local.wandworks.example --rule "$rule"
+    [ "$status" -eq 2 ] || { echo "accepted: $rule"; false; }
+  done
+  for sum in '/=abc' 'x=0000000000000000000000000000000000000000000000000000000000000000' '/../etc=0000000000000000000000000000000000000000000000000000000000000000'; do
+    run dmp nginx-site-write local.wandworks.example --htaccess-sum "$sum"
+    [ "$status" -eq 2 ]
+  done
+  run dmp nginx-site-write local.wandworks.example --upstream apache --rule 'deny ^/a'
+  [ "$status" -eq 2 ]
+  [ ! -e "$T/nginx/sites-available/local.wandworks.example.conf" ]
+}

@@ -37,6 +37,7 @@ import { PerformanceTab } from '@/pages/site-performance';
 import { PhpTab } from '@/pages/site-php';
 import { PluginsTab } from '@/pages/site-plugins';
 import { ServerCard } from '@/pages/site-server';
+import { HtaccessCard } from '@/pages/site-htaccess';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { debugLabel, debugValues, siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
 import { cn } from '@/lib/utils';
@@ -1171,6 +1172,7 @@ function ServerAndPhpTab({ site, onChanged }: { site: Site; onChanged: () => voi
       ) : (
         <ServerCard site={site} onChanged={onChanged} />
       )}
+      {!site.path && site.server === 'nginx' && <HtaccessCard site={site} onChanged={onChanged} />}
       {site.core.kind !== 'none' && <PhpTab site={site} />}
     </div>
   );

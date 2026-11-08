@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { ActionInput } from '@devmagic-panel/shared';
-import { isLocalName, SITE_SERVER_LABEL, SITE_SERVERS, type SiteMove, type SiteServer } from '@devmagic-panel/shared';
+import { isLocalName, SITE_SERVER_LABEL, SITE_SERVERS, type HtaccessRule, type SiteMove, type SiteServer } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
 import type { JobStep } from '../jobs.js';
@@ -10,9 +10,10 @@ import { readPools } from '../php/pools.js';
 import { checkSite } from '../php/site-php.js';
 import { apachePhpVersion, fpmDefaultVersion } from '../php/versions.js';
 import { findVhost } from './discover.js';
-import { htaccessFolders, htaccessIgnored, readHtaccess, siteKind, staticRules } from './htaccess.js';
+import { htaccessFolders, readHtaccess, siteKind, staticRules } from './htaccess.js';
+import { chosenRules, readHtaccessReport, reportSums, sameSums } from './htaccess-rules.js';
 import { hostsOutsideBlock, readHosts } from './hosts-block.js';
-import { mountArgs, SiteActionRefused } from './site-actions.js';
+import { mountArgs, ruleArgs, SiteActionRefused } from './site-actions.js';
 import { readSiteVhosts, siteServer, type VhostInfo } from './vhost.js';
 import { parseWpConfig } from './wpconfig.js';
 
@@ -45,9 +46,14 @@ export function nginxPhpVersion(config: SystemConfig, domain: string): string | 
   return version && existsSync(join(config.PHP_LIB_DIR, version, 'sapi', 'fpm')) ? version : undefined;
 }
 
-/** What nginx leaves out of the site's .htaccess, for the move dialog. */
+/** How the move dialog names a rule: its file when it is not the site's own, its section, and its first line. */
+const ruleName = (r: HtaccessRule) => `${r.file === '/' ? '' : `${r.file}: `}${r.section ? `${r.section}: ` : ''}${(r.source.split('\n')[0] ?? '').slice(0, 90)}`;
+
+/** What nginx leaves out of the site's .htaccess files: rules the panel does not translate, and PHP settings for the PHP tab. */
 export function ignoredOnNginx(docroot: string): string[] {
-  return htaccessIgnored(readHtaccess(docroot) ?? '');
+  const left = readHtaccessReport(docroot).rules.filter((r) => r.status === 'manual' || r.status === 'php');
+  const names = left.slice(0, 8).map((r) => (r.status === 'php' ? `PHP setting: ${ruleName(r)}` : ruleName(r)));
+  return left.length > 8 ? [...names, `and ${left.length - 8} more`] : names;
 }
 
 /** The WordPress rules a site needs on nginx, from its wp-config.php. */
@@ -56,18 +62,8 @@ function kindOf(docroot: string): 'single' | 'subdirectory' | 'subdomain' {
   return existsSync(file) ? siteKind(parseWpConfig(readFileSync(file, 'utf8'))) : 'single';
 }
 
-/** Scans of a site's folders for .htaccess files, kept a minute: the sites list reads them for every site. */
-const scans = new Map<string, { at: number; paths: string[] }>();
-const SCAN_TTL_MS = 60_000;
-
 /** The folders of a site with an .htaccess of their own; fresh when a move is planned, else from the last minute. */
-export function apachePaths(docroot: string, fresh = false): string[] {
-  const hit = scans.get(docroot);
-  if (!fresh && hit && Date.now() - hit.at < SCAN_TTL_MS) return hit.paths;
-  const paths = htaccessFolders(docroot);
-  scans.set(docroot, { at: Date.now(), paths });
-  return paths;
-}
+export const apachePaths = (docroot: string, fresh = false): string[] => htaccessFolders(docroot, fresh);
 
 /**
  * Why a site cannot run on a web server, or null when it can: the checks
@@ -132,18 +128,26 @@ export function planSetServer(ctx: ServerSwitchContext, input: ActionInput<'site
     const php = nginxPhpVersion(config, domain);
     if (!php) throw new SiteActionRefused(`nginx runs PHP through PHP-FPM only, and there is none for the PHP version ${domain} runs: install PHP-FPM for it on Services, PHP`);
     const kind = kindOf(docroot);
-    const write = () => root(ctx, nginxArgs(config, vhost, domain, aliases, kind));
     if (current === 'nginx') {
-      return [{ id: 'nginx', label: `Write the nginx site for ${domain} again, with the ${kind === 'single' ? 'single site' : `${kind} network`} rules`, weight: 2, run: async () => failed(await write()) }, check(ctx, domain)];
+      const again = () => root(ctx, nginxArgs(config, vhost, domain, aliases, kind, vhost.rules, vhost.htaccessSums));
+      return [{ id: 'nginx', label: `Write the nginx site for ${domain} again, with the ${kind === 'single' ? 'single site' : `${kind} network`} rules`, weight: 2, run: async () => failed(await again()) }, check(ctx, domain)];
     }
-    const ignored = ignoredOnNginx(docroot);
-    if (ignored.length && !input.acceptIgnored) {
-      throw new SiteActionRefused(`nginx does not read .htaccess, and ${domain}'s has rules beyond WordPress's: ${ignored.join(', ')}. Tick that you accept it, or keep the site on Apache, or put nginx in front of Apache.`);
+    // The .htaccess rules the panel translates go along: the ones reviewed, when the dialog sent them.
+    const report = readHtaccessReport(docroot, undefined, Date.now(), true);
+    if (input.htaccess && !sameSums(reportSums(report), input.htaccess.sums)) {
+      throw new SiteActionRefused(`${domain}'s .htaccess changed since you reviewed it: review its rules again`);
     }
+    const left = report.rules.filter((r) => r.status === 'manual' || r.status === 'php');
+    if (left.length && !input.acceptIgnored && !input.htaccess) {
+      throw new SiteActionRefused(`nginx does not read .htaccess, and ${domain}'s has rules the panel does not translate: ${ignoredOnNginx(docroot).join(', ')}. Tick that you accept it, or keep the site on Apache, or put nginx in front of Apache.`);
+    }
+    const rules = chosenRules(report, input.htaccess?.skip);
+    const sums = reportSums(report);
+    const write = () => root(ctx, nginxArgs(config, vhost, domain, aliases, kind, rules, sums));
     return [
       {
         id: 'nginx',
-        label: `Write the nginx site for ${domain}, its PHP through PHP-FPM ${php}`,
+        label: `Write the nginx site for ${domain}, its PHP through PHP-FPM ${php}${rules.length ? `, with ${rules.length} rule${rules.length === 1 ? '' : 's'} from its .htaccess` : ''}`,
         weight: 2,
         run: async (job) => {
           const r = await write();
@@ -202,7 +206,7 @@ export function planSetServer(ctx: ServerSwitchContext, input: ActionInput<'site
           const r = await write();
           if (r.code === 0) {
             job.onUndo(current === 'nginx' ? 'Write the nginx site again' : 'Take nginx out and point the hosts line at Apache', async () => {
-              if (current === 'nginx') return root(ctx, nginxArgs(config, vhost, domain, aliases, vhost.kind ?? 'single'));
+              if (current === 'nginx') return root(ctx, nginxArgs(config, vhost, domain, aliases, vhost.kind ?? 'single', vhost.rules, vhost.htaccessSums));
               const removed = await root(ctx, ['nginx-site-remove', domain]);
               return removed.code === 0 ? root(ctx, ['hosts-add', ...names]) : removed;
             });
@@ -255,12 +259,47 @@ export function planSetServerAll(ctx: ServerSwitchContext, input: ActionInput<'s
   ];
 }
 
+/**
+ * site.applyHtaccessRules: a site on nginx gets its .htaccess rules as
+ * reviewed. The files are read again here, never taken from the browser;
+ * when one changed since the review, nothing is written. Undo writes the
+ * rules it had before.
+ */
+export function planApplyHtaccess(ctx: ServerSwitchContext, input: ActionInput<'site.applyHtaccessRules'>): JobStep[] {
+  const { config } = ctx;
+  const { domain } = input;
+  const vhost = findVhost(config, domain);
+  if (!vhost?.docroot || vhost.names[0] !== domain) throw new SiteActionRefused(`${domain} is not a site's primary domain here`);
+  if (vhost.server !== 'nginx') throw new SiteActionRefused(`${domain} does not run on nginx alone: ${siteServer(vhost) === 'nginx-apache' ? 'Apache behind nginx reads its .htaccess' : 'Apache reads its .htaccess'} as it is`);
+  if (!vhost.managed) throw new SiteActionRefused(`the nginx file of ${domain} was not written by the panel`);
+  const report = readHtaccessReport(vhost.docroot, undefined, Date.now(), true);
+  const sums = reportSums(report);
+  if (!sameSums(sums, input.sums)) throw new SiteActionRefused(`${domain}'s .htaccess changed since you reviewed it: review its rules again`);
+  const rules = chosenRules(report, input.skip);
+  const aliases = vhost.names.slice(1).filter(isLocalName);
+  const kind = vhost.kind ?? 'single';
+  const before = { rules: vhost.rules ?? [], sums: vhost.htaccessSums ?? {} };
+  return [
+    {
+      id: 'nginx',
+      label: rules.length ? `Write ${rules.length} rule${rules.length === 1 ? '' : 's'} from ${domain}'s .htaccess into its nginx file` : `Write ${domain}'s nginx file with no .htaccess rules`,
+      weight: 2,
+      run: async (job) => {
+        const r = await root(ctx, nginxArgs(config, vhost, domain, aliases, kind, rules, sums));
+        if (r.code === 0) job.onUndo('Put the rules back as they were', () => root(ctx, nginxArgs(config, vhost, domain, aliases, kind, before.rules, before.sums)));
+        return failed(r);
+      },
+    },
+    check(ctx, domain),
+  ];
+}
+
 const apacheArgs = (config: SystemConfig, vhost: VhostInfo, domain: string, aliases: string[]) => [
   'vhost-write', domain, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...mountArgs(config, vhost.mounts), ...aliases,
 ];
 
-const nginxArgs = (config: SystemConfig, vhost: VhostInfo, domain: string, aliases: string[], kind: string) => [
-  'nginx-site-write', domain, '--kind', kind, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...mountArgs(config, vhost.mounts), ...aliases,
+const nginxArgs = (config: SystemConfig, vhost: VhostInfo, domain: string, aliases: string[], kind: string, rules?: string[], sums?: Record<string, string>) => [
+  'nginx-site-write', domain, '--kind', kind, ...(vhost.uploadsProxy ? ['--uploads-proxy', vhost.uploadsProxy] : []), ...ruleArgs(rules, sums), ...mountArgs(config, vhost.mounts), ...aliases,
 ];
 
 /** dmp-root's command for nginx in front of the site's Apache vhost. */
@@ -297,7 +336,7 @@ function toApache(ctx: ServerSwitchContext, vhost: VhostInfo, domain: string, al
         const r = await root(ctx, ['nginx-site-remove', domain]);
         if (r.code === 0) {
           job.onUndo('Write the nginx site again and point the hosts line at nginx', async () => {
-            const written = await root(ctx, nginxArgs(ctx.config, vhost, domain, aliases, kind));
+            const written = await root(ctx, nginxArgs(ctx.config, vhost, domain, aliases, kind, vhost.rules, vhost.htaccessSums));
             return written.code === 0 ? root(ctx, ['hosts-add', ...names]) : written;
           });
         }

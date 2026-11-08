@@ -30,6 +30,7 @@ Usage: dmp-root <command> [args]
   vhost-write-panel                   write the vhost that proxies to the panel
   vhost-remove <domain>               disable and remove a site vhost
   nginx-site-write <domain> [--kind single|subdirectory|subdomain] [--uploads-proxy <host>]
+                   [--rule <rule>]... [--htaccess-sum /folder=<sha256>]...
                    [--mount /path=folder]... [alias...]
                                       the site on nginx (NGINX_ADDRESS), from WEB_DIR/<domain>,
                                       its PHP through PHP-FPM; kind picks WordPress's rules;
@@ -177,6 +178,18 @@ nginx_site_write() {
     case "$1" in
       --kind) dmp_in_list "$2" "${DMP_NGINX_KINDS[@]}" || dmp_usage_error "--kind takes ${DMP_NGINX_KINDS[*]}, not: $2"; kind="$2"; php_opts=1 ;;
       --uploads-proxy) dmp_require_hostname "$2"; proxy="$2"; php_opts=1 ;;
+      # A rule translated from the site's .htaccess, and the checksum of each .htaccess they came from.
+      --rule)
+        dmp_nginx_rule_ok "$2" || dmp_usage_error "not a rule dmp-root takes: $2"
+        (( ${#DMP_NGINX_RULES[@]} < DMP_NGINX_MAX_RULES )) || dmp_usage_error "more than $DMP_NGINX_MAX_RULES rules"
+        DMP_NGINX_RULES+=("$2")
+        php_opts=1
+        ;;
+      --htaccess-sum)
+        [[ "$2" =~ ^/([A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*)?=[0-9a-f]{64}$ && "$2/" != */./* && "$2/" != */../* ]] || dmp_usage_error "--htaccess-sum needs /folder=<sha256>, not: $2"
+        DMP_NGINX_SUMS+=("$2")
+        php_opts=1
+        ;;
       # nginx in front of the site's Apache vhost, which reads .htaccess and runs its PHP.
       --upstream) [[ "$2" == apache ]] || dmp_usage_error "--upstream takes apache, not: $2"; upstream=apache ;;
       --static) [[ "$2" == on || "$2" == off ]] || dmp_usage_error "--static takes on or off, not: $2"; static="$2" ;;
@@ -208,7 +221,7 @@ nginx_site_write() {
   done
   if [[ -n "$upstream" ]]; then
     # Apache's vhost has the WordPress rules, the uploads redirect and the sites under paths.
-    (( php_opts == 0 )) || dmp_usage_error "--kind, --uploads-proxy and --mount are for a site on nginx's own PHP, not in front of Apache"
+    (( php_opts == 0 )) || dmp_usage_error "--kind, --uploads-proxy, --mount, --rule and --htaccess-sum are for a site on nginx's own PHP, not in front of Apache"
     dmp_nginx_front_write "$domain" "$static" "$@"
     return
   fi
