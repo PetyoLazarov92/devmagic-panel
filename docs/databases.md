@@ -112,6 +112,10 @@ a toast says when one you are not looking at ends.
 and tick rows on a page to delete them together.
 
 - Long values load in full before you edit them. NULL is a tick of its own.
+- The button next to a row's title fills the window, for a row with many
+  columns or long values. The panel remembers it: viewing, editing,
+  duplicating and adding rows, and a row of a SQL result, open the same way
+  until you switch back. The buttons stay below the columns as they scroll.
 - A PHP serialized value whose string lengths no longer add up, or JSON that
   no longer reads, is flagged, with **Count the lengths again**.
 - A value with NUL bytes or Windows line breaks opens in an editor that shows
@@ -168,7 +172,8 @@ suggested, the database's own tables as you type and a table's columns after
 - **Read only** (the default): SELECT, WITH, SHOW, EXPLAIN, DESCRIBE, TABLE or
   VALUES, as the read-only MySQL account, up to 1,000 rows and 30 seconds.
   **Explain** shows how MySQL would run it, **CSV** downloads the result, and
-  the last 30 statements stay in this browser. Explain also takes an UPDATE,
+  the last 30 statements stay in this browser, under **History**, as wide as
+  the editor (the whole statement on hover). Explain also takes an UPDATE,
   a DELETE, or an INSERT or REPLACE with a SELECT: MySQL explains those only
   to an account that may run them, so the panel explains the SELECT that
   finds the same rows (what makes them slow) and shows it above the plan. An

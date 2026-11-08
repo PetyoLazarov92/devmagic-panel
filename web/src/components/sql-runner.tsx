@@ -1,6 +1,6 @@
 import type { DbQueryResult, WriteCheck } from '@devmagic-panel/shared';
 import { Download, History, KeyRound, LoaderCircle, Play, ScanSearch, ShieldCheck, Trash2 } from 'lucide-react';
-import { type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { ValueView } from '@/components/db-browser';
 import { EditorBoundary } from '@/components/editor-boundary';
@@ -12,10 +12,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/input';
-import { Menu } from '@/components/ui/menu';
 import { api, ApiError } from '@/lib/api';
 import { runWithToast } from '@/lib/site-actions';
 import { loadSqlEditor } from '@/lib/sql-editor-load';
+import { useRowDialogFull } from '@/lib/preferences';
 import { addHistory, clearHistory, readHistory, toCsv } from '@/lib/sql-history';
 import { bytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -115,6 +115,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
   const [needsAccount, setNeedsAccount] = useState(false);
   const [running, setRunning] = useState<'run' | 'explain' | null>(null);
   const [history, setHistory] = useState(() => readHistory(database));
+  const fullScreen = useRowDialogFull();
   const [open, setOpen] = useState<number | null>(null);
   // Table and column names for the suggestions; without them the editor still suggests keywords.
   const schema = useAsync(() => api.dbSchema(database), [database]);
@@ -243,7 +244,8 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
               One statement that changes rows (INSERT, UPDATE, DELETE, REPLACE) or a table, an index or a view (ALTER, CREATE, DROP, RENAME, TRUNCATE). The panel shows what it would change first, saves the tables it names, and Undo puts them back for 14 days.
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* relative: the history list opens across this row, as wide as the editor. */}
+          <div className="relative flex flex-wrap items-center gap-2">
             {writing ? (
               <Button onClick={() => void check()} disabled={!sql.trim() || checking || (job !== null && !settled(job))}>
                 {checking ? <LoaderCircle className="animate-spin" /> : <Play />}Check and run...
@@ -258,16 +260,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
                 </Button>
               </>
             )}
-            {history.length > 0 && (
-              <Menu
-                label="Earlier statements"
-                align="start"
-                items={[
-                  ...history.map((h) => ({ label: h.length > 70 ? `${h.slice(0, 70)}…` : h, icon: <History />, onSelect: () => setSql(h) })),
-                  { label: 'Clear this list', icon: <Trash2 />, danger: true, onSelect: () => (clearHistory(database), setHistory([])) },
-                ]}
-              />
-            )}
+            {history.length > 0 && <HistoryMenu history={history} onPick={setSql} onClear={() => (clearHistory(database), setHistory([]))} />}
             <span className="ml-auto text-xs text-muted-foreground">
               {writing ? 'Ctrl+Enter checks it first, Tab takes a suggestion.' : 'Ctrl+Enter runs, Tab takes a suggestion. One statement that reads, up to 1,000 rows and 30 seconds.'}
             </span>
@@ -298,9 +291,9 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
           onConfirm={startWrite}
         />
       )}
-      <Dialog open={open !== null} onClose={() => setOpen(null)} title="A row of the result" className="w-[min(48rem,calc(100vw-2rem))]">
+      <Dialog open={open !== null} onClose={() => setOpen(null)} title="A row of the result" className="w-[min(48rem,calc(100vw-2rem))]" fullScreen={fullScreen} footer={<Button variant="outline" onClick={() => setOpen(null)}>Close</Button>}>
         {open !== null && result && (
-          <div className="mt-3 grid max-h-[70vh] gap-3 overflow-y-auto pr-1">
+          <div className="grid gap-3">
             {result.columns.map((c, i) => (
               <div key={i} className="grid gap-1">
                 <p className="font-mono text-xs font-medium">{c}</p>
@@ -309,9 +302,6 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
             ))}
           </div>
         )}
-        <div className="mt-4 flex justify-end">
-          <Button variant="outline" onClick={() => setOpen(null)}>Close</Button>
-        </div>
       </Dialog>
     </div>
   );
@@ -394,5 +384,65 @@ function ResultCard({ result, onOpen, onCsv }: { result: DbQueryResult; onOpen: 
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * The earlier statements, wide enough to tell them apart: each on up to two
+ * lines in the editor's font, the whole statement on hover.
+ */
+function HistoryMenu({ history, onPick, onClear }: { history: string[]; onPick: (sql: string) => void; onClear: () => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const id = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    root.current?.querySelector<HTMLButtonElement>('[role=menuitem]')?.focus();
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const pick = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+  return (
+    <div ref={root}>
+      <Button variant="ghost" aria-haspopup="menu" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)} className="text-muted-foreground hover:text-foreground">
+        <History />History<span className="text-xs tabular-nums">{history.length}</span>
+      </Button>
+      {open && (
+        <div id={id} role="menu" aria-label="Earlier statements" className="absolute inset-x-0 top-full z-30 mt-1 rounded-lg border bg-card p-1 shadow-lg">
+          <div className="max-h-[min(24rem,60vh)] overflow-y-auto">
+            {history.map((h) => (
+              <button
+                key={h}
+                type="button"
+                role="menuitem"
+                title={h}
+                onClick={pick(() => onPick(h))}
+                className="block w-full rounded-md px-2.5 py-1.5 text-left font-mono text-xs leading-5 hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+              >
+                <span className="line-clamp-2 break-all">{h.replace(/\s+/g, ' ')}</span>
+              </button>
+            ))}
+          </div>
+          <div className="mt-1 border-t pt-1">
+            <button type="button" role="menuitem" onClick={pick(onClear)} className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-danger hover:bg-muted focus-visible:bg-muted focus-visible:outline-none">
+              <Trash2 className="size-4" />Clear this list
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

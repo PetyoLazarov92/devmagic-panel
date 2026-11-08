@@ -18,7 +18,7 @@ import { Segmented } from '@/components/ui/segmented';
 import { api, dbExportUrl, isMockup } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { controlRuns, parseJsonValue, parsePhpSerialized, propertyName, type PhpValue } from '@/lib/php-serialized';
-import { savePreferences, usePreferences } from '@/lib/preferences';
+import { savePreferences, usePreferences, useRowDialogFull } from '@/lib/preferences';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
@@ -675,10 +675,25 @@ function RowDialog({ row, page, database, table, onClose, onEdit, onDuplicate, o
   onDuplicate?: (row: DbRow) => void;
   onDelete?: (row: DbRow) => void;
 }) {
+  const fullScreen = useRowDialogFull();
   return (
-    <Dialog open={row !== null} onClose={onClose} title={`A row of ${table}`} className="w-[min(48rem,calc(100vw-2rem))]">
+    <Dialog
+      open={row !== null}
+      onClose={onClose}
+      title={`A row of ${table}`}
+      className="w-[min(48rem,calc(100vw-2rem))]"
+      fullScreen={fullScreen}
+      footer={
+        <>
+          {row?.key && onDelete && <Button variant="outline" className="mr-auto text-danger" onClick={() => onDelete(row)}><Trash2 />Delete</Button>}
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          {row?.key && onDuplicate && <Button variant="outline" onClick={() => onDuplicate(row)}><Copy />Duplicate</Button>}
+          {row?.key && onEdit && <Button onClick={() => onEdit(row)}><Pencil />Edit</Button>}
+        </>
+      }
+    >
       {row && page && (
-        <div className="mt-3 grid max-h-[70vh] gap-3 overflow-y-auto pr-1">
+        <div className="grid gap-3">
           {page.columns.map((c, i) => (
             <div key={c.name} className="grid gap-1">
               <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -691,12 +706,6 @@ function RowDialog({ row, page, database, table, onClose, onEdit, onDuplicate, o
           {!row.key && <p className="text-xs text-muted-foreground">This table has no primary key, so long values show only their start here.</p>}
         </div>
       )}
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
-        {row?.key && onDelete && <Button variant="outline" className="mr-auto text-danger" onClick={() => onDelete(row)}><Trash2 />Delete</Button>}
-        <Button variant="outline" onClick={onClose}>Close</Button>
-        {row?.key && onDuplicate && <Button variant="outline" onClick={() => onDuplicate(row)}><Copy />Duplicate</Button>}
-        {row?.key && onEdit && <Button onClick={() => onEdit(row)}><Pencil />Edit</Button>}
-      </div>
     </Dialog>
   );
 }

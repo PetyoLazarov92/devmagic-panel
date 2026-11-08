@@ -1,6 +1,6 @@
 import type { ActionId, DbCell, DbColumnHead, DbRow, RowChangeInfo } from '@devmagic-panel/shared';
 import { History, LoaderCircle, RotateCcw, TriangleAlert, Wand2 } from 'lucide-react';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input, Textarea } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { shortDate, timeAgo } from '@/lib/format';
+import { useRowDialogFull } from '@/lib/preferences';
 import { fixSerializedLengths, looksSerialized, lostPropertyMarks, needsExactEditor, parseJsonValue, parsePhpSerialized, type PropertyName, withNulMarks } from '@/lib/php-serialized';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
@@ -90,6 +91,8 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keptOpen, setKeptOpen] = useState(false);
+  const formId = useId();
+  const fullScreen = useRowDialogFull();
 
   // The full values first: a long one shows only its start on the page.
   useEffect(() => {
@@ -166,29 +169,41 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
   const changed = original !== null && fields.some((f, i) => (mode === 'add' ? f.touched : valueOf(f) !== (original[i] ?? null)));
 
   const title = mode === 'edit' ? `Change a row of ${table}` : mode === 'duplicate' ? `Add a copy of a row to ${table}` : `Add a row to ${table}`;
+  const ready = fields.length > 0 && original !== null;
   return (
-    <Dialog open onClose={onClose} closeOnBackdrop={false} closeOnEscape={!changed} onKeptOpen={() => setKeptOpen(true)} title={title} description={mode === 'edit' ? 'Saved only while the row still holds what you see here. Undo in the toast, or under Changes you can undo, puts it back for 14 days.' : 'Columns you leave alone get their default. Undo deletes the row again.'} className="w-[min(52rem,calc(100vw-2rem))]">
-      {loadError && <p role="alert" className="mt-3 text-sm text-danger">{loadError}</p>}
-      {!loadError && fields.length === 0 && <FieldsSkeleton className="mt-3" fields={4} />}
-      {fields.length > 0 && original && (
+    <Dialog
+      open
+      onClose={onClose}
+      closeOnBackdrop={false}
+      closeOnEscape={!changed}
+      onKeptOpen={() => setKeptOpen(true)}
+      title={title}
+      description={mode === 'edit' ? 'Saved only while the row still holds what you see here. Undo in the toast, or under Changes you can undo, puts it back for 14 days.' : 'Columns you leave alone get their default. Undo deletes the row again.'}
+      className="w-[min(52rem,calc(100vw-2rem))]"
+      fullScreen={fullScreen}
+      footer={
+        <>
+          {error && <p role="alert" className="mr-auto text-sm text-danger">{error}</p>}
+          {!error && keptOpen && changed && <p role="status" className="mr-auto text-sm text-muted-foreground">Not saved yet: Cancel discards what you typed.</p>}
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          {ready && <Button type="submit" form={formId} disabled={saving}>{saving && <LoaderCircle className="animate-spin" />}{mode === 'edit' ? 'Save the row' : 'Add the row'}</Button>}
+        </>
+      }
+    >
+      {loadError && <p role="alert" className="text-sm text-danger">{loadError}</p>}
+      {!loadError && fields.length === 0 && <FieldsSkeleton fields={4} />}
+      {ready && (
         <form
-          className="mt-3 grid gap-3"
+          id={formId}
+          className="grid gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             void save();
           }}
         >
-          <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-1">
-            {columns.map((c, i) => (
-              <FieldRow key={c.name} column={c} field={fields[i] as Field} original={original[i] ?? null} locked={lockedWhy(c, mode, primaryKey)} mode={mode} onChange={(next) => set(i, next)} />
-            ))}
-          </div>
-          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {keptOpen && changed && <p role="status" className="mr-auto text-sm text-muted-foreground">Not saved yet: Cancel discards what you typed.</p>}
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving && <LoaderCircle className="animate-spin" />}{mode === 'edit' ? 'Save the row' : 'Add the row'}</Button>
-          </div>
+          {columns.map((c, i) => (
+            <FieldRow key={c.name} column={c} field={fields[i] as Field} original={original[i] ?? null} locked={lockedWhy(c, mode, primaryKey)} mode={mode} tall={fullScreen.on} onChange={(next) => set(i, next)} />
+          ))}
         </form>
       )}
     </Dialog>
@@ -197,7 +212,7 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
 
 const lostName = (p: PropertyName) => (p.visibility === 'private' ? `${p.name} (private to ${p.owner})` : `${p.name} (protected)`);
 
-function FieldRow({ column, field, original, locked, mode, onChange }: { column: DbColumnHead; field: Field; original: string | null; locked: string | null; mode: EditorMode; onChange: (next: Partial<Field>) => void }) {
+function FieldRow({ column, field, original, locked, mode, tall, onChange }: { column: DbColumnHead; field: Field; original: string | null; locked: string | null; mode: EditorMode; tall: boolean; onChange: (next: Partial<Field>) => void }) {
   const id = `field-${column.name}`;
   // A value that was PHP serialized or JSON and no longer reads would reach WordPress as plain text.
   // A new value counts too once it starts like a serialized array or object.
@@ -214,7 +229,8 @@ function FieldRow({ column, field, original, locked, mode, onChange }: { column:
   const lost = useMemo(() => (field.isNull || original === null || field.value === original || !parsePhpSerialized(original) ? [] : lostPropertyMarks(original, field.value)), [field, original]);
   // A plain text box hides NUL bytes and turns \r\n into \n: such a value is edited where both show and stay.
   const exact = !column.numeric && (needsExactEditor(original ?? '') || needsExactEditor(field.value));
-  const lines = Math.min(10, Math.max(1, field.value.split('\n').length, Math.ceil(field.value.length / 90)));
+  // Full screen has room for longer values before a box scrolls.
+  const lines = Math.min(tall ? 30 : 10, Math.max(1, field.value.split('\n').length, Math.ceil(field.value.length / (tall ? 160 : 90))));
   return (
     <div className="grid gap-1">
       <label htmlFor={id} className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

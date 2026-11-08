@@ -61,6 +61,10 @@ globs: ["web/**"]
 - **Confirm dialogs**: the title asks the question, the description says
   what happens and what Undo does, Cancel on the left, the action named for
   what it does on the right.
+- **Dialogs with long content** pass their buttons as `footer`, so the
+  content scrolls between the title and them; a row's dialogs also pass
+  `fullScreen` (`useRowDialogFull`), remembered as a preference. Confirm
+  dialogs stay small.
 - **The menu is three groups** (Work, Server, System, in
   `components/app-shell.tsx`), every page visible, each with a short hint or
   a live count on the right. Group by what a page is for, not by technology:

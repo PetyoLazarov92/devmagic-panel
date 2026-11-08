@@ -24,7 +24,7 @@ export const WP_DB_LIST_ROWS = 7;
 /** The web server a new site of its own gets, once nginx runs next to Apache. */
 export const SITE_SERVERS = ['apache', 'nginx'] as const;
 
-const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS) };
+const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS), rowDialogFull: z.boolean() };
 
 export const preferences = z.object({
   theme: fields.theme.default('system'),
@@ -32,6 +32,8 @@ export const preferences = z.object({
   sitesSort: fields.sitesSort.default('name'),
   newSiteServer: fields.newSiteServer.default('apache'),
   tablesSort: fields.tablesSort.default('name'),
+  /** A row's dialogs (view, edit, duplicate, add) open full screen, as last chosen. */
+  rowDialogFull: fields.rowDialogFull.default(false),
 });
 
 export type Preferences = z.infer<typeof preferences>;

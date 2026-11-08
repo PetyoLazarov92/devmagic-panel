@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.24.0 (2026-11-08)
+* **Databases:** a row's dialogs can fill the window, and the panel remembers it: viewing, editing, duplicating and adding a row, and a row of a SQL result, open full screen until you switch back
+* **Databases:** a row's buttons stay below its columns as they scroll, so the last field no longer runs into them
+* **Databases:** the SQL runner's earlier statements are under History, as wide as the editor, each on up to two lines with the whole statement on hover
+* An update installs this release from the panel as usual
+
 ### v1.23.3 (2026-11-07)
 * **Sites:** the PHP tab is now Server and PHP, with the web server first and Move to nginx or Apache there, out of Domains and SSL; a site without WordPress gets it as Server, and a site under a path says which server its domain runs on, with a link to change it
 * **Sites:** the Overview's Server and PHP tile shows both, like Apache · PHP 8.3, and the command palette has Move to nginx and Move to Apache for every site that can move as it is

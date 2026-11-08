@@ -28,7 +28,7 @@ groups:
 1. **Overview** and **Logs**
 2. WordPress, its data and its speed: **Network** (on a multisite),
    **Plugins**, **Database**, **Performance**, **Cron**, **Config**
-3. The server: **PHP**, **Domains and SSL**
+3. The server: **Server and PHP** (just **Server** without WordPress), **Domains and SSL**
 
 A tab a site lacks leaves the others where they are. A tab's badge counts only
 what needs a look: errors in `debug.log`, late WP-Cron events, local constants
