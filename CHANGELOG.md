@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.29.2 (2026-11-09)
+* **Fix:** a dump from a server over SSH that fails without a word no longer says only "ssh stopped": it gives the exit code, says WP-CLI on the server likely stopped on a PHP error (shared hosts often block mysqldump), and gives the `--debug` command to see why; an export that sends no SQL is caught too
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.29.1 (2026-11-09)
 * **Fix:** on the Database step, A server over SSH has What to take and its choice level with the Host field, at the same height
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

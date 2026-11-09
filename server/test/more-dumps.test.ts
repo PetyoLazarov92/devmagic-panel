@@ -67,6 +67,14 @@ describe('a dump from a server over SSH', () => {
     const refused = await run(planServerDump({ config: t.config, exec: unknown.exec, uploadsDir, dmpRoot: DMP }, { host: 'staging-spellbook', mode: 'export', path: '/var/www/spellbook' }, () => undefined));
     expect(refused).toMatchObject({ code: 1, stderr: expect.stringContaining('not in your known_hosts') });
     expect(readdirSync(uploadsDir).filter((n) => n.startsWith('.more-'))).toEqual([]);
+
+    // A server whose WP-CLI dies without a word: the exit code and what to try, never a bare "ssh stopped".
+    const quiet = fakeExec({ ssh: { code: 255, stderr: '' } });
+    const silent = await run(planServerDump({ config: t.config, exec: quiet.exec, uploadsDir, dmpRoot: DMP }, { host: 'staging-spellbook', mode: 'export', path: '/var/www/spellbook' }, () => undefined));
+    expect(silent.stderr).toMatch(/^staging-spellbook ended with exit 255 and printed nothing: WP-CLI on the server stopped without a word/);
+    expect(silent.stderr).toContain('ssh staging-spellbook wp --path=/var/www/spellbook db export - --debug');
+    const empty = fakeExec({ ssh: { stdout: '' } });
+    expect((await run(planServerDump({ config: t.config, exec: empty.exec, uploadsDir, dmpRoot: DMP }, { host: 'staging-spellbook', mode: 'export', path: '/var/www/spellbook' }, () => undefined))).stderr).toMatch(/sent no SQL/);
   });
 });
 

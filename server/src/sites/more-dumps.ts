@@ -36,14 +36,19 @@ const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 /** ssh never asks for a password or trusts a new host key on the fly, and gives up on a host that does not answer. */
 export const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=30'];
 
-/** What ssh says when it stops, said plainly. */
-function sshProblem(host: string, stderr: string): string {
+/** What ssh says when it stops, said plainly; a run that says nothing gets its exit code and what to try. */
+function sshProblem(host: string, stderr: string, code = 1, hint = ''): string {
   const last = stderr.trim().split('\n').filter(Boolean).at(-1) ?? '';
   if (/Host key verification failed|No .* host key is known/i.test(stderr)) return `${host} is not in your known_hosts: connect once in a terminal with ssh ${host}, check its key, then try again`;
   if (/Permission denied/i.test(stderr)) return `${host} refused your SSH key: the panel uses your ssh-agent and ~/.ssh/config, and never asks for a password`;
   if (/Could not resolve hostname/i.test(stderr)) return `${host} is not a host your ssh knows: use an alias from ~/.ssh/config or user@host`;
-  return last || 'ssh stopped';
+  if (last) return last;
+  return `${host} ended with exit ${code} and printed nothing${hint ? `: ${hint}` : ''}`;
 }
+
+/** Why a quiet wp db export fails, and how to see it. */
+const exportHint = (host: string, path: string) =>
+  `WP-CLI on the server stopped without a word, as PHP does on a fatal error with display_errors off (shared hosts often block mysqldump this way). Run ssh ${host} wp --path=${path} db export - --debug > /dev/null in a terminal to see why, or take A dump file there instead`;
 
 /** The upload a dump job made, said for the wizard: "upload <id>". */
 const madeUpload = (info: UploadInfo, from: string) => ok(`took ${info.name} (${formatBytes(info.size)}) from ${from}: upload ${info.id}${info.facts.hosts[0] ? `, for ${info.facts.hosts[0]}` : ''}`);
@@ -91,7 +96,7 @@ export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.f
           try {
             // sftp reads its commands from stdin; the remote path holds no spaces, quotes or shell characters.
             const r = await ctx.exec('sftp', ['-q', '-b', '-', ...SSH_OPTIONS, '--', input.host], { input: `get ${input.path} ${part}\n`, timeoutMs: 3 * 60 * 60_000 });
-            if (r.code !== 0 || !existsSync(part)) return { code: 1, stdout: '', stderr: sshProblem(input.host, r.stderr) };
+            if (r.code !== 0 || !existsSync(part)) return { code: 1, stdout: '', stderr: sshProblem(input.host, r.stderr, r.code, 'sftp could not copy it; check the path and that the file is there') };
             return await adopt(ctx, job, name, part, onUpload, from);
           } finally {
             clearInterval(timer);
@@ -126,7 +131,9 @@ export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.f
           // A fixed command: wp reads the site at the path, writes SQL to stdout, and changes nothing.
           const r = await ctx.exec('ssh', [...SSH_OPTIONS, '--', input.host, 'wp', `--path=${input.path}`, 'db', 'export', '-', '--single-transaction', '--quick', '--skip-plugins', '--skip-themes'], { stdoutTo: counter, timeoutMs: 3 * 60 * 60_000 });
           await written;
-          if (r.code !== 0) return { code: 1, stdout: '', stderr: /wp: command not found|No such file/i.test(r.stderr) ? `${input.host} has no WP-CLI as wp, or no WordPress at ${input.path}` : sshProblem(input.host, r.stderr) };
+          if (r.code !== 0) return { code: 1, stdout: '', stderr: /wp: command not found|No such file/i.test(r.stderr) ? `${input.host} has no WP-CLI as wp, or no WordPress at ${input.path}` : sshProblem(input.host, r.stderr, r.code, exportHint(input.host, input.path)) };
+          // A run that exits 0 with nothing in it is no dump either.
+          if (raw === 0) return { code: 1, stdout: '', stderr: `${input.host} sent no SQL: ${exportHint(input.host, input.path)}` };
           return await adopt(ctx, job, name, part, onUpload, from);
         } catch (error) {
           return { code: 1, stdout: '', stderr: (error as Error).message };
