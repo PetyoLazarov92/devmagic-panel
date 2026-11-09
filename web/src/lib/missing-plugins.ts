@@ -46,3 +46,36 @@ export function pluginChoices(missing: readonly DumpPlugin[], picks: Readonly<Re
   }
   return { install: install.filter((x, i) => install.findIndex((y) => y.slug === x.slug) === i), off: [...new Set(off)] };
 }
+
+const WPORG_SLUG = /^[a-z0-9_-]{1,100}$/;
+/** WordPress.org is asked about this many plugins at once. */
+const ASK_AT_ONCE = 100;
+
+/**
+ * Asks WordPress.org about plugins by slug, through the panel. A slug
+ * WordPress.org could not have (capitals, a dot, a space: a custom plugin's
+ * folder) is answered here as not there, so one odd folder name never stops
+ * the answers for the rest; long lists go in parts. failed says some part got
+ * no answer, so those slugs stay unknown and can be asked again.
+ */
+export async function askWporg(slugs: readonly string[], ask: (slugs: string[]) => Promise<Record<string, WporgPlugin | null>>): Promise<{ answers: Record<string, WporgPlugin | null>; failed: boolean }> {
+  const answers: Record<string, WporgPlugin | null> = {};
+  const valid: string[] = [];
+  for (const slug of new Set(slugs)) {
+    if (WPORG_SLUG.test(slug)) valid.push(slug);
+    else answers[slug] = null;
+  }
+  let failed = false;
+  for (let i = 0; i < valid.length; i += ASK_AT_ONCE) {
+    const part = valid.slice(i, i + ASK_AT_ONCE);
+    try {
+      const got = await ask(part);
+      Object.assign(answers, got);
+      // WordPress.org did not answer for some: they stay unknown.
+      if (part.some((slug) => !(slug in got))) failed = true;
+    } catch {
+      failed = true;
+    }
+  }
+  return { answers, failed };
+}

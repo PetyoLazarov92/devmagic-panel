@@ -16,7 +16,7 @@ import { timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
 import { siteHref } from '@/lib/site-ref';
 import { pastedRepo } from '@/lib/org-repos';
-import { allRows, isPicked, makeMain, pickRepo, placementOf, planLines, type RepoRow, rowPlacement, rowsProblem, unpickRepo, updateRow } from '@/lib/project-repos';
+import { allRows, isPicked, makeMain, shownOrder, pickRepo, placementOf, planLines, type RepoRow, rowPlacement, rowsProblem, unpickRepo, updateRow } from '@/lib/project-repos';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './new-site';
 import { cliSignedIn, CliHints, OrgPicker, RepoLink } from './new-site-org';
@@ -94,7 +94,8 @@ export function useRepoLookups(state: WizardState, setState: SetState) {
 /**
  * The Code step: the repos of the site, picked from the lists gh and glab
  * read or pasted as any git URL, each with its branch and its folder in the
- * site. What is picked stays on top; the site plan shows where it all goes.
+ * site. The lists come first and what is picked shows below them; the site
+ * plan shows where it all goes.
  */
 export function CodeStep({ state, setState, status, onRecheck, sites, mainExtras, side }: {
   state: WizardState;
@@ -122,32 +123,6 @@ export function CodeStep({ state, setState, status, onRecheck, sites, mainExtras
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] xl:gap-10">
       <div className="grid min-w-0 gap-6">
-        <section aria-labelledby="picked-repos" className="grid gap-3">
-          <h2 id="picked-repos" className="flex items-center gap-2 text-sm font-semibold">
-            Repos of this site
-            {rows.length > 0 && <Badge>{rows.length}</Badge>}
-          </h2>
-          {rows.length === 0 && (
-            <p className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
-              Pick the site's repo from your lists below, or paste any git URL. Add its themes and plugins the same way: each gets a folder of the site.
-            </p>
-          )}
-          {rows.map((row, i) => (
-            <RepoCard
-              key={row.url}
-              row={row}
-              main={i === 0}
-              state={state}
-              setState={setState}
-              site={site}
-              sites={sites}
-              onRemove={() => unpick(row.url)}
-              {...(i === 0 ? { extras: mainExtras } : {})}
-            />
-          ))}
-          {clash && <p role="alert" className="flex items-center gap-2 text-sm text-danger"><CircleAlert className="size-4" />{clash}</p>}
-        </section>
-
         <section aria-label="Add a repo" className="grid gap-3 rounded-xl border bg-card p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">{rows.length === 0 ? 'Pick the repo' : 'Add a theme, plugin or other repo'}</h2>
@@ -158,6 +133,37 @@ export function CodeStep({ state, setState, status, onRecheck, sites, mainExtras
           ) : (
             <PasteRepo onPick={(r) => pick(state.repoUrl.trim() ? { ...r, kind: 'other' } : r)} picked={(url) => isPicked(state, url)} />
           )}
+        </section>
+
+        <section aria-labelledby="picked-repos" className="grid gap-3">
+          <h2 id="picked-repos" className="flex items-center gap-2 text-sm font-semibold">
+            Repos of this site
+            {rows.length > 0 && <Badge>{rows.length}</Badge>}
+          </h2>
+          {rows.length > 1 && (
+            <p className="-mt-1 text-xs text-muted-foreground">
+              The main repo is the project itself: it names the install, Claude reads its docs, and your answers are remembered under it for next time. The others are added to it. <span className="font-medium text-foreground">Make main</span> moves that role to another repo: every repo stays where it is in this list and in its own folder.
+            </p>
+          )}
+          {rows.length === 0 && (
+            <p className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
+              Pick the site's repo from your lists above, or paste any git URL. Add its themes and plugins the same way: each gets a folder of the site.
+            </p>
+          )}
+          {shownOrder(rows, state.mainAt).map((row) => (
+            <RepoCard
+              key={row.url}
+              row={row}
+              main={row === rows[0]}
+              state={state}
+              setState={setState}
+              site={site}
+              sites={sites}
+              onRemove={() => unpick(row.url)}
+              {...(row === rows[0] ? { extras: mainExtras } : {})}
+            />
+          ))}
+          {clash && <p role="alert" className="flex items-center gap-2 text-sm text-danger"><CircleAlert className="size-4" />{clash}</p>}
         </section>
       </div>
 
@@ -202,7 +208,7 @@ function RepoCard({ row, main, state, setState, site, sites, onRemove, extras }:
         <div className="flex items-center gap-1">
           {web && <a href={web.repoUrl} target="_blank" rel="noopener noreferrer" className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline">Open on {web.name}</a>}
           {!main && (
-            <Button size="sm" variant="ghost" onClick={() => setState((s) => makeMain(s, row.url))}>
+            <Button size="sm" variant="ghost" title="Make this the project's repo: it names the install, Claude reads its docs and your answers are remembered under it. The main one now becomes an added repo; nothing moves in the list or in the folders." onClick={() => setState((s) => makeMain(s, row.url))}>
               <Star />
               Make main
             </Button>

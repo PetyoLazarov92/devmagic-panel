@@ -1,6 +1,6 @@
 import type { DumpPlugin } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { defaultPick, missingPlugins, pluginChoices, pluginSitePath, pluginSlug, repoPluginPaths } from '../src/lib/missing-plugins.js';
+import { askWporg, defaultPick, missingPlugins, pluginChoices, pluginSitePath, pluginSlug, repoPluginPaths } from '../src/lib/missing-plugins.js';
 
 const dump: DumpPlugin[] = [
   { file: 'woocommerce/woocommerce.php', active: true, version: '9.4.1', slug: 'woocommerce' },
@@ -34,5 +34,40 @@ describe('missing plugins of an install', () => {
       install: [{ slug: 'duplicate-post', version: '4.5' }],
       off: ['wandworks-pro-forms'],
     });
+  });
+});
+
+describe('asking WordPress.org', () => {
+  const found = { name: 'Redirection', version: '5.5.2' };
+
+  it('answers a name WordPress.org could not have as not there, so one odd folder never stops the rest', async () => {
+    const asked: string[][] = [];
+    const out = await askWporg(['redirection', 'Wandworks.Pro', 'wandworks forms', 'redirection'], async (slugs) => {
+      asked.push(slugs);
+      return { redirection: found };
+    });
+    expect(asked).toEqual([['redirection']]);
+    expect(out).toEqual({ answers: { redirection: found, 'Wandworks.Pro': null, 'wandworks forms': null }, failed: false });
+  });
+
+  it('asks about a long list in parts of 100', async () => {
+    const sizes: number[] = [];
+    const slugs = Array.from({ length: 230 }, (_, i) => `plugin-${i}`);
+    const out = await askWporg(slugs, async (part) => {
+      sizes.push(part.length);
+      return Object.fromEntries(part.map((slug) => [slug, null]));
+    });
+    expect(sizes).toEqual([100, 100, 30]);
+    expect(Object.keys(out.answers)).toHaveLength(230);
+    expect(out.failed).toBe(false);
+  });
+
+  it('says so when a request fails or leaves a plugin out, and keeps what it got', async () => {
+    const down = await askWporg(['redirection'], async () => {
+      throw new Error('offline');
+    });
+    expect(down).toEqual({ answers: {}, failed: true });
+    const partly = await askWporg(['redirection', 'akismet'], async () => ({ redirection: found }));
+    expect(partly).toEqual({ answers: { redirection: found }, failed: true });
   });
 });

@@ -902,15 +902,19 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
             takeLabel="Save"
             {...(settings ? { initial: { host: settings.host, path: settings.folder, excludeRows: settings.excludeRows } } : {})}
             onTake={(input) => void save(input)}
+            actions={<Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>}
+            more={
+              <>
+                {clean && (
+                  <Field label="Keep this administrator" htmlFor="refresh-keep" hint="Its login on production; every other user goes. Empty: a new user, admin.">
+                    <Input id="refresh-keep" value={keep} onChange={(e) => setKeep(e.target.value)} placeholder="admin" autoComplete="off" spellCheck={false} aria-invalid={keepProblem ? true : undefined} />
+                  </Field>
+                )}
+                {keepProblem && <p className="text-xs text-danger">{keepProblem}</p>}
+                {error && <p role="alert" className="text-danger">{error}</p>}
+              </>
+            }
           />
-          {clean && (
-            <Field label="Keep this administrator" htmlFor="refresh-keep" hint="Its login on production; every other user goes. Empty: a new user, admin.">
-              <Input id="refresh-keep" value={keep} onChange={(e) => setKeep(e.target.value)} placeholder="admin" autoComplete="off" spellCheck={false} aria-invalid={keepProblem ? true : undefined} />
-            </Field>
-          )}
-          {keepProblem && <p className="text-xs text-danger">{keepProblem}</p>}
-          {error && <p role="alert" className="text-danger">{error}</p>}
-          <Button variant="ghost" className="justify-self-start" onClick={() => setEditing(false)}>Cancel</Button>
         </>
       )}
       {!editing && settings && (

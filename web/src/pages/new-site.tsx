@@ -1,6 +1,6 @@
 import type { AddressInput, DumpPlugin, InstallDraft, RepoTrustAnswer, WporgPlugin, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
 import { actions, addressSummary, presetPlacement, repoTarget, branchName, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin } from '@devmagic-panel/shared';
-import { ArrowLeft, ArrowRight, Check, TriangleAlert, ChevronRight, CircleAlert, CircleCheck, FolderGit2, Globe, LoaderCircle, Plus, Search, Sparkles, Wand2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, TriangleAlert, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {} from '@/components/branch-picker';
 import {} from '@/components/dump-facts';
@@ -35,7 +35,7 @@ import { answersHash, stepViews } from '@/lib/steps';
 import { useAsync } from '@/lib/use-async';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import { allRows, placementOf, type RepoHelpers, type RepoRow, rowPlacement } from '@/lib/project-repos';
-import { defaultPick, missingPlugins, pluginChoices, type PluginPick, pluginSlug, repoPluginPaths } from '@/lib/missing-plugins';
+import { askWporg, defaultPick, missingPlugins, pluginChoices, type PluginPick, pluginSlug, repoPluginPaths } from '@/lib/missing-plugins';
 import { pastedRepo } from '@/lib/org-repos';
 import { asideUploads } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
@@ -112,6 +112,8 @@ export interface WizardState {
   noDump: boolean;
   /** Clean the copy after the import: one user kept, orders, entries, logs and keys removed. Off unless you choose it. */
   cleanCopy?: boolean;
+  /** Where the main repo shows among the picked ones on the Code step; first when unset. Make main moves the role, not the rows. */
+  mainAt?: number;
   /** What you chose for each plugin the dump has that no repo brings, by its file; unset ones follow defaultPick. */
   pluginPicks: Record<string, PluginPick>;
   /** WordPress.org's answer for each missing plugin's slug: its name and latest version, or null when it does not have it. */
@@ -1745,11 +1747,20 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
   const { missing, reading } = missingOf(state);
   const unknown = [...new Set(missing.map(pluginSlug))].filter((slug) => !(slug in state.wporg));
   const [asking, setAsking] = useState(false);
-  useEffect(() => {
+  // WordPress.org gave no answer for some: said, with a way to ask again, never a line that waits forever.
+  const [unanswered, setUnanswered] = useState(false);
+  const ask = () => {
     if (unknown.length === 0 || asking) return;
     setAsking(true);
-    api.wporgPlugins(unknown).then((answers) => set('wporg', { ...state.wporg, ...answers }), () => undefined).finally(() => setAsking(false));
-  }, [unknown.join('|')]);
+    setUnanswered(false);
+    void askWporg(unknown, api.wporgPlugins)
+      .then(({ answers, failed }) => {
+        set('wporg', { ...state.wporg, ...answers });
+        setUnanswered(failed);
+      })
+      .finally(() => setAsking(false));
+  };
+  useEffect(ask, [unknown.join('|')]);
   if (!state.upload?.facts.plugins) return null;
   const pick = (file: string, p: PluginPick) => set('pluginPicks', { ...state.pluginPicks, [file]: p });
   const active = missing.filter((p) => p.active);
@@ -1761,7 +1772,7 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
     const options: Array<[PluginPick, string]> = [
       ...(wp ? ([['install', 'Install']] as Array<[PluginPick, string]>) : []),
       ...(p.active ? ([['off', 'Turn off']] as Array<[PluginPick, string]>) : []),
-      ['leave', p.active ? 'Leave it' : 'Skip'],
+      ['leave', "Don't install"],
     ];
     return (
       <li key={p.file} className="grid gap-1.5 rounded-lg border px-3 py-2.5 text-sm">
@@ -1773,7 +1784,7 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
         </div>
         <p className="text-xs text-muted-foreground">
           {wp === undefined
-            ? 'Asking WordPress.org...'
+            ? asking ? 'Asking WordPress.org...' : 'WordPress.org did not answer for this one, so it cannot be installed yet.'
             : wp
               ? `On WordPress.org${p.version ? `: installs ${p.version}, production's version (latest ${wp.version})` : `, latest ${wp.version}`}.`
               : 'Not on WordPress.org: a premium or custom plugin. Get it from its vendor or from production, or turn it off.'}
@@ -1794,6 +1805,12 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
           <p className="-mt-2 text-xs text-muted-foreground">
             In the dump, but in none of the repos. Installed from WordPress.org after the import, one at a time: one that fails is noted and the rest go on. They are kept out of git locally.
           </p>
+          {unanswered && !asking && (
+            <p role="alert" className="flex flex-wrap items-center gap-2 text-sm text-warning">
+              WordPress.org did not answer for some plugins, so they are not set to install.
+              <Button size="sm" variant="outline" onClick={ask}><RefreshCw />Ask again</Button>
+            </p>
+          )}
           {active.length > 0 && <ul className="grid gap-2">{active.map(row)}</ul>}
           {inactive.length > 0 && (
             <details className="rounded-lg border bg-card px-3 py-2 text-sm">

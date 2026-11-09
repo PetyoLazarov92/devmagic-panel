@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.31.1 (2026-11-10)
+* **Fix:** the wizard's Missing plugins are installed again. One plugin folder with a name WordPress.org could not have (capitals, a dot, a space), or more than 100 plugins, made the panel refuse the whole question to WordPress.org, so every plugin stayed on "Asking WordPress.org..." with no Install choice and none was installed. Such a name is now answered as not on WordPress.org, long lists are asked in parts, and the site's Plugins tab asks the same way
+* **Sites:** when WordPress.org gives no answer, Missing plugins says so with **Ask again**, and **Leave it** and **Skip** are now **Don't install**
+* **Sites:** the Code step lists your repos first, with the repos of this site and their branch and folder below, and says what the main repo is. **Make main** moves only that role: the repos no longer change places
+* **Sites:** the folder or dump path of a server over SSH has the whole width of its form, and the form ends with its buttons: Export or Save, and Cancel beside Save, after the tables and the copy are chosen
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.31.0 (2026-11-10)
 * **Databases:** one **Import a database** card on a site's Backups and tools in place of Import a dump, Refresh from production and Prepare from production. Production's saved server sits on top with **Refresh now**; below it a dump from any source, with **The copy**: **As it is** (an exact copy) or **Cleaned**. Clean this database stays a card of its own
 * **Databases:** an import as it is keeps the site's tables from before for 7 days under Kept databases, as a cleaned one always did, so it can be put back after the job ends too. A database whose name has no room for that, or that cannot be swapped, goes as before

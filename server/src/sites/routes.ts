@@ -299,7 +299,8 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
   });
   // Whether plugins are on WordPress.org, by slug, kept a day. Read only.
   api.post<{ Body: unknown }>('/api/wporg/plugins', async (request, reply) => {
-    const body = z.object({ slugs: z.array(wpSlug).max(100) }).safeParse(request.body);
+    // A name that cannot be a slug is left out of the answer, not a reason to refuse the rest.
+    const body = z.object({ slugs: z.array(z.string().max(200)).max(100) }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'Plugin slugs like wp-rocket' });
     return wporgPlugins(body.data.slugs, deps.store);
   });

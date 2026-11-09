@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
-import { pluginSlug } from '@/lib/missing-plugins';
+import { askWporg, pluginSlug } from '@/lib/missing-plugins';
 import { siteTarget } from '@/lib/site-ref';
 
 /**
@@ -25,7 +25,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
   const read = () =>
     api.missingPlugins(site.domain, site.path).then(async (list) => {
       setMissing(list);
-      const answers = list.length ? await api.wporgPlugins([...new Set(list.map(pluginSlug))]).catch((): Record<string, WporgPlugin | null> => ({})) : ({} as Record<string, WporgPlugin | null>);
+      const answers = list.length ? (await askWporg(list.map(pluginSlug), api.wporgPlugins)).answers : ({} as Record<string, WporgPlugin | null>);
       setWporg(answers);
       // Active ones on WordPress.org start ticked; ones production only had installed, not.
       setTicked(new Set(list.filter((p) => p.active && answers[pluginSlug(p)]).map((p) => p.file)));

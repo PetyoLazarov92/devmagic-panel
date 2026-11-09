@@ -1,6 +1,6 @@
 import type { OrgRepo } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { allRows, isPicked, makeMain, pickRepo, placementOf, planLines, rowPlacement, rowsProblem, unpickRepo } from '../src/lib/project-repos.js';
+import { allRows, isPicked, makeMain, pickRepo, shownOrder, placementOf, planLines, rowPlacement, rowsProblem, unpickRepo } from '../src/lib/project-repos.js';
 import type { WizardState } from '../src/pages/new-site.js';
 
 const repo = (fullName: string, kind: OrgRepo['kind'] = 'site'): OrgRepo => ({
@@ -46,6 +46,25 @@ describe('picking the repos of a site', () => {
     const swapped = makeMain({ ...s, helpers: { key: 'k', kind: 'plugin' } }, 'git@github.com:wandworks/site.git');
     expect(swapped.repoUrl).toBe('git@github.com:wandworks/site.git');
     expect(swapped.extra).toMatchObject([{ url: 'git@github.com:wandworks/blocks.git', placement: { dir: 'wp-content/plugins', folder: 'blocks' } }]);
+  });
+
+  it('moves only the main role: every repo stays where it shows in the list', () => {
+    const names = (st: WizardState) => shownOrder(allRows(st), st.mainAt).map((r) => r.url.replace(/^.*\/|\.git$/g, ''));
+    const s = [repo('wandworks/site'), repo('wandworks/theme', 'theme'), repo('wandworks/blocks', 'plugin'), repo('wandworks/forms', 'plugin')].reduce(pickRepo, blank);
+    expect(names(s)).toEqual(['site', 'theme', 'blocks', 'forms']);
+    // The third one becomes main: the order is as it was, and the main is that row.
+    const third = makeMain(s, 'git@github.com:wandworks/blocks.git');
+    expect(names(third)).toEqual(['site', 'theme', 'blocks', 'forms']);
+    expect(allRows(third)[0]?.url).toBe('git@github.com:wandworks/blocks.git');
+    // And on to the last, then back to the first: still the same order.
+    const last = makeMain(third, 'git@github.com:wandworks/forms.git');
+    expect(names(last)).toEqual(['site', 'theme', 'blocks', 'forms']);
+    const first = makeMain(last, 'git@github.com:wandworks/site.git');
+    expect(names(first)).toEqual(['site', 'theme', 'blocks', 'forms']);
+    expect(first.mainAt).toBe(0);
+    // A place past the end, after repos were left out, still shows every repo.
+    expect(shownOrder(['a', 'b'], 9)).toEqual(['b', 'a']);
+    expect(shownOrder([], 2)).toEqual([]);
   });
 
   it('finds two repos at one path, and draws the plan shallow first', () => {

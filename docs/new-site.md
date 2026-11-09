@@ -21,7 +21,12 @@ one first), where it goes in the site and the folder it is cloned into.
   signed in, the repos of your GitHub organizations and GitLab groups are
   listed. Tick as many as the site needs: the first is the main repo, and
   **Make main** changes it. The ones you picked stay at the top of the list
-  while you scroll, and a filter never hides them. The list starts on
+  while you scroll, and a filter never hides them. Under the lists, **Repos of
+  this site** has each picked repo with its branch and folder. The main repo
+  is the project itself: it names the install, Claude reads its docs, and the
+  panel remembers your answers under it; **Make main** moves that role to
+  another repo, and every repo stays where it is in the list and in its
+  folder. The list starts on
   WordPress sites and offers themes, plugins and other repos once the site has
   its main repo. **Which to scan** picks the organizations and groups; a
   GitLab group is scanned with its subgroups. Without the CLIs the last list
@@ -193,7 +198,9 @@ production-only plugins go off as on every install from a dump.
   from there after the import, at production's version when the dump's update
   check has it; others you can turn off or leave (WordPress turns a missing
   active plugin off on its own). Ones production had installed but not active
-  are listed apart, to install if you want them. One that fails is noted and
+  are listed apart, to install if you want them. A folder name WordPress.org
+  could not have (capitals, a dot, a space) counts as not on WordPress.org,
+  and when WordPress.org gives no answer the step says so, with **Ask again**. One that fails is noted and
   the rest install; see [Sites](sites.md#plugins) for how.
 - **Uploads**: missing images load from the production domain you give.
 - **Build**: a checklist per repo lists every `composer.json` and

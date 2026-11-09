@@ -420,7 +420,7 @@ function FromUrl({ working, onFetch }: { working: boolean; onFetch: (url: string
 
 /** A dump from a server over SSH: your own ssh config and agent, a fixed read-only command. */
 /** A copy from a server over SSH: a dump file there, or an export now with the rows of some tables left out. */
-export function FromServer({ working, clean, setClean, onTake, initial, takeLabel, exportOnly }: {
+export function FromServer({ working, clean, setClean, onTake, initial, takeLabel, exportOnly, actions, more }: {
   working: boolean;
   /** Clean the copy after the import; undefined where the caller has no such step. */
   clean?: boolean;
@@ -430,6 +430,10 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
   takeLabel?: string;
   /** Only an export with WP-CLI, as Refresh from production runs it. */
   exportOnly?: boolean;
+  /** More buttons beside the one that takes it, like Cancel. */
+  actions?: ReactNode;
+  /** More fields of the caller's, above the buttons. */
+  more?: ReactNode;
 }) {
   const uid = useId();
   const [host, setHost] = useState(initial?.host ?? '');
@@ -481,19 +485,14 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
       </div>
       <div className="grid gap-1.5">
         <label htmlFor={`${uid}-path`} className="font-medium">{mode === 'export' ? 'The WordPress folder on the server' : 'The dump on the server'}</label>
-        <div className="flex flex-wrap gap-2">
-          <Input id={`${uid}-path`} value={path} onChange={(e) => setPath(e.target.value)} placeholder={mode === 'export' ? '/var/www/spellbook/public' : '/home/alex/backups/spellbook.sql.gz'} className="min-w-0 flex-1 font-mono text-[13px]" spellCheck={false} aria-invalid={path.trim() !== '' && !pathOk ? true : undefined} />
-          {mode === 'export' && (
-            <Button variant="outline" disabled={!hostOk || !pathOk || reading || working} onClick={() => void readTables()}>
-              {reading ? <LoaderCircle className="animate-spin" /> : <Table2 />}
-              {tables ? 'Read again' : 'Choose tables'}
-            </Button>
-          )}
-          <Button disabled={!hostOk || !pathOk || working || reading} onClick={() => onTake({ host: host.trim(), mode, path: path.trim(), excludeRows })}>
-            {working ? <LoaderCircle className="animate-spin" /> : <Server />}
-            {takeLabel ?? (mode === 'export' ? 'Export' : 'Copy')}
+        {/* The path gets the whole width, as long ones are usual; its buttons sit under it. */}
+        <Input id={`${uid}-path`} value={path} onChange={(e) => setPath(e.target.value)} placeholder={mode === 'export' ? '/var/www/spellbook/public' : '/home/alex/backups/spellbook.sql.gz'} className="font-mono text-[13px]" spellCheck={false} aria-invalid={path.trim() !== '' && !pathOk ? true : undefined} />
+        {mode === 'export' && (
+          <Button variant="outline" className="justify-self-start" disabled={!hostOk || !pathOk || reading || working} onClick={() => void readTables()}>
+            {reading ? <LoaderCircle className="animate-spin" /> : <Table2 />}
+            {tables ? 'Read the tables again' : 'Choose tables to leave out'}
           </Button>
-        </div>
+        )}
         {path.trim() !== '' && !pathOk && <p className="text-xs text-danger">An absolute path with letters, digits and . _ - / only{mode === 'file' ? ', ending in .sql, .sql.gz or .zip' : ''}.</p>}
         {readError && <p role="alert" className="text-xs text-danger">{readError}</p>}
         {!tables && same && excludeRows.length > 0 && <p className="text-xs text-muted-foreground">The rows of {excludeRows.length} table{excludeRows.length === 1 ? '' : 's'} stay on the server, as saved: {excludeRows.join(', ')}.</p>}
@@ -516,10 +515,19 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
           <TablesPicker found={tables} value={leftOut} onChange={setLeftOut} />
         </div>
       )}
+      {more}
       <ul className="grid gap-1 text-xs text-muted-foreground">
         <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />Your SSH key through your agent; never a password, and a host not in your known_hosts is refused, not trusted on the fly.</li>
         <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />{mode === 'export' ? 'Runs only wp db export (and wp db size for the tables) on the server: it reads, writes no file there, and the database password stays there. Compressed on the way.' : 'Copies the file with sftp; nothing runs on the server.'}</li>
       </ul>
+      {/* The button that takes it comes last, once everything above is chosen. */}
+      <div className="flex flex-wrap gap-2 border-t pt-3">
+        <Button disabled={!hostOk || !pathOk || working || reading} onClick={() => onTake({ host: host.trim(), mode, path: path.trim(), excludeRows })}>
+          {working ? <LoaderCircle className="animate-spin" /> : <Server />}
+          {takeLabel ?? (mode === 'export' ? 'Export' : 'Copy')}
+        </Button>
+        {actions}
+      </div>
     </div>
   );
 }

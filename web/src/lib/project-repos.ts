@@ -127,14 +127,31 @@ export function unpickRepo(s: WizardState, url: string): WizardState {
   return { ...s, extra: s.extra.filter((r) => !(r.url === url || sameRepo(r.url, url))) };
 }
 
-/** An added repo becomes the main one, and the main one an added repo. */
+/**
+ * The picked repos in the order they show: the added ones as picked, with the
+ * main one at its place among them (mainAt; first until Make main moved the
+ * role). The rows themselves come main first, as everything else reads them.
+ */
+export function shownOrder<T>(rows: readonly T[], mainAt = 0): T[] {
+  const [main, ...rest] = rows;
+  if (main === undefined) return [];
+  rest.splice(Math.min(Math.max(0, mainAt), rest.length), 0, main);
+  return rest;
+}
+
+/**
+ * An added repo becomes the main one, and the main one an added repo. Only
+ * the role moves: both stay where they show in the list, and in their folders.
+ */
 export function makeMain(s: WizardState, url: string): WizardState {
   const row = s.extra.find((r) => r.url === url);
   const old = mainRow(s);
   if (!row || !old) return s;
   // The old main repo keeps where it went, so it does not move to the plugins folder.
   const kept: RepoRow = { ...old, placement: old.placement ?? (old.helpers?.kind ? placementForKind(old.helpers.kind, old.url) : null) ?? ROOT };
-  const promoted = withMain({ ...s, repoUrl: '', extra: [kept, ...s.extra.filter((r) => r !== row)] }, row, listedOf(row));
+  // As shown now, with the old main as a row of its own; the new main keeps its place in it.
+  const shown = shownOrder<RepoRow | null>([null, ...s.extra], s.mainAt).map((r) => r ?? kept);
+  const promoted = withMain({ ...s, repoUrl: '', extra: shown.filter((r) => r !== row), mainAt: shown.indexOf(row) }, row, listedOf(row));
   return promoted;
 }
 
