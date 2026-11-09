@@ -33,6 +33,7 @@ import { setConstant, setTablePrefix } from './wpconfig-edit.js';
 import { readLocalConstants } from '../local-constants.js';
 import { excludeLocally } from './mu-plugins.js';
 import { installPlugins, removeInstalled } from './install-plugins.js';
+import { cleanStep, newCleanState, pluginsOffStep, userStep } from './clean.js';
 import { NO_PROMPTS } from './git.js';
 
 export interface CreateContext {
@@ -535,6 +536,21 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     }
   }
 
+  // A copy from production, cleaned as Prepare from production cleans one: on the new database itself, with SQL.
+  const cleaning = Boolean(dumpFile && input.clean);
+  if (dumpFile && input.clean) {
+    const target = limitsTarget(exec, mysql, ctx.store);
+    if (!target) throw new CreateRefused('Cleaning the copy needs the MySQL admin account on this machine (Aura, Machine checks)');
+    const state = newCleanState();
+    const wpc = wpFor(exec, docroot, host);
+    const wpIn = (args: string[], stdin: string) => exec('wp', [`--path=${docroot}`, `--url=https://${host}/`, ...args, '--skip-plugins', '--skip-themes'], { input: stdin, timeoutMs: 10 * 60_000 });
+    steps.push(
+      cleanStep(target, dbName, prefix, `admin@${domain}`, input.clean.user, state),
+      { ...pluginsOffStep(wpc, multisite), id: 'clean-plugins' },
+      userStep(wpc, wpIn, { user: input.clean.user, adminEmail: `admin@${domain}`, multisite, prefix, state }),
+    );
+  }
+
   // A fresh WordPress, or a project without a dump: its code on new, empty tables.
   const freshInstall = input.source === 'wordpress' || (input.source === 'repo' && !dumpFile);
   if (freshInstall) {
@@ -579,7 +595,8 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     }, 2, `The plugins were not installed from WordPress.org: install them on the site's Plugins tab, under Missing plugins.`);
   }
 
-  if (input.source === 'repo' && dumpFile && input.admin && !(input.admin.ifExists === 'keep' && input.admin.ifMissing === 'skip')) {
+  // Cleaning keeps one user itself, the admin; the admin step is for a copy kept as it is.
+  if (!cleaning && input.source === 'repo' && dumpFile && input.admin && !(input.admin.ifExists === 'keep' && input.admin.ifMissing === 'skip')) {
     const admin = input.admin;
     const label = admin.ifExists === 'keep' ? `Add ${admin.user} unless the database has it` : `Make sure ${admin.user} is an administrator${admin.password ? ' with your password' : ''}`;
     add('admin', label, async () => {

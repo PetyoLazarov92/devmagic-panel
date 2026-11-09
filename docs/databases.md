@@ -192,9 +192,18 @@ The runner never touches another database, accounts, rights, routines or files.
 - **Snapshots**: take, restore and download a snapshot of the site's database.
 - **Import a dump**: a `.sql`, `.sql.gz` or `.zip` streamed into a side
   database and swapped in at once, with MySQL's limits raised while it runs.
+  The dump comes from any source the new site wizard has: an upload, the
+  Downloads folder, a cloud drive or Drive link, a public URL, a server over
+  SSH (with tables to leave the rows of) or this machine.
+- **Refresh from production**: set up once per site with the SSH host, the
+  WordPress folder there, the tables whose rows stay there and whether the
+  copy is cleaned (and which administrator it keeps); then one button exports
+  production's database over SSH, reading only, and imports it as Import a
+  dump does, or cleans it as Prepare from production does. Nothing is written
+  on production, and the settings hold no secret.
 - **Prepare from production**: a production dump without users (one
   administrator you pick stays, the author of every post), orders, form
-  entries, logs or keys.
+  entries, logs or keys, from any of the same sources.
 - **Clean this database**: the same clean-up on the database the site has now.
 - **Search and replace** on groups of tables at once, leaving out tables
   without the addresses, with a preview.

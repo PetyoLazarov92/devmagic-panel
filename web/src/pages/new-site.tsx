@@ -25,7 +25,7 @@ import { type CreateSiteInput, PRODUCTION_ONLY_PLUGINS, previewSteps } from '@/l
 import { Link, navigate } from '@/lib/router';
 import {} from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
-import { adminChoices, adminCreateOf, dumpAdmins } from '@/lib/admin-choice';
+import { adminChoices, adminCreateOf, cleanUserOf, dumpAdmins } from '@/lib/admin-choice';
 import { type BuildPick, buildChoice, buildId, buildSteps } from '@/lib/builds';
 import { skipAccess, unskipAccess } from '@/lib/claude-steps';
 import { draftHref, migrateDraftState, migrateStep, type InstallKind, KIND_LABEL, keptUntil, kindOf, landingStep, STEP_LABEL, stepsFor, type WizardStep } from '@/lib/drafts';
@@ -110,6 +110,8 @@ export interface WizardState {
   dumpSource?: DumpSource;
   /** No dump: a fresh WordPress on the repo's code. */
   noDump: boolean;
+  /** Clean the copy after the import: one user kept, orders, entries, logs and keys removed. Off unless you choose it. */
+  cleanCopy?: boolean;
   /** What you chose for each plugin the dump has that no repo brings, by its file; unset ones follow defaultPick. */
   pluginPicks: Record<string, PluginPick>;
   /** WordPress.org's answer for each missing plugin's slug: its name and latest version, or null when it does not have it. */
@@ -237,7 +239,7 @@ const STEP_ANSWERS: Record<Step, (s: WizardState) => unknown> = {
   code: (s) => [placedRows(s).map((r) => [r.url, r.branch, r.placement]), s.org?.useClaude],
   read: (s) => [s.org?.read.status, s.org?.read.facts],
   access: (s) => [s.org?.access.status],
-  database: (s) => [s.upload?.id, s.noDump],
+  database: (s) => [s.upload?.id, s.noDump, Boolean(s.cleanCopy)],
   domains: (s) => [s.domains, s.under, s.replaceExisting, s.replaceOn, s.network, s.server],
   wordpress: (s) => [s.coreMode, s.coreVersion, s.adminUser, s.adminEmail, s.adminIfExists, s.adminIfMissing, s.adminCreate, s.deactivate, s.activate, s.uploadsFrom, s.uploadsVia, s.composer, s.npm, s.buildPicks, s.pluginPicks],
   review: () => null,
@@ -350,6 +352,7 @@ export function toInput(state: WizardState): CreateSiteInput {
     // BE Media from Production loading the images is never also deactivated; a missing plugin you chose to turn off joins the list.
     deactivate: isRepo && state.upload && !state.noDump ? [...new Set([...state.deactivate, ...missing.off])].filter((slug) => !(via === 'plugin' && uploadsOk && slug === MEDIA_PLUGIN)) : [],
     installPlugins: isRepo && state.upload && !state.noDump ? missing.install : [],
+    ...(isRepo && state.upload && !state.noDump && state.cleanCopy && state.source !== 'empty' ? { clean: { user: cleanUserOf(state, (state.adminUser ?? defaults.user).trim(), state.adminPassword ?? defaults.password) } } : {}),
     // Only helpers a repo has, not the ones the dump has on already, and never one set to deactivate.
     activate: isRepo && helpers ? state.activate.filter((slug) => helpers.includes(slug) && !active.has(slug) && !state.deactivate.includes(slug)) : [],
     ...(isRepo && uploadsOk ? { uploadsFrom, uploadsVia: via } : { uploadsVia: 'redirect' as const }),
@@ -1577,7 +1580,16 @@ function AdminSection({ state, set, input, defaults }: { state: WizardState; set
       </Field>
     </div>
   );
-  const title = <h2 className="mt-2 text-sm font-semibold">Admin user</h2>;
+  const title = (
+    <>
+      <h2 className="mt-2 text-sm font-semibold">Admin user</h2>
+      {isRepo && state.cleanCopy && (
+        <p className="text-sm text-muted-foreground">
+          The copy is cleaned after the import, so this is the only user it keeps: {dumpAdmins(state)?.some((l) => l.toLowerCase() === user.toLowerCase()) && !adminCreateOf(state) ? "the dump's own administrator, as it is" : 'made with this password'}, the author of every post.
+        </p>
+      )}
+    </>
+  );
   if (!isRepo) return <>{title}{fields}</>;
   if (!found) {
     return (

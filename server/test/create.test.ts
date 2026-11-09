@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { repoKey } from '@devmagic-panel/shared';
+import { actions, repoKey } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { ActionBusyError, ActionInputError, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs, type JobView } from '../src/jobs.js';
@@ -400,6 +400,24 @@ describe('site.create from a repo', () => {
     const userCalls = lines(s.calls).filter((l) => / user (get|create|set-role|update) /.test(l)).map((l) => /user \S+/.exec(l)?.[0]);
     expect(userCalls).toEqual(commands);
     if (note) expect(view.steps.find((x) => x.id === 'admin')?.output).toContain(note);
+  });
+
+  it('cleans a copy after the import and the replace when asked, keeping one user instead of the admin step', async () => {
+    const s = await setup();
+    const view = await settle(s.jobs, (await runAction(s.ctx, 'site.create', { ...s.input, clean: { user: { login: 'dev', password: 'devpw' } } })).data?.jobId ?? '');
+    const ids = view.steps.map((x) => x.id);
+    expect(ids.indexOf('clean')).toBeGreaterThan(ids.indexOf('replace'));
+    expect(ids.indexOf('clean-plugins')).toBeGreaterThan(ids.indexOf('clean'));
+    // One user step, the clean-up's: the install's own admin step is not added too.
+    expect(ids.filter((id) => id === 'admin')).toHaveLength(1);
+    expect(ids.indexOf('admin')).toBeGreaterThan(ids.indexOf('clean'));
+  });
+
+  it('takes the user a clean-up keeps only as a WordPress login', async () => {
+    const s = await setup();
+    const parse = (input: Record<string, unknown>) => actions['site.create'].input.safeParse(input);
+    expect(parse({ ...s.input, clean: { user: { keep: 'alex' } } }).success).toBe(true);
+    expect(parse({ ...s.input, clean: { user: { login: 'bad;login' } } }).success).toBe(false);
   });
 
   it('adds no admin step when the user is to be left as is and never created', async () => {

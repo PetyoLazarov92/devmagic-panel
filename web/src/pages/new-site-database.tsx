@@ -1,12 +1,14 @@
-import type { OrgStatus, RcloneRemotes, RemoteEntry, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
-import { ChevronRight, CircleAlert, Cloud, ExternalLink, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, LoaderCircle, RefreshCw, Server, ShieldCheck, Sparkles, Upload } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
+import { defaultLeftOut, knownLeftOut } from '@devmagic-panel/shared';
+import { TablesPicker } from '@/components/tables-picker';
+import { ChevronRight, CircleAlert, Cloud, ExternalLink, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, LoaderCircle, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { DumpFactsCard } from '@/components/dump-facts';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
-import { Select } from '@/components/ui/field';
+import { Checkbox, Select } from '@/components/ui/field';
 import { api, isMockup } from '@/lib/api';
 import { bytes, shortDate, timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
@@ -60,6 +62,7 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
 }) {
   const found = state.org?.access.report?.dumps ?? [];
   const source: DumpSource = state.dumpSource ?? (found.length ? 'claude' : 'upload');
+  const setClean = (cleanCopy: boolean) => setState((s) => ({ ...s, cleanCopy }));
   const setSource = (dumpSource: DumpSource) => setState((s) => ({ ...s, dumpSource, noDump: dumpSource === 'none' }));
   const job = useJob();
   const [openStep, setOpenStep] = useState<string | null>(null);
@@ -125,6 +128,7 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
             <DumpFactsCard facts={state.upload.facts} />
           </>
         )}
+        <CleanSwitch on={Boolean(state.cleanCopy)} onChange={setClean} />
       </div>
     );
   }
@@ -167,7 +171,7 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
         {source === 'downloads' && <FromDownloads working={working} onUse={(file) => void start('dump.useDownloaded', { file })} />}
         {source === 'cloud' && <FromCloud working={working} onRemote={(remote, entry) => void start('dump.fromRemote', { remote, path: entry.path, ...(entry.sizeBytes !== null ? { sizeBytes: entry.sizeBytes } : {}) })} onDriveLink={(link) => void start('dump.download', { link })} />}
         {source === 'url' && <FromUrl working={working} onFetch={(url) => void start('dump.fetch', { url })} />}
-        {source === 'server' && <FromServer working={working} onTake={(input) => void start('dump.fromServer', input)} />}
+        {source === 'server' && <FromServer working={working} clean={Boolean(state.cleanCopy)} setClean={setClean} onTake={(input) => void start('dump.fromServer', input)} />}
         {source === 'local' && <FromThisMachine working={working} onTake={(input) => void start('dump.fromLocal', input)} />}
         {source === 'none' && (
           <p className="text-muted-foreground">
@@ -412,39 +416,106 @@ function FromUrl({ working, onFetch }: { working: boolean; onFetch: (url: string
 }
 
 /** A dump from a server over SSH: your own ssh config and agent, a fixed read-only command. */
-function FromServer({ working, onTake }: { working: boolean; onTake: (input: { host: string; mode: 'file' | 'export'; path: string }) => void }) {
-  const [host, setHost] = useState('');
+/** A copy from a server over SSH: a dump file there, or an export now with the rows of some tables left out. */
+export function FromServer({ working, clean, setClean, onTake, initial, takeLabel, exportOnly }: {
+  working: boolean;
+  /** Clean the copy after the import; undefined where the caller has no such step. */
+  clean?: boolean;
+  setClean?: (on: boolean) => void;
+  onTake: (input: { host: string; mode: 'file' | 'export'; path: string; excludeRows: string[] }) => void;
+  initial?: { host: string; path: string; excludeRows: string[] };
+  takeLabel?: string;
+  /** Only an export with WP-CLI, as Refresh from production runs it. */
+  exportOnly?: boolean;
+}) {
+  const uid = useId();
+  const [host, setHost] = useState(initial?.host ?? '');
   const [mode, setMode] = useState<'export' | 'file'>('export');
-  const [path, setPath] = useState('');
+  const [path, setPath] = useState(initial?.path ?? '');
+  const [found, setFound] = useState<ServerTables | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
+  const [leftOut, setLeftOut] = useState<string[]>(initial?.excludeRows ?? []);
   const hostOk = /^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(host.trim());
   const pathOk = /^\/[A-Za-z0-9._/-]+$/.test(path.trim()) && !path.split('/').includes('..') && (mode === 'export' || /\.(sql|sql\.gz|zip)$/i.test(path.trim()));
+  // Another server or folder has other tables.
+  const where = `${host.trim()}|${path.trim()}`;
+  const [readFor, setReadFor] = useState('');
+  const tables = found && readFor === where ? found : null;
+  const readTables = async () => {
+    setReading(true);
+    setReadError(null);
+    try {
+      const answer = await api.serverTables(host.trim(), path.trim());
+      setFound(answer);
+      setReadFor(where);
+      setLeftOut(initial && initial.host === host.trim() && initial.path === path.trim() && initial.excludeRows.length ? initial.excludeRows : defaultLeftOut(answer, Boolean(clean)));
+    } catch (error) {
+      setReadError((error as Error).message);
+    } finally {
+      setReading(false);
+    }
+  };
+  const preset = (cleaned: boolean) => {
+    setClean?.(cleaned);
+    if (tables) setLeftOut(cleaned ? [...new Set([...leftOut, ...tables.logs, ...tables.personal])] : leftOut.filter((t) => !tables.personal.includes(t)));
+  };
+  // Tables not read again keep what was saved for this server and folder.
+  const same = initial !== undefined && initial.host === host.trim() && initial.path === path.trim();
+  const excludeRows = mode !== 'export' ? [] : tables ? leftOut.filter((t) => tables.tables.some((x) => x.name === t)) : same ? initial.excludeRows : [];
   return (
-    <div className="grid gap-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+    <div className="@container grid gap-3">
+      <div className="grid gap-3 @xl:grid-cols-2">
         <div className="grid content-start gap-1.5">
-          <label htmlFor="ssh-host" className="font-medium">Host</label>
-          <Input id="ssh-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="staging-spellbook or alex@www.spellbook.example" className="font-mono text-[13px]" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
+          <label htmlFor={`${uid}-host`} className="font-medium">Host</label>
+          <Input id={`${uid}-host`} value={host} onChange={(e) => setHost(e.target.value)} placeholder="staging-spellbook or alex@www.spellbook.example" className="font-mono text-[13px]" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
           <p className="text-xs text-muted-foreground">An alias from your ~/.ssh/config, or user@host.</p>
         </div>
-        <div className="grid content-start gap-1.5">
+        <div className={cn('grid content-start gap-1.5', exportOnly && 'hidden')}>
           <span className="font-medium">What to take</span>
           <Segmented label="What to take" value={mode} onChange={setMode} options={[['export', 'Export now with WP-CLI'], ['file', 'A dump file there']]} className="h-10 justify-self-start" />
         </div>
       </div>
       <div className="grid gap-1.5">
-        <label htmlFor="ssh-path" className="font-medium">{mode === 'export' ? 'The WordPress folder on the server' : 'The dump on the server'}</label>
-        <div className="flex gap-2">
-          <Input id="ssh-path" value={path} onChange={(e) => setPath(e.target.value)} placeholder={mode === 'export' ? '/var/www/spellbook/public' : '/home/alex/backups/spellbook.sql.gz'} className="font-mono text-[13px]" spellCheck={false} aria-invalid={path.trim() !== '' && !pathOk ? true : undefined} />
-          <Button disabled={!hostOk || !pathOk || working} onClick={() => onTake({ host: host.trim(), mode, path: path.trim() })}>
+        <label htmlFor={`${uid}-path`} className="font-medium">{mode === 'export' ? 'The WordPress folder on the server' : 'The dump on the server'}</label>
+        <div className="flex flex-wrap gap-2">
+          <Input id={`${uid}-path`} value={path} onChange={(e) => setPath(e.target.value)} placeholder={mode === 'export' ? '/var/www/spellbook/public' : '/home/alex/backups/spellbook.sql.gz'} className="min-w-0 flex-1 font-mono text-[13px]" spellCheck={false} aria-invalid={path.trim() !== '' && !pathOk ? true : undefined} />
+          {mode === 'export' && (
+            <Button variant="outline" disabled={!hostOk || !pathOk || reading || working} onClick={() => void readTables()}>
+              {reading ? <LoaderCircle className="animate-spin" /> : <Table2 />}
+              {tables ? 'Read again' : 'Choose tables'}
+            </Button>
+          )}
+          <Button disabled={!hostOk || !pathOk || working || reading} onClick={() => onTake({ host: host.trim(), mode, path: path.trim(), excludeRows })}>
             {working ? <LoaderCircle className="animate-spin" /> : <Server />}
-            {mode === 'export' ? 'Export' : 'Copy'}
+            {takeLabel ?? (mode === 'export' ? 'Export' : 'Copy')}
           </Button>
         </div>
         {path.trim() !== '' && !pathOk && <p className="text-xs text-danger">An absolute path with letters, digits and . _ - / only{mode === 'file' ? ', ending in .sql, .sql.gz or .zip' : ''}.</p>}
+        {readError && <p role="alert" className="text-xs text-danger">{readError}</p>}
+        {!tables && same && excludeRows.length > 0 && <p className="text-xs text-muted-foreground">The rows of {excludeRows.length} table{excludeRows.length === 1 ? '' : 's'} stay on the server, as saved: {excludeRows.join(', ')}.</p>}
       </div>
+      {setClean && (
+        <div className="grid gap-1.5">
+          <span className="font-medium">The copy</span>
+          <Segmented label="The copy" value={clean ? 'clean' : 'whole'} onChange={(v) => preset(v === 'clean')} options={[['whole', 'As it is'], ['clean', 'Production copy, cleaned']]} className="justify-self-start" />
+          <p className="text-xs text-muted-foreground">
+            {clean
+              ? 'After the import: every user but one, WooCommerce orders and customer data, reviews, form entries, logs and payment, mail and API keys go, with SQL here. Ticking the personal-data tables below keeps their rows on the server as well.'
+              : 'Every user, order and key comes as production has it; only the tables you tick stay behind.'}
+          </p>
+        </div>
+      )}
+      {mode === 'export' && tables && (
+        <div className="grid gap-1.5">
+          <span className="font-medium">Leave out the rows of</span>
+          {tables.tables.length === 0 && <p className="text-xs text-muted-foreground">WP-CLI listed no tables there.</p>}
+          <TablesPicker found={tables} value={leftOut} onChange={setLeftOut} />
+        </div>
+      )}
       <ul className="grid gap-1 text-xs text-muted-foreground">
         <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />Your SSH key through your agent; never a password, and a host not in your known_hosts is refused, not trusted on the fly.</li>
-        <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />{mode === 'export' ? 'Runs only wp db export on the server (it reads, it changes nothing), and the server needs WP-CLI as wp.' : 'Copies the file with sftp; nothing runs on the server.'}</li>
+        <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />{mode === 'export' ? 'Runs only wp db export (and wp db size for the tables) on the server: it reads, writes no file there, and the database password stays there. Compressed on the way.' : 'Copies the file with sftp; nothing runs on the server.'}</li>
       </ul>
     </div>
   );
@@ -453,14 +524,14 @@ function FromServer({ working, onTake }: { working: boolean; onTake: (input: { h
 type LocalView = 'site' | 'snapshot' | 'archive';
 
 /** A dump from this machine: another site's database, one of its snapshots, or a deleted site's dump. */
-function FromThisMachine({ working, onTake }: { working: boolean; onTake: (input: Record<string, unknown>) => void }) {
+function FromThisMachine({ working, onTake, exclude }: { working: boolean; onTake: (input: Record<string, unknown>) => void; exclude?: { domain: string; path?: string | undefined } | undefined }) {
   const [view, setView] = useState<LocalView>('site');
   const [sites, setSites] = useState<Site[] | null>(null);
   const [trash, setTrash] = useState<TrashEntry[] | null>(null);
   const [picked, setPicked] = useState('');
   const [snapshots, setSnapshots] = useState<SnapshotInfo[] | null>(null);
   useEffect(() => {
-    api.sites().then((list) => setSites(list.filter((s) => s.core.kind !== 'none')), () => setSites([]));
+    api.sites().then((list) => setSites(list.filter((s) => s.core.kind !== 'none' && !(exclude && s.domain === exclude.domain && (s.path ?? '') === (exclude.path ?? '')))), () => setSites([]));
     api.trash().then((list) => setTrash(list.filter((t) => t.hasDump)), () => setTrash([]));
   }, []);
   const site = (sites ?? []).find((s) => `${s.domain}${s.path ?? ''}` === picked);
@@ -469,6 +540,26 @@ function FromThisMachine({ working, onTake }: { working: boolean; onTake: (input
     if (view === 'snapshot' && site) api.snapshots(site.domain, site.path).then(setSnapshots, () => setSnapshots([]));
   }, [view, picked]);
   const ref = site ? { domain: site.domain, ...(site.path ? { path: site.path } : {}) } : null;
+  const [found, setFound] = useState<{ key: string; tables: ServerTables } | null>(null);
+  const [leftOut, setLeftOut] = useState<string[]>([]);
+  const [reading, setReading] = useState(false);
+  const tables = found?.key === picked ? found.tables : null;
+  // The site's tables from the MySQL server, as the Database tab reads them.
+  const readTables = async () => {
+    if (!site?.db) return;
+    setReading(true);
+    try {
+      const overview = await api.dbOverview(site.db.name);
+      const list = overview.tables.filter((t) => !t.view).map((t) => ({ name: t.name, bytes: t.dataBytes + t.indexBytes })).sort((a, b) => b.bytes - a.bytes);
+      const answer = { tables: list, ...knownLeftOut(list.map((t) => t.name)) };
+      setFound({ key: picked, tables: answer });
+      setLeftOut(defaultLeftOut(answer, false));
+    } catch {
+      setFound(null);
+    } finally {
+      setReading(false);
+    }
+  };
   return (
     <div className="grid gap-3">
       <Segmented label="From" value={view} onChange={setView} options={[['site', 'Another site'], ['snapshot', 'A snapshot'], ['archive', 'A deleted site']]} className="justify-self-start" />
@@ -478,8 +569,14 @@ function FromThisMachine({ working, onTake }: { working: boolean; onTake: (input
             <option value="">{sites === null ? 'Reading the sites...' : 'Pick a site'}</option>
             {(sites ?? []).map((s) => <option key={`${s.domain}${s.path ?? ''}`} value={`${s.domain}${s.path ?? ''}`}>{s.domain}{s.path ?? ''}</option>)}
           </Select>
+          {view === 'site' && site?.db && (
+            <Button variant="outline" disabled={working || reading} onClick={() => void readTables()}>
+              {reading ? <LoaderCircle className="animate-spin" /> : <Table2 />}
+              Choose tables
+            </Button>
+          )}
           {view === 'site' && (
-            <Button disabled={!ref || working} onClick={() => ref && onTake({ kind: 'site', ...ref })}>
+            <Button disabled={!ref || working} onClick={() => ref && onTake({ kind: 'site', ...ref, excludeRows: tables ? leftOut : [] })}>
               {working ? <LoaderCircle className="animate-spin" /> : <HardDrive />}
               Export its database
             </Button>
@@ -487,6 +584,7 @@ function FromThisMachine({ working, onTake }: { working: boolean; onTake: (input
         </div>
       )}
       {view === 'site' && <p className="text-xs text-muted-foreground">A copy of the site's database now, with WP-CLI; the site stays as it is. Handy for a second copy that tests another branch.</p>}
+      {view === 'site' && tables && <TablesPicker found={tables} value={leftOut} onChange={setLeftOut} />}
       {view === 'snapshot' && site && (
         <ul className="grid gap-1.5">
           {snapshots === null && <li className="text-muted-foreground">Reading its snapshots...</li>}
@@ -516,6 +614,70 @@ function FromThisMachine({ working, onTake }: { working: boolean; onTake: (input
           <li className="text-xs text-muted-foreground">A copy of the dump; the deleted site stays restorable as it was.</li>
         </ul>
       )}
+    </div>
+  );
+}
+
+/** Clean the copy after the import, for any dump: off unless you choose it. */
+function CleanSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className="rounded-lg border bg-card px-4 py-3">
+      <Checkbox
+        id="clean-copy"
+        checked={on}
+        onChange={onChange}
+        label="Clean this copy after the import"
+        hint={on
+          ? "Keeps one user (the WordPress step's admin) and removes WooCommerce orders and customer data, reviews, form entries, logs and payment, mail and API keys, with SQL here. Nothing changes on production."
+          : 'Off: every user, order and key stays as the dump has them.'}
+      />
+    </div>
+  );
+}
+
+type PickerSource = Exclude<DumpSource, 'claude' | 'none'>;
+const PICKER_SOURCES: Array<[PickerSource, string]> = [
+  ['upload', 'Upload from this computer'],
+  ['downloads', 'Downloads folder'],
+  ['cloud', 'Cloud drive or Drive link'],
+  ['url', 'Public URL'],
+  ['server', 'A server over SSH'],
+  ['local', 'This machine'],
+];
+
+/**
+ * Every way the wizard brings a dump in, for a site that exists: an upload,
+ * the Downloads folder, a cloud drive, a public URL, a server over SSH with
+ * tables left out, or this machine. Each ends as an upload, handed to onUpload.
+ */
+export function DumpSourcePicker({ busy, onUpload, exclude }: { busy: boolean; onUpload: (upload: UploadResult) => void; exclude?: { domain: string; path?: string | undefined } }) {
+  const [source, setSource] = useState<PickerSource>('upload');
+  const job = useJob();
+  const [openStep, setOpenStep] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const working = busy || (job.job !== null && !settled(job.job));
+  useEffect(() => {
+    if (!job.job || job.job.status !== 'done') return;
+    const id = uploadOf(job.job.steps.map((s) => s.output ?? '').join('\n'));
+    if (id) api.uploadInfo(id).then(onUpload, (err: Error) => setError(err.message));
+  }, [job.job?.status]);
+  const start = (id: Parameters<typeof api.startJob>[0], input: Record<string, unknown>) => {
+    setError(null);
+    void job.follow(api.startJob(id, input));
+  };
+  return (
+    <div className="grid gap-3 text-sm">
+      <Select aria-label="Where the dump comes from" value={source} onChange={(e) => setSource(e.target.value as PickerSource)} wrapClassName="w-fit min-w-64">
+        {PICKER_SOURCES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </Select>
+      {source === 'upload' && <UploadDump onUpload={onUpload} />}
+      {source === 'downloads' && <FromDownloads working={working} onUse={(file) => start('dump.useDownloaded', { file })} />}
+      {source === 'cloud' && <FromCloud working={working} onRemote={(remote, entry) => start('dump.fromRemote', { remote, path: entry.path, ...(entry.sizeBytes !== null ? { sizeBytes: entry.sizeBytes } : {}) })} onDriveLink={(link) => start('dump.download', { link })} />}
+      {source === 'url' && <FromUrl working={working} onFetch={(url) => start('dump.fetch', { url })} />}
+      {source === 'server' && <FromServer working={working} onTake={(input) => start('dump.fromServer', input)} />}
+      {source === 'local' && <FromThisMachine working={working} exclude={exclude} onTake={(input) => start('dump.fromLocal', input)} />}
+      {job.job && job.job.status !== 'done' && <div className="border-t pt-3"><StepList steps={job.job.steps} open={openStep} setOpen={setOpenStep} /></div>}
+      {(job.error || error) && <p role="alert" className="text-danger">{job.error ?? error}</p>}
     </div>
   );
 }

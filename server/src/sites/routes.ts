@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin } from '@devmagic-panel/shared';
-import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
+import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
@@ -35,6 +35,7 @@ import { readNetworkAdmins } from './network-admin.js';
 import { SiteActionRefused, siteFor, SiteNotFoundError, siteKey } from './site-actions.js';
 import { parseWpConfig } from './wpconfig.js';
 import type { WpCronReport } from '@devmagic-panel/shared';
+import { readProduction, saveProduction } from './refresh.js';
 import { type CronContext, CronRefused } from '../cron.js';
 import { readWpCron, testWpCron } from './wp-cron.js';
 
@@ -284,6 +285,17 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       throw error;
     }
+  });
+  // Refresh from production: where the site's production is and how to copy it, kept in the panel's database. No secret in it.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/production', async (request, reply) => {
+    if (!snapshotKey(request.params.domain, request.query.path)) return reply.code(404).send({ error: `no site called ${request.params.domain}${request.query.path ?? ''}` });
+    return readProduction(deps.store, request.params.domain, request.query.path);
+  });
+  api.put<{ Params: { domain: string }; Querystring: { path?: string }; Body: unknown }>('/api/sites/:domain/production', async (request, reply) => {
+    if (!snapshotKey(request.params.domain, request.query.path)) return reply.code(404).send({ error: `no site called ${request.params.domain}${request.query.path ?? ''}` });
+    const body = productionSettings.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: body.error.issues[0]?.message ?? 'An ssh host, a folder and table names' });
+    return saveProduction(deps.store, request.params.domain, request.query.path, body.data);
   });
   // Whether plugins are on WordPress.org, by slug, kept a day. Read only.
   api.post<{ Body: unknown }>('/api/wporg/plugins', async (request, reply) => {

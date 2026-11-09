@@ -1,6 +1,6 @@
 import type { CleanCopyInfo, CleanPreview, KeptDatabaseInfo, Site, SnapshotInfo, UploadResult } from '@devmagic-panel/shared';
 import { CLEAN_FORM_TABLES, CLEAN_LOG_TABLES, CLEAN_WOO_TABLES, isLocalName } from '@devmagic-panel/shared';
-import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCircle, PackageCheck, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCircle, PackageCheck, RefreshCw, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation, rowsSeedState } from '@/components/db-browser';
 import { JobFooter } from '@/components/job-box';
@@ -25,19 +25,20 @@ import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { databaseHref, databaseView, type DbView } from '@/lib/database-href';
 import { useAsync } from '@/lib/use-async';
 import { ViewBar } from '@/components/page';
+import { DumpSourcePicker, FromServer } from './new-site-database';
 import { ReadingBlock } from '@/components/skeletons';
 
-type JobKind = 'snapshot' | 'restore' | 'import' | 'preview' | 'replace' | 'clean' | 'cleanCurrent' | 'export' | 'restoreKept';
+type JobKind = 'snapshot' | 'restore' | 'import' | 'preview' | 'replace' | 'clean' | 'cleanCurrent' | 'export' | 'restoreKept' | 'refresh';
 
 const JOB_ACTIONS = {
   snapshot: 'db.snapshot', restore: 'db.restore', import: 'db.import', preview: 'db.searchReplace', replace: 'db.searchReplace',
-  clean: 'db.cleanCopy', cleanCurrent: 'db.cleanCurrent', export: 'db.exportClean', restoreKept: 'db.restoreKept',
+  clean: 'db.cleanCopy', cleanCurrent: 'db.cleanCurrent', export: 'db.exportClean', restoreKept: 'db.restoreKept', refresh: 'site.refreshFromProduction',
 } as const;
 
 /** The kind of job each action starts, to show a running one in its card again. */
 const KIND_OF: Partial<Record<string, JobKind>> = {
   'db.snapshot': 'snapshot', 'db.restore': 'restore', 'db.import': 'import', 'db.searchReplace': 'replace',
-  'db.cleanCopy': 'clean', 'db.cleanCurrent': 'cleanCurrent', 'db.exportClean': 'export', 'db.restoreKept': 'restoreKept',
+  'db.cleanCopy': 'clean', 'db.cleanCurrent': 'cleanCurrent', 'db.exportClean': 'export', 'db.restoreKept': 'restoreKept', 'site.refreshFromProduction': 'refresh',
 };
 
 export { databaseHref } from '@/lib/database-href';
@@ -142,6 +143,7 @@ function DatabaseTools({ site }: { site: Site }) {
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
           <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} footer={jobIn('snapshots')} />
           <ImportCard site={site} busy={busy} start={start} footer={jobIn('import')} />
+          <RefreshCard site={site} busy={busy} start={start} footer={jobIn('refresh')} />
           <PrepareCard site={site} busy={busy} start={start} footer={jobIn('prepare')} />
           <CleanCurrentCard site={site} preview={preview.data} error={preview.error} busy={busy} start={start} footer={jobIn('cleanCurrent')} />
         </div>
@@ -155,9 +157,9 @@ function DatabaseTools({ site }: { site: Site }) {
   );
 }
 
-type JobCardSlot = 'snapshots' | 'import' | 'prepare' | 'cleanCurrent' | 'replace' | 'copies' | 'kept';
+type JobCardSlot = 'snapshots' | 'import' | 'prepare' | 'refresh' | 'cleanCurrent' | 'replace' | 'copies' | 'kept';
 const JOB_CARD: Record<JobKind, JobCardSlot> = {
-  snapshot: 'snapshots', restore: 'snapshots', import: 'import', clean: 'prepare', cleanCurrent: 'cleanCurrent', preview: 'replace', replace: 'replace', export: 'copies', restoreKept: 'kept',
+  snapshot: 'snapshots', restore: 'snapshots', import: 'import', clean: 'prepare', cleanCurrent: 'cleanCurrent', preview: 'replace', replace: 'replace', export: 'copies', restoreKept: 'kept', refresh: 'refresh',
 };
 
 function doneTitle(kind: JobKind | null): string {
@@ -168,6 +170,7 @@ function doneTitle(kind: JobKind | null): string {
   if (kind === 'cleanCurrent') return 'Database cleaned';
   if (kind === 'export') return 'Clean copy saved';
   if (kind === 'restoreKept') return 'Tables put back';
+  if (kind === 'refresh') return 'Database refreshed from production';
   return 'Search and replace done';
 }
 
@@ -390,56 +393,42 @@ function SearchReplaceCard({ footer, site, busy, start, preview }: { footer: Rea
 
 /** A dump chosen and uploaded for this site, with each production host it uses paired with a local name. */
 function useDumpUpload(site: Site) {
-  const fileInput = useRef<HTMLInputElement>(null);
   const [upload, setUpload] = useState<UploadResult | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [pairs, setPairs] = useState<Array<{ from: string; to: string }>>([]);
   const names = [site.domain, ...site.aliases, ...(site.network?.sites.map((s) => new URL(s.url).hostname) ?? [])].filter((n, i, all) => all.indexOf(n) === i);
 
-  async function pick(file: File | undefined) {
-    if (!file) return;
-    setError(null);
-    setProgress(0);
-    try {
-      const result = await api.upload(file, setProgress);
-      setUpload(result);
-      // Each production host goes to its suggested local name when the site serves it, otherwise to the main domain.
-      // Hosts that are already local names need no replacing.
-      setPairs(result.facts.hosts.filter((from) => !isLocalName(from)).map((from) => {
-        const suggested = result.suggestions.replace.find((r) => r.from === from)?.to;
-        return { from, to: suggested && names.includes(suggested) ? suggested : site.domain };
-      }));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setProgress(null);
-    }
+  /** A dump that is in, from any source. */
+  function take(result: UploadResult) {
+    setUpload(result);
+    // Each production host goes to its suggested local name when the site serves it, otherwise to the main domain.
+    // Hosts that are already local names need no replacing.
+    setPairs(result.facts.hosts.filter((from) => !isLocalName(from)).map((from) => {
+      const suggested = result.suggestions.replace.find((r) => r.from === from)?.to;
+      return { from, to: suggested && names.includes(suggested) ? suggested : site.domain };
+    }));
   }
 
   const reset = () => {
     setUpload(null);
     setPairs([]);
   };
-  return { fileInput, upload, progress, error, pick, pairs, setPairs, replace: pairs.filter((p) => p.to !== ''), names, reset };
+  return { upload, take, pairs, setPairs, replace: pairs.filter((p) => p.to !== ''), names, reset };
 }
 
 type DumpUpload = ReturnType<typeof useDumpUpload>;
 
-function DumpChooser({ dump, busy, id }: { dump: DumpUpload; busy: boolean; id: string }) {
-  return (
-    <>
-      <input ref={dump.fileInput} id={id} type="file" accept=".sql,.gz,.zip" className="hidden" onChange={(e) => void dump.pick(e.target.files?.[0])} />
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" disabled={busy || dump.progress !== null} onClick={() => dump.fileInput.current?.click()}>
-          {dump.progress !== null ? <LoaderCircle className="animate-spin" /> : <Upload />}
-          {dump.progress !== null ? `Uploading ${Math.round(dump.progress * 100)}%` : dump.upload ? 'Choose another dump' : 'Choose a dump'}
-        </Button>
-        {dump.upload && <span className="text-sm">{dump.upload.name} · {bytes(dump.upload.size)}</span>}
+/** The dump for an import: from any source the new site wizard has, or the one that is in, with a way to pick another. */
+function DumpChooser({ dump, busy, site }: { dump: DumpUpload; busy: boolean; site: Site }) {
+  if (dump.upload) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <FileArchive className="size-4 text-success" />
+        <span>{dump.upload.name} · {bytes(dump.upload.size)}</span>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={dump.reset}>Pick another dump</Button>
       </div>
-      {dump.error && <p role="alert" className="text-sm text-danger">{dump.error}</p>}
-    </>
-  );
+    );
+  }
+  return <DumpSourcePicker busy={busy} onUpload={dump.take} exclude={siteTarget(site)} />;
 }
 
 function ReplacePairs({ dump }: { dump: DumpUpload }) {
@@ -474,7 +463,7 @@ function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: S
         <p className="text-xs text-muted-foreground">
           A .sql, .sql.gz or .zip dump replaces the tables it holds. It goes into a side database and is swapped in at once; production domains are then replaced with this site's.
         </p>
-        <DumpChooser dump={dump} busy={busy} id="import-file" />
+        <DumpChooser dump={dump} busy={busy} site={site} />
 
         {upload && (
           <>
@@ -619,7 +608,7 @@ function PrepareCard({ footer, site, busy, start }: { footer: ReactNode;  site: 
         <p className="text-xs text-muted-foreground">
           Makes a production dump this site's database without private data. It is cleaned in a side database before anything reaches the site, then swapped in; your current tables are kept for 7 days. Mail plugins are turned off and one administrator stays, the author of every post. Needs the MySQL admin account.
         </p>
-        <DumpChooser dump={dump} busy={busy} id="prepare-file" />
+        <DumpChooser dump={dump} busy={busy} site={site} />
 
         {upload && (
           <>
@@ -901,6 +890,112 @@ function KeptCard({ footer, site, kept, loading, busy, start, onDeleted }: { foo
           <Button variant="danger" onClick={() => deleting && void remove(deleting)}><Trash2 />Drop</Button>
         </div>
       </Dialog>
+      {footer}
+    </Card>
+  );
+}
+
+/**
+ * Refresh from production: the server and folder saved for the site, the
+ * tables whose rows stay there and whether the copy is cleaned, then one
+ * button. Reads only on the server; here it imports or cleans as the cards
+ * below do, from a side database.
+ */
+function RefreshCard({ footer, site, busy, start }: { footer: ReactNode; site: Site; busy: boolean; start: Start }) {
+  const saved = useAsync(() => api.productionSettings(site.domain, site.path), [site.domain, site.path]);
+  const settings = saved.data ?? null;
+  const [editing, setEditing] = useState(false);
+  const [clean, setClean] = useState(false);
+  const [keep, setKeep] = useState('');
+  const [password, setPassword] = useState('admin');
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    setClean(settings?.clean ?? false);
+    setKeep(settings?.keep ?? '');
+  }, [settings]);
+  const form = !saved.loading && (!settings || editing);
+  const user = keep ? { keep, login: keep, password } : { login: 'admin', password };
+  const save = async (input: { host: string; path: string; excludeRows: string[] }) => {
+    setError(null);
+    try {
+      await api.saveProductionSettings(site.domain, site.path, { host: input.host, folder: input.path, excludeRows: input.excludeRows, clean, ...(clean && keep.trim() ? { keep: keep.trim() } : {}) });
+      saved.reload();
+      setEditing(false);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  const keepProblem = keep.trim() && !WP_LOGIN.test(keep.trim()) ? 'A login of letters, digits, spaces and _ . @ + -' : null;
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Refresh from production</CardTitle><RefreshCw className="size-4 text-muted-foreground" /></CardHeader>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5 text-sm">
+        <p className="text-xs text-muted-foreground">
+          Copies production's database over SSH with WP-CLI, reading only: nothing is written there, and its database password stays there. Here it goes into a side database and is swapped in; production domains become this site's.
+        </p>
+        {saved.loading && <p className="text-muted-foreground">Reading the saved settings...</p>}
+        {form && (
+          <>
+            <FromServer
+              working={busy}
+              exportOnly
+              clean={clean}
+              setClean={setClean}
+              takeLabel="Save"
+              {...(settings ? { initial: { host: settings.host, path: settings.folder, excludeRows: settings.excludeRows } } : {})}
+              onTake={(input) => void save(input)}
+            />
+            {clean && (
+              <Field label="Keep this administrator" htmlFor="refresh-keep" hint="Its login on production; every other user goes. Empty: a new user, admin.">
+                <Input id="refresh-keep" value={keep} onChange={(e) => setKeep(e.target.value)} placeholder="admin" autoComplete="off" spellCheck={false} aria-invalid={keepProblem ? true : undefined} />
+              </Field>
+            )}
+            {keepProblem && <p className="text-xs text-danger">{keepProblem}</p>}
+            {error && <p role="alert" className="text-danger">{error}</p>}
+            {settings && <Button variant="ghost" className="justify-self-start" onClick={() => setEditing(false)}>Cancel</Button>}
+          </>
+        )}
+        {!form && settings && (
+          <>
+            <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1">
+              <dt className="text-muted-foreground">From</dt>
+              <dd className="truncate font-mono text-[13px]" title={`${settings.host}:${settings.folder}`}>{settings.host}:{settings.folder}</dd>
+              <dt className="text-muted-foreground">Rows left out</dt>
+              <dd>{settings.excludeRows.length ? `${settings.excludeRows.length} table${settings.excludeRows.length === 1 ? '' : 's'}` : 'none'}</dd>
+              <dt className="text-muted-foreground">The copy</dt>
+              <dd>{settings.clean ? `cleaned, keeping ${settings.keep ?? 'a new admin'}` : 'as it is'}</dd>
+            </dl>
+            {settings.clean && (
+              <Field label={settings.keep ? `Password for ${settings.keep}` : 'Password for admin'} htmlFor="refresh-secret" hint="For this local copy only; not saved.">
+                <SecretInput id="refresh-secret" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </Field>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="danger" disabled={busy || (settings.clean && password === '')} onClick={() => setConfirming(true)}>
+                <RefreshCw />
+                Refresh {site.db?.name}
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={() => setEditing(true)}>Change</Button>
+            </div>
+          </>
+        )}
+      </div>
+      <ConfirmDialog
+        open={confirming}
+        title={`Refresh ${site.db?.name ?? 'the database'} from ${settings?.host ?? 'production'}?`}
+        description={settings?.clean
+          ? `The export is imported into a side database and cleaned there, then replaces ${site.db?.name ?? 'the database'} at once: the tables it replaces are kept for 7 days under Kept databases, where Put back swaps them in again.`
+          : `The export goes into a side database and its tables are swapped into ${site.db?.name ?? 'the database'} at once; until the job ends, Undo puts the tables from before back.`}
+        domain={site.domain}
+        action="Refresh"
+        onClose={() => setConfirming(false)}
+        onConfirm={(confirm) => {
+          setConfirming(false);
+          start('refresh', { user, confirm });
+        }}
+      />
       {footer}
     </Card>
   );

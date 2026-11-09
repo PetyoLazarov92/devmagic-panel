@@ -121,14 +121,40 @@ against the free space.
   password, and a host not in your `known_hosts` is refused with how to add
   it, never trusted on the fly. Paths take letters, digits and `. _ - /`
   only, as ssh hands the command to the server's shell.
+  The export is compressed on the way, writes no file on the server and
+  leaves its database password there (WP-CLI reads `wp-config.php` and runs
+  mysqldump there). On a host whose PHP turns `exec` and similar functions
+  off, where WP-CLI stops without a word, it runs once more as
+  `php -d disable_functions= <wp>`, for that one run only, and the job says
+  so. A dump without mysqldump's last line was cut off on the way and is
+  thrown away, never imported.
+  **Choose tables** lists the server's tables, biggest first, with their size,
+  to leave the rows of some on the server: known logs (Action Scheduler,
+  Wordfence, Redirection, WP Activity Log, Simple History, Stream, WP Mail
+  Logging) are ticked for you, and personal data (WooCommerce orders and
+  customers, Gravity Forms and WPForms entries) too with a cleaned copy. A
+  table left out still comes, empty, so nothing misses it. The choice is
+  remembered per server and folder. Only whole tables: personal data in
+  users, comments or options still comes, and the clean step below takes
+  care of it.
+  **Production copy, cleaned** turns that clean step on.
 - **This machine**: another site's database exported now (a second copy to
-  test another branch), one of a site's snapshots, or the dump a deleted
-  site's archive holds; the deleted site stays restorable as it was.
+  test another branch, with tables to leave the rows of, as over SSH), one of
+  a site's snapshots, or the dump a deleted site's archive holds; the deleted
+  site stays restorable as it was.
 - **No database**: a fresh WordPress on the repo's code, with the admin from
   the WordPress step.
 
 The **Found in the dump** card shows what it holds, and **Pick another dump**
 takes a different one.
+
+**Clean this copy after the import** (off unless you choose it) runs the
+clean-up of Prepare from production on the new database, with SQL and no
+WordPress code: every user but one goes, with WooCommerce orders and customer
+data, product reviews, form entries, logs and payment, mail and API keys. The
+one user kept is the WordPress step's admin: the dump's own administrator as
+it is, or a new one with your password, the author of every post. Mail and
+production-only plugins go off as on every install from a dump.
 
 ## Domains and WordPress
 

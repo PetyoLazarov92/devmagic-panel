@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { GitHosts, InstallDraft, OrgNamespace, OrgRepoList, OrgSettings, OrgStatus, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
-import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts } from '@devmagic-panel/shared';
+import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, knownLeftOut, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Executor } from '../exec.js';
 import type { RunStore } from '../store.js';
@@ -9,6 +9,7 @@ import { RepoRefused } from '../sites/repo.js';
 import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } from './claude-code.js';
 import { DumpRefused, listRemote, rcloneRemotes, recentDownloads, rcloneRemote } from './dumps.js';
 import { z } from 'zod';
+import { MoreDumpsRefused, serverTables } from '../sites/more-dumps.js';
 import { ghStatus } from '../repo-hosts/github.js';
 import { type GitHostDetector, glabOverview, HostRefused, listNamespaces, remotesOf } from '../repo-hosts/index.js';
 import { OrgScanner } from './scan.js';
@@ -162,6 +163,21 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
 
   // Dumps you downloaded in the browser, to pick one when rclone is not set up.
   api.get('/api/downloads', async () => recentDownloads(deps.home));
+
+  // A server's tables with their sizes, for leaving the rows of some out of an export; and what was left out last time there.
+  const serverFolder = z.object({ host: z.string().max(300).regex(/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/), path: z.string().max(500).regex(/^\/[A-Za-z0-9._/-]+$/).refine((p) => !p.split('/').includes('..')) });
+  api.post<{ Body: unknown }>('/api/dumps/server-tables', async (request, reply) => {
+    const body = serverFolder.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'An ssh host and an absolute folder' });
+    try {
+      const tables = await serverTables(deps.exec, body.data.host, body.data.path);
+      const kept = deps.store.getMeta(`server-export:${body.data.host}|${body.data.path}`);
+      return { tables, ...knownLeftOut(tables.map((t) => t.name)), ...(kept ? { remembered: JSON.parse(kept) as string[] } : {}) };
+    } catch (error) {
+      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: error.message });
+      throw error;
+    }
+  });
 
   // rclone's remotes and one folder of one, read only, for the Database step: names and sizes of dumps, never their contents.
   api.get('/api/dumps/remotes', async () => rcloneRemotes(deps.exec));

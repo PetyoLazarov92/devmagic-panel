@@ -30,3 +30,13 @@ export function adminChoices(state: AdminState): { ifExists: 'keep' | 'update'; 
   if (!dumpAdmins(state)) return { ifExists: state.adminIfExists, ifMissing: state.adminIfMissing };
   return adminCreateOf(state) ? { ifExists: 'update', ifMissing: 'create' } : { ifExists: 'keep', ifMissing: 'skip' };
 }
+
+/**
+ * The one user a cleaned copy keeps: the WordPress step's admin, kept as it
+ * is when it is an administrator of the dump and you make none, else made
+ * with this password.
+ */
+export function cleanUserOf(state: AdminState, user: string, password: string): { keep?: string; login: string; password: string } {
+  const admin = (dumpAdmins(state) ?? []).find((login) => login.toLowerCase() === user.toLowerCase());
+  return admin && !adminCreateOf(state) ? { keep: admin, login: user, password } : { login: user, password };
+}

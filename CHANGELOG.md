@@ -1,5 +1,14 @@
 # Changelog
 
+### v1.30.0 (2026-11-09)
+* **Fix:** a dump from a server over SSH works on hosts whose PHP turns `exec` and similar functions off: when WP-CLI stops there without a word, the export runs once more as `php -d disable_functions= <wp>`, for that one run only, and the job says so. Every export uses `--no-tablespaces`, so a host without the PROCESS privilege no longer refuses it
+* **Sites:** an export over SSH is compressed on the way, and one without mysqldump's last line (a dropped connection) is thrown away instead of imported
+* **Sites:** Choose tables lists a server's tables, biggest first with their size, to leave the rows of some there: known log tables are ticked for you, personal-data tables too for a cleaned copy, a table left out still comes empty, and the choice is remembered per server and folder. Another site's database on this machine takes the same choice
+* **Sites:** the wizard's Database step can clean the copy after the import (Production copy, cleaned on the SSH option, or a switch for any dump): one user kept, the WordPress step's admin, and orders, customer data, reviews, form entries, logs and keys removed with SQL here
+* **Databases:** Import a dump and Prepare from production take every source the new site wizard has: the Downloads folder, a cloud drive or Drive link, a public URL, a server over SSH with tables left out, or this machine, not only an upload
+* **Databases:** Refresh from production on a site's Backups and tools: set up once with the SSH host, the WordPress folder, the tables to leave out and whether to clean, then one button exports production's database, reading only, and imports or cleans it from a side database, with Undo for an import and Put back for a cleaned copy. The settings hold no secret
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.29.2 (2026-11-09)
 * **Fix:** a dump from a server over SSH that fails without a word no longer says only "ssh stopped": it gives the exit code, says WP-CLI on the server likely stopped on a PHP error (shared hosts often block mysqldump), and gives the `--debug` command to see why; an export that sends no SQL is caught too
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

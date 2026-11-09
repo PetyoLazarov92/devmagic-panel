@@ -37,6 +37,7 @@ import { findClaude } from './org/claude-code.js';
 import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded } from './org/dumps.js';
 import { type Getter, shownUrl, urlProblem } from './sites/fetch-dump.js';
 import { MoreDumpsRefused, planLocalDump, planServerDump } from './sites/more-dumps.js';
+import { planRefresh } from './sites/refresh.js';
 import { giveBack, planTakeOver, TakeoverRefused } from './sites/takeover.js';
 import { installPlugins, removeInstalled } from './sites/install-plugins.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
@@ -473,6 +474,8 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   },
   'dump.fromServer': async (ctx, input) => {
     let upload: string | undefined;
+    // The tables left out, remembered for the next export from this server and folder (names only).
+    if (input.mode === 'export') ctx.store.setMeta(`server-export:${input.host}|${input.path}`, JSON.stringify(input.excludeRows));
     const steps = planServerDump(ctx, input, (id) => {
       upload = id;
       if (input.draftId) ctx.drafts?.attach(input.draftId, id);
@@ -637,6 +640,17 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       onUndone: () => removeUpload(ctx.uploadsDir, input.uploadId),
       upload: input.uploadId,
     }),
+  'site.refreshFromProduction': async (ctx, input) => {
+    let upload: string | undefined;
+    const steps = planRefresh(ctx, input, (id) => {
+      upload = id;
+    });
+    const gone = () => {
+      if (upload) removeUpload(ctx.uploadsDir, upload);
+    };
+    // The dump goes once it is in, or once the job is undone; a failed job keeps it for Retry.
+    return startJob(ctx, steps, `Refresh ${input.domain}${input.path ?? ''} from production`, `${input.domain}${input.path ?? ''}`, { onDone: gone, onUndone: gone });
+  },
   'db.cleanCurrent': async (ctx, input) => startJob(ctx, planCleanCurrent(ctx, input), `Clean the database of ${input.domain}${input.path ?? ''}`, `${input.domain}${input.path ?? ''}`),
   'db.exportClean': async (ctx, input) => startJob(ctx, planExportClean(ctx, input), `Export a clean copy of ${input.domain}${input.path ?? ''}`, `${input.domain}${input.path ?? ''}`),
   'db.deleteCleanCopy': async (ctx, input) => [deleteCleanCopy(ctx.config, input)],

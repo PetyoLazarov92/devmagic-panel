@@ -1,6 +1,6 @@
-import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, RepoBuild, TrustedOwner, DumpPlugin, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerTables, RepoBuild, TrustedOwner, DumpPlugin, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
-import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
+import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
@@ -111,6 +111,10 @@ const mockPlugins: SitePlugin[] = [
   { name: 'wp-mail-smtp-pro', title: 'WP Mail SMTP Pro', status: 'active', version: '4.8.0' },
 ];
 
+/** Refresh from production per site: Spellbook is set up, the others not yet. */
+const mockProduction: Record<string, ProductionSettings> = {
+  'local.spellbook.example': { host: 'spellbook-prod', folder: '/var/www/spellbook/public', excludeRows: ['wp_actionscheduler_logs', 'wp_redirection_404'], clean: true },
+};
 const mockJobs = new Map<string, JobView>();
 // An install that finished with its build skipped, as on local.wandworks.test's page and run 40.
 mockJobs.set('mock-done-skipped', {
@@ -488,6 +492,10 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'admin', label: mockUserLabel(input) },
       { id: 'flush', label: 'Flush caches and rewrite rules' },
     ],
+    'site.refreshFromProduction': [
+      { id: 'export', label: `Export the database on ${mockProduction[String(input.domain)]?.host ?? 'production'} with WP-CLI and read it` },
+      { id: 'copy', label: mockProduction[String(input.domain)]?.clean ? 'Clean it in a side database and swap it in' : 'Import it and swap it in' },
+    ],
     'db.cleanCurrent': [
       { id: 'copy', label: 'Copy the database beside the site' },
       { id: 'clean', label: 'Remove users, orders, reviews, form entries, logs and keys' },
@@ -589,7 +597,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'hosts', label: "Add the hosts line to the panel's block" },
       { id: 'record', label: 'Note that the panel took it over' },
     ],
-    'dump.fromServer': [{ id: 'download', label: input.mode === 'export' ? `Export the database on ${String(input.host)} with WP-CLI and read it` : `Copy ${String(input.path).split('/').pop()} from ${String(input.host)} and read it` }],
+    'dump.fromServer': [{ id: 'download', label: input.mode === 'export' ? `Export the database on ${String(input.host)} with WP-CLI${Array.isArray(input.excludeRows) && input.excludeRows.length ? `, without the rows of ${input.excludeRows.length} tables,` : ''} and read it` : `Copy ${String(input.path).split('/').pop()} from ${String(input.host)} and read it` }],
     'dump.fromLocal': [{ id: 'take', label: input.kind === 'archive' ? `Take the database dump of the deleted ${String(input.id).slice(0, -16)}` : `Take the database of ${String(input.domain)}${String(input.path ?? '')} and read it` }],
     'dump.fetch': [{ id: 'download', label: `Download the dump from ${(() => { try { return new URL(String(input.url)).host; } catch { return 'the address'; } })()} and read it` }],
     'dump.useDownloaded': [{ id: 'take', label: `Take ${String(input.file).split('/').pop()} from Downloads and read it` }],
@@ -1945,6 +1953,33 @@ export const mockApi: Api = {
   downloads: async () => {
     await wait(150);
     return [{ file: '/home/wandworksco/Downloads/wandworks-store-2026-10-24.sql.gz', name: 'wandworks-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: new Date(Date.now() - 20 * 60_000).toISOString() }];
+  },
+  serverTables: async (): Promise<ServerTables> => {
+    await wait(500);
+    const tables = [
+      { name: 'wp_actionscheduler_logs', bytes: 2_400_000_000 },
+      { name: 'wp_postmeta', bytes: 910_000_000 },
+      { name: 'wp_wc_orders_meta', bytes: 640_000_000 },
+      { name: 'wp_posts', bytes: 420_000_000 },
+      { name: 'wp_redirection_404', bytes: 380_000_000 },
+      { name: 'wp_wc_orders', bytes: 120_000_000 },
+      { name: 'wp_woocommerce_order_items', bytes: 96_000_000 },
+      { name: 'wp_woocommerce_order_itemmeta', bytes: 88_000_000 },
+      { name: 'wp_gf_entry_meta', bytes: 54_000_000 },
+      { name: 'wp_options', bytes: 31_000_000 },
+      { name: 'wp_usermeta', bytes: 12_000_000 },
+      { name: 'wp_users', bytes: 2_000_000 },
+    ];
+    return { tables, ...knownLeftOut(tables.map((t) => t.name)) };
+  },
+  productionSettings: async (domain) => {
+    await wait(120);
+    return mockProduction[domain] ?? null;
+  },
+  saveProductionSettings: async (domain, _path, settings: ProductionSettings) => {
+    await wait(150);
+    mockProduction[domain] = settings;
+    return settings;
   },
   missingPlugins: async () => {
     await wait(300);

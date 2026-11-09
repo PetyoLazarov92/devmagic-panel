@@ -122,6 +122,8 @@ export const siteBuild = buildStep.extend({ repo: z.number().int().min(0).max(MA
 export const CORE_MODES = ['wpcore', 'standalone', 'repo'] as const;
 
 export const wpSlug = z.string().regex(/^[a-z0-9_-]{1,100}$/, 'A plugin slug like wp-rocket');
+/** A table name as a WP-CLI export takes it: letters, digits, _ and $. */
+export const tableName = z.string().regex(/^[A-Za-z0-9_$]{1,64}$/, 'A table name');
 /** A plugin to install from WordPress.org: its slug there, and production's version when known. Never a zip or URL. */
 export const pluginInstall = z.object({ slug: wpSlug, version: z.string().regex(/^\d[0-9A-Za-z.+-]{0,39}$/, 'A version like 5.3.1').optional() });
 
@@ -273,6 +275,19 @@ export function presetPlacement(preset: Pick<z.infer<typeof repoPreset>, 'placem
 export const XDEBUG_MODES = ['debug', 'develop', 'profile', 'trace', 'gcstats', 'coverage'] as const;
 /** A WordPress login as the panel accepts one: letters, digits, space and _ . @ + -, up to 60. */
 export const wpLogin = z.string().regex(/^[\w.@+ -]{1,60}$/, 'A WordPress login');
+/** An ssh destination: an alias from ~/.ssh/config, or user@host. */
+export const sshHost = z.string().max(300).regex(/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/, 'An alias from ~/.ssh/config, or user@host');
+/** A path on a server: no spaces, quotes or shell characters, as ssh hands it to the server's shell. */
+export const serverPath = z.string().max(500).regex(/^\/[A-Za-z0-9._/-]+$/, 'An absolute path with letters, digits and . _ - / only').refine((p) => !p.split('/').some((x) => x === '..'), 'No .. in the path');
+/** What a site keeps for Refresh from production: where WordPress is on the server and how to copy it. No secret. */
+export const productionSettings = z.object({
+  host: sshHost,
+  folder: serverPath,
+  excludeRows: z.array(tableName).max(200).default([]),
+  clean: z.boolean().default(false),
+  /** An administrator there to keep when the copy is cleaned; a new user otherwise. */
+  keep: wpLogin.optional(),
+});
 /**
  * The one user a clean-up keeps: an administrator already in the database
  * (keep), or a new one made with login and password. Every other user goes,
@@ -1178,14 +1193,16 @@ export const actions = {
   'dump.fromServer': {
     title: 'Take a database dump from a server over SSH',
     description:
-      "Takes a database dump from a server over SSH, with your own ssh config and agent (an alias from ~/.ssh/config, or user@host; never a password, never a new host key trusted on the fly): mode file copies a .sql, .sql.gz or .zip there with sftp; mode export runs wp --path=<path> db export on the server (read only) and streams it into a gzip here. Checks its first bytes and reads it as for an upload. Starts a job; the upload id is in its data.",
+      "Takes a database dump from a server over SSH, with your own ssh config and agent (an alias from ~/.ssh/config, or user@host; never a password, never a new host key trusted on the fly): mode file copies a .sql, .sql.gz or .zip there with sftp; mode export runs wp --path=<path> db export on the server (read only, --no-tablespaces, compressed on the way, again through php -d disable_functions= when WP-CLI dies quietly on a host that turns exec off) and streams it into a gzip here; the tables in excludeRows come as their structure only. A dump without mysqldump's last line was cut off and is refused. Checks its first bytes and reads it as for an upload. Starts a job; the upload id is in its data.",
     changesSystem: true,
     input: z
       .object({
-        host: z.string().max(300).regex(/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/, 'An alias from ~/.ssh/config, or user@host'),
+        host: sshHost,
         mode: z.enum(['file', 'export']),
-        /** file: the dump on the server; export: the WordPress folder there. No spaces, quotes or shell characters, as ssh hands it to the server's shell. */
-        path: z.string().max(500).regex(/^\/[A-Za-z0-9._/-]+$/, 'An absolute path with letters, digits and . _ - / only').refine((p) => !p.split('/').some((x) => x === '..'), 'No .. in the path'),
+        /** file: the dump on the server; export: the WordPress folder there. */
+        path: serverPath,
+        /** export: tables whose rows stay on the server; they come as their structure only. */
+        excludeRows: z.array(tableName).max(200).default([]),
         draftId: z.string().uuid().optional(),
       })
       .refine((v) => v.mode !== 'file' || /\.(?:sql|sql\.gz|zip)$/i.test(v.path), { path: ['path'], message: 'A .sql, .sql.gz or .zip file' }),
@@ -1196,7 +1213,7 @@ export const actions = {
       "Takes a database dump from this machine for a new install: kind site exports another site's database with WP-CLI, kind snapshot copies one of a site's snapshots, kind archive copies the dump a deleted site's archive holds (dmp-root trash-dump; the archive stays). Reads it as for an upload. Starts a job; the upload id is in its data.",
     changesSystem: true,
     input: z.discriminatedUnion('kind', [
-      z.object({ kind: z.literal('site'), domain: localName, path: sitePath, draftId: z.string().uuid().optional() }),
+      z.object({ kind: z.literal('site'), domain: localName, path: sitePath, excludeRows: z.array(tableName).max(200).default([]), draftId: z.string().uuid().optional() }),
       z.object({ kind: z.literal('snapshot'), domain: localName, path: sitePath, snapshot: snapshotName, draftId: z.string().uuid().optional() }),
       z.object({ kind: z.literal('archive'), id: trashId, draftId: z.string().uuid().optional() }),
     ]),
@@ -1488,6 +1505,15 @@ export const actions = {
       .object({ id: trashId, confirm: z.string() })
       .refine((v) => v.id.startsWith(`${v.confirm}-`) && localName.safeParse(v.confirm).success, { path: ['confirm'], message: 'Type the domain to confirm' }),
   },
+  'site.refreshFromProduction': {
+    title: 'Refresh the database from production',
+    description:
+      "Copies the site's database from production with the settings saved for it (the ssh host, the WordPress folder there, the tables whose rows stay there, clean or not): exports it over SSH as dump.fromServer does, reading only, then imports it as db.import does, or with clean on as db.cleanCopy does (one user kept: user, an administrator there or a new one). The tables from before are kept for 7 days with a clean copy, or until the job ends with an import. Replaces the production domains with the site's. Nothing is written on production. Starts a job.",
+    changesSystem: true,
+    input: z
+      .object({ domain: localName, path: sitePath, user: cleanUser, confirm: z.string() })
+      .refine(confirmDomain, { path: ['confirm'], message: 'Type the domain to confirm' }),
+  },
   'site.installPlugins': {
     title: 'Install missing plugins from WordPress.org',
     description:
@@ -1550,6 +1576,13 @@ export const actions = {
         deactivate: z.array(wpSlug).max(50).default([]),
         /** Local helper plugins the repo already has, to activate; one the site lacks is skipped, never downloaded. */
         activate: z.array(localHelper).max(10).default([]),
+        /**
+         * Clean the copy after the import and the replace, as Prepare the database
+         * from production does: every user but the one kept, WooCommerce orders and
+         * customer data, reviews, form entries, logs and payment, mail and API keys,
+         * with SQL; mail and production-only plugins off. The admin step follows user.
+         */
+        clean: z.object({ user: cleanUser }).optional(),
         /** Plugins the dump has that no repo brings, installed from WordPress.org after the import; one that fails is noted and the rest go on. */
         installPlugins: z.array(pluginInstall).max(100).default([]),
         /** Production host that serves uploads missing locally. */
