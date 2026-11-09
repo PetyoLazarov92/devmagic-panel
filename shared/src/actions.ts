@@ -276,7 +276,33 @@ export const XDEBUG_MODES = ['debug', 'develop', 'profile', 'trace', 'gcstats', 
 /** A WordPress login as the panel accepts one: letters, digits, space and _ . @ + -, up to 60. */
 export const wpLogin = z.string().regex(/^[\w.@+ -]{1,60}$/, 'A WordPress login');
 /** An ssh destination: an alias from ~/.ssh/config, or user@host. */
-export const sshHost = z.string().max(300).regex(/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/, 'An alias from ~/.ssh/config, or user@host');
+const SSH_HOST = /^((?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252})(?::([1-9][0-9]{0,4}))?$/;
+
+/**
+ * A server as the SSH forms take it: an alias from ~/.ssh/config, or
+ * user@host, with :port after it when sshd listens on another one
+ * (alex@www.spellbook.example:2222). Its parts, or null when it is not one:
+ * nothing ssh could read as an option, and a port from 1 to 65535.
+ */
+export function splitSshHost(value: string): { host: string; port?: number } | null {
+  const m = SSH_HOST.exec(value);
+  if (!m) return null;
+  const port = m[2] ? Number(m[2]) : undefined;
+  if (port !== undefined && port > 65535) return null;
+  return { host: m[1] as string, ...(port !== undefined ? { port } : {}) };
+}
+
+/**
+ * WP-CLI as a server names it, when it is not wp: a program's name or path
+ * (wp-cli, ~/bin/wp, /usr/local/bin/wp-cli.phar). Plain characters only and
+ * never a leading dash, as ssh hands the command to the server's shell: no
+ * space, option, quote or anything a shell reads.
+ */
+export const WP_CLI_COMMAND = /^(?!-)[A-Za-z0-9._/~-]{1,200}$/;
+export const isWpCliCommand = (value: string) => WP_CLI_COMMAND.test(value) && !value.split('/').includes('..');
+export const wpCliCommand = z.string().max(200).refine(isWpCliCommand, 'A program name or path like wp-cli or ~/bin/wp');
+
+export const sshHost = z.string().max(300).refine((v) => splitSshHost(v) !== null, 'An alias from ~/.ssh/config, or user@host, with :port when it is not 22');
 /** A path on a server: no spaces, quotes or shell characters, as ssh hands it to the server's shell. */
 export const serverPath = z.string().max(500).regex(/^\/[A-Za-z0-9._/-]+$/, 'An absolute path with letters, digits and . _ - / only').refine((p) => !p.split('/').some((x) => x === '..'), 'No .. in the path');
 /** What a site keeps for Refresh from production: where WordPress is on the server and how to copy it. No secret. */
@@ -287,6 +313,8 @@ export const productionSettings = z.object({
   clean: z.boolean().default(false),
   /** An administrator there to keep when the copy is cleaned; a new user otherwise. */
   keep: wpLogin.optional(),
+  /** WP-CLI's command on the server, when it is not wp. */
+  wpCli: wpCliCommand.optional(),
 });
 /**
  * The one user a clean-up keeps: an administrator already in the database
@@ -1214,6 +1242,8 @@ export const actions = {
         excludeRows: z.array(tableName).max(200).default([]),
         /** The server's password, when it asks for one: for this run only. */
         password: z.string().max(1024).optional(),
+        /** WP-CLI's command on the server, when it is not wp. */
+        wpCli: wpCliCommand.optional(),
         draftId: z.string().uuid().optional(),
       })
       .refine((v) => v.mode !== 'file' || /\.(?:sql|sql\.gz|zip)$/i.test(v.path), { path: ['path'], message: 'A .sql, .sql.gz or .zip file' }),

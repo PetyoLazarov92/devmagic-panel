@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.32.1 (2026-11-10)
+* **Sites:** a server over SSH can be on another port: type it after the host, like `alex@www.spellbook.example:2222`, in the new site wizard, a site's Import a database and Refresh from production. An alias from `~/.ssh/config` keeps the port it names there
+* **Sites:** a server that names WP-CLI another way can be exported from: **WP-CLI has another name on the server?**, folded under the folder, takes its command, like `wp-cli` or `~/bin/wp`. Only a program name or path, never spaces or options. It is used for the export and for reading the tables, and saved with Refresh from production
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.32.0 (2026-11-10)
 * **Sites:** a server over SSH that asks for a password can be used. The panel checks how the server signs you in as soon as the host is typed, and **Password on the server** shows under the host, in the new site wizard and in a site's Import a database, only when the server would ask for one; with your key signing in it says so and asks for nothing. Reading the tables, the export and the copy of a dump file then sign in with it, and Refresh from production has the same field
 * **Sites:** the password is used for that run's connections only and is never saved, logged or shown: it reaches ssh through a helper and a pipe only you can open, and a Retry asks for it again. Nothing is written on the server and no key is added to it. A host that is not in your known_hosts is still refused, and a wrong password is tried once

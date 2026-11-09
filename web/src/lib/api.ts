@@ -212,7 +212,7 @@ export interface Api {
   /** How a server signs you in over SSH: with your key, or with a password. Runs nothing there but true. */
   serverSignIn: (host: string) => Promise<ServerSignIn>;
   /** password: the server's own, when it asks for one; for this read only. */
-  serverTables: (host: string, path: string, password?: string) => Promise<ServerTables>;
+  serverTables: (host: string, path: string, password?: string, wpCli?: string) => Promise<ServerTables>;
   /** What a site keeps for Refresh from production; null until it is set up. */
   productionSettings: (domain: string, path?: string) => Promise<ProductionSettings | null>;
   saveProductionSettings: (domain: string, path: string | undefined, settings: ProductionSettings) => Promise<ProductionSettings>;
@@ -416,7 +416,7 @@ const realApi: Api = {
   downloads: () => request('GET', '/api/downloads'),
   rcloneRemotes: () => request('GET', '/api/dumps/remotes'),
   serverSignIn: (host) => request('POST', '/api/dumps/server-sign-in', { host }),
-  serverTables: (host, path, password) => request('POST', '/api/dumps/server-tables', { host, path, ...(password ? { password } : {}) }),
+  serverTables: (host, path, password, wpCli) => request('POST', '/api/dumps/server-tables', { host, path, ...(password ? { password } : {}), ...(wpCli ? { wpCli } : {}) }),
   productionSettings: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`),
   saveProductionSettings: (domain, path, settings) => request('PUT', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`, settings),
   takeoverPreview: (domain) => request('GET', `/api/sites/${encodeURIComponent(domain)}/takeover`),

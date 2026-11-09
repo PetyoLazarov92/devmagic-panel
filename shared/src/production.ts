@@ -81,6 +81,8 @@ export interface ProductionSettings {
   clean: boolean;
   /** The user a cleaned copy keeps: an administrator there by login, or a new one. */
   keep?: string | undefined;
+  /** WP-CLI's command on the server, when it is not wp. */
+  wpCli?: string | undefined;
 }
 
 /** The tables ticked at first: the ones left out last time, else the known logs, and the personal ones when the copy is cleaned. */

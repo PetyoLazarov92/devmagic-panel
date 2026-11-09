@@ -1,10 +1,10 @@
 import { mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { actions } from '@devmagic-panel/shared';
+import { actions, isWpCliCommand, splitSshHost } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { withoutPasswords } from '../src/actions.js';
 import type { JobStep } from '../src/jobs.js';
-import { planServerDump, serverSignIn, SSH_OPTIONS } from '../src/sites/more-dumps.js';
+import { planServerDump, serverSignIn, serverTables, SSH_OPTIONS, sshTarget } from '../src/sites/more-dumps.js';
 import { oncePassword, PASSWORD_OPTIONS, withSshPassword } from '../src/sites/ssh-password.js';
 import { DMP, fakeExec, type FakeResponse, wpSiteTree } from './helpers.js';
 
@@ -101,6 +101,45 @@ describe('a server that asks for a password', () => {
     expect(await ask({ code: 255, stderr: 'alex@www.spellbook.example: Permission denied (publickey).' })).toMatchObject({ how: 'refused', problem: expect.stringContaining('takes SSH keys only') });
     expect(await ask({ code: 255, stderr: 'Host key verification failed.' })).toMatchObject({ how: 'unknown', problem: expect.stringContaining('is not in your known_hosts') });
     expect(await ask({ code: 255, stderr: 'ssh: connect to host www.spellbook.example port 22: Connection refused' })).toMatchObject({ how: 'unknown', problem: expect.stringContaining('Connection refused') });
+  });
+
+  it('takes a port after the host and gives it to ssh and sftp as an option of its own', async () => {
+    expect(splitSshHost('alex@www.spellbook.example:2222')).toEqual({ host: 'alex@www.spellbook.example', port: 2222 });
+    expect(splitSshHost('staging-spellbook')).toEqual({ host: 'staging-spellbook' });
+    for (const bad of ['alex@www.spellbook.example:0', 'alex@www.spellbook.example:70000', 'alex@www.spellbook.example:22a', 'host:-oProxyCommand=x', '-p2222', 'host: 22', 'host:']) {
+      expect(splitSshHost(bad)).toBeNull();
+      expect(actions['dump.fromServer'].input.safeParse({ host: bad, mode: 'export', path: '/var/www' }).success).toBe(false);
+    }
+    expect(sshTarget('alex@www.spellbook.example:2222')).toEqual(['-p', '2222', '--', 'alex@www.spellbook.example']);
+    expect(sshTarget('alex@www.spellbook.example:2222', 'sftp')).toEqual(['-P', '2222', '--', 'alex@www.spellbook.example']);
+    expect(sshTarget('staging-spellbook')).toEqual(['--', 'staging-spellbook']);
+    const fake = fakeExec({ ssh: { code: 255, stderr: 'Host key verification failed.' } });
+    const answer = await serverSignIn(fake.exec, 'alex@www.spellbook.example:2222');
+    expect(fake.calls[0]?.args).toEqual([...SSH_OPTIONS, '-p', '2222', '--', 'alex@www.spellbook.example', 'true']);
+    // The command it says to type has the port the way ssh takes it.
+    expect(answer.problem).toContain('ssh -p 2222 alex@www.spellbook.example');
+  });
+
+  it('runs WP-CLI by the name the server gives it, and takes only a program name or path', async () => {
+    const s = setup({ ssh: { stdout: DONE } });
+    const steps = planServerDump(s.ctx, { host: 'alex@www.spellbook.example', mode: 'export', path: '/var/www/spellbook', excludeRows: [], wpCli: 'wp-cli' }, () => undefined);
+    expect([await (steps[0] as JobStep).run(job())].flat().every((r) => r.code === 0)).toBe(true);
+    const args = s.fake.calls.find((c) => c.file === 'ssh')?.args ?? [];
+    expect(args.slice(args.indexOf('--') + 2, args.indexOf('--') + 6)).toEqual(['wp-cli', '--path=/var/www/spellbook', 'db', 'export']);
+    // The tables are read with the same command.
+    const tables = fakeExec({ ssh: { stdout: '[{"Name":"wp_options","Size":"1048576"}]' } });
+    await serverTables(tables.exec, 'staging-spellbook', '/var/www/spellbook', '~/bin/wp');
+    expect(tables.calls[0]?.args.slice(tables.calls[0].args.indexOf('--') + 2, tables.calls[0].args.indexOf('--') + 4)).toEqual(['~/bin/wp', '--path=/var/www/spellbook']);
+    // A server without it says which command was missing, and where to give another.
+    const none = setup({ ssh: { code: 127, stderr: 'bash: line 1: wp: command not found' } });
+    const out = [await (planServerDump(none.ctx, { host: 'staging-spellbook', mode: 'export', path: '/var/www/spellbook', excludeRows: [] }, () => undefined)[0] as JobStep).run(job())].flat();
+    expect(out[0]?.stderr).toContain('has no WP-CLI as wp');
+    expect(out[0]?.stderr).toContain('give its command under the folder');
+    for (const good of ['wp', 'wp-cli', '~/bin/wp', '/usr/local/bin/wp-cli.phar']) expect(isWpCliCommand(good)).toBe(true);
+    for (const bad of ['wp --allow-root', '-wp', 'wp;id', 'wp$(id)', 'wp`id`', "wp'", 'php wp-cli.phar', '../wp', '/a/../wp', '']) {
+      expect(isWpCliCommand(bad)).toBe(false);
+      expect(actions['dump.fromServer'].input.safeParse({ host: 'staging', mode: 'export', path: '/var/www', wpCli: bad }).success).toBe(false);
+    }
   });
 
   it('hands a password out once, and run history never keeps it', () => {

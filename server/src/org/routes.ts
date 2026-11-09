@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { GitHosts, InstallDraft, OrgNamespace, OrgRepoList, OrgSettings, OrgStatus, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
-import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, knownLeftOut, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts, sshHost } from '@devmagic-panel/shared';
+import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, knownLeftOut, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts, sshHost, wpCliCommand } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Executor } from '../exec.js';
 import type { RunStore } from '../store.js';
@@ -167,14 +167,14 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
   api.get('/api/downloads', async () => recentDownloads(deps.home));
 
   // A server's tables with their sizes, for leaving the rows of some out of an export; and what was left out last time there.
-  const serverFolder = z.object({ host: z.string().max(300).regex(/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/), path: z.string().max(500).regex(/^\/[A-Za-z0-9._/-]+$/).refine((p) => !p.split('/').includes('..')) });
+  const serverFolder = z.object({ wpCli: wpCliCommand.optional(), host: sshHost, path: z.string().max(500).regex(/^\/[A-Za-z0-9._/-]+$/).refine((p) => !p.split('/').includes('..')) });
   api.post<{ Body: unknown }>('/api/dumps/server-tables', async (request, reply) => {
     const body = serverFolder.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'An ssh host and an absolute folder' });
     // The server's password, when it asks for one: for this one read, never kept or logged.
     const password = z.string().max(1024).optional().safeParse((request.body as { password?: unknown } | null)?.password);
     try {
-      const read = (exec: typeof deps.exec) => serverTables(exec, body.data.host, body.data.path);
+      const read = (exec: typeof deps.exec) => serverTables(exec, body.data.host, body.data.path, body.data.wpCli ?? 'wp');
       const tables = password.success && password.data ? await withSshPassword({ exec: deps.exec }, password.data, read) : await read(deps.exec);
       const kept = deps.store.getMeta(`server-export:${body.data.host}|${body.data.path}`);
       return { tables, ...knownLeftOut(tables.map((t) => t.name)), ...(kept ? { remembered: JSON.parse(kept) as string[] } : {}) };

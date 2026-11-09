@@ -226,7 +226,8 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       shell, and every dump's type is read from its first bytes. A dump over
       SSH (`sites/more-dumps.ts`) uses your own ssh config with BatchMode and
       StrictHostKeyChecking, sftp for a file and only `wp db export` for an
-      export, with a path of plain characters. A server that asks for a
+      export, with a path of plain characters; WP-CLI's command there is `wp`
+      or the plain program name or path you give (`wpCliCommand`). A server that asks for a
       password gets the one you give for that run (`sites/ssh-password.ts`):
       it reaches ssh through its askpass helper and a FIFO only you can
       open, never argv, the environment, a file or a log, is handed out once

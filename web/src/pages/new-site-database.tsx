@@ -1,5 +1,5 @@
 import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerSignIn, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
-import { defaultLeftOut, knownLeftOut } from '@devmagic-panel/shared';
+import { defaultLeftOut, isWpCliCommand, knownLeftOut, splitSshHost } from '@devmagic-panel/shared';
 import { TablesPicker } from '@/components/tables-picker';
 import { ChevronRight, CircleAlert, Cloud, ExternalLink, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, LoaderCircle, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
@@ -426,8 +426,8 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
   /** Clean the copy after the import; undefined where the caller has no such step. */
   clean?: boolean;
   setClean?: (on: boolean) => void;
-  onTake: (input: { host: string; mode: 'file' | 'export'; path: string; excludeRows: string[]; password?: string }) => void;
-  initial?: { host: string; path: string; excludeRows: string[] };
+  onTake: (input: { host: string; mode: 'file' | 'export'; path: string; excludeRows: string[]; password?: string; wpCli?: string }) => void;
+  initial?: { host: string; path: string; excludeRows: string[]; wpCli?: string | undefined };
   takeLabel?: string;
   /** Only an export with WP-CLI, as Refresh from production runs it. */
   exportOnly?: boolean;
@@ -440,13 +440,17 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
   const [host, setHost] = useState(initial?.host ?? '');
   // The server's password, when it asks for one: for the runs started from here, never kept.
   const [secret, setSecret] = useState('');
+  // WP-CLI's command there, when it is not wp.
+  const [wpCli, setWpCli] = useState(initial?.wpCli ?? '');
+  const wpCliOk = wpCli.trim() === '' || isWpCliCommand(wpCli.trim());
   const [mode, setMode] = useState<'export' | 'file'>('export');
+  const command = mode === 'export' && wpCli.trim() ? { wpCli: wpCli.trim() } : {};
   const [path, setPath] = useState(initial?.path ?? '');
   const [found, setFound] = useState<ServerTables | null>(null);
   const [reading, setReading] = useState(false);
   const [readError, setReadError] = useState<string | null>(null);
   const [leftOut, setLeftOut] = useState<string[]>(initial?.excludeRows ?? []);
-  const hostOk = /^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(host.trim());
+  const hostOk = splitSshHost(host.trim()) !== null;
   const pathOk = /^\/[A-Za-z0-9._/-]+$/.test(path.trim()) && !path.split('/').includes('..') && (mode === 'export' || /\.(sql|sql\.gz|zip)$/i.test(path.trim()));
   // Another server or folder has other tables.
   const where = `${host.trim()}|${path.trim()}`;
@@ -456,7 +460,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
     setReading(true);
     setReadError(null);
     try {
-      const answer = await api.serverTables(host.trim(), path.trim(), secret || undefined);
+      const answer = await api.serverTables(host.trim(), path.trim(), secret || undefined, command.wpCli);
       setFound(answer);
       setReadFor(where);
       setLeftOut(initial && initial.host === host.trim() && initial.path === path.trim() && initial.excludeRows.length ? initial.excludeRows : defaultLeftOut(answer, Boolean(clean)));
@@ -479,7 +483,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
         <div className="grid content-start gap-1.5">
           <label htmlFor={`${uid}-host`} className="font-medium">Host</label>
           <Input id={`${uid}-host`} value={host} onChange={(e) => setHost(e.target.value)} placeholder="staging-spellbook or alex@www.spellbook.example" className="font-mono text-[13px]" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
-          <p className="text-xs text-muted-foreground">An alias from your ~/.ssh/config, or user@host.</p>
+          <p className="text-xs text-muted-foreground">An alias from your ~/.ssh/config, or user@host. Another port goes after it: user@host:2222.</p>
           <ServerPassword id={`${uid}-secret`} host={host.trim()} value={secret} onChange={setSecret} />
         </div>
         <div className={cn('grid content-start gap-1.5', exportOnly && 'hidden')}>
@@ -492,7 +496,19 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
         {/* The path gets the whole width, as long ones are usual; its buttons sit under it. */}
         <Input id={`${uid}-path`} value={path} onChange={(e) => setPath(e.target.value)} placeholder={mode === 'export' ? '/var/www/spellbook/public' : '/home/alex/backups/spellbook.sql.gz'} className="font-mono text-[13px]" spellCheck={false} aria-invalid={path.trim() !== '' && !pathOk ? true : undefined} />
         {mode === 'export' && (
-          <Button variant="outline" className="justify-self-start" disabled={!hostOk || !pathOk || reading || working} onClick={() => void readTables()}>
+          <details className="text-xs" open={wpCli !== '' ? true : undefined}>
+            <summary className="cursor-pointer font-medium text-primary">WP-CLI has another name on the server?</summary>
+            <div className="mt-2 grid gap-1.5">
+              <label htmlFor={`${uid}-wpcli`} className="text-sm font-medium text-foreground">WP-CLI command</label>
+              <Input id={`${uid}-wpcli`} value={wpCli} onChange={(e) => setWpCli(e.target.value)} placeholder="wp" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={!wpCliOk ? true : undefined} />
+              <p className={wpCliOk ? 'text-muted-foreground' : 'text-danger'}>
+                {wpCliOk ? 'Empty means wp. Some hosts name it wp-cli, or keep it at a path like ~/bin/wp.' : 'A program name or path only, like wp-cli or ~/bin/wp: no spaces or options.'}
+              </p>
+            </div>
+          </details>
+        )}
+        {mode === 'export' && (
+          <Button variant="outline" className="justify-self-start" disabled={!hostOk || !pathOk || !wpCliOk || reading || working} onClick={() => void readTables()}>
             {reading ? <LoaderCircle className="animate-spin" /> : <Table2 />}
             {tables ? 'Read the tables again' : 'Choose tables to leave out'}
           </Button>
@@ -526,7 +542,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
       </ul>
       {/* The button that takes it comes last, once everything above is chosen. */}
       <div className="flex flex-wrap gap-2 border-t pt-3">
-        <Button disabled={!hostOk || !pathOk || working || reading} onClick={() => onTake({ host: host.trim(), mode, path: path.trim(), excludeRows, ...(secret ? { password: secret } : {}) })}>
+        <Button disabled={!hostOk || !pathOk || !wpCliOk || working || reading} onClick={() => onTake({ host: host.trim(), mode, path: path.trim(), excludeRows, ...(secret ? { password: secret } : {}), ...command })}>
           {working ? <LoaderCircle className="animate-spin" /> : <Server />}
           {takeLabel ?? (mode === 'export' ? 'Export' : 'Copy')}
         </Button>
@@ -544,7 +560,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
  * from the browser's and every password manager's saved passwords.
  */
 export function ServerPassword({ id, host, value, onChange }: { id: string; host: string; value: string; onChange: (value: string) => void }) {
-  const ok = /^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(host);
+  const ok = splitSshHost(host) !== null;
   const [answer, setAnswer] = useState<{ host: string; signIn: ServerSignIn | null } | null>(null);
   useEffect(() => {
     if (!ok) return;

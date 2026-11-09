@@ -136,9 +136,12 @@ against the free space.
   history or shown. A link that needs a sign-in does not work: download it in
   the browser and use the Downloads folder.
 - **A server over SSH**: with your own SSH key through your agent and your
-  `~/.ssh/config` (an alias, or `user@host`). **Export now with WP-CLI** runs
+  `~/.ssh/config` (an alias, or `user@host`, with the port after it when it
+  is not 22: `alex@www.spellbook.example:2222`). **Export now with WP-CLI** runs
   `wp db export` in the WordPress folder you give on the server (it only
-  reads; the server needs WP-CLI as `wp`) and streams it into a gzip here;
+  reads; the server needs WP-CLI, as `wp` or under the name you give in **WP-CLI
+  has another name on the server?**: a program name or path like `wp-cli` or
+  `~/bin/wp`, saved with Refresh from production) and streams it into a gzip here;
   **A dump file there** copies a `.sql`, `.sql.gz` or `.zip` with sftp. A host
   not in your `known_hosts` is refused with how to add it, never trusted on
   the fly. The panel signs in with your key, and checks how the server signs

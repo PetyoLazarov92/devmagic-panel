@@ -5,6 +5,7 @@ import { Transform, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
 import type { ActionInput, ServerSignIn } from '@devmagic-panel/shared';
+import { splitSshHost } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
 import { runRoot } from '../exec.js';
@@ -39,6 +40,17 @@ const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 /** ssh never asks for a password or trusts a new host key on the fly, and gives up on a host that does not answer. */
 export const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=30', '-o', 'Compression=yes'];
 
+/**
+ * The server as ssh and sftp take it after their options: the host as typed,
+ * with its port as an option of its own when one was given (ssh -p, sftp
+ * -P). The host was checked by the registry, so neither part can be an option.
+ */
+export function sshTarget(host: string, program: 'ssh' | 'sftp' = 'ssh'): string[] {
+  const parts = splitSshHost(host);
+  if (!parts) throw new MoreDumpsRefused(`${host} is not an ssh alias or user@host`);
+  return [...(parts.port !== undefined ? [program === 'sftp' ? '-P' : '-p', String(parts.port)] : []), '--', parts.host];
+}
+
 /** What ssh says when it stops, said plainly; a run that says nothing gets its exit code and what to try. */
 /**
  * How a server would sign you in, from one connection in batch mode that
@@ -47,12 +59,18 @@ export const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=
  * No password is used or needed to ask.
  */
 export async function serverSignIn(exec: Executor, host: string): Promise<ServerSignIn> {
-  const r = await exec('ssh', [...SSH_OPTIONS, '--', host, 'true'], { timeoutMs: 30_000 });
+  const r = await exec('ssh', [...SSH_OPTIONS, ...sshTarget(host), 'true'], { timeoutMs: 30_000 });
   if (r.code === 0) return { how: 'key' };
   const denied = /Permission denied \(([^)]*)\)/i.exec(r.stderr);
   if (denied) return /password|keyboard-interactive/i.test(denied[1] ?? '') ? { how: 'password' } : { how: 'refused', problem: `${host} takes SSH keys only, and refused yours (the panel uses your ssh-agent and ~/.ssh/config)` };
   return { how: 'unknown', problem: sshProblem(host, r.stderr, r.code) };
 }
+
+/** The command to type for a host, with its port the way ssh takes it. */
+const sshCommand = (host: string) => {
+  const parts = splitSshHost(host);
+  return parts?.port !== undefined ? `ssh -p ${parts.port} ${parts.host}` : `ssh ${host}`;
+};
 
 /** What a refused sign-in says without a password given: where to give one. */
 const REFUSED = (host: string) => `${host} refused your SSH key (the panel uses your ssh-agent and ~/.ssh/config). When the server asks for a password, the field for it shows under the host: it is used for this run only and not kept`;
@@ -63,7 +81,7 @@ export const refusalWithPassword = (host: string, message: string) => (message =
 
 export function sshProblem(host: string, stderr: string, code = 1, hint = ''): string {
   const last = stderr.trim().split('\n').filter(Boolean).at(-1) ?? '';
-  if (/Host key verification failed|No .* host key is known/i.test(stderr)) return `${host} is not in your known_hosts: connect once in a terminal with ssh ${host}, check its key, then try again`;
+  if (/Host key verification failed|No .* host key is known/i.test(stderr)) return `${host} is not in your known_hosts: connect once in a terminal with ${sshCommand(host)}, check its key, then try again`;
   if (/Permission denied/i.test(stderr)) return REFUSED(host);
   if (/Could not resolve hostname/i.test(stderr)) return `${host} is not a host your ssh knows: use an alias from ~/.ssh/config or user@host`;
   if (last) return last;
@@ -72,7 +90,7 @@ export function sshProblem(host: string, stderr: string, code = 1, hint = ''): s
 
 /** Why a quiet wp db export fails, and how to see it. */
 const exportHint = (host: string, path: string) =>
-  `WP-CLI on the server stopped without a word, as PHP does on a fatal error with display_errors off (shared hosts often block mysqldump this way). Run ssh ${host} wp --path=${path} db export - --debug > /dev/null in a terminal to see why, or take A dump file there instead`;
+  `WP-CLI on the server stopped without a word, as PHP does on a fatal error with display_errors off (shared hosts often block mysqldump this way). Run ${sshCommand(host)} wp --path=${path} db export - --debug > /dev/null in a terminal to see why, or take A dump file there instead`;
 
 /** The upload a dump job made, said for the wizard: "upload <id>". */
 const madeUpload = (info: UploadInfo, from: string) => ok(`took ${info.name} (${formatBytes(info.size)}) from ${from}: upload ${info.id}${info.facts.hosts[0] ? `, for ${info.facts.hosts[0]}` : ''}`);
@@ -132,7 +150,7 @@ export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.f
           }, 1000);
           try {
             // sftp reads its commands from stdin; the remote path holds no spaces, quotes or shell characters.
-            const r = await exec('sftp', ['-q', '-b', '-', ...SSH_OPTIONS, '--', input.host], { input: `get ${input.path} ${part}\n`, timeoutMs: 3 * 60 * 60_000 });
+            const r = await exec('sftp', ['-q', '-b', '-', ...SSH_OPTIONS, ...sshTarget(input.host, 'sftp')], { input: `get ${input.path} ${part}\n`, timeoutMs: 3 * 60 * 60_000 });
             if (r.code !== 0 || !existsSync(part)) return { code: 1, stdout: '', stderr: sshProblem(input.host, r.stderr, r.code, 'sftp could not copy it; check the path and that the file is there') };
             return await adopt(ctx, job, name, part, onUpload, from);
           } finally {
@@ -155,7 +173,7 @@ export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.f
         const exported = { bytes: 0 };
         const timer = setInterval(() => job.progress(0.1, `${formatBytes(exported.bytes)} of SQL so far`), 1000);
         try {
-          const r = await exportOverSsh(exec, input.host, input.path, leftOut, part, exported);
+          const r = await exportOverSsh(exec, input.host, input.path, leftOut, part, exported, input.wpCli ?? 'wp');
           if ('error' in r) return { code: 1, stdout: '', stderr: r.error };
           const out = await adopt(ctx, job, name, part, onUpload, from);
           return r.notes.length ? [ok(r.notes.join('\n')), out] : out;
@@ -185,15 +203,15 @@ type WpRun = string[];
  * disable_functions= -d display_errors=stderr <wp> ...`: the same command,
  * with those functions back for that process only, and its errors shown.
  */
-async function sshWp(exec: Executor, host: string, wp: WpRun | null, args: string[], stdoutTo?: Writable): Promise<{ result: ExecResult; wp: WpRun; fellBack: boolean }> {
-  const run = (cmd: WpRun) => exec('ssh', [...SSH_OPTIONS, '--', host, ...cmd, ...args], { timeoutMs: 3 * 60 * 60_000, ...(stdoutTo ? { stdoutTo } : {}) });
+async function sshWp(exec: Executor, host: string, wp: WpRun | null, args: string[], stdoutTo?: Writable, command = 'wp'): Promise<{ result: ExecResult; wp: WpRun; fellBack: boolean }> {
+  const run = (cmd: WpRun) => exec('ssh', [...SSH_OPTIONS, ...sshTarget(host), ...cmd, ...args], { timeoutMs: 3 * 60 * 60_000, ...(stdoutTo ? { stdoutTo } : {}) });
   if (wp) return { result: await run(wp), wp, fellBack: false };
-  return { result: await run(['wp']), wp: ['wp'], fellBack: false };
+  return { result: await run([command]), wp: [command], fellBack: false };
 }
 
 /** The fallback form of WP-CLI on a server, once the plain one died without a word; null when wp cannot be found. */
-async function fallbackWp(exec: Executor, host: string): Promise<WpRun | null> {
-  const where = await exec('ssh', [...SSH_OPTIONS, '--', host, 'command', '-v', 'wp'], { timeoutMs: 60_000 });
+async function fallbackWp(exec: Executor, host: string, command = 'wp'): Promise<WpRun | null> {
+  const where = await exec('ssh', [...SSH_OPTIONS, ...sshTarget(host), 'command', '-v', command], { timeoutMs: 60_000 });
   const path = where.stdout.trim().split('\n')[0] ?? '';
   return where.code === 0 && PROGRAM_PATH.test(path) ? ['php', '-d', 'disable_functions=', '-d', 'display_errors=stderr', path] : null;
 }
@@ -217,7 +235,7 @@ const quietDeath = (r: ExecResult, bytes: number) => r.code === 255 && bytes ===
  * Tables in leftOut come as their structure only: a second export with
  * --no-data, appended as a second gzip member, read as one file.
  */
-export async function exportOverSsh(exec: Executor, host: string, path: string, leftOut: readonly string[], file: string, seen: { bytes: number } = { bytes: 0 }): Promise<{ notes: string[] } | { error: string }> {
+export async function exportOverSsh(exec: Executor, host: string, path: string, leftOut: readonly string[], file: string, seen: { bytes: number } = { bytes: 0 }, command = 'wp'): Promise<{ notes: string[] } | { error: string }> {
   const base = [`--path=${path}`, 'db', 'export', '-', '--single-transaction', '--quick', NO_TABLESPACES, '--skip-plugins', '--skip-themes'];
   const parts: string[][] = [[...base, ...(leftOut.length ? [`--exclude_tables=${leftOut.join(',')}`] : [])], ...(leftOut.length ? [[...base, `--tables=${leftOut.join(',')}`, NO_DATA]] : [])];
   const gzip = createGzip({ level: 1 });
@@ -248,11 +266,11 @@ export async function exportOverSsh(exec: Executor, host: string, path: string, 
           piece.on('end', resolve);
         });
         piece.pipe(gzip, { end: false });
-        const { result, wp: used } = await sshWp(exec, host, wp, args, piece);
+        const { result, wp: used } = await sshWp(exec, host, wp, args, piece, command);
         await into;
         if (broke) throw broke;
         if (quietDeath(result, bytes) && !wp) {
-          const fallback = await fallbackWp(exec, host);
+          const fallback = await fallbackWp(exec, host, command);
           if (!fallback) return { error: sshProblem(host, result.stderr, result.code, exportHint(host, path)) };
           wp = fallback;
           notes.push(`WP-CLI on ${host} stopped without a word (its PHP disables exec and similar functions), so the export ran again as php -d disable_functions= ${fallback.at(-1)}: for that one run only, nothing changed on the server`);
@@ -260,7 +278,7 @@ export async function exportOverSsh(exec: Executor, host: string, path: string, 
         }
         wp = used;
         if (result.code !== 0) {
-          return { error: /wp: command not found|No such file/i.test(result.stderr) ? `${host} has no WP-CLI as wp, or no WordPress at ${path}` : sshProblem(host, result.stderr, result.code, exportHint(host, path)) };
+          return { error: /command not found|No such file/i.test(result.stderr) ? `${host} has no WP-CLI as ${command}, or no WordPress at ${path}: when the server names it another way, give its command under the folder` : sshProblem(host, result.stderr, result.code, exportHint(host, path)) };
         }
         if (bytes === 0) return { error: `${host} sent no SQL: ${exportHint(host, path)}` };
         if (!DUMP_DONE.test(tail)) return { error: `the ${i === 0 ? 'export' : 'structure of the tables left out'} from ${host} stopped before its end (no "-- Dump completed" line), so it was not used: try again` };
@@ -289,11 +307,11 @@ export async function exportOverSsh(exec: Executor, host: string, path: string, 
 }
 
 /** The tables of a WordPress database on a server, biggest first, with their size, read with WP-CLI (and its fallback). */
-export async function serverTables(exec: Executor, host: string, path: string): Promise<Array<{ name: string; bytes: number }>> {
+export async function serverTables(exec: Executor, host: string, path: string, command = 'wp'): Promise<Array<{ name: string; bytes: number }>> {
   const args = [`--path=${path}`, 'db', 'size', '--tables', '--size_format=b', '--format=json', '--skip-plugins', '--skip-themes'];
-  let { result } = await sshWp(exec, host, null, args);
+  let { result } = await sshWp(exec, host, null, args, undefined, command);
   if (quietDeath(result, result.stdout.length)) {
-    const fallback = await fallbackWp(exec, host);
+    const fallback = await fallbackWp(exec, host, command);
     if (fallback) ({ result } = await sshWp(exec, host, fallback, args));
   }
   if (result.code !== 0) throw new MoreDumpsRefused(sshProblem(host, result.stderr, result.code, exportHint(host, path)));

@@ -870,10 +870,10 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
     setKeep(settings?.keep ?? '');
   }, [settings]);
   const user = keep.trim() ? { keep: keep.trim(), login: keep.trim(), password } : { login: 'admin', password };
-  const save = async (input: { host: string; path: string; excludeRows: string[] }) => {
+  const save = async (input: { host: string; path: string; excludeRows: string[]; wpCli?: string }) => {
     setError(null);
     try {
-      await api.saveProductionSettings(site.domain, site.path, { host: input.host, folder: input.path, excludeRows: input.excludeRows, clean, ...(clean && keep.trim() ? { keep: keep.trim() } : {}) });
+      await api.saveProductionSettings(site.domain, site.path, { host: input.host, folder: input.path, excludeRows: input.excludeRows, ...(input.wpCli ? { wpCli: input.wpCli } : {}), clean, ...(clean && keep.trim() ? { keep: keep.trim() } : {}) });
       saved.reload();
       setEditing(false);
     } catch (err) {
@@ -905,7 +905,7 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
             clean={clean}
             setClean={setClean}
             takeLabel="Save"
-            {...(settings ? { initial: { host: settings.host, path: settings.folder, excludeRows: settings.excludeRows } } : {})}
+            {...(settings ? { initial: { host: settings.host, path: settings.folder, excludeRows: settings.excludeRows, wpCli: settings.wpCli } } : {})}
             onTake={(input) => void save(input)}
             actions={<Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>}
             more={error && <p role="alert" className="text-danger">{error}</p>}
@@ -917,6 +917,12 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
           <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1">
             <dt className="text-muted-foreground">From</dt>
             <dd className="truncate font-mono text-[13px]" title={`${settings.host}:${settings.folder}`}>{settings.host}:{settings.folder}</dd>
+            {settings.wpCli && (
+              <>
+                <dt className="text-muted-foreground">WP-CLI</dt>
+                <dd className="truncate font-mono text-[13px]">{settings.wpCli}</dd>
+              </>
+            )}
             <dt className="text-muted-foreground">Rows left out</dt>
             <dd>{settings.excludeRows.length ? `${settings.excludeRows.length} table${settings.excludeRows.length === 1 ? '' : 's'}` : 'none'}</dd>
             <dt className="text-muted-foreground">The copy</dt>
