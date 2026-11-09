@@ -215,6 +215,25 @@ dmp_trash_purge() {
   dmp_ok "purged $count deleted site(s) older than $days days"
 }
 
+# trash-dump <id>: a copy of a deleted site's database dump for the panel, to
+# install another site from it. The archive stays as it is. Prints the copy.
+dmp_trash_dump() {
+  local id="$1" entry domain out
+  dmp_trash_require_id "$id"
+  entry="$(dmp_trash_dir)/$id"
+  [[ -d "$entry" ]] || dmp_die "no trash entry $id"
+  dmp_trash_verify "$entry"
+  domain="$(dmp_trash_get "$entry/manifest.env" DOMAIN)"
+  dmp_require_local_name "$domain"
+  [[ "$id" == "$domain-"* ]] || dmp_die "$id does not belong to $domain"
+  [[ -f "$entry/db.sql.gz" && ! -L "$entry/db.sql.gz" ]] || dmp_die "$id holds no database dump"
+  out="$BACKUP_DIR/sites/copy-$id.sql.gz"
+  install -d -m 0700 -o "$PANEL_USER" -g "$PANEL_GROUP" "$BACKUP_DIR/sites"
+  install -m 0600 -o "$PANEL_USER" -g "$PANEL_GROUP" "$entry/db.sql.gz" "$out"
+  printf 'DUMP=%s\n' "$out"
+  dmp_ok "copied the database dump of $id for the panel"
+}
+
 # trash-restore <id>: puts a site back when nothing of it exists again. Prints
 # the database dump it left for the panel to import, if any.
 dmp_trash_restore() {

@@ -36,6 +36,7 @@ import type { Drafts } from './drafts.js';
 import { findClaude } from './org/claude-code.js';
 import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded } from './org/dumps.js';
 import { type Getter, shownUrl, urlProblem } from './sites/fetch-dump.js';
+import { MoreDumpsRefused, planLocalDump, planServerDump } from './sites/more-dumps.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
 import { planRemove, RemoveRefused, stampDate } from './sites/remove.js';
@@ -468,6 +469,23 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     });
     return noteDump(ctx, input.draftId, startJob(ctx, steps, `Download ${input.path.split('/').pop() ?? 'a dump'} from ${input.remote}`, input.draftId ?? input.remote, { onUndone: () => upload && input.draftId && ctx.drafts?.detach(input.draftId, upload) }));
   },
+  'dump.fromServer': async (ctx, input) => {
+    let upload: string | undefined;
+    const steps = planServerDump(ctx, input, (id) => {
+      upload = id;
+      if (input.draftId) ctx.drafts?.attach(input.draftId, id);
+    });
+    return noteDump(ctx, input.draftId, startJob(ctx, steps, `Take a dump from ${input.host}`, input.draftId ?? input.host, { onUndone: () => upload && input.draftId && ctx.drafts?.detach(input.draftId, upload) }));
+  },
+  'dump.fromLocal': async (ctx, input) => {
+    let upload: string | undefined;
+    const steps = planLocalDump(ctx, input, (id) => {
+      upload = id;
+      if (input.draftId) ctx.drafts?.attach(input.draftId, id);
+    });
+    const from = input.kind === 'archive' ? input.id : `${input.domain}${input.path ?? ''}`;
+    return noteDump(ctx, input.draftId, startJob(ctx, steps, `Take a dump from ${from}`, input.draftId ?? from, { onUndone: () => upload && input.draftId && ctx.drafts?.detach(input.draftId, upload) }));
+  },
   'dump.fetch': async (ctx, input) => {
     let upload: string | undefined;
     const problem = urlProblem(input.url);
@@ -765,7 +783,7 @@ export async function runAction(ctx: ActionContext, id: ActionId, rawInput: unkn
     const result = await handler({ ...ctx, runId, actionId: id }, parsed.data as ActionInput<ActionId>);
     outcome = Array.isArray(result) ? { results: result } : result;
   } catch (error) {
-    if (error instanceof SiteNotFoundError || error instanceof SiteActionRefused || error instanceof DumpRefused || error instanceof TrashRefused || error instanceof CreateRefused || error instanceof RemoveRefused || error instanceof DbRefused || error instanceof CoreRefused || error instanceof MysqlRefused || error instanceof PhpSettingsRefused || error instanceof CronRefused) {
+    if (error instanceof SiteNotFoundError || error instanceof SiteActionRefused || error instanceof DumpRefused || error instanceof MoreDumpsRefused || error instanceof TrashRefused || error instanceof CreateRefused || error instanceof RemoveRefused || error instanceof DbRefused || error instanceof CoreRefused || error instanceof MysqlRefused || error instanceof PhpSettingsRefused || error instanceof CronRefused) {
       ctx.store.finish(runId, 2, error.message);
       throw new ActionInputError(error.message);
     }

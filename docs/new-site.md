@@ -113,6 +113,17 @@ against the free space.
   before and while it downloads. The part after `?` is never kept in run
   history or shown. A link that needs a sign-in does not work: download it in
   the browser and use the Downloads folder.
+- **A server over SSH**: with your own SSH key through your agent and your
+  `~/.ssh/config` (an alias, or `user@host`). **Export now with WP-CLI** runs
+  `wp db export` in the WordPress folder you give on the server (it only
+  reads; the server needs WP-CLI as `wp`) and streams it into a gzip here;
+  **A dump file there** copies a `.sql`, `.sql.gz` or `.zip` with sftp. Never a
+  password, and a host not in your `known_hosts` is refused with how to add
+  it, never trusted on the fly. Paths take letters, digits and `. _ - /`
+  only, as ssh hands the command to the server's shell.
+- **This machine**: another site's database exported now (a second copy to
+  test another branch), one of a site's snapshots, or the dump a deleted
+  site's archive holds; the deleted site stays restorable as it was.
 - **No database**: a fresh WordPress on the repo's code, with the admin from
   the WordPress step.
 

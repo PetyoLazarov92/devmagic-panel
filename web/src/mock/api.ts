@@ -572,6 +572,8 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'space', label: 'Check free disk space' },
       { id: 'download', label: `Download ${String(input.path).split('/').pop()} from ${String(input.remote)} and read it` },
     ],
+    'dump.fromServer': [{ id: 'download', label: input.mode === 'export' ? `Export the database on ${String(input.host)} with WP-CLI and read it` : `Copy ${String(input.path).split('/').pop()} from ${String(input.host)} and read it` }],
+    'dump.fromLocal': [{ id: 'take', label: input.kind === 'archive' ? `Take the database dump of the deleted ${String(input.id).slice(0, -16)}` : `Take the database of ${String(input.domain)}${String(input.path ?? '')} and read it` }],
     'dump.fetch': [{ id: 'download', label: `Download the dump from ${(() => { try { return new URL(String(input.url)).host; } catch { return 'the address'; } })()} and read it` }],
     'dump.useDownloaded': [{ id: 'take', label: `Take ${String(input.file).split('/').pop()} from Downloads and read it` }],
     'db.searchReplace': input.dryRun
@@ -702,7 +704,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     preview: `+------------+--------------+--------------+------+\n| Table      | Column       | Replacements | Type |\n+------------+--------------+--------------+------+\n| wp_options | option_value | 4            | PHP  |\n| wp_posts   | post_content | 37           | SQL  |\n+------------+--------------+--------------+------+\nSuccess: 41 replacements to be made.`,
     replace: 'Success: Made 41 replacements.',
     download: `downloaded ${String(input.name ?? String(input.path ?? 'wandworks-store.sql.gz').split('/').pop())} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example`,
-    take: `took ${String(input.file).split('/').pop()} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example; your file stays in /home/wandworksco/Downloads`,
+    take: input.file ? `took ${String(input.file).split('/').pop()} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example; your file stays in /home/wandworksco/Downloads` : `took the dump (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example`,
     clean: 'Users\n  wp_users removed, all but admin: about 18,239 rows\n  wp_usermeta removed with them: about 402,113 rows\nWooCommerce orders and customers\n  wp_wc_orders emptied: about 51,320 rows\n  wp_comments order notes: 88,412\nForm entries\n  wp_gf_entry emptied: about 9,804 rows\nLogs\n  wp_actionscheduler_logs emptied: about 1,204,511 rows\n  wp_wfHits emptied: about 603,220 rows\nPayment, mail and API keys\n  wp_options settings with keys: 7\nSettings: done',
     plugins: 'turned off: wp-mail-smtp, mailchimp-for-wp, wordfence, wp-rocket',
     copy: 'copied 12 tables into spellbook_example__import',

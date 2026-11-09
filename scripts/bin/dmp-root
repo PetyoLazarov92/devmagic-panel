@@ -57,6 +57,7 @@ Usage: dmp-root <command> [args]
   trash-list                          list deleted sites, tab-separated
   trash-restore <id>                  put a deleted site back when nothing of it exists
   trash-delete <id>                   delete a trash entry for good
+  trash-dump <id>                     copy a deleted site's database dump for the panel
   trash-purge <days>                  delete trash entries older than that
   cert-remove <domain>                remove a cert no vhost uses any more
   apache-module-enable <module>       enable an allowed Apache module
@@ -259,6 +260,7 @@ main() {
     trash-list) (( $# == 0 )) || dmp_usage_error "trash-list takes no arguments"; dmp_trash_list ;;
     trash-restore) (( $# == 1 )) || dmp_usage_error "trash-restore takes an id"; dmp_trash_restore "$1" ;;
     trash-delete) (( $# == 1 )) || dmp_usage_error "trash-delete takes an id"; dmp_trash_delete "$1" ;;
+    trash-dump) (( $# == 1 )) || dmp_usage_error "trash-dump takes an id"; dmp_trash_dump "$1" ;;
     trash-purge) (( $# == 1 )) || dmp_usage_error "trash-purge takes a number of days"; dmp_trash_purge "$1" ;;
     cert-remove) (( $# == 1 )) || dmp_usage_error "cert-remove takes one domain"; with_names dmp_cert_remove "$@" ;;
     apache-module-enable) (( $# == 1 )) || dmp_usage_error "apache-module-enable takes one module"; dmp_apache_module_enable "$1" ;;

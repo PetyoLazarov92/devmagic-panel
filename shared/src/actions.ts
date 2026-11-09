@@ -1171,6 +1171,32 @@ export const actions = {
       draftId: z.string().uuid().optional(),
     }),
   },
+  'dump.fromServer': {
+    title: 'Take a database dump from a server over SSH',
+    description:
+      "Takes a database dump from a server over SSH, with your own ssh config and agent (an alias from ~/.ssh/config, or user@host; never a password, never a new host key trusted on the fly): mode file copies a .sql, .sql.gz or .zip there with sftp; mode export runs wp --path=<path> db export on the server (read only) and streams it into a gzip here. Checks its first bytes and reads it as for an upload. Starts a job; the upload id is in its data.",
+    changesSystem: true,
+    input: z
+      .object({
+        host: z.string().max(300).regex(/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/, 'An alias from ~/.ssh/config, or user@host'),
+        mode: z.enum(['file', 'export']),
+        /** file: the dump on the server; export: the WordPress folder there. No spaces, quotes or shell characters, as ssh hands it to the server's shell. */
+        path: z.string().max(500).regex(/^\/[A-Za-z0-9._/-]+$/, 'An absolute path with letters, digits and . _ - / only').refine((p) => !p.split('/').some((x) => x === '..'), 'No .. in the path'),
+        draftId: z.string().uuid().optional(),
+      })
+      .refine((v) => v.mode !== 'file' || /\.(?:sql|sql\.gz|zip)$/i.test(v.path), { path: ['path'], message: 'A .sql, .sql.gz or .zip file' }),
+  },
+  'dump.fromLocal': {
+    title: 'Take a database dump from this machine',
+    description:
+      "Takes a database dump from this machine for a new install: kind site exports another site's database with WP-CLI, kind snapshot copies one of a site's snapshots, kind archive copies the dump a deleted site's archive holds (dmp-root trash-dump; the archive stays). Reads it as for an upload. Starts a job; the upload id is in its data.",
+    changesSystem: true,
+    input: z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('site'), domain: localName, path: sitePath, draftId: z.string().uuid().optional() }),
+      z.object({ kind: z.literal('snapshot'), domain: localName, path: sitePath, snapshot: snapshotName, draftId: z.string().uuid().optional() }),
+      z.object({ kind: z.literal('archive'), id: trashId, draftId: z.string().uuid().optional() }),
+    ]),
+  },
   'dump.fetch': {
     title: 'Download a database dump from a URL',
     description:

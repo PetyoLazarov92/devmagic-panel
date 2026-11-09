@@ -1284,6 +1284,22 @@ trash_site_tree() {
   [[ "$output" == *"exists again"* ]]
 }
 
+@test "trash-dump copies a deleted site's dump for the panel, keeps the archive, and refuses one without a dump" {
+  trash_site_tree
+  dmp trash-site local.site.com 20261024-120000 site_com site_com
+  dmp trash-remove local.site.com 20261024-120000
+  run dmp trash-dump local.site.com-20261024-120000
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DUMP=$T/backups/sites/copy-local.site.com-20261024-120000.sql.gz"* ]]
+  [ -f "$T/backups/sites/copy-local.site.com-20261024-120000.sql.gz" ]
+  [ -f "$T/state/trash/local.site.com-20261024-120000/db.sql.gz" ]
+  [ "$(stat -c %a "$T/backups/sites/copy-local.site.com-20261024-120000.sql.gz")" = 600 ]
+  run dmp trash-dump ../etc
+  [ "$status" -ne 0 ]
+  run dmp trash-dump local.none.com-20261024-120000
+  [ "$status" -eq 1 ]
+}
+
 @test "trash-restore refuses an archive that does not match its checksums" {
   trash_site_tree
   dmp trash-site local.site.com 20261024-120000 - -

@@ -210,7 +210,10 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       organizations or groups, your CLI listed it, or you trusted its owner
       (`server/src/repo-trust.ts`). A dump from a URL comes through
       `fetch-dump.ts` only: https, public addresses checked on connect, no
-      shell, and every dump's type is read from its first bytes.
+      shell, and every dump's type is read from its first bytes. A dump over
+      SSH (`sites/more-dumps.ts`) uses your own ssh config with BatchMode and
+      StrictHostKeyChecking, sftp for a file and only `wp db export` for an
+      export, with a path of plain characters.
     - **Removed sites go to the trash first**, made by the panel or not:
       `dmp-root trash-site` archives the folder (`WEB_DIR/<domain>`), the
       vhosts (`<domain>-ssl.conf` or `<domain>.conf`), the certificate and the

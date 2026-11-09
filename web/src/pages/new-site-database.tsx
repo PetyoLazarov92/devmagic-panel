@@ -1,10 +1,12 @@
-import type { OrgStatus, RcloneRemotes, RemoteEntry, UploadResult } from '@devmagic-panel/shared';
-import { ChevronRight, CircleAlert, Cloud, ExternalLink, FileArchive, FolderOpen, Globe, HardDriveDownload, LoaderCircle, RefreshCw, ShieldCheck, Sparkles, Upload } from 'lucide-react';
+import type { OrgStatus, RcloneRemotes, RemoteEntry, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
+import { ChevronRight, CircleAlert, Cloud, ExternalLink, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, LoaderCircle, RefreshCw, Server, ShieldCheck, Sparkles, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { DumpFactsCard } from '@/components/dump-facts';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Segmented } from '@/components/ui/segmented';
+import { Select } from '@/components/ui/field';
 import { api, isMockup } from '@/lib/api';
 import { bytes, shortDate, timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
@@ -16,7 +18,7 @@ import { applyOrgAnswers, PrefillSummary } from './new-site-org';
 type SetState = (update: (s: WizardState) => WizardState) => void;
 
 /** Where the dump comes from. */
-export type DumpSource = 'claude' | 'upload' | 'downloads' | 'cloud' | 'url' | 'none';
+export type DumpSource = 'claude' | 'upload' | 'downloads' | 'cloud' | 'url' | 'server' | 'local' | 'none';
 
 /** A Drive file's page, where it opens and downloads in the browser. */
 const driveUrl = (fileId: string) => `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
@@ -133,6 +135,8 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
     { value: 'downloads', title: 'Downloads folder', text: 'A dump you downloaded in the browser', icon: <FolderOpen />, show: true },
     { value: 'cloud', title: 'Cloud drive', text: 'Google Drive, Dropbox, OneDrive, S3, SFTP and more, through rclone', icon: <Cloud />, show: true },
     { value: 'url', title: 'Public URL', text: 'Any https:// address that serves the file', icon: <Globe />, show: true },
+    { value: 'server', title: 'A server over SSH', text: 'A dump file there, or a fresh export with WP-CLI', icon: <Server />, show: true },
+    { value: 'local', title: 'This machine', text: "Another site's database, a snapshot, or a deleted site", icon: <HardDrive />, show: true },
     { value: 'none', title: 'No database', text: 'A fresh WordPress on the repo code', icon: <HardDriveDownload />, show: true },
   ];
 
@@ -163,6 +167,8 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
         {source === 'downloads' && <FromDownloads working={working} onUse={(file) => void start('dump.useDownloaded', { file })} />}
         {source === 'cloud' && <FromCloud working={working} onRemote={(remote, entry) => void start('dump.fromRemote', { remote, path: entry.path, ...(entry.sizeBytes !== null ? { sizeBytes: entry.sizeBytes } : {}) })} onDriveLink={(link) => void start('dump.download', { link })} />}
         {source === 'url' && <FromUrl working={working} onFetch={(url) => void start('dump.fetch', { url })} />}
+        {source === 'server' && <FromServer working={working} onTake={(input) => void start('dump.fromServer', input)} />}
+        {source === 'local' && <FromThisMachine working={working} onTake={(input) => void start('dump.fromLocal', input)} />}
         {source === 'none' && (
           <p className="text-muted-foreground">
             The install makes empty tables and installs WordPress on the repo's code, with the admin from the WordPress step. Nothing is imported, so no address is replaced and no plugin is turned off.
@@ -401,6 +407,115 @@ function FromUrl({ working, onFetch }: { working: boolean; onFetch: (url: string
         <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />The free space and the 20 GB limit are checked before and while it downloads, and it stops unless it starts like SQL, a gzip or a zip.</li>
         <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />Signed links work; the part after ? is never kept or shown. A link that needs a sign-in does not: download it in the browser and use Downloads folder.</li>
       </ul>
+    </div>
+  );
+}
+
+/** A dump from a server over SSH: your own ssh config and agent, a fixed read-only command. */
+function FromServer({ working, onTake }: { working: boolean; onTake: (input: { host: string; mode: 'file' | 'export'; path: string }) => void }) {
+  const [host, setHost] = useState('');
+  const [mode, setMode] = useState<'export' | 'file'>('export');
+  const [path, setPath] = useState('');
+  const hostOk = /^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(host.trim());
+  const pathOk = /^\/[A-Za-z0-9._/-]+$/.test(path.trim()) && !path.split('/').includes('..') && (mode === 'export' || /\.(sql|sql\.gz|zip)$/i.test(path.trim()));
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <label htmlFor="ssh-host" className="font-medium">Host</label>
+          <Input id="ssh-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="staging-spellbook or alex@www.spellbook.example" className="font-mono text-[13px]" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
+          <p className="text-xs text-muted-foreground">An alias from your ~/.ssh/config, or user@host.</p>
+        </div>
+        <div className="grid gap-1.5">
+          <span className="font-medium">What to take</span>
+          <Segmented label="What to take" value={mode} onChange={setMode} options={[['export', 'Export now with WP-CLI'], ['file', 'A dump file there']]} className="justify-self-start" />
+        </div>
+      </div>
+      <div className="grid gap-1.5">
+        <label htmlFor="ssh-path" className="font-medium">{mode === 'export' ? 'The WordPress folder on the server' : 'The dump on the server'}</label>
+        <div className="flex gap-2">
+          <Input id="ssh-path" value={path} onChange={(e) => setPath(e.target.value)} placeholder={mode === 'export' ? '/var/www/spellbook/public' : '/home/alex/backups/spellbook.sql.gz'} className="font-mono text-[13px]" spellCheck={false} aria-invalid={path.trim() !== '' && !pathOk ? true : undefined} />
+          <Button disabled={!hostOk || !pathOk || working} onClick={() => onTake({ host: host.trim(), mode, path: path.trim() })}>
+            {working ? <LoaderCircle className="animate-spin" /> : <Server />}
+            {mode === 'export' ? 'Export' : 'Copy'}
+          </Button>
+        </div>
+        {path.trim() !== '' && !pathOk && <p className="text-xs text-danger">An absolute path with letters, digits and . _ - / only{mode === 'file' ? ', ending in .sql, .sql.gz or .zip' : ''}.</p>}
+      </div>
+      <ul className="grid gap-1 text-xs text-muted-foreground">
+        <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />Your SSH key through your agent; never a password, and a host not in your known_hosts is refused, not trusted on the fly.</li>
+        <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />{mode === 'export' ? 'Runs only wp db export on the server (it reads, it changes nothing), and the server needs WP-CLI as wp.' : 'Copies the file with sftp; nothing runs on the server.'}</li>
+      </ul>
+    </div>
+  );
+}
+
+type LocalView = 'site' | 'snapshot' | 'archive';
+
+/** A dump from this machine: another site's database, one of its snapshots, or a deleted site's dump. */
+function FromThisMachine({ working, onTake }: { working: boolean; onTake: (input: Record<string, unknown>) => void }) {
+  const [view, setView] = useState<LocalView>('site');
+  const [sites, setSites] = useState<Site[] | null>(null);
+  const [trash, setTrash] = useState<TrashEntry[] | null>(null);
+  const [picked, setPicked] = useState('');
+  const [snapshots, setSnapshots] = useState<SnapshotInfo[] | null>(null);
+  useEffect(() => {
+    api.sites().then((list) => setSites(list.filter((s) => s.core.kind !== 'none')), () => setSites([]));
+    api.trash().then((list) => setTrash(list.filter((t) => t.hasDump)), () => setTrash([]));
+  }, []);
+  const site = (sites ?? []).find((s) => `${s.domain}${s.path ?? ''}` === picked);
+  useEffect(() => {
+    setSnapshots(null);
+    if (view === 'snapshot' && site) api.snapshots(site.domain, site.path).then(setSnapshots, () => setSnapshots([]));
+  }, [view, picked]);
+  const ref = site ? { domain: site.domain, ...(site.path ? { path: site.path } : {}) } : null;
+  return (
+    <div className="grid gap-3">
+      <Segmented label="From" value={view} onChange={setView} options={[['site', 'Another site'], ['snapshot', 'A snapshot'], ['archive', 'A deleted site']]} className="justify-self-start" />
+      {view !== 'archive' && (
+        <div className="flex flex-wrap items-end gap-2">
+          <Select aria-label="Site" value={picked} onChange={(e) => setPicked(e.target.value)} wrapClassName="min-w-64">
+            <option value="">{sites === null ? 'Reading the sites...' : 'Pick a site'}</option>
+            {(sites ?? []).map((s) => <option key={`${s.domain}${s.path ?? ''}`} value={`${s.domain}${s.path ?? ''}`}>{s.domain}{s.path ?? ''}</option>)}
+          </Select>
+          {view === 'site' && (
+            <Button disabled={!ref || working} onClick={() => ref && onTake({ kind: 'site', ...ref })}>
+              {working ? <LoaderCircle className="animate-spin" /> : <HardDrive />}
+              Export its database
+            </Button>
+          )}
+        </div>
+      )}
+      {view === 'site' && <p className="text-xs text-muted-foreground">A copy of the site's database now, with WP-CLI; the site stays as it is. Handy for a second copy that tests another branch.</p>}
+      {view === 'snapshot' && site && (
+        <ul className="grid gap-1.5">
+          {snapshots === null && <li className="text-muted-foreground">Reading its snapshots...</li>}
+          {snapshots?.length === 0 && <li className="text-muted-foreground">This site has no snapshots.</li>}
+          {(snapshots ?? []).map((snap) => (
+            <li key={snap.name} className="flex flex-wrap items-center gap-2">
+              <FileArchive className="size-4 text-muted-foreground" />
+              <span className="font-mono text-[13px]">{snap.label ?? snap.name}</span>
+              <span className="text-xs text-muted-foreground">{bytes(snap.sizeBytes)} · {timeAgo(snap.createdAt)}</span>
+              <Button size="sm" variant="outline" disabled={working || !ref} onClick={() => ref && onTake({ kind: 'snapshot', ...ref, snapshot: snap.name })}>Use it</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {view === 'archive' && (
+        <ul className="grid gap-1.5">
+          {trash === null && <li className="text-muted-foreground">Reading the deleted sites...</li>}
+          {trash?.length === 0 && <li className="text-muted-foreground">No deleted site with a database dump.</li>}
+          {(trash ?? []).map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-2">
+              <FileArchive className="size-4 text-muted-foreground" />
+              <span className="font-mono text-[13px]">{t.domain}</span>
+              <span className="text-xs text-muted-foreground">{t.reason === 'deleted' ? 'deleted' : 'archived'} {timeAgo(t.deletedAt)}</span>
+              <Button size="sm" variant="outline" disabled={working} onClick={() => onTake({ kind: 'archive', id: t.id })}>Use its dump</Button>
+            </li>
+          ))}
+          <li className="text-xs text-muted-foreground">A copy of the dump; the deleted site stays restorable as it was.</li>
+        </ul>
+      )}
     </div>
   );
 }
