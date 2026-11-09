@@ -37,6 +37,7 @@ import { findClaude } from './org/claude-code.js';
 import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded } from './org/dumps.js';
 import { type Getter, shownUrl, urlProblem } from './sites/fetch-dump.js';
 import { MoreDumpsRefused, planLocalDump, planServerDump } from './sites/more-dumps.js';
+import { giveBack, planTakeOver, TakeoverRefused } from './sites/takeover.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
 import { planRemove, RemoveRefused, stampDate } from './sites/remove.js';
@@ -662,6 +663,8 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     const view = ctx.jobs.start(steps, { runId: ctx.runId as number, title: `Remove ${input.domain}`, target: input.domain, kind: 'site.remove' });
     return { results: [{ code: 0, stdout: `started ${view.id}`, stderr: '' }], data: { jobId: view.id }, detached: true };
   },
+  'site.takeOver': async (ctx, input) => startJob(ctx, await planTakeOver(ctx, input), `Take over ${input.domain}`, input.domain),
+  'site.giveBack': async (ctx, input) => giveBack(ctx, input),
   'site.create': async (ctx, input) => {
     const steps = await planCreate(ctx, input);
     const draft = input.draftId && ctx.drafts?.get(input.draftId) ? input.draftId : undefined;
@@ -783,7 +786,7 @@ export async function runAction(ctx: ActionContext, id: ActionId, rawInput: unkn
     const result = await handler({ ...ctx, runId, actionId: id }, parsed.data as ActionInput<ActionId>);
     outcome = Array.isArray(result) ? { results: result } : result;
   } catch (error) {
-    if (error instanceof SiteNotFoundError || error instanceof SiteActionRefused || error instanceof DumpRefused || error instanceof MoreDumpsRefused || error instanceof TrashRefused || error instanceof CreateRefused || error instanceof RemoveRefused || error instanceof DbRefused || error instanceof CoreRefused || error instanceof MysqlRefused || error instanceof PhpSettingsRefused || error instanceof CronRefused) {
+    if (error instanceof SiteNotFoundError || error instanceof SiteActionRefused || error instanceof DumpRefused || error instanceof MoreDumpsRefused || error instanceof TakeoverRefused || error instanceof TrashRefused || error instanceof CreateRefused || error instanceof RemoveRefused || error instanceof DbRefused || error instanceof CoreRefused || error instanceof MysqlRefused || error instanceof PhpSettingsRefused || error instanceof CronRefused) {
       ctx.store.finish(runId, 2, error.message);
       throw new ActionInputError(error.message);
     }

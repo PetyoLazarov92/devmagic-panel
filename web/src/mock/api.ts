@@ -572,6 +572,12 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'space', label: 'Check free disk space' },
       { id: 'download', label: `Download ${String(input.path).split('/').pop()} from ${String(input.remote)} and read it` },
     ],
+    'site.takeOver': [
+      { id: 'cert', label: 'Issue a certificate for 2 names from the local CA' },
+      { id: 'vhost', label: "Put the panel's vhost in place of the site's own" },
+      { id: 'hosts', label: "Add the hosts line to the panel's block" },
+      { id: 'record', label: 'Note that the panel took it over' },
+    ],
     'dump.fromServer': [{ id: 'download', label: input.mode === 'export' ? `Export the database on ${String(input.host)} with WP-CLI and read it` : `Copy ${String(input.path).split('/').pop()} from ${String(input.host)} and read it` }],
     'dump.fromLocal': [{ id: 'take', label: input.kind === 'archive' ? `Take the database dump of the deleted ${String(input.id).slice(0, -16)}` : `Take the database of ${String(input.domain)}${String(input.path ?? '')} and read it` }],
     'dump.fetch': [{ id: 'download', label: `Download the dump from ${(() => { try { return new URL(String(input.url)).host; } catch { return 'the address'; } })()} and read it` }],
@@ -1928,6 +1934,13 @@ export const mockApi: Api = {
   downloads: async () => {
     await wait(150);
     return [{ file: '/home/wandworksco/Downloads/wandworks-store-2026-10-24.sql.gz', name: 'wandworks-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: new Date(Date.now() - 20 * 60_000).toISOString() }];
+  },
+  takeoverPreview: async (domain) => {
+    await wait(300);
+    return {
+      files: [`${domain.replace(/^local\./, '')}.conf`], enabled: [`${domain.replace(/^local\./, '')}.conf`], names: [domain, `www.${domain}`], docroot: `/var/www/${domain}`, mounts: [],
+      extra: ['Header set X-Robots-Tag "noindex"', 'php_value upload_max_filesize 256M'], problems: [],
+    };
   },
   rcloneRemotes: async () => {
     await wait(120);

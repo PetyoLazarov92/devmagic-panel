@@ -8,7 +8,7 @@
 set -euo pipefail
 
 DMP_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-for lib in log config validate apache php fpm php-apt ca cert vhost nginx hosts backup site trash mysql; do
+for lib in log config validate apache php fpm php-apt ca cert vhost nginx hosts backup site trash takeover mysql; do
   # shellcheck source=/dev/null
   source "$DMP_HOME/lib/$lib.sh"
 done
@@ -58,6 +58,9 @@ Usage: dmp-root <command> [args]
   trash-restore <id>                  put a deleted site back when nothing of it exists
   trash-delete <id>                   delete a trash entry for good
   trash-dump <id>                     copy a deleted site's database dump for the panel
+  vhost-adopt <domain> [--check|--drop-lines]
+                                      take over a site made by hand: the panel's vhost in place of its own
+  vhost-release <domain>              give a site taken over its own vhost back
   trash-purge <days>                  delete trash entries older than that
   cert-remove <domain>                remove a cert no vhost uses any more
   apache-module-enable <module>       enable an allowed Apache module
@@ -198,7 +201,7 @@ nginx_site_write() {
       --apache-path)
         dmp_require_mount_path "$2"
         dmp_require_local_name "$domain"
-        dmp_nginx_apache_path_ok "$domain" "$2" || dmp_die "no folder $WEB_DIR/$domain$2 with an .htaccess of its own"
+        dmp_nginx_apache_path_ok "$domain" "$2" || dmp_die "no folder $(dmp_site_folder "$domain")$2 with an .htaccess of its own"
         DMP_NGINX_APACHE_PATHS+=("$2")
         ;;
       # As vhost-write's: a path of letters, digits, . _ - and a folder in WEB_DIR that exists.
@@ -261,6 +264,8 @@ main() {
     trash-restore) (( $# == 1 )) || dmp_usage_error "trash-restore takes an id"; dmp_trash_restore "$1" ;;
     trash-delete) (( $# == 1 )) || dmp_usage_error "trash-delete takes an id"; dmp_trash_delete "$1" ;;
     trash-dump) (( $# == 1 )) || dmp_usage_error "trash-dump takes an id"; dmp_trash_dump "$1" ;;
+    vhost-adopt) (( $# == 1 || $# == 2 )) || dmp_usage_error "vhost-adopt takes a domain and --check or --drop-lines"; dmp_require_local_name "$1"; dmp_vhost_adopt "$@" ;;
+    vhost-release) (( $# == 1 )) || dmp_usage_error "vhost-release takes one domain"; dmp_require_local_name "$1"; dmp_vhost_release "$1" ;;
     trash-purge) (( $# == 1 )) || dmp_usage_error "trash-purge takes a number of days"; dmp_trash_purge "$1" ;;
     cert-remove) (( $# == 1 )) || dmp_usage_error "cert-remove takes one domain"; with_names dmp_cert_remove "$@" ;;
     apache-module-enable) (( $# == 1 )) || dmp_usage_error "apache-module-enable takes one module"; dmp_apache_module_enable "$1" ;;

@@ -32,6 +32,28 @@ dmp_site_register() {
   mv -f "$tmp" "$entry"
 }
 
+# Where the record of a site taken over lives: its original vhosts and how it was.
+dmp_takeover_dir() { printf '%s/taken-over/%s' "$STATE_DIR" "$1"; }
+
+# The folder a site lives in: WEB_DIR/<domain>, or for a site taken over the
+# folder it had (a real folder right in WEB_DIR), when both its registry entry
+# (same device:inode) and its takeover record name it. A registry entry alone
+# never points a domain at another folder.
+dmp_site_folder() {
+  local domain="$1" entry dir manifest
+  entry="$(dmp_site_registry_entry "$domain")"
+  manifest="$(dmp_takeover_dir "$domain")/manifest.env"
+  if [[ -f "$entry" && ! -L "$entry" && -O "$entry" && -f "$manifest" && ! -L "$manifest" && -O "$manifest" ]]; then
+    dir="$(sed -n 1p "$entry")"
+    if [[ "${dir%/*}" == "$WEB_DIR" && "${dir##*/}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$ && -d "$dir" && ! -L "$dir" ]] \
+      && [[ "$(sed -n 2p "$entry")" == "$(stat -c '%d:%i' "$dir")" ]] && grep -qxF "DOCROOT=$dir" "$manifest"; then
+      printf '%s' "$dir"
+      return 0
+    fi
+  fi
+  printf '%s/%s' "$WEB_DIR" "$domain"
+}
+
 dmp_site_dir_create() {
   local domain="$1" dir
   dir="$WEB_DIR/$domain"
@@ -46,7 +68,7 @@ dmp_site_dir_create() {
 
 dmp_site_dir_remove() {
   local domain="$1" dir entry
-  dir="$WEB_DIR/$domain"
+  dir="$(dmp_site_folder "$domain")"
   entry="$(dmp_site_registry_entry "$domain")"
   if [[ ! -e "$dir" ]]; then
     rm -f -- "$entry"

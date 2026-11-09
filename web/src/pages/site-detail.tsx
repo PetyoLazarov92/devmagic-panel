@@ -1,4 +1,5 @@
 import type { ActionId, JobView, Site, SiteGit, SiteLocalMode, WpCronReport, WpDebugConstant } from '@devmagic-panel/shared';
+import { TakeoverCard } from '@/components/takeover-card';
 import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, sameRepo, SITE_SERVER_LABEL, siteRepos, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import {
   ArrowDownToLine, ArrowLeft, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LoaderCircle, LogIn, Network, RefreshCw,
@@ -548,6 +549,8 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
         </div>
 
         <SaltsConfirm mode={salting} onClose={() => setSalting(null)} onConfirm={(only) => void run(saltsName, 'site.shuffleSalts', { ...siteTarget(site), only })} />
+
+        <TakeoverCard site={site} onChanged={onChanged} />
 
         {site.localMode && <LocalModeCard site={site} localMode={site.localMode} onChanged={onChanged} />}
 

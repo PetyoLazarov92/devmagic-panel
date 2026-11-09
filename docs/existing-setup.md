@@ -11,6 +11,34 @@ The panel only rewrites or removes a vhost whose first line is its own marker.
 Sites made by hand or by devmagic keep their vhost; the panel reissues their
 certificate and manages their hosts line.
 
+### Taking over a site made by hand
+
+When you want every panel feature on such a site (domains, nginx, sites under
+a path, removal to the trash), **Take over...** on its Overview shows first
+what would happen, read by `dmp-root vhost-adopt --check`: its vhost files,
+names, folder and sites under a path, and every line the panel's vhost does
+not have. Then:
+
+- its vhost files are kept, root-owned with checksums, in
+  `$STATE_DIR/taken-over/<domain>`;
+- its folder stays where it is (it must be a real folder right in `WEB_DIR`)
+  and is registered, so removal and restore know it by its name;
+- the certificate comes from the panel's CA, the panel writes its own vhost
+  with the same names and sites under a path, and the hosts line goes into its
+  block (a line for it outside the block stays, as always);
+- a failed Apache configtest puts the original vhost back at once.
+
+Lines the panel's vhost does not have (headers, rewrites, `php_value` and the
+like) are refused until you tick to leave them out; they stay in the kept
+files. A real domain among its names, a file that also holds another site, or
+a folder outside `WEB_DIR` stops the takeover with the reason.
+
+The site shows **Made by hand, managed by the panel since** its date, with a
+**Taken over** badge and filter on the Sites page. **Give back** (or Undo on
+the job) puts its own vhost files back, checked against their checksums, and
+the panel leaves it as it is again; the site, its certificate and its hosts
+line stay.
+
 ## nginx runs next to Apache, never in its place
 
 Once you set it up, Apache answers on `127.0.0.1` and nginx on `127.0.0.2`,

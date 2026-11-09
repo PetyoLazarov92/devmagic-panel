@@ -1484,6 +1484,23 @@ export const actions = {
       .object({ id: trashId, confirm: z.string() })
       .refine((v) => v.id.startsWith(`${v.confirm}-`) && localName.safeParse(v.confirm).success, { path: ['confirm'], message: 'Type the domain to confirm' }),
   },
+  'site.takeOver': {
+    title: 'Take over a site made by hand',
+    description:
+      "Puts a site made by hand under the panel: issues its certificate from the local CA, keeps its vhost files root-owned with checksums, writes the panel's vhost with the same names, folder (kept where it is) and sites under a path, and adds its hosts line to the panel's block. Lines the panel's vhost does not have are refused unless dropLines (they stay in the kept files). Give it back with site.giveBack, or Undo. Starts a job.",
+    changesSystem: true,
+    input: z
+      .object({ domain: localName, confirm: z.string(), dropLines: z.boolean().default(false) })
+      .refine((v) => v.confirm === v.domain, { path: ['confirm'], message: 'Type the domain to confirm' }),
+  },
+  'site.giveBack': {
+    title: 'Give a site its own vhost back',
+    description: "Puts back the vhost files a site had before the panel took it over (their checksums checked) instead of the panel's, and the folder's registration the takeover made goes. The site stays, with its hosts line. Refused while it runs on nginx.",
+    changesSystem: true,
+    input: z
+      .object({ domain: localName, confirm: z.string() })
+      .refine((v) => v.confirm === v.domain, { path: ['confirm'], message: 'Type the domain to confirm' }),
+  },
   'site.create': {
     title: 'Create site',
     description:

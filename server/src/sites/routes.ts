@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry } from '@devmagic-panel/shared';
-import { actions, branchName, cleanCopyName, gitUrl, isActionId, mountPath, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TakeoverPreview, TrashEntry } from '@devmagic-panel/shared';
+import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
@@ -16,6 +16,7 @@ import { coresReport } from './cores.js';
 import { listSnapshots, snapshotDir } from './db.js';
 import { cleanDir, listCleanCopies } from './export.js';
 import { listKept } from './kept.js';
+import { takeoverPreview, TakeoverRefused } from './takeover.js';
 import { cleanPreview } from './clean-current.js';
 import { readLocalConstants } from '../local-constants.js';
 import { gitFolder, readGitDetails, readPullRequests } from './git.js';
@@ -268,6 +269,18 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     if (vhost?.names[0] !== domain || (path !== undefined && !vhost.mounts.some((m) => m.path === path))) return null;
     return siteKey(domain, path);
   };
+
+  // What taking over a site made by hand would do: read by dmp-root, which changes nothing with --check.
+  api.get<{ Params: { domain: string } }>('/api/sites/:domain/takeover', async (request, reply): Promise<TakeoverPreview | undefined> => {
+    const domain = localName.safeParse(request.params.domain);
+    if (!domain.success) return reply.code(400).send({ error: 'A local name' });
+    try {
+      return await takeoverPreview(deps, domain.data);
+    } catch (error) {
+      if (error instanceof TakeoverRefused) return reply.code(400).send({ error: error.message });
+      throw error;
+    }
+  });
 
   api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/snapshots', async (request, reply): Promise<SnapshotInfo[] | undefined> => {
     const key = snapshotKey(request.params.domain, request.query.path);

@@ -124,7 +124,13 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       the panel rewrites a vhost, or they are lost.
     - **Vhosts are left as is** unless their first line is the panel's marker
       (`dmp_vhost_require_managed`). For other sites the panel only reissues
-      the cert and manages the hosts line.
+      the cert and manages the hosts line, unless you take one over
+      (`site.takeOver`, `dmp-root vhost-adopt` after a `--check` preview): its
+      files are kept root-owned with checksums in `$STATE_DIR/taken-over`,
+      only its names, folder and paths reach the panel's vhost, and
+      `vhost-release` (`site.giveBack`) puts them back. A folder with another
+      name right in `WEB_DIR` is used only when its registry entry and its
+      takeover record both name it (`dmp_site_folder`).
     - **Hosts entries live in one marked block** (`# BEGIN devmagic-panel` ...
       `# END devmagic-panel`), one line per site keyed by its primary domain.
       Lines outside the block are never changed.

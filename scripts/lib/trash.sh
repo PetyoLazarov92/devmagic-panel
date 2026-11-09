@@ -58,6 +58,18 @@ dmp_trash_verify() {
   done
 }
 
+# The folder an archive was made from: its FOLDER when that is right in
+# WEB_DIR (a site taken over keeps its folder's name), else WEB_DIR/<domain>.
+dmp_trash_folder() {
+  local manifest="$1" domain="$2" folder
+  folder="$(dmp_trash_get "$manifest" FOLDER)"
+  if [[ "${folder%/*}" == "$WEB_DIR" && "${folder##*/}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$ ]]; then
+    printf '%s' "$folder"
+  else
+    printf '%s/%s' "$WEB_DIR" "$domain"
+  fi
+}
+
 # trash-site <domain> <stamp> <db-name|-> <db-user|-> [deleted|reinstall|restore]
 dmp_trash_site() {
   local domain="$1" stamp="$2" db_name="$3" db_user="$4" reason="${5:-deleted}"
@@ -66,7 +78,9 @@ dmp_trash_site() {
   [[ "$db_name" == - || "$db_name" =~ $DMP_TRASH_SQL_NAME ]] || dmp_usage_error "not a database name: '$db_name'"
   [[ "$db_user" == - || "$db_user" =~ $DMP_TRASH_SQL_NAME ]] || dmp_usage_error "not a database user: '$db_user'"
 
-  local folder="$WEB_DIR/$domain" entry cert dump panel_made=0
+  local folder entry cert dump panel_made=0
+  # A site taken over keeps its folder's name: the registry names it.
+  folder="$(dmp_site_folder "$domain")"
   entry="$(dmp_trash_dir)/$domain-$stamp"
   cert="$(dmp_cert_dir "$domain")"
   dump="$BACKUP_DIR/sites/$domain-$stamp.sql.gz"
@@ -99,7 +113,7 @@ dmp_trash_site() {
   dmp_step "Archiving $domain into $entry"
   install -d -m 0700 "$(dmp_trash_dir)"
   install -d -m 0700 "$entry"
-  (umask 077 && tar -czf "$entry/site.tar.gz" --one-file-system -C "$WEB_DIR" "$domain") || { rm -rf -- "$entry"; dmp_die "could not archive $folder"; }
+  (umask 077 && tar -czf "$entry/site.tar.gz" --one-file-system -C "$WEB_DIR" "${folder##*/}") || { rm -rf -- "$entry"; dmp_die "could not archive $folder"; }
   (umask 077 && tar -czf "$entry/config.tar.gz" -C / "${members[@]}") || { rm -rf -- "$entry"; dmp_die "could not archive the vhost and certificate"; }
   if [[ -f "$dump" && ! -L "$dump" ]]; then
     [[ "$(stat -c %U "$dump")" == "$PANEL_USER" ]] || { rm -rf -- "$entry"; dmp_die "$dump is not the panel user's export"; }
@@ -141,7 +155,7 @@ dmp_trash_remove() {
   [[ "$(dmp_trash_get "$entry/manifest.env" DOMAIN)" == "$domain" ]] || dmp_die "$entry is not an archive of $domain"
   dmp_trash_verify "$entry"
 
-  folder="$WEB_DIR/$domain"
+  folder="$(dmp_trash_folder "$entry/manifest.env" "$domain")"
   cert="$(dmp_cert_dir "$domain")"
   dmp_step "Removing $domain (archived in $entry)"
   while IFS= read -r f; do
@@ -246,7 +260,7 @@ dmp_trash_restore() {
   domain="$(dmp_trash_get "$manifest" DOMAIN)"
   dmp_require_local_name "$domain"
   [[ "$id" == "$domain-"* ]] || dmp_die "$id does not belong to $domain"
-  folder="$WEB_DIR/$domain"
+  folder="$(dmp_trash_folder "$manifest" "$domain")"
   cert="$(dmp_cert_dir "$domain")"
   nginx="$(dmp_trash_get "$manifest" NGINX)"
   nginx_enabled="$(dmp_trash_get "$manifest" NGINX_ENABLED)"
@@ -273,6 +287,11 @@ dmp_trash_restore() {
       *) dmp_die "unexpected file in the archive: $member" ;;
     esac
   done < <(tar -tzf "$entry/config.tar.gz")
+
+  # The site archive holds the site's folder and nothing beside it.
+  local top
+  top="$(tar -tzf "$entry/site.tar.gz" | cut -d/ -f1 | sort -u)"
+  [[ "$top" == "${folder##*/}" ]] || dmp_die "the site archive of $id holds more than ${folder##*/}"
 
   dmp_step "Restoring $domain from $id"
   tar -xzf "$entry/site.tar.gz" -C "$WEB_DIR" --same-owner -p || dmp_die "could not unpack the site folder"

@@ -38,7 +38,8 @@ DMP_VHOST_MOUNTS=()
 dmp_vhost_render_site() {
   local domain="$1" proxy="$2"
   shift 2
-  local docroot="$WEB_DIR/$domain" alias_line="" proxy_block="" mount_block="" mount at dir
+  local docroot alias_line="" proxy_block="" mount_block="" mount at dir
+  docroot="$(dmp_site_folder "$domain")"
   (( $# > 0 )) && alias_line="    ServerAlias $*"$'\n'
   for mount in "${DMP_VHOST_MOUNTS[@]}"; do
     at="${mount%%=*}"

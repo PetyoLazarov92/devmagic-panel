@@ -356,6 +356,25 @@ export interface SiteInstall {
   archivedAt?: string;
   /** Steps of the install that failed and were skipped, with what is left to do. */
   skipped?: Array<{ label: string; todo: string }>;
+  /** A site made by hand the panel took over: when, its vhost files kept to give back, its folder, and how many lines its vhost lost. */
+  takenOver?: { at: string; files: string[]; docroot: string; dropped: number };
+}
+
+/** What taking over a site made by hand would do, read by dmp-root vhost-adopt --check. */
+export interface TakeoverPreview {
+  /** Its vhost files in sites-available, and the enabled ones. */
+  files: string[];
+  enabled: string[];
+  /** Its names; the panel's vhost answers to the same. */
+  names: string[];
+  /** Its folder, right in WEB_DIR. */
+  docroot?: string;
+  /** Sites under a path it serves: /learn=local.learn.spellbook.example. */
+  mounts: string[];
+  /** Lines the panel's vhost does not have: left out with dropLines, kept in the originals. */
+  extra: string[];
+  /** Why it cannot be taken over now. */
+  problems: string[];
 }
 
 export interface SiteLog {

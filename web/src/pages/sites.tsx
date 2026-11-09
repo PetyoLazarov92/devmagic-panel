@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
 import { UnfinishedInstalls } from '@/components/unfinished-installs';
 import { api } from '@/lib/api';
-import { bytes } from '@/lib/format';
+import { bytes, shortDate } from '@/lib/format';
 import { Link, navigate, useQueryParam } from '@/lib/router';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import { openWpAdmin, runWithToast } from '@/lib/site-actions';
@@ -63,7 +63,8 @@ export function SitesPage() {
   const trash = useAsync(() => api.trash().catch(() => null), []);
   const removed = trash.data ?? null;
   const removedMatching = (removed ?? []).filter((e) => removedMatches(e, query));
-  const [how, setHow] = useState<InstallHow | 'any'>('any');
+  // How installed; taken-over is the sites made by hand the panel took over.
+  const [how, setHow] = useState<InstallHow | 'any' | 'taken-over'>('any');
   const [php, setPhp] = useState<string>('any');
   const { sitesView: view, sitesSort: sort } = usePreferences();
 
@@ -72,7 +73,7 @@ export function SitesPage() {
     const q = query.trim().toLowerCase();
     const matching = (sites ?? [])
       .filter((s) => filter !== 'attention' || s.health !== 'ok')
-      .filter((s) => how === 'any' || (s.install?.how ?? 'hand') === how)
+      .filter((s) => how === 'any' || (how === 'taken-over' ? Boolean(s.install?.takenOver) : (s.install?.how ?? 'hand') === how))
       .filter((s) => php === 'any' || s.php?.version === php)
       .filter((s) => !q || [siteName(s), s.title ?? '', ...s.aliases, s.git?.branch ?? ''].some((v) => v.toLowerCase().includes(q)));
     return sortSites(matching, sort);
@@ -148,9 +149,10 @@ export function SitesPage() {
           ))}
         </div>
         {filter !== 'removed' && hows.length > 1 && (
-          <Select value={how} onChange={(e) => setHow(e.target.value as InstallHow | 'any')} aria-label="How installed" className="h-9" wrapClassName="self-start sm:self-auto">
+          <Select value={how} onChange={(e) => setHow(e.target.value as InstallHow | 'any' | 'taken-over')} aria-label="How installed" className="h-9" wrapClassName="self-start sm:self-auto">
             <option value="any">Installed any way</option>
             {hows.map((h) => <option key={h} value={h}>{INSTALL_HOW_LABELS[h]}</option>)}
+            {sites?.some((x) => x.install?.takenOver) && <option value="taken-over">Made by hand, taken over</option>}
           </Select>
         )}
         {filter !== 'removed' && phps.length > 1 && (
@@ -240,6 +242,7 @@ function SiteCard({ site }: { site: Site }) {
           {siteSubtitle(site) && <p className="truncate text-sm text-muted-foreground">{siteSubtitle(site)}</p>}
           {site.network && <NetworkBadge site={site} className="mt-1.5" />}
           {site.server !== 'apache' && <Badge tone="primary" className="mt-1.5" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>}
+          {site.install?.takenOver && <Badge className="mt-1.5" title={`Made by hand, managed by the panel since ${shortDate(site.install.takenOver.at)}`}>Taken over</Badge>}
           {site.installing && <Badge tone="warning" className="mt-1.5"><LoaderCircle className="size-3 animate-spin" />Installing: see progress</Badge>}
           {site.busy && (
             <Link href={site.busy.jobId ? `/jobs/${encodeURIComponent(site.busy.jobId)}` : href} className="relative z-10 mt-1.5 block w-fit">
@@ -332,6 +335,7 @@ function SiteRow({ site }: { site: Site }) {
         {site.title && <p className="truncate text-xs text-muted-foreground">{site.title}</p>}
       </div>
       {site.server !== 'apache' && <Badge tone="primary" className="hidden shrink-0 sm:inline-flex" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>}
+      {site.install?.takenOver && <Badge className="hidden shrink-0 sm:inline-flex">Taken over</Badge>}
       {site.installing && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Installing</Badge>}
       {site.busy && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Busy</Badge>}
       {issues > 0 && <Badge tone={site.health === 'fail' ? 'danger' : 'warning'} className="hidden shrink-0 sm:inline-flex">{issues === 1 ? '1 issue' : `${issues} issues`}</Badge>}

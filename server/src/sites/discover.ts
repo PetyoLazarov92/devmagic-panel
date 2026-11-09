@@ -19,6 +19,9 @@ import { readSiteVhosts, siteAddress, siteServer, type VhostInfo } from './vhost
 import { saltStatus } from './salts.js';
 import { parseWpConfig, parseWpVersion, type WpConfig } from './wpconfig.js';
 import { removalRefusal } from './remove.js';
+import { isPanelFolder, siteRegistryEntry } from './registry.js';
+
+export { isPanelFolder, siteRegistryEntry };
 import { apachePaths, moveFacts } from './server-switch.js';
 import { readHtaccessReport, ruleDiff } from './htaccess-rules.js';
 
@@ -380,7 +383,7 @@ export function unwritableByWeb(docroot: string, webGroup: string, gid = groupId
 }
 
 /** The registry entry dmp-root writes for a folder it creates (scripts/lib/site.sh): the path, then device:inode. */
-export const siteRegistryEntry = (config: SystemConfig, domain: string) => join(config.STATE_DIR, 'sites', domain);
+
 
 /**
  * True when the panel created this site's folder. Only for showing the remove
@@ -401,15 +404,6 @@ export function folderTime(dir: string): string | undefined {
   }
 }
 
-export function isPanelFolder(config: SystemConfig, docroot: string, domain: string): boolean {
-  try {
-    const [path, id] = readFileSync(siteRegistryEntry(config, domain), 'utf8').split('\n');
-    const st = statSync(docroot);
-    return path === docroot && id === `${st.dev}:${st.ino}`;
-  } catch {
-    return false;
-  }
-}
 
 type Shared = { legacyIssuer: string | null; sizes: Map<string, { sizeBytes: number; tables: number }>; hosts: Set<string>; hostsText: string; cores: string[]; mysql: Mysql | null };
 

@@ -92,6 +92,7 @@ export function installLabel(install: SiteInstall | undefined): string {
   const repo = install.repo ? (repoWeb(install.repo)?.repoUrl.replace(/^https?:\/\/[^/]+\//, '') ?? install.repo) : null;
   return [
     INSTALL_HOW_LABELS[install.how],
+    install.takenOver ? `managed by the panel since ${shortDate(install.takenOver.at)}` : null,
     install.how === 'restore' && install.archivedAt ? `copy from ${shortDate(install.archivedAt)}` : null,
     install.at ? shortDate(install.at) : null,
     install.org && !repo ? namespaceLabel(install.org) : null,

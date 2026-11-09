@@ -8,6 +8,7 @@ import type { ExecResult, Executor } from '../exec.js';
 import { runRoot } from '../exec.js';
 import type { JobStep } from '../jobs.js';
 import { forgetCompat } from '../php/compat.js';
+import { isPanelFolder } from './registry.js';
 import type { Secrets } from '../secrets.js';
 import type { RunStore } from '../store.js';
 import { readSiteVhosts } from './vhost.js';
@@ -114,7 +115,9 @@ export function planRemove(ctx: RemoveContext, { domain }: Pick<ActionInput<'sit
  * way the panel and devmagic lay sites out; anything else is left to a person.
  */
 export function removalRefusal(config: SystemConfig, domain: string, docroot: string, vhostFile: string): string | null {
-  if (docroot !== join(config.WEB_DIR, domain)) return `${domain} lives in ${docroot}, not ${join(config.WEB_DIR, domain)}; remove it by hand`;
+  // A site taken over keeps its folder's name, right in WEB_DIR, and dmp-root knows it from its registry.
+  const takenOver = dirname(docroot) === config.WEB_DIR && isPanelFolder(config, docroot, domain);
+  if (docroot !== join(config.WEB_DIR, domain) && !takenOver) return `${domain} lives in ${docroot}, not ${join(config.WEB_DIR, domain)}; remove it by hand`;
   if (![`${domain}-ssl.conf`, `${domain}.conf`].includes(basename(vhostFile))) return `${domain}'s vhost is ${basename(vhostFile)}, not ${domain}-ssl.conf; remove it by hand`;
   return null;
 }

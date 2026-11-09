@@ -643,7 +643,7 @@ server {
 server {
     $listen443$http2
     server_name $names;
-    root $WEB_DIR/$domain;
+    root $(dmp_site_folder "$domain");
     index index.php index.html;
 
     ssl_certificate $(dmp_cert_file "$domain");
@@ -711,7 +711,7 @@ dmp_nginx_site_write() {
   mapfile -t aliases < <(dmp_unique_aliases "$domain" "$@")
   dmp_nginx_is_setup || dmp_die "nginx is not set up next to Apache: run dmp-root nginx-setup first"
   [[ "$domain" != "$PANEL_DOMAIN" ]] || dmp_usage_error "the panel's own site stays on Apache"
-  [[ -d "$WEB_DIR/$domain" && ! -L "$WEB_DIR/$domain" ]] || dmp_die "no site folder $WEB_DIR/$domain"
+  [[ -d "$(dmp_site_folder "$domain")" && ! -L "$(dmp_site_folder "$domain")" ]] || dmp_die "no site folder $(dmp_site_folder "$domain")"
   [[ -f "$(dmp_cert_file "$domain")" ]] || dmp_die "no certificate for $domain yet, run: dmp-root cert-issue $domain"
   # A site whose vhost was made by hand stays on Apache, as it is.
   for apache in "$APACHE_SITES_AVAILABLE/$domain-ssl.conf" "$APACHE_SITES_AVAILABLE/$domain.conf"; do
@@ -881,7 +881,7 @@ server {
 server {
     $listen443$http2
     server_name $names;
-    root $WEB_DIR/$domain;
+    root $(dmp_site_folder "$domain");
 
     ssl_certificate $(dmp_cert_file "$domain");
     ssl_certificate_key $(dmp_cert_key_file "$domain");
@@ -928,10 +928,10 @@ dmp_nginx_front_settings() {
 dmp_nginx_apache_path_ok() {
   local domain="$1" at="$2" dir real
   [[ "$at" =~ ^(/[A-Za-z0-9._-]+)+$ && "$at/" != */./* && "$at/" != */../* ]] || return 1
-  dir="$WEB_DIR/$domain$at"
+  dir="$(dmp_site_folder "$domain")$at"
   [[ -d "$dir" && -f "$dir/.htaccess" ]] || return 1
   real="$(realpath -e -- "$dir" 2>/dev/null)" || return 1
-  [[ "$real" == "$WEB_DIR/$domain$at" ]]
+  [[ "$real" == "$dir" ]]
 }
 
 # nginx-site-write <domain> --upstream apache [--static on|off] [--apache-path /path]... [alias...]:
@@ -944,7 +944,7 @@ dmp_nginx_front_write() {
   mapfile -t aliases < <(dmp_unique_aliases "$domain" "$@")
   dmp_nginx_is_setup || dmp_die "nginx is not set up next to Apache: run dmp-root nginx-setup first"
   [[ "$domain" != "$PANEL_DOMAIN" ]] || dmp_usage_error "the panel's own site stays on Apache"
-  [[ -d "$WEB_DIR/$domain" && ! -L "$WEB_DIR/$domain" ]] || dmp_die "no site folder $WEB_DIR/$domain"
+  [[ -d "$(dmp_site_folder "$domain")" && ! -L "$(dmp_site_folder "$domain")" ]] || dmp_die "no site folder $(dmp_site_folder "$domain")"
   [[ -f "$(dmp_cert_file "$domain")" ]] || dmp_die "no certificate for $domain yet, run: dmp-root cert-issue $domain"
   apache="$APACHE_SITES_AVAILABLE/$domain-ssl.conf"
   [[ -f "$apache" ]] || dmp_die "no Apache vhost for $domain: nginx in front of Apache needs it, run: dmp-root vhost-write $domain"

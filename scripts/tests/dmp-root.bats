@@ -1965,3 +1965,142 @@ front_tree() {
   [ "$status" -eq 2 ]
   [ ! -e "$T/nginx/sites-available/local.wandworks.example.conf" ]
 }
+
+# A site made by hand, as devmagic or a person sets one up: its own vhost files, its folder right in WEB_DIR.
+hand_site() {
+  local folder="${1:-local.hand.com}"
+  dmp ca-create
+  dmp cert-issue local.hand.com www.local.hand.com
+  mkdir -p "$T/www/$folder" "$T/www/local.learn.hand.com"
+  printf '<?php echo 1;\n' > "$T/www/$folder/index.php"
+  cat > "$T/sites-available/hand.conf" <<CONF
+<VirtualHost *:80>
+    ServerName local.hand.com
+    ServerAlias www.local.hand.com
+    RewriteEngine On
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</VirtualHost>
+<VirtualHost *:443>
+    ServerName local.hand.com
+    ServerAlias www.local.hand.com
+    DocumentRoot $T/www/$folder
+    <Directory $T/www/$folder>
+        AllowOverride All
+        Require all granted
+    </Directory>
+    Alias /learn $T/www/local.learn.hand.com
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/hand/hand.crt
+    SSLCertificateKeyFile /etc/ssl/hand/hand.key
+</VirtualHost>
+CONF
+  ln -sfn ../sites-available/hand.conf "$T/sites-enabled/hand.conf"
+}
+
+@test "vhost-adopt --check reads a site made by hand and changes nothing" {
+  hand_site
+  run dmp vhost-adopt local.hand.com --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"FILE=hand.conf"* && "$output" == *"ENABLED=hand.conf"* ]]
+  [[ "$output" == *"NAME=local.hand.com"* && "$output" == *"NAME=www.local.hand.com"* ]]
+  [[ "$output" == *"DOCROOT=$T/www/local.hand.com"* && "$output" == *"MOUNT=/learn=local.learn.hand.com"* ]]
+  [[ "$output" != *"PROBLEM="* && "$output" != *"EXTRA="* ]]
+  [ -f "$T/sites-available/hand.conf" ] && [ ! -e "$T/state/taken-over" ]
+}
+
+@test "vhost-adopt writes the panel's vhost with the same names, folder and paths, and vhost-release gives the original back" {
+  hand_site
+  original="$(sha256sum < "$T/sites-available/hand.conf")"
+  run dmp vhost-adopt local.hand.com
+  [ "$status" -eq 0 ]
+  vhost="$T/sites-available/local.hand.com-ssl.conf"
+  [ "$(head -n 1 "$vhost")" = "# Managed by devmagic-panel. Edits here are overwritten." ]
+  grep -q "ServerAlias www.local.hand.com" "$vhost"
+  grep -q "DocumentRoot $T/www/local.hand.com" "$vhost"
+  grep -q "Alias /learn $T/www/local.learn.hand.com" "$vhost"
+  [ ! -e "$T/sites-available/hand.conf" ] && [ ! -e "$T/sites-enabled/hand.conf" ] && [ -L "$T/sites-enabled/local.hand.com-ssl.conf" ]
+  [ "$(sed -n 1p "$T/state/sites/local.hand.com")" = "$T/www/local.hand.com" ]
+  (cd "$T/state/taken-over/local.hand.com" && sha256sum --quiet -c SHA256SUMS)
+  # Now the panel may change it like its own.
+  run dmp vhost-write local.hand.com www.local.hand.com local.hand.test
+  [ "$status" -eq 0 ]
+
+  run dmp vhost-release local.hand.com
+  [ "$status" -eq 0 ]
+  [ "$(sha256sum < "$T/sites-available/hand.conf")" = "$original" ]
+  [ -L "$T/sites-enabled/hand.conf" ] && [ ! -e "$vhost" ] && [ ! -e "$T/sites-enabled/local.hand.com-ssl.conf" ]
+  [ ! -e "$T/state/sites/local.hand.com" ] && [ ! -e "$T/state/taken-over/local.hand.com" ]
+  [ -f "$T/www/local.hand.com/index.php" ]
+}
+
+@test "vhost-adopt keeps a folder named otherwise where it is, and the trash archives and restores it by that name" {
+  hand_site old-hand-site
+  run dmp vhost-adopt local.hand.com
+  [ "$status" -eq 0 ]
+  grep -q "DocumentRoot $T/www/old-hand-site" "$T/sites-available/local.hand.com-ssl.conf"
+  mkdir -p "$T/backups/sites"
+  run dmp trash-site local.hand.com 20261109-120000 - -
+  [ "$status" -eq 0 ]
+  grep -qx "FOLDER=$T/www/old-hand-site" "$T/state/trash/local.hand.com-20261109-120000/manifest.env"
+  run dmp trash-remove local.hand.com 20261109-120000
+  [ "$status" -eq 0 ]
+  [ ! -e "$T/www/old-hand-site" ]
+  run dmp trash-restore local.hand.com-20261109-120000
+  [ "$status" -eq 0 ]
+  [ -f "$T/www/old-hand-site/index.php" ] && [ ! -e "$T/www/local.hand.com" ]
+}
+
+@test "vhost-adopt refuses real domains, another site in the file, a folder outside WEB_DIR, and lines it does not keep unless told" {
+  hand_site
+  sed -i 's/ServerAlias www.local.hand.com/ServerAlias www.local.hand.com shop.example.com/' "$T/sites-available/hand.conf"
+  run dmp vhost-adopt local.hand.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"shop.example.com is not a local name"* ]]
+  [ -f "$T/sites-available/hand.conf" ] && [ ! -e "$T/state/taken-over/local.hand.com" ]
+
+  hand_site
+  printf '<VirtualHost *:443>\n    ServerName local.other.com\n    DocumentRoot %s/www/local.hand.com\n</VirtualHost>\n' "$T" >> "$T/sites-available/hand.conf"
+  printf 'ServerAlias local.hand.com\n' >> "$T/sites-available/hand.conf"
+  run dmp vhost-adopt local.hand.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"also holds local.other.com"* ]]
+
+  hand_site
+  sed -i "s|DocumentRoot $T/www/local.hand.com|DocumentRoot /srv/elsewhere|" "$T/sites-available/hand.conf"
+  run dmp vhost-adopt local.hand.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not a folder right in"* ]]
+
+  hand_site
+  sed -i 's|    SSLEngine on|    Header set X-Robots-Tag noindex\n    php_value memory_limit 512M\n    SSLEngine on|' "$T/sites-available/hand.conf"
+  run dmp vhost-adopt local.hand.com --check
+  [[ "$output" == *"EXTRA=Header set X-Robots-Tag noindex"* && "$output" == *"EXTRA=php_value memory_limit 512M"* ]]
+  run dmp vhost-adopt local.hand.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--drop-lines"* ]]
+  run dmp vhost-adopt local.hand.com --drop-lines
+  [ "$status" -eq 0 ]
+  run grep -q 'php_value' "$T/sites-available/local.hand.com-ssl.conf"
+  [ "$status" -ne 0 ]
+  grep -q 'php_value memory_limit 512M' "$T/state/taken-over/local.hand.com/hand.conf"
+  grep -qx 'DROPPED=2' "$T/state/taken-over/local.hand.com/manifest.env"
+}
+
+@test "vhost-adopt puts the original back when Apache refuses the panel's vhost, and vhost-release checks what it restores" {
+  hand_site
+  STUB_CONFIGTEST_FAIL=1 run dmp vhost-adopt local.hand.com
+  [ "$status" -eq 1 ]
+  [ -f "$T/sites-available/hand.conf" ] && [ -L "$T/sites-enabled/hand.conf" ]
+  [ ! -e "$T/sites-available/local.hand.com-ssl.conf" ] && [ ! -e "$T/state/taken-over/local.hand.com" ] && [ ! -e "$T/state/sites/local.hand.com" ]
+
+  dmp vhost-adopt local.hand.com
+  printf 'Header set X 1\n' >> "$T/state/taken-over/local.hand.com/hand.conf"
+  run dmp vhost-release local.hand.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"does not match its checksums"* ]]
+  [ -f "$T/sites-available/local.hand.com-ssl.conf" ]
+  run dmp vhost-release local.none.com
+  [ "$status" -eq 1 ]
+  run dmp vhost-adopt '../x'
+  [ "$status" -ne 0 ]
+}
