@@ -22,7 +22,7 @@ const reached = {
     read: { status: 'done', facts: { asanaLinks: ['https://app.asana.com/0/1/2'] }, files: ['README.md'], costUsd: 0.03 },
     access: { status: 'done', report: { links: [], facts: [], dumps: [] }, costUsd: 0.06 },
     prefill: { repoUrl: 'git@github.com:wandworks/storefront.git' },
-    claude: { read: { model: 'haiku', effort: 'low', budgetUsd: 0.2 } },
+    run: { model: 'haiku', effort: 'low', budgetUsd: 0.2 },
   },
 } as unknown as WizardState;
 
@@ -35,7 +35,7 @@ describe('switching repos in an organization install', () => {
     const next = switchRepo(reached, repo('blog'), blank, 10);
     expect(next).toMatchObject({ repoUrl: 'git@github.com:wandworks/blog.git', branch: 'main', upload: null, passed: { start: 's1' } });
     expect(next.passed).toEqual({ start: 's1' });
-    expect(next.org).toMatchObject({ repo: { fullName: 'wandworks/blog' }, read: { status: 'idle' }, access: { status: 'idle' }, claude: reached.org?.claude });
+    expect(next.org).toMatchObject({ repo: { fullName: 'wandworks/blog' }, read: { status: 'idle' }, access: { status: 'idle' }, run: reached.org?.run });
     expect(next.org?.prefill).toBeUndefined();
     expect(asideUploads(next.org)).toEqual(['dump-a']);
   });

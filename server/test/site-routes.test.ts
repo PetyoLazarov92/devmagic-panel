@@ -107,10 +107,10 @@ describe('site routes', () => {
     expect((await get('/api/sites/local.shop.com/git?repo=wp-content%2Fthemes%2Fwandworks')).statusCode).toBe(404);
   });
 
-  it('say what an organization install needs, keep its settings per step, and start no read without Claude Code', async () => {
+  it('say what an organization install needs, keep its settings, and start no read without Claude Code', async () => {
     const send = (method: 'PUT' | 'POST', url: string, payload: Record<string, unknown>) => app.inject({ method, url, headers: { host: HOST, origin: ORIGIN, cookie }, payload });
     expect((await get('/api/org/status')).json()).toMatchObject({ claude: { found: false }, gh: { installed: false }, glab: { installed: false, hosts: [{ host: 'gitlab.com', installed: false }] }, rclone: { installed: false }, settings: { selected: [] } });
-    const settings = { selected: ['wandworks', 'gitlab.com/wandworks/web'], gitlabHosts: ['git.wandworks.test'], read: { model: 'haiku', effort: 'high', budgetUsd: 0.2 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } };
+    const settings = { selected: ['wandworks', 'gitlab.com/wandworks/web'], gitlabHosts: ['git.wandworks.test'], run: { model: 'haiku', effort: 'high', budgetUsd: 0.2 } };
     expect((await send('PUT', '/api/org/settings', settings)).json()).toEqual({ ...settings, accountHosts: [] });
     expect((await send('PUT', '/api/org/settings', { selected: ['-bad'] })).statusCode).toBe(400);
     expect((await get('/api/org/status')).json().settings).toEqual({ ...settings, accountHosts: [] });
@@ -122,7 +122,7 @@ describe('site routes', () => {
     expect((await get('/api/git-hosts')).json()).toEqual({ gitlab: ['git.wandworks.test'], detected: {}, aliases: {} });
     expect((await get('/api/org/status')).json().glab.hosts.map((h: { host: string }) => h.host)).toEqual(['gitlab.com', 'git.wandworks.test']);
     // Reading a repo is a job started through its action; without Claude Code it does not start.
-    const input = { draftId: '11111111-2222-4333-8444-555555555555', url: 'git@github.com:wandworks/site.git', branch: 'main', fullName: 'wandworks/site', settings: settings.read };
+    const input = { draftId: '11111111-2222-4333-8444-555555555555', url: 'git@github.com:wandworks/site.git', branch: 'main', fullName: 'wandworks/site', settings: settings.run };
     const read = await send('POST', '/api/actions/org.readRepo', input);
     expect(read.json()).toMatchObject({ ok: false, output: expect.stringContaining('Claude Code is not installed') });
     expect((await send('POST', '/api/actions/org.readRepo', { ...input, url: 'nope' })).statusCode).toBe(400);

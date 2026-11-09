@@ -1025,7 +1025,7 @@ export const actions = {
   'db.import': {
     title: 'Import a database dump',
     description:
-      'Imports an uploaded dump into a side database and swaps its tables in at once (Undo puts the tables from before back until the job ends), or takes a snapshot and imports straight in when that cannot be done; then replaces production domains (URLs only, or every mention with replaceBare), makes http:// for the local names https:// and flushes caches. The dump must use the table prefix in wp-config.php. Starts a job.',
+      'Imports an uploaded dump into a side database and swaps its tables in at once (the tables from before are kept for 7 days, to put back with db.restoreKept; Undo does it until the job ends), or takes a snapshot and imports straight in when that cannot be done; then replaces production domains (URLs only, or every mention with replaceBare), makes http:// for the local names https:// and flushes caches. The dump must use the table prefix in wp-config.php. Starts a job.',
     changesSystem: true,
     input: z
       .object({
@@ -1039,15 +1039,17 @@ export const actions = {
       .refine(confirmDomain, { path: ['confirm'], message: 'Type the domain to confirm' }),
   },
   'db.cleanCopy': {
-    title: 'Prepare the database from production',
+    title: 'Import a database dump, cleaned',
     description:
-      "Makes a production dump this site's database without private data: imports it into a side database, removes every user but the one kept, WooCommerce orders and customer data, product reviews, form entries, logs and payment, mail and API keys there with SQL (no WordPress code runs), then swaps it in. The site's tables from before are kept for 7 days. Then replaces production domains, turns off mail and production-only plugins, and keeps one user: an administrator of the dump (user.keep) or a new one (user.login, admin / admin by default), who becomes the author of every post as wp user delete --reassign does; comments stay as they are. Needs the MySQL admin account. Starts a job.",
+      "Makes a production dump this site's database without private data: imports it into a side database, removes every user but the one kept, WooCommerce orders and customer data, product reviews, form entries, logs and payment, mail and API keys there with SQL (no WordPress code runs), then swaps it in. The site's tables from before are kept for 7 days. Then replaces production domains (URLs only, or every mention with replaceBare), turns off mail and production-only plugins, and keeps one user: an administrator of the dump (user.keep) or a new one (user.login, admin / admin by default), who becomes the author of every post as wp user delete --reassign does; comments stay as they are. Needs the MySQL admin account. Starts a job.",
     changesSystem: true,
     input: z
       .object({
         domain: localName, path: sitePath,
         uploadId: z.string().regex(/^[0-9a-f-]{36}$/),
         replace: z.array(z.object({ from: dumpHost, to: localName })).max(50).default([]),
+        /** Replace every mention of the production hosts, emails included, not only URLs. */
+        replaceBare: z.boolean().default(false),
         user: cleanUser,
         confirm: z.string(),
       })
@@ -1056,7 +1058,7 @@ export const actions = {
   'db.cleanCurrent': {
     title: "Clean the site's database",
     description:
-      "Cleans the database a site has now, like a production database imported earlier, the way Prepare from production cleans a dump: copies it into a side database on the MySQL server, removes every user but the one kept, WooCommerce orders and customer data, product reviews, form entries, logs and payment, mail and API keys there with SQL, then swaps it in; the tables from before are kept for 7 days. Then turns off mail and production-only plugins and keeps one user, an administrator there (user.keep) or a new one (user.login, admin / admin by default), the author of every post as wp user delete --reassign leaves it; comments stay as they are. Replaces no address. Needs the MySQL admin account, and refuses a database with views, triggers or generated columns. Starts a job.",
+      "Cleans the database a site has now, like a production database imported earlier, the way db.cleanCopy cleans a dump: copies it into a side database on the MySQL server, removes every user but the one kept, WooCommerce orders and customer data, product reviews, form entries, logs and payment, mail and API keys there with SQL, then swaps it in; the tables from before are kept for 7 days. Then turns off mail and production-only plugins and keeps one user, an administrator there (user.keep) or a new one (user.login, admin / admin by default), the author of every post as wp user delete --reassign leaves it; comments stay as they are. Replaces no address. Needs the MySQL admin account, and refuses a database with views, triggers or generated columns. Starts a job.",
     changesSystem: true,
     input: z
       .object({ domain: localName, path: sitePath, user: cleanUser, confirm: z.string() })
@@ -1142,6 +1144,13 @@ export const actions = {
       "Claude Code reads a repo's README, docs and build files, copied into a folder of their own, and fills a fixed form for the install: addresses, network, versions, build and the Asana and Google links. Read-only, within the given model, effort and spending cap. Starts a job; the answer is kept on the install draft.",
     changesSystem: false,
     input: z.object({ draftId: z.string().uuid(), url: gitUrl, branch: branchName, fullName: repoFullName, settings: claudeRun }),
+  },
+  'org.readProject': {
+    title: 'Read a project with Claude Code',
+    description:
+      "The one Claude Code step of an install, as one job: reads a repo's README, docs and build files as org.readRepo does, then, unless checkLinks is off, opens the Asana tasks and Google files they name as org.checkAccess does, at low effort. settings is the model and effort for reading and the spending cap for both runs together: checking the links gets what reading left. An answer kept on the install draft for the same repo and branch, or the same links, is used again and nothing runs for it. Read-only. Starts a job; the answers are kept on the install draft.",
+    changesSystem: false,
+    input: z.object({ draftId: z.string().uuid(), url: gitUrl, branch: branchName, fullName: repoFullName, settings: claudeRun, checkLinks: z.boolean().default(true) }),
   },
   'org.checkAccess': {
     title: 'Check the linked tasks and files with Claude Code',
@@ -1508,7 +1517,7 @@ export const actions = {
   'site.refreshFromProduction': {
     title: 'Refresh the database from production',
     description:
-      "Copies the site's database from production with the settings saved for it (the ssh host, the WordPress folder there, the tables whose rows stay there, clean or not): exports it over SSH as dump.fromServer does, reading only, then imports it as db.import does, or with clean on as db.cleanCopy does (one user kept: user, an administrator there or a new one). The tables from before are kept for 7 days with a clean copy, or until the job ends with an import. Replaces the production domains with the site's. Nothing is written on production. Starts a job.",
+      "Copies the site's database from production with the settings saved for it (the ssh host, the WordPress folder there, the tables whose rows stay there, clean or not): exports it over SSH as dump.fromServer does, reading only, then imports it as db.import does, or with clean on as db.cleanCopy does (one user kept: user, an administrator there or a new one). The tables from before are kept for 7 days. Replaces the production domains with the site's. Nothing is written on production. Starts a job.",
     changesSystem: true,
     input: z
       .object({ domain: localName, path: sitePath, user: cleanUser, confirm: z.string() })

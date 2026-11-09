@@ -11,8 +11,10 @@ describe('a draft in the lists', () => {
   it('says which step of its kind it stopped at', () => {
     expect(draftProgress(draft('domains', { source: 'repo' }))).toEqual({ kind: 'repo', at: 4, total: 6, step: 'domains', label: 'Domains' });
     expect(draftProgress(draft('database', { source: 'repo', org: { name: '', useClaude: false } }))).toMatchObject({ at: 3, total: 6, label: 'Database' });
-    // An organization install from before 1.28 had Claude read the repo; its old step names map to today's.
-    expect(draftProgress(draft('access', { source: 'repo', org: { name: 'wandworks' } }))).toEqual({ kind: 'repo', at: 4, total: 8, step: 'access', label: 'Claude checks the links' });
+    // An organization install from before 1.28 had Claude read the repo; its old step names map to today's,
+    // and the links' step of before 1.31 is the one Claude step.
+    expect(draftProgress(draft('access', { source: 'repo', org: { name: 'wandworks' } }))).toEqual({ kind: 'repo', at: 3, total: 7, step: 'read', label: 'Claude reads the project' });
+    expect(stepsFor('repo', true)).toEqual(['start', 'code', 'read', 'database', 'domains', 'wordpress', 'review']);
     expect(draftProgress(draft('org', { source: 'repo', org: { name: 'wandworks' } }))).toMatchObject({ at: 2, step: 'code' });
     expect(draftProgress(draft('source', { source: 'repo' }))).toMatchObject({ at: 2, step: 'code' });
     expect(draftProgress(draft('wordpress', { source: 'wordpress' }))).toMatchObject({ kind: 'wordpress', at: 3, total: 4 });

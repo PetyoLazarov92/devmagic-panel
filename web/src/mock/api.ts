@@ -1,6 +1,6 @@
 import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerTables, RepoBuild, TrustedOwner, DumpPlugin, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
-import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
+import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
@@ -201,7 +201,7 @@ const MOCK_DUMP_PLUGINS: DumpPlugin[] = [
   { file: 'duplicate-post/duplicate-post.php', active: false, version: '4.5', slug: 'duplicate-post' },
   { file: 'hello.php', active: false, version: '1.7.2', slug: 'hello-dolly' },
 ];
-let mockOrgSettings: OrgSettings = { selected: ['wandworks', 'gitlab.com/wandworks-web', 'gitlab.com/~shared'], gitlabHosts: ['git.wandworks.test'], accountHosts: ['github.com', 'gitlab.com'], ...structuredClone(DEFAULT_CLAUDE_STEPS) };
+let mockOrgSettings: OrgSettings = { selected: ['wandworks', 'gitlab.com/wandworks-web', 'gitlab.com/~shared'], gitlabHosts: ['git.wandworks.test'], accountHosts: ['github.com', 'gitlab.com'], run: structuredClone(DEFAULT_CLAUDE_RUN) };
 // A GitLab group in the mockup, its projects in subgroups: two of one name, kept apart by their path.
 const mockGitlabRepos: OrgRepo[] = [
   { org: 'gitlab.com/wandworks-web', name: 'site', fullName: 'wandworks-web/clients/site', description: 'Client site on WordPress', sshUrl: 'git@gitlab.com:wandworks-web/clients/site.git', url: 'https://gitlab.com/wandworks-web/clients/site', defaultBranch: 'main', pushedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), archived: false, kind: 'site' },
@@ -270,7 +270,7 @@ async function mockStoreUpload(id: string): Promise<UploadResult> {
   await wait(150);
   return {
     id, name: 'wandworks-store-2026-10-24.sql.gz', size: 432_000_000,
-    facts: { tablePrefix: 'wp_', siteUrl: 'https://www.wandworks-store.example', home: 'https://www.wandworks-store.example', dbVersion: 58975, multisite: false, hosts: ['www.wandworks-store.example', 'wandworks-store.de'], activePlugins: ['woocommerce', 'woocommerce-gateway-stripe', 'wp-rocket'], plugins: MOCK_DUMP_PLUGINS, partial: false, admins: ['admin', 'wandworksshop'] },
+    facts: { tablePrefix: 'wp_', siteUrl: 'https://www.wandworks-store.example', home: 'https://www.wandworks-store.example', dbVersion: 58975, multisite: false, hosts: ['www.wandworks-store.example', 'wandworks-store.de'], activePlugins: ['woocommerce', 'woocommerce-gateway-stripe', 'wp-rocket'], plugins: MOCK_DUMP_PLUGINS, partial: false, admins: ['admin', 'wandworksshop'], storedObjects: false, tableHosts: { wp_options: ['www.wandworks-store.example'], wp_posts: ['www.wandworks-store.example'], wp_users: [], wp_woocommerce_order_items: [], wp_wc_customer_lookup: [], wp_actionscheduler_logs: [] } },
     suggestions: { replace: [{ from: 'www.wandworks-store.example', to: 'local.wandworks-store.example' }, { from: 'wandworks-store.de', to: 'local.wandworks-store.de' }] },
   };
 }
@@ -482,7 +482,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     'db.fixTable': [{ id: 'save', label: `Save ${String(input.table)} for Undo` }, { id: 'fix', label: { keys: `Give ${String(input.table)} its primary key back`, index: `Add the missing indexes to ${String(input.table)}`, engine: `Turn ${String(input.table)} into InnoDB`, charset: `Turn ${String(input.table)} into utf8mb4` }[String(input.fix)] ?? 'Fix the table' }],
     'db.snapshot': [{ id: 'snapshot', label: `Snapshot the database${input.label ? ` (${String(input.label)})` : ''}` }],
     'db.restore': [snapshot, { id: 'restore', label: `Import ${String(input.snapshot)}` }, { id: 'flush', label: 'Flush caches and rewrite rules' }],
-    'db.import': [{ id: 'import', label: 'Import the dump' }, { id: 'swap', label: 'Swap the imported tables in' }, { id: 'replace', label: 'Replace production domains' }, { id: 'flush', label: 'Flush caches and rewrite rules' }, { id: 'cleanup', label: 'Remove the tables from before the import' }],
+    'db.import': [{ id: 'import', label: 'Import the dump' }, { id: 'swap', label: 'Swap the imported tables in' }, { id: 'replace', label: 'Replace production domains' }, { id: 'flush', label: 'Flush caches and rewrite rules' }, { id: 'cleanup', label: 'Keep the tables from before the import for 7 days' }],
     'db.cleanCopy': [
       { id: 'import', label: 'Import the dump beside the site' },
       { id: 'clean', label: 'Remove users, orders, reviews, form entries, logs and keys' },
@@ -745,9 +745,9 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     export: id === 'mysql.dropDatabase' ? `saved /home/wandworksco/.local/share/devmagic-panel/mysql-backups/${String(input.database)}-20261029-101500.sql.gz (61 MB gzipped), kept 14 days` : 'saved /home/wandworksco/devmagic-panel-backups/clean/local.spellbook.example/spellbook.example-local-clean-2026.10.28.sql.gz (95 MB gzipped, 1.1 GB of SQL)\nno email addresses left in it, apart from local and example ones',
   });
   // What each finished job leaves for the Database tab's lists.
-  if (id === 'db.cleanCopy' || id === 'db.cleanCurrent') {
+  if (id === 'db.import' || id === 'db.cleanCopy' || id === 'db.cleanCurrent' || id === 'site.refreshFromProduction') {
     const at = new Date();
-    const kept: KeptDatabaseInfo = { name: `${domain.replace(/^local\./, '').replace(/\W/g, '_')}__keep${stamp(at)}`, reason: id === 'db.cleanCopy' ? 'before the dump from production' : 'before cleaning it', createdAt: at.toISOString(), purgeAt: new Date(at.getTime() + 7 * 86_400_000).toISOString(), sizeBytes: 1_860_000_000 };
+    const kept: KeptDatabaseInfo = { name: `${domain.replace(/^local\./, '').replace(/\W/g, '_')}__keep${stamp(at)}`, reason: id === 'db.cleanCurrent' ? 'before cleaning it' : id === 'site.refreshFromProduction' ? 'before the copy from production' : id === 'db.cleanCopy' ? 'before the dump from production' : 'before importing the dump', createdAt: at.toISOString(), purgeAt: new Date(at.getTime() + 7 * 86_400_000).toISOString(), sizeBytes: 1_860_000_000 };
     keptDatabases.set(domain, [kept, ...(keptDatabases.get(domain) ?? [])]);
   }
   if (id === 'db.exportClean') {
@@ -764,8 +764,8 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     const out: KeptDatabaseInfo = { name: `${String(input.name).replace(/__keep\d{12}$/, '')}__keep${stamp(at)}`, reason: `before putting back the tables kept on ${back ? dayOf(back.createdAt) : 'that day'}`, createdAt: at.toISOString(), purgeAt: new Date(at.getTime() + 7 * 86_400_000).toISOString(), sizeBytes: 1_860_000_000 };
     keptDatabases.set(domain, [out, ...list.filter((k) => k.name !== input.name)]);
   }
-  if (['db.snapshot', 'db.restore', 'db.import', 'db.searchReplace'].includes(id) && (id !== 'db.searchReplace' || !input.dryRun)) {
-    const label = id === 'db.snapshot' ? (input.label as string | undefined) : id === 'db.restore' ? 'before-restore' : id === 'db.import' ? 'before-import' : 'before-replace';
+  if (['db.snapshot', 'db.restore', 'db.searchReplace'].includes(id) && (id !== 'db.searchReplace' || !input.dryRun)) {
+    const label = id === 'db.snapshot' ? (input.label as string | undefined) : id === 'db.restore' ? 'before-restore' : 'before-replace';
     const name = `20261024-${String(Date.now()).slice(-6)}${label ? `-${label}` : ''}.sql.gz`;
     snapshots.set(domain, [{ name, ...(label ? { label } : {}), sizeBytes: 418_000_000, createdAt: new Date().toISOString() }, ...(snapshots.get(domain) ?? [])]);
   }
@@ -823,6 +823,63 @@ function mockClaudeJob(id: 'org.readRepo' | 'org.checkAccess', input: Record<str
     const d = mockDrafts.get(draftId);
     if (d) mockDrafts.set(draftId, { ...d, results: { ...d.results, [step]: result } });
   }, step === 'read' ? 5000 : 5500);
+  return jobId;
+}
+
+/**
+ * The one Claude Code step in the mockup: a job of two steps, reading the repo
+ * and then checking its links, each a few seconds. It is noted on the draft
+ * and its answers are kept there, so leaving the page and coming back can be
+ * tried, and an answer already kept is used again.
+ */
+function mockProjectJob(input: Record<string, unknown>): string {
+  const draftId = String(input.draftId);
+  const fullName = String(input.fullName);
+  const key = readKey(fullName, String(input.branch));
+  const noted = mockDrafts.get(draftId)?.jobs?.read;
+  const running = noted?.key === key ? mockJobs.get(noted.id) : undefined;
+  if (running?.status === 'running') return running.id;
+  const jobId = `mock-${Date.now()}`;
+  const job: JobView = {
+    id: jobId, title: `Read ${fullName} and its links with Claude Code`, target: draftId, kind: 'org.readProject', status: 'running',
+    steps: [
+      { id: 'read', label: `Claude Code reads the docs of ${fullName}`, status: 'running' },
+      { id: 'access', label: 'Claude Code checks the links the docs name', status: 'pending' },
+    ],
+    undo: [], undoable: [], progress: 0, startedAt: new Date().toISOString(), runId: 900 + mockJobs.size,
+  };
+  mockJobs.set(jobId, job);
+  const draft = mockDrafts.get(draftId);
+  if (draft) mockDrafts.set(draftId, { ...draft, jobs: { ...draft.jobs, read: { id: jobId, key } } });
+  const [read, access] = job.steps as [JobView['steps'][number], JobView['steps'][number]];
+  // What Claude Code does as it goes, a line every few hundred milliseconds.
+  const say = (step: JobView['steps'][number], lines: string[], from: number) =>
+    lines.forEach((line, i) =>
+      window.setTimeout(() => {
+        if (step.status === 'running') step.activity = [...(step.activity ?? []), line];
+      }, from + 400 + i * 550),
+    );
+  const keep = (part: 'read' | 'access', result: unknown) => {
+    const d = mockDrafts.get(draftId);
+    if (d) mockDrafts.set(draftId, { ...d, results: { ...d.results, [part]: result } });
+  };
+  // The repo's answer, kept for this repo and branch, is used again: only the links run.
+  const readKept = mockDrafts.get(draftId)?.results?.read?.key === key;
+  const readFor = readKept ? 300 : 5000;
+  if (!readKept) say(read, MOCK_READ_LINES, 0);
+  window.setTimeout(() => {
+    if (!readKept) keep('read', { key, facts: structuredClone(mockFacts), files: ['README.md', '.lando.yml', 'composer.json', 'docs/local.md'], costUsd: 0.03, durationMs: 41_800, tokens: { input: 3100, output: 1400, cacheRead: 22_600, cacheWrite: 9800 }, activity: MOCK_READ_LINES });
+    Object.assign(read, { status: 'done', durationMs: readFor, output: readKept ? `the answer kept for ${fullName} is used: nothing ran` : 'Read 4 files for $0.03' });
+    Object.assign(access, { status: 'running' });
+    job.progress = 0.5;
+    say(access, MOCK_ACCESS_LINES, 0);
+  }, readFor);
+  window.setTimeout(() => {
+    const links = [...mockFacts.asanaLinks, ...mockFacts.googleLinks];
+    keep('access', { key: accessKey(fullName, links, mockFacts.dumpHints ?? []), report: structuredClone(mockAccess), costUsd: 0.06, durationMs: 96_300, tokens: { input: 5200, output: 2300, cacheRead: 61_000, cacheWrite: 12_400 }, activity: MOCK_ACCESS_LINES });
+    Object.assign(access, { status: 'done', durationMs: 5500, output: 'Checked 2 links and found 2 dumps for $0.06' });
+    Object.assign(job, { status: 'done', progress: 1 });
+  }, readFor + 5500);
   return jobId;
 }
 
@@ -1661,6 +1718,7 @@ export const mockApi: Api = {
   },
   startJob: async (id, input) => {
     await wait(300);
+    if (id === 'org.readProject') return mockProjectJob(input);
     if (id === 'org.readRepo' || id === 'org.checkAccess') return mockClaudeJob(id, input);
     // The mockup's Mailpit "runs" once its install job has had time to finish.
     if (id === 'mailpit.install') window.setTimeout(() => (mailpitRunning = true), 3500);

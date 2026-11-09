@@ -536,7 +536,7 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     }
   }
 
-  // A copy from production, cleaned as Prepare from production cleans one: on the new database itself, with SQL.
+  // A copy from production, cleaned as a cleaned import cleans one: on the new database itself, with SQL.
   const cleaning = Boolean(dumpFile && input.clean);
   if (dumpFile && input.clean) {
     const target = limitsTarget(exec, mysql, ctx.store);

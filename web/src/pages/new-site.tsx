@@ -10,7 +10,7 @@ import { Button, ButtonLink } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { installLabel } from '@/components/site-bits';
-import { AccessStep, linksOf, newOrgState, type OrgState, ReadStep } from './new-site-org';
+import { newOrgState, type OrgState, ProjectReadStep, runFor } from './new-site-org';
 import { ClaudeSwitch, CodeStep, codeProblem, placedRows, SitePlan, useRepoLookups } from './new-site-code';
 import { DatabaseStep, type DumpSource } from './new-site-database';
 import { NetworkSection } from './new-site-network';
@@ -27,7 +27,7 @@ import {} from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { adminChoices, adminCreateOf, cleanUserOf, dumpAdmins } from '@/lib/admin-choice';
 import { type BuildPick, buildChoice, buildId, buildSteps } from '@/lib/builds';
-import { skipAccess, unskipAccess } from '@/lib/claude-steps';
+import { runSource, skipAccess } from '@/lib/claude-steps';
 import { draftHref, migrateDraftState, migrateStep, type InstallKind, KIND_LABEL, keptUntil, kindOf, landingStep, STEP_LABEL, stepsFor, type WizardStep } from '@/lib/drafts';
 import { type NetworkAnswers, networkPlan, type NetworkPlan, NO_NETWORK_ANSWERS } from '@/lib/network';
 import { pluginMatches } from '@/lib/plugin-search';
@@ -238,7 +238,6 @@ const STEP_ANSWERS: Record<Step, (s: WizardState) => unknown> = {
   start: (s) => [s.source, s.org !== null],
   code: (s) => [placedRows(s).map((r) => [r.url, r.branch, r.placement]), s.org?.useClaude],
   read: (s) => [s.org?.read.status, s.org?.read.facts],
-  access: (s) => [s.org?.access.status],
   database: (s) => [s.upload?.id, s.noDump, Boolean(s.cleanCopy)],
   domains: (s) => [s.domains, s.under, s.replaceExisting, s.replaceOn, s.network, s.server],
   wordpress: (s) => [s.coreMode, s.coreVersion, s.adminUser, s.adminEmail, s.adminIfExists, s.adminIfMissing, s.adminCreate, s.deactivate, s.activate, s.uploadsFrom, s.uploadsVia, s.composer, s.npm, s.buildPicks, s.pluginPicks],
@@ -718,8 +717,8 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
   const canNext: Record<Step, boolean> = {
     start: true,
     code: codeProblem(state) === null,
-    read: state.org?.read.status === 'done',
-    access: state.org?.access.status === 'done' || state.org?.access.status === 'skipped',
+    // The repo is read, and its links are checked, skipped or could not be checked: only a check still running holds the step.
+    read: state.org?.read.status === 'done' && state.org.access.status !== 'checking' && state.org.access.status !== 'idle',
     database: state.upload !== null || state.noDump,
     domains: state.under && state.source !== 'empty'
       ? !underError && Boolean(input.path)
@@ -744,9 +743,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
     }
     const n = flow[index + 1];
     if (!n) return;
-    let passed = passStep(state, step);
-    // Check access after a skip checks: the answer kept for these links comes back, or Claude Code runs.
-    if (step === 'read' && passed.org) passed = { ...passed, org: { ...passed.org, access: unskipAccess(passed.org.access) } };
+    const passed = passStep(state, step);
     setTouched(true);
     setState(passed);
     if (!draftId.current) {
@@ -872,23 +869,37 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
                 )}
               </>
             }
-            side={<ClaudeSwitch status={orgStatus.data ?? null} on={Boolean(state.org?.useClaude)} onChange={setUseClaude} preference={claudePreference} onPreference={(p) => void savePreferences({ useClaude: p })} />}
+            side={
+              <ClaudeSwitch
+                status={orgStatus.data ?? null}
+                on={Boolean(state.org?.useClaude)}
+                onChange={setUseClaude}
+                preference={claudePreference}
+                onPreference={(p) => void savePreferences({ useClaude: p })}
+                run={state.org && orgStatus.data ? runFor(state.org, orgStatus.data) : undefined}
+                own={Boolean(state.org && orgStatus.data && runSource(state.org.run, orgStatus.data.settings.run) === 'install')}
+                onRun={(run) => setOrgState((s) => {
+                  if (!s.org) return s;
+                  const { run: _own, ...org } = s.org;
+                  return { ...s, org: run ? { ...org, run } : org };
+                })}
+              />
+            }
           />
         )}
         {wizard && step === 'read' && (
-          <ReadStep
+          <ProjectReadStep
             state={state}
             setState={setOrgState}
             status={orgStatus.data ?? null}
             draftId={draftId.current ?? ''}
             saveNow={saveNow}
             onSkip={() => {
-              setOrgState((s) => passStep(passStep(s.org ? { ...s, org: { ...s.org, access: skipAccess(s.org.access) } } : s, 'read'), 'access'));
+              setOrgState((s) => passStep(s.org ? { ...s, org: { ...s.org, access: skipAccess(s.org.access) } } : s, 'read'));
               goTo('database');
             }}
           />
         )}
-        {wizard && step === 'access' && <AccessStep state={state} setState={setOrgState} status={orgStatus.data ?? null} cores={cores.data ?? []} draftId={draftId.current ?? ''} saveNow={saveNow} />}
         {wizard && step === 'database' && <DatabaseStep state={state} setState={setOrgState} status={orgStatus.data ?? null} cores={cores.data ?? []} draftId={draftId.current ?? ''} saveNow={saveNow} />}
         {wizard && step === 'domains' && <DomainsStep state={state} set={set} nginx={nginx.data ?? null} errors={domainErrors} sites={sites.data ?? []} underError={underError} underFolder={underFolder} existing={existing} network={network} networkErrors={networkErrors} summary={state.upload ? addressSummary(addressesFor(input, state, network), input.network?.layout) : null} />}
         {wizard && step === 'wordpress' && <WordPressStep state={state} set={set} cores={cores.data ?? []} input={input} uploadsError={uploadsError} />}
@@ -906,7 +917,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
           </Button>
           <Button onClick={next} disabled={!canNext[step]}>
             {step === 'review' ? <Wand2 /> : null}
-            {step === 'review' ? 'Create site' : step === 'read' && linksOf(state.org?.read.facts).length > 0 && state.org?.access.status !== 'done' ? 'Check access' : 'Continue'}
+            {step === 'review' ? 'Create site' : 'Continue'}
             {step !== 'review' && <ArrowRight />}
           </Button>
         </div>

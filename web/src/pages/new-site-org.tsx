@@ -1,5 +1,5 @@
-import type { AccessReport, AccessResult, ClaudeEffort, ClaudeUsage, ClaudeModel, ClaudeRun, ClaudeStep, OrgRepo, OrgStatus, Prefill, ReadResult, RepoFacts, UploadResult } from '@devmagic-panel/shared';
-import { accessKey, CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE_STEPS, gitlabHost, namespaceShortLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, repoWeb } from '@devmagic-panel/shared';
+import type { AccessReport, ClaudeUsage, ClaudeRun, ClaudeStep, InstallDraft, OrgRepo, OrgStatus, Prefill, RepoFacts, UploadResult } from '@devmagic-panel/shared';
+import { accessKey, DEFAULT_CLAUDE_RUN, LINKS_EFFORT, gitlabHost, namespaceShortLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, repoWeb } from '@devmagic-panel/shared';
 import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, ExternalLink, LoaderCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {} from '@/components/branch-picker';
@@ -11,7 +11,8 @@ import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
 import {} from '@/components/ui/menu';
 import { api } from '@/lib/api';
-import { failureOf, resumeStep, runSource, unskipAccess, usageHover, usageText } from '@/lib/claude-steps';
+import { failureOf, runSource, usageHover, usageText } from '@/lib/claude-steps';
+import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS } from '@/components/claude-run-fields';
 import { bytes } from '@/lib/format';
 import { Link } from '@/lib/router';
 import { toast } from '@/lib/toast';
@@ -27,8 +28,8 @@ export interface OrgState {
   repo: OrgRepo | null;
   read: { status: 'idle' | 'reading' | 'done' | 'error'; facts?: RepoFacts; files?: string[]; error?: string } & Partial<ClaudeUsage>;
   access: { status: 'idle' | 'checking' | 'done' | 'skipped' | 'error'; report?: AccessReport; error?: string } & Partial<ClaudeUsage>;
-  /** This install's own Claude Code settings per step; unset steps use the panel's defaults. */
-  claude?: Partial<Record<ClaudeStep, ClaudeRun>>;
+  /** This install's own Claude Code settings; unset, the step uses your defaults. */
+  run?: ClaudeRun;
   /** The wizard's answers from the docs and the dump, once the dump is in. */
   prefill?: Prefill;
   /** The other repos you picked in this install, by full name, as you left them (lib/org-repos). */
@@ -197,28 +198,51 @@ export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?
   );
 }
 
-// ── 2. What the repo says ────────────────────────────────────
+// ── 2. Claude reads the project ──────────────────────────────
 
-export function ReadStep({ state, setState, onSkip, status, draftId, saveNow }: { state: WizardState; setState: SetState; onSkip: () => void; status: OrgStatus | null; draftId: string; saveNow: () => Promise<unknown> }) {
+const withoutKey = <T extends { key: string }>({ key: _key, ...rest }: T) => rest;
+
+/**
+ * The one Claude Code step: it reads the repo, then checks the links its docs
+ * name, as one job. The repo's answer shows as soon as it is in, while the
+ * links are still checked. Both answers are kept on the draft, so coming back
+ * runs nothing again, and either part can be skipped.
+ */
+export function ProjectReadStep({ state, setState, onSkip, status, draftId, saveNow }: { state: WizardState; setState: SetState; onSkip: () => void; status: OrgStatus | null; draftId: string; saveNow: () => Promise<unknown> }) {
   const org = state.org as OrgState;
   const repo = org.repo as OrgRepo;
   const key = readKey(repo.fullName, state.branch);
   const job = useJob();
   const started = useRef<string | null>(null);
-  const take = ({ key: _key, ...r }: ReadResult) => setOrg(setState, (o) => ({ ...o, read: { status: 'done', ...r }, access: { status: 'idle' } }));
-  const fail = (error: string) => setOrg(setState, (o) => ({ ...o, read: { status: 'error', error } }));
+  const linksKeyOf = (facts?: RepoFacts) => accessKey(repo.fullName, linksOf(facts), facts?.dumpHints ?? []);
 
+  /** What the draft keeps for this repo and its links, into the wizard; failed is why the job stopped, when it did. */
+  const takeDraft = (draft: InstallDraft | null, failed?: string) =>
+    setOrg(setState, (o) => {
+      const read = draft?.results?.read?.key === key ? draft.results.read : undefined;
+      if (!read) return { ...o, read: { status: 'error', error: failed ?? 'The answer was not kept: read it again' } };
+      const kept = draft?.results?.access;
+      const access: OrgState['access'] =
+        linksOf(read.facts).length === 0 ? { status: 'skipped' }
+          : kept?.key === linksKeyOf(read.facts) ? { status: 'done', ...withoutKey(kept) }
+            : failed ? { status: 'error', error: failed }
+              : { status: 'skipped' };
+      return { ...o, read: { status: 'done', ...withoutKey(read) }, access };
+    });
+
+  /** Runs the job: the repo's answer, when the draft keeps it, is used again at no cost, so only the links run. */
   async function start() {
     if (!status) return;
-    setOrg(setState, (o) => ({ ...o, read: { status: 'reading' } }));
+    setOrg(setState, (o) => (o.read.status === 'done' ? { ...o, access: { status: 'checking' } } : { ...o, read: { status: 'reading' }, access: { status: 'idle' } }));
     // The job notes itself on the draft, so the draft is saved first.
     await saveNow().catch(() => undefined);
-    void job.follow(api.startJob('org.readRepo', { draftId, url: repo.sshUrl, branch: state.branch, fullName: repo.fullName, settings: runFor(org, status, 'read') }));
+    void job.follow(api.startJob('org.readProject', { draftId, url: repo.sshUrl, branch: state.branch, fullName: repo.fullName, settings: runFor(org, status) }));
   }
 
-  // Opening the step, or coming back to it: the answer kept for this repo and branch, the job still reading it, or a new run.
+  // Opening the step, or coming back to it: the answers kept for this repo and its links, the job still working, or a new run.
+  const waiting = org.read.status === 'idle' || org.read.status === 'reading' || org.access.status === 'checking';
   useEffect(() => {
-    if ((org.read.status !== 'idle' && org.read.status !== 'reading') || started.current === key || !status) return;
+    if (!waiting || started.current === key || !status) return;
     let live = true;
     void (async () => {
       const draft = await api.draft(draftId).catch(() => null);
@@ -226,34 +250,48 @@ export function ReadStep({ state, setState, onSkip, status, draftId, saveNow }: 
       const view = noted ? await api.job(noted.id).catch(() => null) : null;
       if (!live) return;
       started.current = key;
-      const next = resumeStep(key, draft?.results?.read, noted, view);
-      if (next.use === 'answer' && draft?.results?.read) take(draft.results.read);
-      else if (next.use === 'failed') fail(next.reason);
-      else if (next.use === 'follow') void job.follow(Promise.resolve(next.jobId));
-      else await start();
+      const mine = noted?.key === key ? view : null;
+      if (mine && (mine.status === 'running' || mine.status === 'queued')) return void job.follow(Promise.resolve(mine.id));
+      const kept = draft?.results?.read?.key === key ? draft.results.read : undefined;
+      const linksDone = kept && (linksOf(kept.facts).length === 0 || draft?.results?.access?.key === linksKeyOf(kept.facts));
+      const failed = mine?.status === 'failed' ? failureOf(mine) : undefined;
+      if (failed || linksDone) return takeDraft(draft, failed);
+      await start();
     })();
     return () => {
       live = false;
     };
-  }, [org.read.status, key, status]);
+  }, [waiting, key, status]);
 
-  // The job ended: its answer is on the draft.
+  // The repo is read while the links are still checked: its answer shows at once.
+  const readStep = job.job?.steps.find((s) => s.id === 'read')?.status;
+  useEffect(() => {
+    if (readStep !== 'done' || org.read.status === 'done' || !job.job || settled(job.job)) return;
+    void api.draft(draftId).then((d) => {
+      const read = d.results?.read?.key === key ? d.results.read : undefined;
+      if (read) setOrg(setState, (o) => ({ ...o, read: { status: 'done', ...withoutKey(read) }, access: linksOf(read.facts).length > 0 ? { status: 'checking' } : { status: 'skipped' } }));
+    }, () => undefined);
+  }, [readStep]);
+
+  // The job ended: its answers are on the draft.
   useEffect(() => {
     const view = job.job;
     if (!view || !settled(view)) return;
-    if (view.status !== 'done') return fail(failureOf(view));
-    api.draft(draftId).then((d) => (d.results?.read?.key === key ? take(d.results.read) : fail('The answer was not kept: read it again')), (err: Error) => fail(err.message));
+    api.draft(draftId).then((d) => takeDraft(d, view.status === 'done' ? undefined : failureOf(view)), (err: Error) => takeDraft(null, err.message));
   }, [job.job?.status]);
   useEffect(() => {
-    if (job.error) fail(job.error);
+    if (job.error) takeDraft(null, job.error);
   }, [job.error]);
 
-  // Once the links are checked, nothing more runs: their answer is kept.
-  const card = status && <ClaudeCard status={status} org={org} setState={setState} next={org.access.status === 'done' ? null : 'access'} />;
+  const card = status && <ClaudeRunCard status={status} org={org} />;
+  const goOn = <Button variant="ghost" size="sm" className="w-fit" onClick={onSkip}>Go on without Claude</Button>;
   if (org.read.status === 'reading' || org.read.status === 'idle') {
     return (
       <WithClaudeCard card={card}>
-        <Working title={`Claude Code is reading the README files, docs and build files of ${repo.fullName}...`} job={job.job} />
+        <div className="grid max-w-3xl gap-3">
+          <Working title={`Claude Code is reading the README files, docs and build files of ${repo.fullName}...`} job={job.job} />
+          {goOn}
+        </div>
       </WithClaudeCard>
     );
   }
@@ -262,7 +300,10 @@ export function ReadStep({ state, setState, onSkip, status, draftId, saveNow }: 
       <WithClaudeCard card={card}>
         <div className="grid max-w-3xl gap-3">
           <Notice tone="danger">{org.read.error}</Notice>
-          <Button variant="outline" className="w-fit" onClick={() => void start()}><RefreshCw />Read it again</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" className="w-fit" onClick={() => void start()}><RefreshCw />Read it again</Button>
+            {goOn}
+          </div>
         </div>
       </WithClaudeCard>
     );
@@ -277,159 +318,84 @@ export function ReadStep({ state, setState, onSkip, status, draftId, saveNow }: 
     ['Local setup in the docs', f.docsLocalSetup, 'docsLocalSetup'],
   ];
   const links = linksOf(f);
+  const report = org.access.report;
   return (
     <WithClaudeCard card={card}>
-    <div className="grid max-w-3xl gap-5">
-      <p className="text-sm text-muted-foreground">
-        From {org.read.files?.length ? org.read.files.join(', ') : 'no doc files: the repo has none'}. Next, the links are checked for the dump, which gives the domains and network.
-      </p>
-      <DoneActivity lines={org.read.activity} />
-      <dl className="grid gap-2 rounded-lg border bg-card p-4 text-sm sm:grid-cols-[12rem_1fr]">
-        {rows.map(([label, value, field]) => (
-          <div key={label} className="contents">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className={cn(!value && 'text-muted-foreground')}>
-              {value ?? 'Not found'}
-              {value && source(field) && <span className="ml-2 text-xs text-muted-foreground">from {source(field)}</span>}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {f.notes.length > 0 && <ul className="grid list-disc gap-1 pl-5 text-sm">{f.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
-      <div role="status" className="grid gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-        {links.length > 0 && org.access.status === 'done' ? (
-          <p>
-            <span className="font-medium">The links are checked already:</span> {org.access.report?.links.filter((l) => l.status === 'ok').length ?? 0} of {org.access.report?.links.length ?? 0} open, {org.access.report?.dumps.length ?? 0} {org.access.report?.dumps.length === 1 ? 'dump' : 'dumps'} found. Continue shows the answer; nothing runs again.
+      <div className="grid max-w-3xl gap-5">
+        <section className="grid gap-3" aria-label="What the repo says">
+          <h3 className="text-sm font-medium">What the repo says</h3>
+          <p className="text-sm text-muted-foreground">From {org.read.files?.length ? org.read.files.join(', ') : 'no doc files: the repo has none'}.</p>
+          <DoneActivity lines={org.read.activity} />
+          <dl className="grid gap-2 rounded-lg border bg-card p-4 text-sm sm:grid-cols-[12rem_1fr]">
+            {rows.map(([label, value, field]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className={cn(!value && 'text-muted-foreground')}>
+                  {value ?? 'Not found'}
+                  {value && source(field) && <span className="ml-2 text-xs text-muted-foreground">from {source(field)}</span>}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {f.notes.length > 0 && <ul className="grid list-disc gap-1 pl-5 text-sm">{f.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+        </section>
+
+        <section className="grid gap-3 border-t pt-5" aria-label="The links and the dumps">
+          <h3 className="text-sm font-medium">The links and the dumps</h3>
+          {links.length === 0 && <p className="text-sm text-muted-foreground">The docs link no Asana tasks or Google files, so there is nothing to check.</p>}
+          {org.access.status === 'checking' && (
+            <>
+              <Working title={`Claude Code is checking ${links.length} ${links.length === 1 ? 'link' : 'links'} with your claude.ai account, read-only...`} job={job.job} />
+              <Button variant="ghost" size="sm" className="w-fit" onClick={() => setOrg(setState, (o) => ({ ...o, access: { status: 'skipped' } }))}>Skip the links and pick a dump myself</Button>
+            </>
+          )}
+          {org.access.status === 'error' && (
+            <div className="grid gap-2">
+              <Notice tone="danger">{org.access.error}</Notice>
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <Button variant="outline" size="sm" className="w-fit" onClick={() => void start()}><RefreshCw />Check the links again</Button>
+                <span className="text-muted-foreground">Or go on and pick the dump yourself.</span>
+              </div>
+            </div>
+          )}
+          {org.access.status === 'skipped' && links.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
+              <p className="min-w-0 flex-1">
+                The {links.length === 1 ? 'link was' : `${links.length} links were`} not checked, so pick the dump yourself on the next step.{' '}
+                <span className="text-muted-foreground">Checking them brings back an answer kept for them at no cost, or runs Claude Code once, at most ${(status ? runFor(org, status) : DEFAULT_CLAUDE_RUN).budgetUsd.toFixed(2)}.</span>
+              </p>
+              <Button size="sm" variant="outline" onClick={() => void start()}><Sparkles />Check the links</Button>
+            </div>
+          )}
+          {report && (
+            <>
+              <ul className="grid gap-1.5 rounded-lg border bg-card p-4 text-sm">
+                {report.links.map((l) => (
+                  <li key={l.url} className="flex items-start gap-2">
+                    {l.status === 'ok' ? <Check className="mt-0.5 size-4 shrink-0 text-success" /> : <CircleX className="mt-0.5 size-4 shrink-0 text-danger" />}
+                    <span className="min-w-0">
+                      <span className="font-medium">{l.title ?? (l.status === 'no-access' ? 'No access' : 'Not found')}</span>{' '}
+                      <a href={l.url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-muted-foreground hover:underline">{l.url}</a>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {report.facts.length > 0 && (
+                <ul className="grid list-disc gap-1 pl-5 text-sm">{report.facts.map((fact) => <li key={fact.text}>{fact.text} <span className="text-xs text-muted-foreground">({fact.source})</span></li>)}</ul>
+              )}
+              <DoneActivity lines={org.access.activity} />
+            </>
+          )}
+        </section>
+
+        {org.access.status !== 'checking' && (
+          <p className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+            {report?.dumps.length
+              ? `Next, pick the dump: Claude found ${report.dumps.length === 1 ? 'one' : report.dumps.length} in Google Drive, and every other way to get one is there too.`
+              : 'Next, pick the database dump: upload it, take it from your Downloads folder, a cloud drive, a URL or a server, or go on without one.'}
           </p>
-        ) : links.length > 0 ? (
-          <>
-            <p className="font-medium">
-              {org.access.status === 'skipped'
-                ? 'You skipped the access check. Check access runs it after all, or brings back the answer kept for these links at no cost.'
-                : 'Next, Claude checks your access to the linked Asana tasks and Google Docs and Drive files, with your claude.ai account. It only reads them.'}
-            </p>
-            <ul className="grid gap-1">{links.map((l) => <li key={l} className="truncate font-mono text-[12px] text-muted-foreground" title={l}>{l}</li>)}</ul>
-            <p className="text-muted-foreground">It looks for facts for the install and the database dumps in Drive, by name, size and date only.</p>
-            <Button variant="ghost" size="sm" className="w-fit" onClick={onSkip}>Skip it and pick a dump myself</Button>
-          </>
-        ) : (
-          <p>The docs link no Asana tasks or Google files. Next, pick the database dump.</p>
         )}
       </div>
-    </div>
-    </WithClaudeCard>
-  );
-}
-
-// ── 3. The links and the dump ────────────────────────────────
-
-export function AccessStep({ state, setState, status, cores, draftId, saveNow }: { state: WizardState; setState: SetState; status: OrgStatus | null; cores: string[]; draftId: string; saveNow: () => Promise<unknown> }) {
-  const org = state.org as OrgState;
-  const repo = org.repo as OrgRepo;
-  const links = linksOf(org.read.facts);
-  const hints = org.read.facts?.dumpHints ?? [];
-  const key = accessKey(repo.fullName, links, hints);
-  const check = useJob();
-  const started = useRef<string | null>(null);
-
-  const take = ({ key: _key, ...r }: AccessResult) => setOrg(setState, (o) => ({ ...o, access: { status: 'done', ...r } }));
-  const fail = (error: string) => setOrg(setState, (o) => ({ ...o, access: { status: 'error', error } }));
-
-  // Check the links after a skip: the step looks again, as when it opens.
-  const recheck = () => {
-    started.current = null;
-    setOrg(setState, (o) => ({ ...o, access: unskipAccess(o.access) }));
-  };
-
-  async function start() {
-    if (!status) return;
-    setOrg(setState, (o) => ({ ...o, access: { status: 'checking' } }));
-    await saveNow().catch(() => undefined);
-    void check.follow(api.startJob('org.checkAccess', { draftId, fullName: repo.fullName, links, dumpHints: hints, settings: runFor(org, status, 'access') }));
-  }
-
-  // Opening the step, or coming back to it: the answer kept for these links, the job still checking them, or a new run.
-  useEffect(() => {
-    if ((org.access.status !== 'idle' && org.access.status !== 'checking') || started.current === key || !status) return;
-    if (links.length === 0) {
-      setOrg(setState, (o) => ({ ...o, access: { status: 'skipped' } }));
-      return;
-    }
-    let live = true;
-    void (async () => {
-      const draft = await api.draft(draftId).catch(() => null);
-      const noted = draft?.jobs?.access;
-      const view = noted ? await api.job(noted.id).catch(() => null) : null;
-      if (!live) return;
-      started.current = key;
-      const next = resumeStep(key, draft?.results?.access, noted, view);
-      if (next.use === 'answer' && draft?.results?.access) take(draft.results.access);
-      else if (next.use === 'failed') fail(next.reason);
-      else if (next.use === 'follow') void check.follow(Promise.resolve(next.jobId));
-      else await start();
-    })();
-    return () => {
-      live = false;
-    };
-  }, [org.access.status, key, status]);
-
-  useEffect(() => {
-    const view = check.job;
-    if (!view || !settled(view)) return;
-    if (view.status !== 'done') return fail(failureOf(view));
-    api.draft(draftId).then((d) => (d.results?.access?.key === key ? take(d.results.access) : fail('The answer was not kept: check again')), (err: Error) => fail(err.message));
-  }, [check.job?.status]);
-  useEffect(() => {
-    if (check.error) fail(check.error);
-  }, [check.error]);
-
-  return (
-    <WithClaudeCard card={status && <ClaudeCard status={status} org={org} setState={setState} next={org.access.status === 'skipped' && links.length > 0 ? 'access' : null} />}>
-    <div className="grid max-w-3xl gap-5">
-      {org.access.status === 'checking' && <Working title={`Claude Code is checking ${links.length} links with your claude.ai account...`} job={check.job} />}
-      {org.access.status === 'error' && (
-        <div className="grid gap-2">
-          <Notice tone="danger">{org.access.error}</Notice>
-          <Button variant="outline" size="sm" className="w-fit" onClick={() => void start()}><RefreshCw />Check again</Button>
-        </div>
-      )}
-      {org.access.status === 'skipped' && links.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
-          <p className="min-w-0 flex-1">
-            You skipped the access check, so pick the dump below.{' '}
-            <span className="text-muted-foreground">Checking the links brings back an answer kept for them at no cost, or runs Claude Code once, at most ${(status ? runFor(org, status, 'access') : DEFAULT_CLAUDE_STEPS.access).budgetUsd.toFixed(2)}.</span>
-          </p>
-          <Button size="sm" variant="outline" onClick={recheck}><Sparkles />Check the links</Button>
-        </div>
-      )}
-      {org.access.report && (
-        <>
-          <ul className="grid gap-1.5 rounded-lg border bg-card p-4 text-sm">
-            {org.access.report.links.map((l) => (
-              <li key={l.url} className="flex items-start gap-2">
-                {l.status === 'ok' ? <Check className="mt-0.5 size-4 shrink-0 text-success" /> : <CircleX className="mt-0.5 size-4 shrink-0 text-danger" />}
-                <span className="min-w-0">
-                  <span className="font-medium">{l.title ?? (l.status === 'no-access' ? 'No access' : 'Not found')}</span>{' '}
-                  <a href={l.url} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-muted-foreground hover:underline">{l.url}</a>
-                </span>
-              </li>
-            ))}
-          </ul>
-          {org.access.report.facts.length > 0 && (
-            <ul className="grid list-disc gap-1 pl-5 text-sm">{org.access.report.facts.map((f) => <li key={f.text}>{f.text} <span className="text-xs text-muted-foreground">({f.source})</span></li>)}</ul>
-          )}
-          <DoneActivity lines={org.access.activity} />
-        </>
-      )}
-
-      {(org.access.status === 'done' || org.access.status === 'skipped') && (
-        <p className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-          {org.access.report?.dumps.length
-            ? `Next, pick the dump: Claude found ${org.access.report.dumps.length === 1 ? 'one' : org.access.report.dumps.length} in Google Drive, and every other way to get one is there too.`
-            : 'Next, pick the database dump: upload it, take it from your Downloads folder, a cloud drive or a URL, or go on without one.'}
-        </p>
-      )}
-    </div>
     </WithClaudeCard>
   );
 }
@@ -513,93 +479,23 @@ function DoneActivity({ lines }: { lines: string[] | undefined }) {
   );
 }
 
-/** The settings a Claude Code step runs with: this install's own, or the panel's defaults. */
-export const runFor = (org: OrgState, status: OrgStatus, step: ClaudeStep): ClaudeRun => org.claude?.[step] ?? status.settings[step];
+/** The settings the Claude Code step runs with: this install's own, or your defaults. */
+export const runFor = (org: OrgState, status: OrgStatus): ClaudeRun => org.run ?? status.settings.run;
 
-export const CLAUDE_MODEL_LABELS: Record<ClaudeModel, string> = { haiku: 'Haiku', sonnet: 'Sonnet', opus: 'Opus' };
-export const CLAUDE_EFFORT_LABELS: Record<ClaudeEffort, string> = { low: 'Low', medium: 'Medium', high: 'High' };
-export const CLAUDE_STEP_LABELS: Record<ClaudeStep, string> = { read: 'Read the repo', access: 'Links and dump' };
-
-/** What each Claude Code step does, for the card that sets it up the step before. */
-const NEXT_STEP: Record<ClaudeStep, { text: string; then?: string }> = {
-  read: { text: "Claude Code reads the repo's README, docs and build files and fills in this install.", then: 'You can change these again before Links and dump.' },
-  access: { text: 'Claude Code opens the linked Asana tasks and Google files read-only, collects facts for this install and lists the database dumps in Drive.' },
-};
-
-/** A model or effort with "recommended" when it is the default this step was tuned for. */
-const recommended = (step: ClaudeStep, field: 'model' | 'effort', value: string, label: string) => (DEFAULT_CLAUDE_STEPS[step][field] === value ? `${label} (recommended)` : label);
+/** The two parts of the step, as their costs are listed. */
+const PART_LABELS: Record<ClaudeStep, string> = { read: 'Read the repo', access: 'Links and dumps' };
 
 /**
- * The Claude Code card beside the organization steps: the model, effort and
- * spending cap for the next Claude step of this install, what that step does,
- * and what the runs cost so far. Changes stay with this install unless you
- * make them your defaults.
+ * The Claude Code card beside the step: how it is signed in, what the step
+ * runs with (set on the Code step, or under Settings for every install) and
+ * what its two parts cost so far.
  */
-/** What your defaults are, where they are kept and what they apply to, behind a question mark on the Claude Code card. */
-function DefaultsHelp() {
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
-    const escape = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('mousedown', away);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [open]);
-  return (
-    <div ref={box} className="relative shrink-0">
-      <button type="button" aria-label="About your defaults" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="rounded-full p-0.5 hover:bg-foreground/8 hover:text-foreground">
-        <CircleHelp className="size-3.5" />
-      </button>
-      {open && (
-        <div role="dialog" aria-label="About your defaults" className="absolute right-0 bottom-full z-30 mb-2 grid w-64 gap-2 rounded-lg border bg-card p-3 text-xs text-muted-foreground shadow-lg">
-          <p><span className="font-medium text-foreground">Your defaults</span> are the model, effort and spending cap for each Claude Code step. They are under <Link href="/settings" className="font-medium text-primary hover:underline">Settings</Link>, and kept in <code className="font-mono text-[11px] break-all">~/.config/devmagic-panel/organizations.json</code>.</p>
-          <p>They apply to the next Claude Code step of every install that has not changed its own here, this one included.</p>
-          <p><span className="font-medium text-foreground">Use as my defaults</span> saves what this card shows as your defaults. <span className="font-medium text-foreground">Back to my defaults</span> drops this install's own values.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function ClaudeCard({ status, org, setState, next }: { status: OrgStatus; org: OrgState; setState: SetState; next: ClaudeStep | null }) {
-  const value = next ? runFor(org, status, next) : null;
-  const [cap, setCap] = useState(String(value?.budgetUsd ?? ''));
-  const [saving, setSaving] = useState(false);
-  useEffect(() => setCap(String(value?.budgetUsd ?? '')), [next, value?.budgetUsd]);
-  const set = (patch: Partial<ClaudeRun>) => {
-    if (!next || !value) return;
-    setOrg(setState, (o) => ({ ...o, claude: { ...o.claude, [next]: { ...value, ...patch } } }));
-  };
-  const source = next ? runSource(org.claude?.[next], status.settings[next]) : 'defaults';
-  // This install follows your defaults again for the next step.
-  const followDefaults = () => {
-    if (!next) return;
-    setOrg(setState, (o) => {
-      const { [next]: _own, ...rest } = o.claude ?? {};
-      return { ...o, claude: rest };
-    });
-  };
-  async function makeDefault() {
-    if (!next || !value) return;
-    setSaving(true);
-    try {
-      Object.assign(status.settings, await api.saveOrgSettings({ ...status.settings, [next]: value }));
-      followDefaults();
-      toast({ tone: 'success', title: `Saved as your defaults for ${CLAUDE_STEP_LABELS[next]}`, detail: 'They show under Environment, Settings, in Claude Code for installs.' });
-    } catch (err) {
-      toast({ tone: 'danger', title: 'Not saved', detail: (err as Error).message });
-    } finally {
-      setSaving(false);
-    }
-  }
-  const costs = (['read', 'access'] as const).flatMap((step) => {
-    const run = step === 'read' ? org.read : org.access;
-    return typeof run.costUsd === 'number' ? [{ label: CLAUDE_STEP_LABELS[step], usage: run as ClaudeUsage }] : [];
+export function ClaudeRunCard({ status, org }: { status: OrgStatus; org: OrgState }) {
+  const run = runFor(org, status);
+  const own = runSource(org.run, status.settings.run) === 'install';
+  const costs = (['read', 'access'] as const).flatMap((part) => {
+    const usage = part === 'read' ? org.read : org.access;
+    return typeof usage.costUsd === 'number' ? [{ label: PART_LABELS[part], usage: usage as ClaudeUsage }] : [];
   });
   return (
     <aside aria-label="Claude Code" className="grid gap-4 rounded-xl border bg-card p-4 text-sm lg:sticky lg:top-4">
@@ -614,54 +510,21 @@ export function ClaudeCard({ status, org, setState, next }: { status: OrgStatus;
           {status.claude.claudeAi ? 'Signed in with claude.ai' : 'Signed in without claude.ai: Asana and Google links need it'}
         </p>
       </div>
-      {next && value ? (
-        <>
-          <div className="grid gap-1 rounded-lg bg-muted/60 p-3 text-xs">
-            <p className="font-medium text-foreground">Used for the next step: {CLAUDE_STEP_LABELS[next]}</p>
-            <p className="text-muted-foreground">{NEXT_STEP[next].text}</p>
-            {NEXT_STEP[next].then && <p className="text-muted-foreground">{NEXT_STEP[next].then}</p>}
-          </div>
-          <Field htmlFor="claude-model" label="Model">
-            <Select id="claude-model" value={value.model} onChange={(e) => set({ model: e.target.value as ClaudeModel })}>
-              {CLAUDE_MODELS.map((m) => <option key={m} value={m}>{recommended(next, 'model', m, CLAUDE_MODEL_LABELS[m])}</option>)}
-            </Select>
-          </Field>
-          <Field htmlFor="claude-effort" label="Effort" hint="Higher thinks longer and costs more.">
-            <Select id="claude-effort" value={value.effort} onChange={(e) => set({ effort: e.target.value as ClaudeEffort })}>
-              {CLAUDE_EFFORTS.map((m) => <option key={m} value={m}>{recommended(next, 'effort', m, CLAUDE_EFFORT_LABELS[m])}</option>)}
-            </Select>
-          </Field>
-          <Field htmlFor="claude-cap" label="Spending cap per run, $" hint="From $0.05 to $5.">
-            <Input
-              id="claude-cap"
-              type="number"
-              min={0.05}
-              max={5}
-              step={0.05}
-              value={cap}
-              onChange={(e) => setCap(e.target.value)}
-              onBlur={() => set({ budgetUsd: Math.min(5, Math.max(0.05, Number(cap) || value.budgetUsd)) })}
-            />
-          </Field>
-          <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-            <p className="min-w-0 flex-1">
-              {source === 'defaults' ? (
-                'Your defaults. A change here is for this install only.'
-              ) : (
-                <>
-                  Changed for this install.{' '}
-                  <button type="button" disabled={saving} onClick={() => void makeDefault()} className="font-medium text-primary hover:underline disabled:opacity-50">Use as my defaults</button>
-                  {' · '}
-                  <button type="button" disabled={saving} onClick={followDefaults} className="font-medium text-foreground hover:underline disabled:opacity-50">Back to my defaults</button>
-                </>
-              )}
-            </p>
-            <DefaultsHelp />
-          </div>
-        </>
-      ) : (
-        <p className="text-xs text-muted-foreground">No more Claude Code steps for this install.</p>
-      )}
+      <div className="grid gap-2 rounded-lg bg-muted/60 p-3 text-xs">
+        <p className="font-medium text-foreground">This step runs with</p>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+          <dt className="text-muted-foreground">Model</dt>
+          <dd className="text-right">{CLAUDE_MODEL_LABELS[run.model]}</dd>
+          <dt className="text-muted-foreground">Effort</dt>
+          <dd className="text-right">{CLAUDE_EFFORT_LABELS[run.effort]} for the repo, {CLAUDE_EFFORT_LABELS[LINKS_EFFORT].toLowerCase()} for links</dd>
+          <dt className="text-muted-foreground">Spending cap</dt>
+          <dd className="text-right">${run.budgetUsd.toFixed(2)} for both</dd>
+        </dl>
+        <p className="text-muted-foreground">
+          {own ? 'Changed for this install on the Code step.' : <>Your defaults, from <Link href="/settings" className="font-medium text-primary hover:underline">Settings</Link>. The Code step changes them for one install.</>}
+        </p>
+      </div>
+      <p className="text-xs text-muted-foreground">Read-only: it reads the repo&apos;s docs, never wp-config.php or .env, and only opens the links those docs name.</p>
       {costs.length > 0 && (
         <div className="grid gap-2 border-t pt-3 text-xs">
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">

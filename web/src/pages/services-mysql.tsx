@@ -662,7 +662,7 @@ function ImportDumpCard({ databases, onDone }: { databases: MysqlDatabase[]; onD
         <CardHeader><CardTitle>Import a dump</CardTitle><Upload className="size-4 text-muted-foreground" /></CardHeader>
         <div className="grid gap-4 p-5">
           <p className="text-sm text-muted-foreground">
-            A .sql, .sql.gz or .zip into a new database, or into one no site uses. Its own CREATE DATABASE and USE lines are left out, so it changes no other database. For a site, use Import a dump on the site&apos;s Database tab, which also replaces production addresses.
+            A .sql, .sql.gz or .zip into a new database, or into one no site uses. Its own CREATE DATABASE and USE lines are left out, so it changes no other database. For a site, use Import a database on the site&apos;s Database tab, which also replaces production addresses.
           </p>
           <input ref={fileInput} id="mysql-import-file" type="file" accept=".sql,.gz,.zip" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
           <div className="flex flex-wrap items-center gap-2">

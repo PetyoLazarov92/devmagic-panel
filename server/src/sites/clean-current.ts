@@ -11,7 +11,7 @@ import { sqlModeStatement } from './sql-stream.js';
 import { canKeep, dropSide, KEEP_DAYS, keepName, makeSide, sideName, swapIn } from './swap.js';
 
 /**
- * Clean this database: the clean-up of Prepare from production on the
+ * Clean this database: the clean-up of a cleaned import on the
  * database a site has now, like a production one imported before. It is
  * copied into a side database on the MySQL server (no dump file), cleaned
  * there with SQL while the site keeps working, then swapped in with the
@@ -138,7 +138,7 @@ async function copyToSide(target: LimitsTarget, db: string, prefix: string, stat
   return [{ code: 0, stdout: `copied ${tables.length} tables into ${side}${leftOut.length > 0 ? `, ${leftOut.length} of them without their rows` : ''}`, stderr: '' }];
 }
 
-/** The job: copy, clean, swap, then the plugins, the user and a flush, as after Prepare from production. */
+/** The job: copy, clean, swap, then the plugins, the user and a flush, as after a cleaned import. */
 export function planCleanCurrent(ctx: CleanContext, { domain, path, user }: ActionInput<'db.cleanCurrent'>): JobStep[] {
   const { site, wp } = wordpressSite(ctx, domain, path);
   const target = isLocalDbHost(site.wp.dbHost) ? limitsTarget(ctx.exec, ctx.secrets?.mysql, ctx.store) : null;

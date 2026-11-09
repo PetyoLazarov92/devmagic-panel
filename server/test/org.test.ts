@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Site } from '@devmagic-panel/shared';
-import { DEFAULT_CLAUDE_STEPS, DEFAULT_ORG_SETTINGS, orgSettingsInput } from '@devmagic-panel/shared';
+import { DEFAULT_CLAUDE_RUN, DEFAULT_ORG_SETTINGS, orgSettingsInput } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { runAction, type ActionContext } from '../src/actions.js';
 import { Drafts } from '../src/drafts.js';
@@ -588,6 +588,78 @@ describe('Claude Code steps as jobs', () => {
     expect(s.drafts.get(DRAFT)?.jobs?.access?.id).toBe(other.data?.jobId);
   });
 
+  describe('the one step, org.readProject', () => {
+    const REPORT = { links: [{ url: 'https://app.asana.com/0/1/2', status: 'ok', title: 'Local setup' }], facts: [], dumps: [] };
+    const project = { draftId: DRAFT, url: 'git@github.com:wandworks/site.git', branch: 'main', fullName: 'wandworks/site', settings: SETTINGS };
+    // Claude Code answers the repo's form first, then the links' report.
+    const claude = (read: ReturnType<typeof answer>) => {
+      let runs = 0;
+      return () => (runs++ === 0 ? read : answer(REPORT));
+    };
+    const budgetOf = (args: string[]) => args.slice(1, 7);
+
+    it('reads the repo, then checks its links at low effort with what is left of the cap, in one job', async () => {
+      const s = setup();
+      const fake = fakeExec({ ...repoGit, [s.bin]: claude(answer(FACTS)) });
+      const started = await runAction(s.ctxOf(fake.exec), 'org.readProject', project);
+      const view = await settle(s.jobs, started.data?.jobId ?? '');
+      expect(view).toMatchObject({ status: 'done', kind: 'org.readProject', target: DRAFT });
+      expect(view.steps.map((x) => [x.id, x.status])).toEqual([['read', 'done'], ['access', 'done']]);
+      const runs = fake.calls.filter((c) => c.file === s.bin);
+      expect(runs.map((c) => budgetOf(c.args))).toEqual([
+        ['--model', 'sonnet', '--effort', 'medium', '--max-budget-usd', '0.5'],
+        ['--model', 'sonnet', '--effort', 'low', '--max-budget-usd', '0.48'],
+      ]);
+      const draft = s.drafts.get(DRAFT);
+      expect(draft?.jobs?.read).toEqual({ id: view.id, key: 'wandworks/site@main' });
+      expect(draft?.results?.read).toMatchObject({ key: 'wandworks/site@main', files: ['README.md'], costUsd: 0.02 });
+      expect(draft?.results?.access?.report.links[0]?.status).toBe('ok');
+
+      // The same repo and links again: both answers are kept, so Claude Code does not run.
+      const again = await runAction(s.ctxOf(fake.exec), 'org.readProject', project);
+      const second = await settle(s.jobs, again.data?.jobId ?? '');
+      expect(second.steps.map((x) => x.output)).toEqual(['the answer kept for wandworks/site (main) is used: nothing ran', 'the answer kept for these links is used: nothing ran']);
+      expect(fake.calls.filter((c) => c.file === s.bin)).toHaveLength(2);
+    });
+
+    it('leaves the links alone when the docs name none, or when asked to', async () => {
+      const none = setup();
+      const quiet = fakeExec({ ...repoGit, [none.bin]: claude(answer({ ...FACTS, asanaLinks: [], googleLinks: [] })) });
+      const first = await settle(none.jobs, (await runAction(none.ctxOf(quiet.exec), 'org.readProject', project)).data?.jobId ?? '');
+      expect(first.steps[1]).toMatchObject({ status: 'done', output: 'the docs link no Asana tasks or Google files: nothing to check' });
+      expect(quiet.calls.filter((c) => c.file === none.bin)).toHaveLength(1);
+
+      const asked = setup();
+      const fake = fakeExec({ ...repoGit, [asked.bin]: claude(answer(FACTS)) });
+      const view = await settle(asked.jobs, (await runAction(asked.ctxOf(fake.exec), 'org.readProject', { ...project, checkLinks: false })).data?.jobId ?? '');
+      expect(view.steps[1]).toMatchObject({ status: 'done', output: 'the links are left unchecked, as asked' });
+      expect(asked.drafts.get(DRAFT)?.results?.access).toBeUndefined();
+    });
+
+    it('keeps the repo answer and says so when reading used the whole cap, then gives the links the whole cap', async () => {
+      const s = setup();
+      const fake = fakeExec({ ...repoGit, [s.bin]: claude(answer(FACTS, { total_cost_usd: 0.5 })) });
+      const view = await settle(s.jobs, (await runAction(s.ctxOf(fake.exec), 'org.readProject', project)).data?.jobId ?? '');
+      expect(view.status).toBe('failed');
+      expect(view.steps[1]).toMatchObject({ status: 'failed', output: expect.stringContaining('so the links were not checked') });
+      expect(s.drafts.get(DRAFT)?.results?.read?.costUsd).toBe(0.5);
+      expect(fake.calls.filter((c) => c.file === s.bin)).toHaveLength(1);
+
+      const again = await settle(s.jobs, (await runAction(s.ctxOf(fake.exec), 'org.readProject', project)).data?.jobId ?? '');
+      expect(again.status).toBe('done');
+      expect(budgetOf(fake.calls.filter((c) => c.file === s.bin)[1]?.args ?? [])).toEqual(['--model', 'sonnet', '--effort', 'low', '--max-budget-usd', '0.5']);
+    });
+
+    it('follows the running job instead of starting a second one', async () => {
+      const s = setup();
+      const held = new Promise<{ stdout: string }>(() => undefined);
+      const fake = fakeExec({ ...repoGit, [s.bin]: () => held });
+      const first = await runAction(s.ctxOf(fake.exec), 'org.readProject', project);
+      const second = await runAction(s.ctxOf(fake.exec), 'org.readProject', project);
+      expect(second.data?.jobId).toBe(first.data?.jobId);
+    });
+  });
+
   it('fail the job with the reason, and refuse without Claude Code', async () => {
     const s = setup();
     const fake = fakeExec({ ...repoGit, [s.bin]: answer(null, { subtype: 'error_max_budget_usd', is_error: true }) });
@@ -627,20 +699,21 @@ describe('organization settings', () => {
     expect(orgSettingsInput.parse({ selected: [], accountsTicked: false }).accountHosts).toEqual([]);
   });
 
-  it('start from the recommended model and effort for each step', () => {
-    expect(orgSettingsInput.parse({ selected: [] })).toEqual({ selected: [], gitlabHosts: [], accountHosts: [], ...DEFAULT_CLAUDE_STEPS });
-    expect(DEFAULT_CLAUDE_STEPS).toEqual({ read: { model: 'sonnet', effort: 'medium', budgetUsd: 0.5 }, access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 } });
+  it('start from the recommended model, effort and one cap for the step', () => {
+    expect(orgSettingsInput.parse({ selected: [] })).toEqual({ selected: [], gitlabHosts: [], accountHosts: [], run: DEFAULT_CLAUDE_RUN });
+    expect(DEFAULT_CLAUDE_RUN).toEqual({ model: 'sonnet', effort: 'medium', budgetUsd: 1 });
   });
 
-  it('carry a model and cap saved before effort came over to both steps', () => {
-    expect(orgSettingsInput.parse({ selected: ['wandworks'], model: 'opus', budgetUsd: 1 })).toEqual({
-      selected: ['wandworks'],
-      gitlabHosts: [],
-      accountHosts: [],
-      read: { model: 'opus', effort: 'medium', budgetUsd: 1 },
-      access: { model: 'opus', effort: 'low', budgetUsd: 1 },
-    });
-    expect(orgSettingsInput.safeParse({ selected: [], read: { model: 'gpt', effort: 'low', budgetUsd: 1 } }).success).toBe(false);
+  it('carry settings saved per step, or as one model and cap before that, over to the one step', () => {
+    // Two steps: the model and effort of reading the repo, and both caps together, never above the most a run may spend.
+    const perStep = { selected: ['wandworks'], read: { model: 'opus', effort: 'high', budgetUsd: 0.3 }, access: { model: 'haiku', effort: 'low', budgetUsd: 0.5 } };
+    expect(orgSettingsInput.parse(perStep)).toEqual({ selected: ['wandworks'], gitlabHosts: [], accountHosts: [], run: { model: 'opus', effort: 'high', budgetUsd: 0.8 } });
+    expect(orgSettingsInput.parse({ ...perStep, read: { ...perStep.read, budgetUsd: 4 }, access: { ...perStep.access, budgetUsd: 4 } }).run.budgetUsd).toBe(5);
+    // Older still: one model and cap for both steps.
+    expect(orgSettingsInput.parse({ selected: [], model: 'opus', budgetUsd: 1 }).run).toEqual({ model: 'opus', effort: 'medium', budgetUsd: 2 });
+    // Today's settings stay as they are, and a model that does not exist is refused.
+    expect(orgSettingsInput.parse({ selected: [], run: { model: 'haiku', effort: 'low', budgetUsd: 0.2 } }).run).toEqual({ model: 'haiku', effort: 'low', budgetUsd: 0.2 });
+    expect(orgSettingsInput.safeParse({ selected: [], run: { model: 'gpt', effort: 'low', budgetUsd: 1 } }).success).toBe(false);
   });
 
   it('take GitLab groups with their host and your own GitLab hosts, and refuse anything else', () => {

@@ -59,19 +59,23 @@ async function setup(server: ReturnType<typeof fakeMysql>, extra: (wp: string) =
 const BEFORE = { shop_com: { wp_options: 'old', wp_posts: 'old', wp_redirection_logs: 'old' } };
 
 describe('an import through a side database', () => {
-  it('imports beside the site, swaps the tables in at once and removes the ones from before when the job ends', async () => {
+  it('imports beside the site, swaps the tables in at once and keeps the ones from before for 7 days', async () => {
     const server = fakeMysql(BEFORE);
     const s = await setup(server);
     const { view } = await s.start();
     expect(view.status).toBe('done');
     expect(view.steps.map((x) => x.id)).toEqual(['import', 'swap', 'replace', 'check', 'flush', 'cleanup']);
-    // The dump's tables in, a table it does not have left alone, and nothing else left behind.
-    expect(server.state()).toEqual({ shop_com: { wp_comments: 'dump', wp_options: 'dump', wp_posts: 'dump', wp_redirection_logs: 'old' } });
+    // The dump's tables in, a table it does not have left alone, and the ones it replaced in a kept database.
+    const kept = Object.keys(server.state()).find((name) => name.startsWith('shop_com__keep')) as string;
+    expect(kept).toMatch(/^shop_com__keep\d{12}$/);
+    expect(server.state()).toEqual({ shop_com: { wp_comments: 'dump', wp_options: 'dump', wp_posts: 'dump', wp_redirection_logs: 'old' }, [kept]: { wp_options: 'old', wp_posts: 'old' } });
+    expect(s.ctx.store.keptDatabases('local.shop.com')).toMatchObject([{ name: kept, db: 'shop_com', reason: 'before importing shop.sql', before: ['wp_options', 'wp_posts', 'wp_redirection_logs'] }]);
     expect(s.calls.find((c) => c.args.includes('--max-allowed-packet=1G'))?.args.at(-1)).toBe('shop_com__import');
     expect(view.steps.find((x) => x.id === 'swap')?.output).toBe(
-      'swapped 3 tables into shop_com at once; the 2 ones they replace wait in shop_com__prev until the job ends, and Undo puts them back; 1 table the dump does not have stayed',
+      `swapped 3 tables into shop_com at once; the 2 ones they replace are kept in ${kept} for 7 days; 1 table the dump does not have stayed`,
     );
-    // No slow export first, and no Undo once the tables from before are gone.
+    expect(view.steps.find((x) => x.id === 'cleanup')).toMatchObject({ label: 'Keep the tables from before the import for 7 days', output: expect.stringContaining('under Kept databases') });
+    // No slow export first, and the kept database is the way back once the job ends, not the job's Undo.
     expect(s.calls.some((c) => c.args.includes('export'))).toBe(false);
     expect(view.undoable).toEqual([]);
   });
@@ -82,15 +86,18 @@ describe('an import through a side database', () => {
     const { jobId, view } = await s.start();
     expect(view.status).toBe('failed');
     expect(view.steps.find((x) => x.status === 'failed')?.id).toBe('replace');
+    const kept = Object.keys(server.state()).find((name) => name.startsWith('shop_com__keep')) as string;
     expect(server.state()).toEqual({
       shop_com: { wp_comments: 'dump', wp_options: 'dump', wp_posts: 'dump', wp_redirection_logs: 'old' },
-      shop_com__prev: { wp_options: 'old', wp_posts: 'old' },
+      [kept]: { wp_options: 'old', wp_posts: 'old' },
     });
     expect(view.undoable).toEqual([SWAP_UNDO]);
     s.jobs.undo(jobId);
     const undone = await settle(s.jobs, jobId);
     expect(undone.status).toBe('undone');
     expect(server.state()).toEqual(BEFORE);
+    // Undo forgets the kept database it emptied.
+    expect(s.ctx.store.keptDatabases()).toEqual([]);
   });
 
   it('leaves the site as it was when the dump does not go in, with no side database left', async () => {

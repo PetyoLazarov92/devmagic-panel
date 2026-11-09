@@ -8,13 +8,12 @@ import { canOpen } from './steps';
  * browser's Back and Forward move between its steps and a reload stays.
  */
 
-export type WizardStep = 'start' | 'code' | 'read' | 'access' | 'database' | 'domains' | 'wordpress' | 'review';
+export type WizardStep = 'start' | 'code' | 'read' | 'database' | 'domains' | 'wordpress' | 'review';
 
 export const STEP_LABEL: Record<WizardStep, string> = {
   start: 'Start',
   code: 'Code',
-  read: 'Claude reads the repo',
-  access: 'Claude checks the links',
+  read: 'Claude reads the project',
   database: 'Database',
   domains: 'Domains',
   wordpress: 'WordPress',
@@ -25,7 +24,7 @@ const SOURCES: readonly NewSiteSource[] = ['repo', 'wordpress', 'empty'];
 
 /** The steps of each kind of install; a project lets Claude Code read the repo and its links only when you switch it on. */
 export function stepsFor(source: NewSiteSource, claude = false): WizardStep[] {
-  if (source === 'repo') return ['start', 'code', ...(claude ? (['read', 'access'] as const) : []), 'database', 'domains', 'wordpress', 'review'];
+  if (source === 'repo') return ['start', 'code', ...(claude ? (['read'] as const) : []), 'database', 'domains', 'wordpress', 'review'];
   if (source === 'wordpress') return ['start', 'domains', 'wordpress', 'review'];
   return ['start', 'domains', 'review'];
 }
@@ -49,9 +48,9 @@ export function usesClaude(state: unknown): boolean {
   return org.useClaude === undefined ? true : org.useClaude === true;
 }
 
-/** A step a draft from before 1.28 stopped at, in today's steps. */
+/** A step a draft stopped at in an older panel, in today's steps: Code came from two steps in 1.28, and the two Claude steps are one since 1.31. */
 export function migrateStep(step: string): string {
-  return step === 'source' || step === 'org' ? 'code' : step;
+  return step === 'source' || step === 'org' ? 'code' : step === 'access' ? 'read' : step;
 }
 
 /** A draft's address; without a step it opens where the draft stopped. */
@@ -111,6 +110,8 @@ export function migrateDraftState(state: unknown): Record<string, unknown> {
       if (passed[old] !== undefined) passed.code ??= passed[old];
       delete passed[old];
     }
+    // The two Claude steps are one since 1.31: the links' step has no place of its own.
+    delete passed.access;
     saved.passed = passed;
   }
   if ('layout' in saved) {

@@ -6,7 +6,7 @@ The new site wizard starts three ways: **from a project** (its repos and,
 usually, a database dump), **a fresh WordPress**, or **an empty site**.
 
 From a project, the steps are **Code**, then, when Claude Code reads the repo
-for you, **Claude reads the repo** and **Claude checks the links**, then
+for you, **Claude reads the project**, then
 **Database**, **Domains**, **WordPress** and **Review**. Every step after Code
 shows a short plan of the site at the top: each repo with its folder, and the
 dump once it is in.
@@ -60,30 +60,47 @@ with each repo at its path and branch.
 ## Claude Code, optional
 
 The **Let Claude read the repo and its links** switch on the Code step adds
-two steps. It shows once Claude Code is installed and signed in
-(`claude auth login`); with a claude.ai sign-in it gets an animated border,
-as only that sign-in reaches the Asana, Google Drive and Google Docs
-connectors. **Settings**, **Use Claude Code in new installs** sets it: always
-on (switch it off for one install), off (switch it on for one), or never.
-Without Claude Code nothing about it shows and you go on by hand.
+one step, **Claude reads the project**. It shows once Claude Code is installed
+and signed in (`claude auth login`); with a claude.ai sign-in it gets an
+animated border, as only that sign-in reaches the Asana, Google Drive and
+Google Docs connectors. **Settings**, **Use Claude Code in new installs** sets
+it: always on (switch it off for one install), off (switch it on for one), or
+never. Without Claude Code nothing about it shows and you go on by hand.
 
-1. **Claude reads the repo**: Claude Code reads only the repo's docs and build
+The step runs as one job, in two parts:
+
+1. **What the repo says**: Claude Code reads only the repo's docs and build
    files (README, `docs/`, `composer.json`, local dev configs; never
    `wp-config.php` or `.env`), copied into a folder of their own, and fills a
    fixed form: the Asana and Google links and what the docs say about dumps,
    plus versions, build and the production address. Each answer names the
-   file it came from. **Skip** goes straight to the Database step.
-2. **Claude checks the links**: it opens each link read-only, marks it ok, no
-   access or not found, collects facts for the install, and lists the database
-   dumps in Google Drive by name, size and date only.
+   file it came from, and shows as soon as it is in.
+2. **The links and the dumps**: it opens each link the docs name, read-only,
+   marks it ok, no access or not found, collects facts for the install, and
+   lists the database dumps in Google Drive by name, size and date only.
+   Docs without links skip this part.
 
-Both run as jobs: leave the page and they keep going, show in the jobs list,
-and the wizard picks up their answer when you come back. A card beside them
-sets the model, effort and spending cap for the next run; the defaults per
-step live under **Settings** (Read the repo: Sonnet, medium effort; Links and
-dump: Sonnet, low effort; $0.50 per run), with **Check connectors**. Runs have
-only read-only tools. Your local setup wins over the docs (local.* names,
-wpcore, the cores you have, Apache), and the differences are listed.
+They stay two runs of Claude Code on purpose: the one that reads the repo's
+text has no connectors, and only its checked form reaches the one that opens
+your links. **Go on without Claude** leaves the step at any time, and **Skip
+the links and pick a dump myself** leaves only the second part; **Check the
+links** runs it after all. When the links cannot be checked, the repo's
+answer stays and you go on to pick the dump yourself.
+
+Leave the page and the job keeps going, shows in the jobs list, and the wizard
+picks up its answers when you come back. Both answers are kept on the draft,
+so coming back, or checking the links again, never pays twice for the same
+repo or the same links.
+
+One model, effort and spending cap cover the step: under the switch on the
+Code step for this install (**Runs with ...**), and under **Settings** for
+every install (Sonnet, medium effort, $1.00), with **Check connectors**. The
+effort is for reading the repo; links are always checked at low effort. The
+cap is for both parts together: the links get what reading left, and when
+reading used it all, the job says so and **Check the links again** gives them
+the whole cap. Runs have only read-only tools. Your local setup wins over the
+docs (local.* names, wpcore, the cores you have, Apache), and the differences
+are listed.
 
 **Describe the site to Claude**, under the main repo when the AI assistant is
 on, fills the wizard from your words instead; see [AI assistant](ai-assistant.md).
@@ -137,7 +154,7 @@ against the free space.
   remembered per server and folder. Only whole tables: personal data in
   users, comments or options still comes, and the clean step below takes
   care of it.
-  **Production copy, cleaned** turns that clean step on.
+  **The copy**, **Cleaned** turns that clean step on.
 - **This machine**: another site's database exported now (a second copy to
   test another branch, with tables to leave the rows of, as over SSH), one of
   a site's snapshots, or the dump a deleted site's archive holds; the deleted
@@ -148,8 +165,9 @@ against the free space.
 The **Found in the dump** card shows what it holds, and **Pick another dump**
 takes a different one.
 
-**Clean this copy after the import** (off unless you choose it) runs the
-clean-up of Prepare from production on the new database, with SQL and no
+**The copy** is the same choice a site's Import a database has: **As it is**
+(an exact copy, the default) or **Cleaned**, which lists what goes from this
+dump and runs the clean-up on the new database after the import, with SQL and no
 WordPress code: every user but one goes, with WooCommerce orders and customer
 data, product reviews, form entries, logs and payment, mail and API keys. The
 one user kept is the WordPress step's admin: the dump's own administrator as

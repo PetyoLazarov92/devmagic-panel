@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type ClaudeRun, claudeRun, hostname } from './actions.js';
+import { type ClaudeEffort, type ClaudeRun, claudeRun, hostname } from './actions.js';
 import { gitlabHost, namespaceRef } from './repo-host.js';
 import { type InstallHow } from './sites.js';
 import { placementForKind, type RepoPlacement } from './site-repos.js';
@@ -57,18 +57,21 @@ export interface OrgRepoList {
   problem?: string;
 }
 
-/** The Claude Code steps of an install from an organization. */
+/** The two parts of the Claude Code step of an install, as their answers and jobs are kept on its draft. */
 export type ClaudeStep = 'read' | 'access';
 
 /**
- * The recommended defaults: Sonnet reads several docs into a form, which
- * Haiku gets wrong more often and Opus does no better; checking links is
- * mostly opening them, so low effort is enough.
+ * The recommended default for the one Claude Code step of an install: Sonnet
+ * reads several docs into a form, which Haiku gets wrong more often and Opus
+ * does no better, and one cap covers reading the repo and checking its links.
  */
-export const DEFAULT_CLAUDE_STEPS: Record<ClaudeStep, ClaudeRun> = {
-  read: { model: 'sonnet', effort: 'medium', budgetUsd: 0.5 },
-  access: { model: 'sonnet', effort: 'low', budgetUsd: 0.5 },
-};
+export const DEFAULT_CLAUDE_RUN: ClaudeRun = { model: 'sonnet', effort: 'medium', budgetUsd: 1 };
+
+/** Checking links is mostly opening them, so that part always runs at low effort. */
+export const LINKS_EFFORT: ClaudeEffort = 'low';
+
+/** The least a Claude Code run can be capped at; with less left of the cap, the links are not checked. */
+export const MIN_CLAUDE_CAP = 0.05;
 
 export interface OrgSettings {
   /** The organizations and groups to scan, as namespace refs. */
@@ -77,24 +80,38 @@ export interface OrgSettings {
   gitlabHosts: string[];
   /** The hosts your own account was ticked on, once each, the first time its CLI was signed in; after that it is yours to untick. */
   accountHosts: string[];
-  /** The defaults for each Claude Code step; an install can change them for itself. */
-  read: ClaudeRun;
-  access: ClaudeRun;
+  /** The default for the Claude Code step: its model, effort and the cap for the whole step; an install can change them for itself. */
+  run: ClaudeRun;
 }
 
-export const DEFAULT_ORG_SETTINGS: OrgSettings = { selected: [], gitlabHosts: [], accountHosts: [], ...DEFAULT_CLAUDE_STEPS };
+export const DEFAULT_ORG_SETTINGS: OrgSettings = { selected: [], gitlabHosts: [], accountHosts: [], run: DEFAULT_CLAUDE_RUN };
 
-/** Settings saved before effort came: one model and cap for both steps. */
-function fromOneModel(value: unknown): unknown {
+const MAX_CAP = 5;
+const capOf = (value: unknown): number | undefined => {
+  const cap = (value as { budgetUsd?: unknown } | undefined)?.budgetUsd;
+  return typeof cap === 'number' ? cap : undefined;
+};
+
+/**
+ * Settings saved before the two Claude Code steps became one: the model and
+ * effort of reading the repo, and both caps together. Older still, one model
+ * and cap for both steps: that cap twice.
+ */
+function fromSteps(value: unknown): unknown {
   if (!value || typeof value !== 'object') return value;
   const v = value as Record<string, unknown>;
-  if (v.read !== undefined || v.access !== undefined) return value;
-  const step = (id: ClaudeStep) => ({
-    ...DEFAULT_CLAUDE_STEPS[id],
-    ...(typeof v.model === 'string' ? { model: v.model } : {}),
-    ...(typeof v.budgetUsd === 'number' ? { budgetUsd: v.budgetUsd } : {}),
-  });
-  return { ...v, read: step('read'), access: step('access') };
+  if (v.run !== undefined) return value;
+  const read = v.read as Record<string, unknown> | undefined;
+  const cap = read || v.access ? (capOf(read) ?? DEFAULT_CLAUDE_RUN.budgetUsd / 2) + (capOf(v.access) ?? DEFAULT_CLAUDE_RUN.budgetUsd / 2) : typeof v.budgetUsd === 'number' ? v.budgetUsd * 2 : undefined;
+  if (cap === undefined && typeof v.model !== 'string' && !read) return value;
+  return {
+    ...v,
+    run: {
+      model: read?.model ?? v.model ?? DEFAULT_CLAUDE_RUN.model,
+      effort: read?.effort ?? DEFAULT_CLAUDE_RUN.effort,
+      budgetUsd: Math.min(MAX_CAP, Math.round((cap ?? DEFAULT_CLAUDE_RUN.budgetUsd) * 100) / 100),
+    },
+  };
 }
 
 /**
@@ -109,13 +126,12 @@ function fromOneFlag(value: unknown): unknown {
 }
 
 export const orgSettingsInput = z.preprocess(
-  (value) => fromOneFlag(fromOneModel(value)),
+  (value) => fromOneFlag(fromSteps(value)),
   z.object({
     selected: z.array(orgName).max(40),
     gitlabHosts: z.array(gitlabHost).max(10).default([]),
     accountHosts: z.array(hostname).max(20).default([]),
-    read: claudeRun.default(DEFAULT_CLAUDE_STEPS.read),
-    access: claudeRun.default(DEFAULT_CLAUDE_STEPS.access),
+    run: claudeRun.default(DEFAULT_CLAUDE_RUN),
   }),
 );
 

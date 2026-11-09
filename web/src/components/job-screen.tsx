@@ -16,7 +16,7 @@ import { Notice } from '@/components/page';
 import { Bar, ListSkeleton, Reading } from '@/components/skeletons';
 
 /** Jobs an install from an organization starts on its way: their target is the install draft. */
-const INSTALL_STEP_JOBS = ['org.readRepo', 'org.checkAccess', 'dump.download', 'dump.useDownloaded'];
+const INSTALL_STEP_JOBS = ['org.readProject', 'org.readRepo', 'org.checkAccess', 'dump.download', 'dump.useDownloaded'];
 
 /**
  * A job's progress, from its id: the overall bar, each step with its own

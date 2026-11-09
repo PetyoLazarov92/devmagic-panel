@@ -1,29 +1,22 @@
-import type { ClaudeEffort, ClaudeModel, ClaudeRun, ClaudeStep, OrgSettings } from '@devmagic-panel/shared';
-import { CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE_STEPS } from '@devmagic-panel/shared';
+import type { OrgSettings } from '@devmagic-panel/shared';
 import { Check, CircleAlert, CircleCheck, LoaderCircle, Plug, Sparkles, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { ClaudeRunFields } from '@/components/claude-run-fields';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import type { UseClaude } from '@devmagic-panel/shared';
-import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS, CLAUDE_STEP_LABELS } from '@/pages/new-site-org';
-
-const STEP_TEXT: Record<ClaudeStep, string> = {
-  read: "Reads a repo's README, docs and build files into the install's form.",
-  access: 'Opens the linked Asana tasks and Google files read-only and lists the dumps in Drive.',
-};
 
 /**
- * The panel's defaults for the Claude Code steps of an install from an
- * organization: model, effort and spending cap for each, which an install can
- * change for itself. Claude Code runs with your own sign-in; the AI assistant
- * above uses your API key and keeps its own model.
+ * The panel's defaults for the Claude Code step of an install from a
+ * project: one model, effort and spending cap, which an install can change
+ * for itself. Claude Code runs with your own sign-in; the AI assistant above
+ * uses your API key and keeps its own model.
  */
 export function ClaudeDefaultsCard() {
   const status = useAsync(() => api.orgStatus(), []);
@@ -74,8 +67,8 @@ export function ClaudeDefaultsCard() {
       <div className="grid gap-4 p-5 text-sm">
         <UseClaudeField />
         <div>
-          <p className="flex items-center gap-1.5 font-medium"><Sparkles className="size-4 text-primary" />Defaults for each Claude Code step</p>
-          <p className="text-xs text-muted-foreground">Claude Code runs with your own sign-in, never an API key. Model, effort and spending cap per run for each step, saved as you change them. They apply to the next Claude Code step of every install, unless that install changed its own on its Claude Code card.</p>
+          <p className="flex items-center gap-1.5 font-medium"><Sparkles className="size-4 text-primary" />Defaults for the Claude Code step</p>
+          <p className="text-xs text-muted-foreground">Claude Code runs with your own sign-in, never an API key. One model, effort and spending cap for the step that reads a repo and checks its links, saved as you change them. They apply to every install, unless that install changed its own on its Code step.</p>
           <p className="mt-1 flex min-h-4 items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
             {saved === 'saving' && <><LoaderCircle className="size-3.5 animate-spin" />Saving...</>}
             {saved === 'saved' && <><Check className="size-3.5 text-success" />Saved as your defaults</>}
@@ -88,10 +81,17 @@ export function ClaudeDefaultsCard() {
             {!claude.found ? 'Claude Code is not installed.' : !claude.signedIn ? 'Claude Code is not signed in: run claude auth login in a terminal.' : claude.claudeAi ? `Claude Code ${claude.version ?? ''}, signed in with claude.ai.` : 'Signed in without claude.ai: Asana and Google links need claude auth login with your claude.ai account.'}
           </p>
         )}
-        {settings &&
-          (['read', 'access'] as const).map((step) => (
-            <StepDefaults key={step} step={step} value={settings[step]} onChange={(value) => void save({ ...settings, [step]: value })} />
-          ))}
+        {settings && (
+          <div className="grid gap-2 border-t pt-4">
+            <div>
+              <p className="font-medium">Claude reads the project</p>
+              <p className="text-xs text-muted-foreground">
+                Reads a repo&apos;s README, docs and build files into the install&apos;s form, then opens the Asana tasks and Google files they link, read-only, and lists the dumps in Drive. The effort is for reading; links are always checked at low effort. The cap covers both: the links get what reading left.
+              </p>
+            </div>
+            <ClaudeRunFields value={settings.run} onChange={(run) => void save({ ...settings, run })} />
+          </div>
+        )}
         <div className="grid gap-2 border-t pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" disabled={probing || !claude?.signedIn} onClick={() => void checkConnectors()}>
@@ -111,47 +111,6 @@ export function ClaudeDefaultsCard() {
         </div>
       </div>
     </Card>
-  );
-}
-
-function StepDefaults({ step, value, onChange }: { step: ClaudeStep; value: ClaudeRun; onChange: (value: ClaudeRun) => void }) {
-  const [cap, setCap] = useState(String(value.budgetUsd));
-  useEffect(() => setCap(String(value.budgetUsd)), [value.budgetUsd]);
-  const tag = (field: 'model' | 'effort', v: string, label: string) => (DEFAULT_CLAUDE_STEPS[step][field] === v ? `${label} (recommended)` : label);
-  return (
-    <div className="grid gap-2 border-t pt-4">
-      <div>
-        <p className="font-medium">{CLAUDE_STEP_LABELS[step]}</p>
-        <p className="text-xs text-muted-foreground">{STEP_TEXT[step]}</p>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_7rem]">
-        <Select aria-label={`${CLAUDE_STEP_LABELS[step]}: model`} value={value.model} onChange={(e) => onChange({ ...value, model: e.target.value as ClaudeModel })}>
-          {CLAUDE_MODELS.map((m) => <option key={m} value={m}>{tag('model', m, CLAUDE_MODEL_LABELS[m])}</option>)}
-        </Select>
-        <Select aria-label={`${CLAUDE_STEP_LABELS[step]}: effort`} value={value.effort} onChange={(e) => onChange({ ...value, effort: e.target.value as ClaudeEffort })}>
-          {CLAUDE_EFFORTS.map((m) => <option key={m} value={m}>{tag('effort', m, `${CLAUDE_EFFORT_LABELS[m]} effort`)}</option>)}
-        </Select>
-        <div className="relative" title="Spending cap per run">
-          <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">$</span>
-          <Input
-            aria-label={`${CLAUDE_STEP_LABELS[step]}: spending cap per run in dollars`}
-            type="number"
-            min={0.05}
-            max={5}
-            step={0.05}
-            value={cap}
-            onChange={(e) => setCap(e.target.value)}
-            onBlur={() => {
-              const budgetUsd = Math.min(5, Math.max(0.05, Number(cap) || value.budgetUsd));
-              setCap(String(budgetUsd));
-              // Leaving the field unchanged saves nothing.
-              if (budgetUsd !== value.budgetUsd) onChange({ ...value, budgetUsd });
-            }}
-            className="pl-6"
-          />
-        </div>
-      </div>
-    </div>
   );
 }
 

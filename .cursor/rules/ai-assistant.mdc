@@ -38,10 +38,14 @@ alwaysApply: false
   commands, a model, an effort (`--effort`) and a spending cap, and a JSON
   schema; the answer is checked again with zod (`shared/src/org.ts`: links,
   Drive ids, dump names) before use. Reading a repo and checking its links
-  are the registry actions `org.readRepo` and `org.checkAccess`
+  are the registry actions `org.readRepo` and `org.checkAccess`, and the
+  wizard's one Claude step runs both as one job, `org.readProject`
   (`changesSystem: false`, kept from the assistant): jobs that note
   themselves on the install draft with what they are for, and keep their
-  answer there (`Drafts.noteJob`, `saveResult`).
+  answers there (`Drafts.noteJob`, `saveResult`). They stay two runs: the
+  one that reads a repo's text has no connectors, and only its checked form
+  reaches the one that opens the links. One cap covers both (`settings`,
+  the links get what reading left, at `LINKS_EFFORT`).
 - A repo is read from a folder holding only its doc and build files
   (`docPaths`), never `wp-config.php` or `.env`. Dumps are downloaded by the
   panel with rclone or taken from Downloads; their contents never reach

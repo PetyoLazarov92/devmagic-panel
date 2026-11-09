@@ -1,5 +1,5 @@
 import type { CleanCopyInfo, CleanPreview, KeptDatabaseInfo, Site, SnapshotInfo, UploadResult } from '@devmagic-panel/shared';
-import { CLEAN_FORM_TABLES, CLEAN_LOG_TABLES, CLEAN_WOO_TABLES, isLocalName } from '@devmagic-panel/shared';
+import { isLocalName } from '@devmagic-panel/shared';
 import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCircle, PackageCheck, RefreshCw, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation, rowsSeedState } from '@/components/db-browser';
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
+import { cleanupFindings, CopyChoice, findings } from '@/components/copy-choice';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -143,8 +144,6 @@ function DatabaseTools({ site }: { site: Site }) {
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
           <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} footer={jobIn('snapshots')} />
           <ImportCard site={site} busy={busy} start={start} footer={jobIn('import')} />
-          <RefreshCard site={site} busy={busy} start={start} footer={jobIn('refresh')} />
-          <PrepareCard site={site} busy={busy} start={start} footer={jobIn('prepare')} />
           <CleanCurrentCard site={site} preview={preview.data} error={preview.error} busy={busy} start={start} footer={jobIn('cleanCurrent')} />
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
@@ -157,16 +156,16 @@ function DatabaseTools({ site }: { site: Site }) {
   );
 }
 
-type JobCardSlot = 'snapshots' | 'import' | 'prepare' | 'refresh' | 'cleanCurrent' | 'replace' | 'copies' | 'kept';
+type JobCardSlot = 'snapshots' | 'import' | 'cleanCurrent' | 'replace' | 'copies' | 'kept';
 const JOB_CARD: Record<JobKind, JobCardSlot> = {
-  snapshot: 'snapshots', restore: 'snapshots', import: 'import', clean: 'prepare', cleanCurrent: 'cleanCurrent', preview: 'replace', replace: 'replace', export: 'copies', restoreKept: 'kept', refresh: 'refresh',
+  snapshot: 'snapshots', restore: 'snapshots', import: 'import', clean: 'import', cleanCurrent: 'cleanCurrent', preview: 'replace', replace: 'replace', export: 'copies', restoreKept: 'kept', refresh: 'import',
 };
 
 function doneTitle(kind: JobKind | null): string {
   if (kind === 'snapshot') return 'Snapshot saved';
   if (kind === 'restore') return 'Snapshot restored';
   if (kind === 'import') return 'Dump imported';
-  if (kind === 'clean') return 'Database prepared from production';
+  if (kind === 'clean') return 'Dump imported and cleaned';
   if (kind === 'cleanCurrent') return 'Database cleaned';
   if (kind === 'export') return 'Clean copy saved';
   if (kind === 'restoreKept') return 'Tables put back';
@@ -450,60 +449,94 @@ function ReplacePairs({ dump }: { dump: DumpUpload }) {
   );
 }
 
+/**
+ * Import a database: a copy from production with the settings saved for the
+ * site, or a dump from any source, as it is or cleaned. Either way it goes
+ * into a side database and is swapped in, with the tables from before kept.
+ */
 function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: Site; busy: boolean; start: Start }) {
   const dump = useDumpUpload(site);
   const { upload, replace } = dump;
+  const [copy, setCopy] = useState<'whole' | 'clean'>('whole');
   const [bare, setBare] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const admins = upload ? (upload.facts.multisite ? upload.facts.superAdmins : upload.facts.admins) : undefined;
+  const [user, setUser] = useState<KeepUser>(defaultKeepUser(undefined));
+  const uploadId = upload?.id;
+  // A new dump gets the default user for its administrators.
+  const adminsKey = admins?.join(',');
+  useEffect(() => setUser(defaultKeepUser(adminsKey?.split(','))), [uploadId, adminsKey]);
+  const clean = copy === 'clean';
+  const db = site.db?.name ?? 'the database';
+  // Only a dump read to its end that makes nothing RENAME TABLE cannot move is cleaned in a side database.
+  const blocked = clean && upload && upload.facts.storedObjects !== false
+    ? upload.facts.storedObjects ? 'This dump makes views, triggers or routines, which cannot be cleaned in a side database. Import it as it is.' : 'This dump was not read to its end, so it is not known to be safe to clean in a side database. Take it again.'
+    : null;
 
   return (
     <Card>
-      <CardHeader><CardTitle>Import a dump</CardTitle><FileArchive className="size-4 text-muted-foreground" /></CardHeader>
+      <CardHeader><CardTitle>Import a database</CardTitle><FileArchive className="size-4 text-muted-foreground" /></CardHeader>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
-          A .sql, .sql.gz or .zip dump replaces the tables it holds. It goes into a side database and is swapped in at once; production domains are then replaced with this site's.
+          Replaces {db} with a copy from production or a dump, as it is or cleaned. The copy goes into a side database and is swapped in at once; production domains become this site&apos;s, and the tables from before are kept for 7 days.
         </p>
-        <DumpChooser dump={dump} busy={busy} site={site} />
+        <ProductionRefresh site={site} busy={busy} start={start} />
 
-        {upload && (
-          <>
-            <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Table prefix</dt>
-              <dd className="font-mono text-[13px]">{upload.facts.tablePrefix ?? 'unknown'}</dd>
-              <dt className="text-muted-foreground">Multisite</dt>
-              <dd>{upload.facts.multisite ? 'yes' : 'no'}</dd>
-            </dl>
-            <ReplacePairs dump={dump} />
-            {replace.length > 0 && (
-              <Checkbox
-                id="import-bare"
-                checked={bare}
-                onChange={setBare}
-                label="Replace every mention, not only URLs"
-                hint="URLs only (//host) is the default, so email addresses and plain text keep the production domain."
-              />
-            )}
-            <p className="text-xs text-muted-foreground">http:// on this site's local domains becomes https:// after the import.</p>
-            <Button variant="danger" className="justify-self-start" disabled={busy} onClick={() => setConfirming(true)}>
-              <Upload />
-              Import into {site.db?.name}
-            </Button>
-          </>
-        )}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 border-t pt-4">
+          <p className="text-sm font-medium">From a dump</p>
+          <DumpChooser dump={dump} busy={busy} site={site} />
+
+          {upload && (
+            <>
+              <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">Table prefix</dt>
+                <dd className="font-mono text-[13px]">{upload.facts.tablePrefix ?? 'unknown'}</dd>
+                <dt className="text-muted-foreground">Multisite</dt>
+                <dd>{upload.facts.multisite ? 'yes' : 'no'}</dd>
+              </dl>
+              <CopyChoice id="import-copy" clean={clean} onChange={(on) => setCopy(on ? 'clean' : 'whole')} removed={findings(upload)} />
+              <ReplacePairs dump={dump} />
+              {replace.length > 0 && (
+                <Checkbox
+                  id="import-bare"
+                  checked={bare}
+                  onChange={setBare}
+                  label="Replace every mention, not only URLs"
+                  hint="URLs only (//host) is the default, so email addresses and plain text keep the production domain."
+                />
+              )}
+              {clean && <KeepUserFields id="import-user" admins={admins} multisite={upload.facts.multisite} value={user} onChange={setUser} />}
+              <p className="text-xs text-muted-foreground">http:// on this site&apos;s local domains becomes https:// after the import.</p>
+              {blocked ? (
+                <p role="alert" className="text-sm text-warning">{blocked}</p>
+              ) : (
+                <Button variant="danger" className="justify-self-start" disabled={busy || (clean && keepUserProblem(user) !== null)} onClick={() => setConfirming(true)}>
+                  {clean ? <ShieldCheck /> : <Upload />}
+                  {clean ? `Import into ${db}, cleaned` : `Import into ${db}`}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </div>
       <ConfirmDialog
         open={confirming}
-        title={`Import ${upload?.name ?? 'the dump'}?`}
-        description={`The dump goes into a side database first and its tables are then swapped into ${site.db?.name ?? 'the database'} at once, so ${siteName(site)} keeps working until it is in. Until the job ends, Undo puts the tables from before back. When that cannot be done (an empty database, triggers or views, too little disk), a snapshot is taken and the dump imported straight in.`}
+        title={`Import ${upload?.name ?? 'the dump'}${clean ? ', cleaned' : ''}?`}
+        description={clean
+          ? `The dump is imported into a side database and cleaned there, so no WordPress code runs on it and nothing can send mail. Then it replaces ${db} at once: the tables it replaces are kept for 7 days under Kept databases, where Put back swaps them in again.`
+          : `The dump goes into a side database first and its tables are then swapped into ${db} at once, so ${siteName(site)} keeps working until it is in. The tables it replaces are kept for 7 days under Kept databases, where Put back swaps them in again. When that cannot be done (an empty database, triggers or views, too little disk), a snapshot is taken and the dump imported straight in.`}
         domain={site.domain}
         action="Import"
         onClose={() => setConfirming(false)}
         onConfirm={(confirm) => {
           setConfirming(false);
           if (!upload) return;
-          start('import', { uploadId: upload.id, replace, replaceBare: replace.length > 0 && bare, confirm });
+          const pairs = { replace, replaceBare: replace.length > 0 && bare };
+          if (clean) start('clean', { uploadId: upload.id, ...pairs, user, confirm });
+          else start('import', { uploadId: upload.id, ...pairs, confirm });
           dump.reset();
           setBare(false);
+          setCopy('whole');
         }}
       />
       {footer}
@@ -567,90 +600,7 @@ function KeepUserFields({ id, admins, multisite, value, onChange }: {
   );
 }
 
-/** What a clean copy finds in a dump, from the tables it makes: the plugins with private data, and the log tables. */
-function findings(upload: UploadResult): string[] {
-  const tables = Object.keys(upload.facts.tableHosts ?? {});
-  return cleanupFindings(tables, upload.facts.tablePrefix ?? 'wp_');
-}
-
-/** What the clean-up removes, from a list of table names. */
-function cleanupFindings(tables: readonly string[], prefix: string): string[] {
-  const has = (names: readonly string[]) => names.filter((n) => tables.some((t) => t.toLowerCase() === `${prefix}${n}`.toLowerCase() || new RegExp(`^${prefix}\\d+_${n}$`, 'i').test(t)));
-  const found = ['every user but the one you keep'];
-  if (has(CLEAN_WOO_TABLES).length > 0) found.push('WooCommerce orders, customers and product reviews');
-  const forms = has(CLEAN_FORM_TABLES);
-  if (forms.length > 0) found.push(`form entries (${forms.length} table${forms.length === 1 ? '' : 's'})`);
-  const logs = has(CLEAN_LOG_TABLES);
-  if (logs.length > 0) found.push(`logs (${logs.length} table${logs.length === 1 ? '' : 's'}) and transients`);
-  found.push('payment, mail and API keys');
-  return found;
-}
-
-function PrepareCard({ footer, site, busy, start }: { footer: ReactNode;  site: Site; busy: boolean; start: Start }) {
-  const dump = useDumpUpload(site);
-  const { upload, replace } = dump;
-  const [confirming, setConfirming] = useState(false);
-  const admins = upload ? (upload.facts.multisite ? upload.facts.superAdmins : upload.facts.admins) : undefined;
-  const [user, setUser] = useState<KeepUser>(defaultKeepUser(undefined));
-  const uploadId = upload?.id;
-  // A new dump gets the default user for its administrators.
-  const adminsKey = admins?.join(',');
-  useEffect(() => setUser(defaultKeepUser(adminsKey?.split(','))), [uploadId, adminsKey]);
-  // Only a dump read to its end that makes nothing RENAME TABLE cannot move goes through a side database.
-  const blocked = upload && upload.facts.storedObjects !== false
-    ? upload.facts.storedObjects ? 'This dump makes views, triggers or routines, which cannot be swapped in from a side database. Use Import a dump instead.' : 'This dump was not read to its end, so it is not known to be safe to swap in. Upload it again.'
-    : null;
-
-  return (
-    <Card>
-      <CardHeader><CardTitle>Prepare from production</CardTitle><ShieldCheck className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
-        <p className="text-xs text-muted-foreground">
-          Makes a production dump this site's database without private data. It is cleaned in a side database before anything reaches the site, then swapped in; your current tables are kept for 7 days. Mail plugins are turned off and one administrator stays, the author of every post. Needs the MySQL admin account.
-        </p>
-        <DumpChooser dump={dump} busy={busy} site={site} />
-
-        {upload && (
-          <>
-            <div className="grid gap-1.5">
-              <p className="text-sm font-medium">Removed in the side database</p>
-              <ul className="grid gap-1 text-sm text-muted-foreground">
-                {findings(upload).map((f) => <li key={f} className="before:mr-2 before:text-primary before:content-['–']">{f}</li>)}
-              </ul>
-            </div>
-            <ReplacePairs dump={dump} />
-            <KeepUserFields id="prepare-user" admins={admins} multisite={upload.facts.multisite} value={user} onChange={setUser} />
-            {blocked ? (
-              <p role="alert" className="text-sm text-warning">{blocked}</p>
-            ) : (
-              <Button variant="danger" className="justify-self-start" disabled={busy || keepUserProblem(user) !== null} onClick={() => setConfirming(true)}>
-                <ShieldCheck />
-                Prepare {site.db?.name}
-              </Button>
-            )}
-          </>
-        )}
-      </div>
-      <ConfirmDialog
-        open={confirming}
-        title={`Prepare ${site.db?.name ?? 'the database'} from ${upload?.name ?? 'the dump'}?`}
-        description={`The dump is imported into a side database and cleaned there, so no WordPress code runs on it and nothing can send mail. Then it replaces ${site.db?.name ?? 'the database'} at once: the tables it replaces are kept for 7 days under Kept databases, where Put back swaps them in again.`}
-        domain={site.domain}
-        action="Prepare"
-        onClose={() => setConfirming(false)}
-        onConfirm={(confirm) => {
-          setConfirming(false);
-          if (!upload) return;
-          start('clean', { uploadId: upload.id, replace, user, confirm });
-          dump.reset();
-        }}
-      />
-      {footer}
-    </Card>
-  );
-}
-
-/** Clean this database: the clean-up of Prepare from production on the database the site has now. */
+/** Clean this database: the clean-up of a cleaned import on the database the site has now. */
 /** Below this, what the copy leaves out is not worth a line. */
 const LEFT_OUT_SHOWN = 100 * 1024 ** 2;
 
@@ -667,7 +617,7 @@ function CleanCurrentCard({ footer, site, preview, error, busy, start }: { foote
       <CardHeader><CardTitle>Clean this database</CardTitle><Eraser className="size-4 text-muted-foreground" /></CardHeader>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
-          Cleans the database the site has now, like a production database you imported, the way Prepare from production cleans a dump. It is copied beside the site and cleaned there while the site keeps working, then swapped in; your current tables are kept for 7 days. Mail plugins are turned off and one administrator stays, the author of every post. Addresses are not replaced.
+          Cleans the database the site has now, like a production database you imported as it is, the way a cleaned import does. It is copied beside the site and cleaned there while the site keeps working, then swapped in; your current tables are kept for 7 days. Mail plugins are turned off and one administrator stays, the author of every post. Addresses are not replaced.
         </p>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         {!preview && !error && <ReadingBlock lines={4}>Reading {db}...</ReadingBlock>}
@@ -844,7 +794,7 @@ function KeptCard({ footer, site, kept, loading, busy, start, onDeleted }: { foo
       <CardHeader><CardTitle>Kept databases</CardTitle><Archive className="size-4 text-muted-foreground" /></CardHeader>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
         <p className="text-xs text-muted-foreground">
-          Your tables from before a Prepare from production or a clean. Put back swaps them in at once, and what it takes out is kept the same way. Each goes 7 days after it was made.
+          Your tables from before an import or a clean. Put back swaps them in at once, and what it takes out is kept the same way. Each goes 7 days after it was made.
         </p>
         {kept.length === 0 ? (
           <p className="text-sm text-muted-foreground">{loading ? 'Loading kept databases...' : 'No kept databases.'}</p>
@@ -896,12 +846,12 @@ function KeptCard({ footer, site, kept, loading, busy, start, onDeleted }: { foo
 }
 
 /**
- * Refresh from production: the server and folder saved for the site, the
- * tables whose rows stay there and whether the copy is cleaned, then one
- * button. Reads only on the server; here it imports or cleans as the cards
- * below do, from a side database.
+ * From production, the top of Import a database: the server and folder saved
+ * for the site, the tables whose rows stay there and whether the copy is
+ * cleaned, then one button. Reads only on the server; here it imports as a
+ * dump does, from a side database.
  */
-function RefreshCard({ footer, site, busy, start }: { footer: ReactNode; site: Site; busy: boolean; start: Start }) {
+function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; start: Start }) {
   const saved = useAsync(() => api.productionSettings(site.domain, site.path), [site.domain, site.path]);
   const settings = saved.data ?? null;
   const [editing, setEditing] = useState(false);
@@ -914,7 +864,6 @@ function RefreshCard({ footer, site, busy, start }: { footer: ReactNode; site: S
     setClean(settings?.clean ?? false);
     setKeep(settings?.keep ?? '');
   }, [settings]);
-  const form = !saved.loading && (!settings || editing);
   const user = keep ? { keep, login: keep, password } : { login: 'admin', password };
   const save = async (input: { host: string; path: string; excludeRows: string[] }) => {
     setError(null);
@@ -927,67 +876,73 @@ function RefreshCard({ footer, site, busy, start }: { footer: ReactNode; site: S
     }
   };
   const keepProblem = keep.trim() && !WP_LOGIN.test(keep.trim()) ? 'A login of letters, digits, spaces and _ . @ + -' : null;
+  const db = site.db?.name ?? 'the database';
 
   return (
-    <Card>
-      <CardHeader><CardTitle>Refresh from production</CardTitle><RefreshCw className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5 text-sm">
-        <p className="text-xs text-muted-foreground">
-          Copies production's database over SSH with WP-CLI, reading only: nothing is written there, and its database password stays there. Here it goes into a side database and is swapped in; production domains become this site's.
-        </p>
-        {saved.loading && <p className="text-muted-foreground">Reading the saved settings...</p>}
-        {form && (
-          <>
-            <FromServer
-              working={busy}
-              exportOnly
-              clean={clean}
-              setClean={setClean}
-              takeLabel="Save"
-              {...(settings ? { initial: { host: settings.host, path: settings.folder, excludeRows: settings.excludeRows } } : {})}
-              onTake={(input) => void save(input)}
-            />
-            {clean && (
-              <Field label="Keep this administrator" htmlFor="refresh-keep" hint="Its login on production; every other user goes. Empty: a new user, admin.">
-                <Input id="refresh-keep" value={keep} onChange={(e) => setKeep(e.target.value)} placeholder="admin" autoComplete="off" spellCheck={false} aria-invalid={keepProblem ? true : undefined} />
-              </Field>
-            )}
-            {keepProblem && <p className="text-xs text-danger">{keepProblem}</p>}
-            {error && <p role="alert" className="text-danger">{error}</p>}
-            {settings && <Button variant="ghost" className="justify-self-start" onClick={() => setEditing(false)}>Cancel</Button>}
-          </>
-        )}
-        {!form && settings && (
-          <>
-            <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1">
-              <dt className="text-muted-foreground">From</dt>
-              <dd className="truncate font-mono text-[13px]" title={`${settings.host}:${settings.folder}`}>{settings.host}:{settings.folder}</dd>
-              <dt className="text-muted-foreground">Rows left out</dt>
-              <dd>{settings.excludeRows.length ? `${settings.excludeRows.length} table${settings.excludeRows.length === 1 ? '' : 's'}` : 'none'}</dd>
-              <dt className="text-muted-foreground">The copy</dt>
-              <dd>{settings.clean ? `cleaned, keeping ${settings.keep ?? 'a new admin'}` : 'as it is'}</dd>
-            </dl>
-            {settings.clean && (
-              <Field label={settings.keep ? `Password for ${settings.keep}` : 'Password for admin'} htmlFor="refresh-secret" hint="For this local copy only; not saved.">
-                <SecretInput id="refresh-secret" value={password} onChange={(e) => setPassword(e.target.value)} />
-              </Field>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button variant="danger" disabled={busy || (settings.clean && password === '')} onClick={() => setConfirming(true)}>
-                <RefreshCw />
-                Refresh {site.db?.name}
-              </Button>
-              <Button variant="outline" disabled={busy} onClick={() => setEditing(true)}>Change</Button>
-            </div>
-          </>
-        )}
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3 text-sm">
+      <div className="flex items-center gap-2">
+        <RefreshCw className="size-4 text-muted-foreground" />
+        <p className="font-medium">From production</p>
       </div>
+      {saved.loading && <p className="text-muted-foreground">Reading the saved settings...</p>}
+      {!saved.loading && !settings && !editing && (
+        <>
+          <p className="text-xs text-muted-foreground">Save the SSH server and the WordPress folder there once, and one button copies production&apos;s database from then on. It only reads there, with WP-CLI.</p>
+          <Button variant="outline" className="justify-self-start" disabled={busy} onClick={() => setEditing(true)}>Set up production</Button>
+        </>
+      )}
+      {editing && (
+        <>
+          <p className="text-xs text-muted-foreground">Copies production&apos;s database over SSH with WP-CLI, reading only: nothing is written there, and its database password stays there.</p>
+          <FromServer
+            working={busy}
+            exportOnly
+            clean={clean}
+            setClean={setClean}
+            takeLabel="Save"
+            {...(settings ? { initial: { host: settings.host, path: settings.folder, excludeRows: settings.excludeRows } } : {})}
+            onTake={(input) => void save(input)}
+          />
+          {clean && (
+            <Field label="Keep this administrator" htmlFor="refresh-keep" hint="Its login on production; every other user goes. Empty: a new user, admin.">
+              <Input id="refresh-keep" value={keep} onChange={(e) => setKeep(e.target.value)} placeholder="admin" autoComplete="off" spellCheck={false} aria-invalid={keepProblem ? true : undefined} />
+            </Field>
+          )}
+          {keepProblem && <p className="text-xs text-danger">{keepProblem}</p>}
+          {error && <p role="alert" className="text-danger">{error}</p>}
+          <Button variant="ghost" className="justify-self-start" onClick={() => setEditing(false)}>Cancel</Button>
+        </>
+      )}
+      {!editing && settings && (
+        <>
+          <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1">
+            <dt className="text-muted-foreground">From</dt>
+            <dd className="truncate font-mono text-[13px]" title={`${settings.host}:${settings.folder}`}>{settings.host}:{settings.folder}</dd>
+            <dt className="text-muted-foreground">Rows left out</dt>
+            <dd>{settings.excludeRows.length ? `${settings.excludeRows.length} table${settings.excludeRows.length === 1 ? '' : 's'}` : 'none'}</dd>
+            <dt className="text-muted-foreground">The copy</dt>
+            <dd>{settings.clean ? `cleaned, keeping ${settings.keep ?? 'a new admin'}` : 'as it is'}</dd>
+          </dl>
+          {settings.clean && (
+            <Field label={settings.keep ? `Password for ${settings.keep}` : 'Password for admin'} htmlFor="refresh-secret" hint="For this local copy only; not saved.">
+              <SecretInput id="refresh-secret" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </Field>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="danger" disabled={busy || (settings.clean && password === '')} onClick={() => setConfirming(true)}>
+              <RefreshCw />
+              Refresh {db} now
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => setEditing(true)}>Change</Button>
+          </div>
+        </>
+      )}
       <ConfirmDialog
         open={confirming}
-        title={`Refresh ${site.db?.name ?? 'the database'} from ${settings?.host ?? 'production'}?`}
+        title={`Refresh ${db} from ${settings?.host ?? 'production'}?`}
         description={settings?.clean
-          ? `The export is imported into a side database and cleaned there, then replaces ${site.db?.name ?? 'the database'} at once: the tables it replaces are kept for 7 days under Kept databases, where Put back swaps them in again.`
-          : `The export goes into a side database and its tables are swapped into ${site.db?.name ?? 'the database'} at once; until the job ends, Undo puts the tables from before back.`}
+          ? `The export is imported into a side database and cleaned there, then replaces ${db} at once: the tables it replaces are kept for 7 days under Kept databases, where Put back swaps them in again.`
+          : `The export goes into a side database and its tables are swapped into ${db} at once: the tables it replaces are kept for 7 days under Kept databases, where Put back swaps them in again.`}
         domain={site.domain}
         action="Refresh"
         onClose={() => setConfirming(false)}
@@ -996,7 +951,6 @@ function RefreshCard({ footer, site, busy, start }: { footer: ReactNode; site: S
           start('refresh', { user, confirm });
         }}
       />
-      {footer}
-    </Card>
+    </div>
   );
 }

@@ -454,7 +454,7 @@ export function flushStep(wp: WpRunner): JobStep {
 }
 
 /** The job that makes a production dump the site's clean database. */
-export function planCleanCopy(ctx: CleanContext, { domain, path, uploadId, replace, user }: ActionInput<'db.cleanCopy'>): JobStep[] {
+export function planCleanCopy(ctx: CleanContext, { domain, path, uploadId, replace, replaceBare, user }: ActionInput<'db.cleanCopy'>): JobStep[] {
   const { site, wp } = wordpressSite(ctx, domain, path);
   const upload = readUpload(ctx.uploadsDir, uploadId);
   if (!upload) throw new DbRefused('The uploaded dump is gone; upload it again');
@@ -519,7 +519,7 @@ export function planCleanCopy(ctx: CleanContext, { domain, path, uploadId, repla
       weight: 5,
       run: (job) =>
         raisedFor(ctx, site, job, () =>
-          replaceDomains(wp, replace, { tables: '--all-tables-with-prefix', tableHosts: upload.facts.tableHosts, multisite, prefix, domainMapping: Boolean(upload.facts.domainMapping), job }),
+          replaceDomains(wp, replace, { tables: '--all-tables-with-prefix', tableHosts: upload.facts.tableHosts, multisite, prefix, bare: replaceBare, domainMapping: Boolean(upload.facts.domainMapping), job }),
         ),
     });
   }
@@ -530,7 +530,7 @@ export function planCleanCopy(ctx: CleanContext, { domain, path, uploadId, repla
       id: 'https',
       label: 'Use https for the local domains',
       weight: 2,
-      run: (job) => raisedFor(ctx, site, job, () => httpsForLocals(wp, locals, { tables: '--all-tables-with-prefix', tableHosts: upload.facts.tableHosts, replaced: replace, job })),
+      run: (job) => raisedFor(ctx, site, job, () => httpsForLocals(wp, locals, { tables: '--all-tables-with-prefix', tableHosts: upload.facts.tableHosts, replaced: replace, bare: replaceBare, job })),
     });
   }
   const left = replace.filter((r) => r.from !== r.to).map((r) => r.from);

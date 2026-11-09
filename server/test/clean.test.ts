@@ -131,7 +131,7 @@ async function settle(jobs: Jobs, id: string): Promise<JobView> {
   throw new Error('job did not settle');
 }
 
-async function setup(server: ReturnType<typeof fakeMysql>, extra: (wp: string) => Record<string, FakeResponse> = () => ({}), options: { dump?: string; admin?: boolean; user?: Record<string, string> } = {}) {
+async function setup(server: ReturnType<typeof fakeMysql>, extra: (wp: string) => Record<string, FakeResponse> = () => ({}), options: { dump?: string; admin?: boolean; user?: Record<string, string>; bare?: boolean } = {}) {
   const t = wpSiteTree();
   const wp = `wp --path=${t.docroot} --url=https://local.shop.com/`;
   const fake = fakeExec({
@@ -158,7 +158,7 @@ async function setup(server: ReturnType<typeof fakeMysql>, extra: (wp: string) =
     secrets: options.admin === false ? { panelPasswordHash: 'x' } : { panelPasswordHash: 'x', mysql: { user: 'root', host: 'localhost', password: 'adminpw' } },
   };
   const { id } = await saveUpload(fake.exec, ctx.uploadsDir, 'shop.sql', Readable.from([options.dump ?? DUMP]));
-  const input = { domain: 'local.shop.com', uploadId: id, replace: [{ from: 'www.shop.com', to: 'local.shop.com' }], confirm: 'local.shop.com', ...(options.user ? { user: options.user } : {}) };
+  const input = { domain: 'local.shop.com', uploadId: id, replace: [{ from: 'www.shop.com', to: 'local.shop.com' }], confirm: 'local.shop.com', ...(options.user ? { user: options.user } : {}), ...(options.bare ? { replaceBare: true } : {}) };
   const start = async () => {
     const result = await runAction(ctx, 'db.cleanCopy', input);
     return { jobId: result.data?.jobId as string, view: await settle(jobs, result.data?.jobId as string) };
@@ -236,6 +236,17 @@ describe('preparing a database from production', () => {
     expect((await settle(s.jobs, jobId)).status).toBe('undone');
     expect(server.state()).toEqual(BEFORE);
     expect(s.store.keptDatabases()).toEqual([]);
+  });
+
+  it('replaces every mention of the production domain when asked, not only URLs', async () => {
+    const mentions = (calls: Array<{ file: string; args: string[] }>) => calls.filter((c) => c.file === 'wp' && c.args.includes('search-replace')).map((c) => c.args[c.args.indexOf('search-replace') + 1]);
+    const urls = await setup(fakeMysql(BEFORE));
+    expect((await urls.start()).view.status).toBe('done');
+    expect(mentions(urls.calls).length).toBeGreaterThan(0);
+    expect(mentions(urls.calls)).not.toContain('www.shop.com');
+    const bare = await setup(fakeMysql(BEFORE), undefined, { bare: true });
+    expect((await bare.start()).view.status).toBe('done');
+    expect(mentions(bare.calls)).toContain('www.shop.com');
   });
 
   it('refuses without the admin account, and for a dump that makes views or triggers', async () => {

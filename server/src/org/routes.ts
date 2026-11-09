@@ -68,8 +68,9 @@ export interface OrgRouteDeps {
 /**
  * Installing a site from an organization: what is set up for it, its
  * settings, and the organizations and their repos. Claude Code reading a repo
- * and its links runs as jobs through the registry actions org.readRepo and
- * org.checkAccess, so it goes on when you leave the page.
+ * and its links runs as a job through the registry action org.readProject
+ * (org.readRepo and org.checkAccess, one after the other), so it goes on when
+ * you leave the page.
  */
 export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): void {
   const scanner = new OrgScanner(deps.exec, deps.store);

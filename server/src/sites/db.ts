@@ -9,8 +9,9 @@ import type { ExecResult, Executor } from '../exec.js';
 import type { JobRuntime, JobStep } from '../jobs.js';
 import { type LimitsMemo, type LimitsTarget, type MysqlAccount, withRaisedLimits } from '../mysql-limits.js';
 import type { Secrets } from '../secrets.js';
+import type { RunStore } from '../store.js';
 import { sqlFileFor } from './dump.js';
-import { canSwap, chooseMode, dropPrevious, dropSide, makeSide, prevName, sideName, swapIn, type SwapState } from './swap.js';
+import { canKeep, canSwap, chooseMode, dropPrevious, dropSide, KEEP_DAYS, keepName, makeSide, prevName, sideName, SWAP_UNDO, swapIn, type SwapState } from './swap.js';
 import { placeSites } from './network.js';
 import { checkAddresses, runPasses, type TableFlag } from './replace.js';
 import { siteFor, type SiteRef } from './site-actions.js';
@@ -28,8 +29,8 @@ export interface DbContext {
   uploadsDir: string;
   /** The MySQL admin account: imports go straight into MySQL with it, and its limits are raised while they run. */
   secrets?: Secrets | null;
-  /** Where raised MySQL limits are noted until they are put back. */
-  store?: LimitsMemo;
+  /** Where raised MySQL limits are noted until they are put back, and the databases kept from before an import. */
+  store?: LimitsMemo & Partial<Pick<RunStore, 'addKeptDatabase' | 'removeKeptDatabase'>>;
 }
 
 /** wp-cli pinned to one site, without loading its plugins or theme (a broken plugin cannot stop a database job). */
@@ -293,6 +294,8 @@ export function planImport(ctx: DbContext, { domain, path, uploadId, replace, re
   const db = site.wp.dbName;
   // Through a side database when the admin account can make one and the dump makes nothing RENAME TABLE cannot move.
   const swap = target && canSwap(db) && upload.facts.storedObjects === false ? { target, db, state: { db } as SwapState } : null;
+  // Kept for 7 days where the panel can note it and the name has room; otherwise the tables from before go when the job ends.
+  const keeps = Boolean(swap && canKeep(db) && ctx.store?.addKeptDatabase);
   const steps: JobStep[] = swap
     ? [
         {
@@ -327,7 +330,21 @@ export function planImport(ctx: DbContext, { domain, path, uploadId, replace, re
           id: 'swap',
           label: 'Swap the imported tables in',
           weight: 0.2,
-          run: async (job) => (swap.state.mode === 'side' ? swapIn(swap.target, swap.db, job) : ok(`imported straight into ${swap.db}: nothing to swap`)),
+          run: async (job) => {
+            if (swap.state.mode !== 'side') return ok(`imported straight into ${swap.db}: nothing to swap`);
+            if (!keeps) return swapIn(swap.target, swap.db, job);
+            // The tables from before stay for 7 days, as after a clean-up, so an import can be taken back after the job ends too.
+            const out = keepName(swap.db);
+            swap.state.kept = true;
+            return swapIn(swap.target, swap.db, job, {
+              out,
+              keptFor: `for ${KEEP_DAYS} days`,
+              onKept: (before) => {
+                ctx.store?.addKeptDatabase?.({ name: out, site: site.key, db: swap.db, reason: `before importing ${upload.name}`, createdAt: new Date().toISOString(), before });
+              },
+              afterUndo: () => ctx.store?.removeKeptDatabase?.(out),
+            });
+          },
         },
       ]
     : [
@@ -376,9 +393,15 @@ export function planImport(ctx: DbContext, { domain, path, uploadId, replace, re
   if (swap) {
     steps.push({
       id: 'cleanup',
-      label: 'Remove the tables from before the import',
+      label: keeps ? `Keep the tables from before the import for ${KEEP_DAYS} days` : 'Remove the tables from before the import',
       weight: 0.2,
-      run: async (job) => (swap.state.mode === 'side' ? dropPrevious(swap.target, swap.db, job) : ok('nothing to remove: the import went straight in')),
+      run: async (job) => {
+        if (swap.state.mode !== 'side') return ok('nothing to remove: the import went straight in');
+        if (!swap.state.kept) return dropPrevious(swap.target, swap.db, job);
+        // The kept database is the way back from here, so the job's own Undo goes.
+        job.dropUndo?.(SWAP_UNDO);
+        return ok(`the tables from before the import stay for ${KEEP_DAYS} days under Kept databases, where Put back swaps them in again`);
+      },
       skippable: `the tables from before the import stay in ${prevName(swap.db)}: drop that database yourself to free the disk`,
     });
   }

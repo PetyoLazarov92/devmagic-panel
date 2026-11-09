@@ -190,21 +190,28 @@ The runner never touches another database, accounts, rights, routines or files.
 ## Backups and tools
 
 - **Snapshots**: take, restore and download a snapshot of the site's database.
-- **Import a dump**: a `.sql`, `.sql.gz` or `.zip` streamed into a side
-  database and swapped in at once, with MySQL's limits raised while it runs.
-  The dump comes from any source the new site wizard has: an upload, the
-  Downloads folder, a cloud drive or Drive link, a public URL, a server over
-  SSH (with tables to leave the rows of) or this machine.
-- **Refresh from production**: set up once per site with the SSH host, the
-  WordPress folder there, the tables whose rows stay there and whether the
-  copy is cleaned (and which administrator it keeps); then one button exports
-  production's database over SSH, reading only, and imports it as Import a
-  dump does, or cleans it as Prepare from production does. Nothing is written
-  on production, and the settings hold no secret.
-- **Prepare from production**: a production dump without users (one
-  administrator you pick stays, the author of every post), orders, form
-  entries, logs or keys, from any of the same sources.
-- **Clean this database**: the same clean-up on the database the site has now.
+- **Import a database**: one card for every way a copy replaces the site's
+  database. It goes into a side database and is swapped in at once, with
+  MySQL's limits raised while it runs, production domains replaced with the
+  site's (URLs only, or every mention when you tick it), and the tables from
+  before kept for 7 days under Kept databases.
+  - **From production**: set up once per site with the SSH host, the
+    WordPress folder there, the tables whose rows stay there and whether the
+    copy is cleaned (and which administrator it keeps); then **Refresh now**
+    exports production's database over SSH, reading only, and imports it.
+    Nothing is written on production, and the settings hold no secret.
+  - **From a dump**: a `.sql`, `.sql.gz` or `.zip` from any source the new
+    site wizard has: an upload, the Downloads folder, a cloud drive or Drive
+    link, a public URL, a server over SSH (with tables to leave the rows of)
+    or this machine.
+  - **The copy**: **As it is**, an exact copy with every user, order and key,
+    or **Cleaned**: without users (one administrator you pick stays, the
+    author of every post), orders, form entries, logs or keys, cleaned in the
+    side database with SQL before anything reaches the site. A dump with
+    views, triggers or routines cannot be cleaned there and is imported as it
+    is, straight in after a snapshot.
+- **Clean this database**: the same clean-up on the database the site has
+  now, with nothing imported and no address replaced.
 - **Search and replace** on groups of tables at once, leaving out tables
   without the addresses, with a preview.
 - **Clean copies**: export a gzipped clean copy for the team, with a check for

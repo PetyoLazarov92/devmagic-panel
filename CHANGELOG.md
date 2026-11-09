@@ -1,5 +1,15 @@
 # Changelog
 
+### v1.31.0 (2026-11-10)
+* **Databases:** one **Import a database** card on a site's Backups and tools in place of Import a dump, Refresh from production and Prepare from production. Production's saved server sits on top with **Refresh now**; below it a dump from any source, with **The copy**: **As it is** (an exact copy) or **Cleaned**. Clean this database stays a card of its own
+* **Databases:** an import as it is keeps the site's tables from before for 7 days under Kept databases, as a cleaned one always did, so it can be put back after the job ends too. A database whose name has no room for that, or that cannot be swapped, goes as before
+* **Databases:** a cleaned import can replace every mention of the production domains, not only URLs, as an import as it is could
+* **Sites:** the new site wizard's Database step has the same **The copy** choice once the dump is in, with what a clean-up removes from that dump, in place of the Clean this copy checkbox
+* **Sites:** From a project has one Claude step, **Claude reads the project**, in place of two: one job reads the repo and then checks the links its docs name. The repo's answer shows while the links are still checked, **Go on without Claude** leaves the step and **Skip the links** leaves only its second part
+* **Sites:** one model, effort and spending cap for that step in place of two sets, under the switch on the Code step for one install and under Settings for all (Sonnet, medium effort, $1.00). Links are always checked at low effort and get what reading left of the cap. Settings saved per step carry over: the model and effort of reading the repo, and both caps together
+* **Sites:** a draft that stopped on either of the two old Claude steps opens on the new one, with its answers kept, and an answer the draft keeps is never paid for twice
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.30.1 (2026-11-09)
 * **Fix:** an export over SSH with WP-CLI no longer stops with `unknown variable 'tablespaces='`: WP-CLI turned the panel's switch into one mysqldump and mariadb-dump refuse, on a server or for Refresh from production. Tables whose rows are left out, over SSH or from another site on this machine, had the same fault and come with their structure again
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

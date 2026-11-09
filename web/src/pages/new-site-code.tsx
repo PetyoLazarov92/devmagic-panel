@@ -1,8 +1,9 @@
-import type { OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, RepoTrustAnswer, Site, UseClaude } from '@devmagic-panel/shared';
+import type { ClaudeRun, OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, RepoTrustAnswer, Site, UseClaude } from '@devmagic-panel/shared';
 import { branchName, gitUrl, isShared, namespaceLabel, namespaceShortLabel, parseNamespaceRef, placementWarnings, REPO_KIND_LABELS, repoWeb, sameRepo } from '@devmagic-panel/shared';
 import { Check, CircleAlert, FolderGit2, FolderTree, LoaderCircle, Plus, RefreshCw, Search, ShieldAlert, Sparkles, Star, TriangleAlert, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BranchPicker } from '@/components/branch-picker';
+import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS, ClaudeRunFields } from '@/components/claude-run-fields';
 import { PlacementFields, placementError } from '@/components/repo-placement';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -550,14 +551,21 @@ function PlanTree({ site, lines }: { site: string; lines: ReturnType<typeof plan
 /**
  * Whether Claude Code reads the repo and its links for this install: a
  * switch when it is installed and signed in (on by default, as Settings says),
- * nothing but a line on how to set it up otherwise.
+ * nothing but a line on how to set it up otherwise. Switched on, it shows what
+ * the step runs with, to change for this install.
  */
-export function ClaudeSwitch({ status, on, onChange, preference, onPreference }: {
+export function ClaudeSwitch({ status, on, onChange, preference, onPreference, run, own, onRun }: {
   status: OrgStatus | null;
   on: boolean;
   onChange: (on: boolean) => void;
   preference: UseClaude;
   onPreference: (p: UseClaude) => void;
+  /** What the step runs with: this install's own values, or your defaults. */
+  run?: ClaudeRun | undefined;
+  /** This install changed them from your defaults. */
+  own?: boolean;
+  /** A change for this install; undefined goes back to your defaults. */
+  onRun?: (run: ClaudeRun | undefined) => void;
 }) {
   const ready = Boolean(status?.claude.found && status.claude.signedIn);
   if (preference === 'never') {
@@ -591,6 +599,25 @@ export function ClaudeSwitch({ status, on, onChange, preference, onPreference }:
         <button type="button" className="w-fit text-xs font-medium text-primary hover:underline" onClick={() => onPreference(wanted)}>
           Make this the default
         </button>
+      )}
+      {on && run && onRun && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground">
+            Runs with <span className="font-medium text-foreground">{CLAUDE_MODEL_LABELS[run.model]}, {CLAUDE_EFFORT_LABELS[run.effort].toLowerCase()} effort, at most ${run.budgetUsd.toFixed(2)}</span>
+            {own ? ', for this install' : ''}
+          </summary>
+          <div className="mt-2 grid gap-2">
+            <ClaudeRunFields value={run} onChange={onRun} />
+            <p className="text-muted-foreground">
+              One step reads the repo and checks its links; the cap is for both.{' '}
+              {own ? (
+                <button type="button" className="font-medium text-primary hover:underline" onClick={() => onRun(undefined)}>Back to my defaults</button>
+              ) : (
+                <>Your defaults, from <Link href="/settings" className="font-medium text-primary hover:underline">Settings</Link>: a change here is for this install only.</>
+              )}
+            </p>
+          </div>
+        </details>
       )}
     </div>
   );

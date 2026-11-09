@@ -12,8 +12,8 @@ import { readUpload } from './uploads.js';
 /**
  * Refresh from production: the copy settings saved for a site (no secret),
  * and the job that uses them. The job exports over SSH as dump.fromServer
- * does, reading only, then hands the dump to the same steps as Import a dump
- * or, with clean on, Prepare from production. Nothing is written on
+ * does, reading only, then hands the dump to the same steps as an import as
+ * it is or, with clean on, a cleaned one. Nothing is written on
  * production.
  */
 
@@ -74,7 +74,7 @@ export function planRefresh(ctx: RefreshContext, input: ActionInput<'site.refres
         const replace = replaceFor(upload.facts.hosts, site);
         try {
           inner = settings.clean
-            ? planCleanCopy(ctx, { domain: input.domain, ...(input.path ? { path: input.path } : {}), uploadId, replace, user: input.user, confirm: input.confirm })
+            ? planCleanCopy(ctx, { domain: input.domain, ...(input.path ? { path: input.path } : {}), uploadId, replace, replaceBare: false, user: input.user, confirm: input.confirm })
             : planImport(ctx, { domain: input.domain, ...(input.path ? { path: input.path } : {}), uploadId, replace, replaceBare: false, confirm: input.confirm });
         } catch (error) {
           if (error instanceof DbRefused) return fail(error.message);

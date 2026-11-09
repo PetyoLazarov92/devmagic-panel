@@ -3,6 +3,7 @@ import { defaultLeftOut, knownLeftOut } from '@devmagic-panel/shared';
 import { TablesPicker } from '@/components/tables-picker';
 import { ChevronRight, CircleAlert, Cloud, ExternalLink, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, LoaderCircle, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { CopyChoice, findings } from '@/components/copy-choice';
 import { DumpFactsCard } from '@/components/dump-facts';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
@@ -128,7 +129,9 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
             <DumpFactsCard facts={state.upload.facts} />
           </>
         )}
-        <CleanSwitch on={Boolean(state.cleanCopy)} onChange={setClean} />
+        <div className="rounded-lg border bg-card px-4 py-3">
+          <CopyChoice id="clean-copy" clean={Boolean(state.cleanCopy)} onChange={setClean} removed={findings(state.upload)} keeps="the WordPress step's admin" />
+        </div>
       </div>
     );
   }
@@ -498,7 +501,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
       {setClean && (
         <div className="grid gap-1.5">
           <span className="font-medium">The copy</span>
-          <Segmented label="The copy" value={clean ? 'clean' : 'whole'} onChange={(v) => preset(v === 'clean')} options={[['whole', 'As it is'], ['clean', 'Production copy, cleaned']]} className="justify-self-start" />
+          <Segmented label="The copy" value={clean ? 'clean' : 'whole'} onChange={(v) => preset(v === 'clean')} options={[['whole', 'As it is'], ['clean', 'Cleaned']]} className="justify-self-start" />
           <p className="text-xs text-muted-foreground">
             {clean
               ? 'After the import: every user but one, WooCommerce orders and customer data, reviews, form entries, logs and payment, mail and API keys go, with SQL here. Ticking the personal-data tables below keeps their rows on the server as well.'
@@ -614,23 +617,6 @@ function FromThisMachine({ working, onTake, exclude }: { working: boolean; onTak
           <li className="text-xs text-muted-foreground">A copy of the dump; the deleted site stays restorable as it was.</li>
         </ul>
       )}
-    </div>
-  );
-}
-
-/** Clean the copy after the import, for any dump: off unless you choose it. */
-function CleanSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
-  return (
-    <div className="rounded-lg border bg-card px-4 py-3">
-      <Checkbox
-        id="clean-copy"
-        checked={on}
-        onChange={onChange}
-        label="Clean this copy after the import"
-        hint={on
-          ? "Keeps one user (the WordPress step's admin) and removes WooCommerce orders and customer data, reviews, form entries, logs and payment, mail and API keys, with SQL here. Nothing changes on production."
-          : 'Off: every user, order and key stays as the dump has them.'}
-      />
     </div>
   );
 }

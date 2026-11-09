@@ -51,6 +51,8 @@ export interface SwapState {
   db: string;
   /** side: through the side database; direct: straight into the site's database, after a snapshot when it has tables. */
   mode?: 'side' | 'direct';
+  /** The tables it replaced went to a kept database, for 7 days, instead of the previous one. */
+  kept?: boolean;
 }
 
 export interface ModeChoice {

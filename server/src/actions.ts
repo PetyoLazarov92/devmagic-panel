@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ActionId, ActionInput, ActionRunResult, ClaudeRun, ClaudeStep, ClaudeUsage } from '@devmagic-panel/shared';
-import { accessKey, actions, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, totalTokens } from '@devmagic-panel/shared';
+import { accessKey, actions, LINKS_EFFORT, MIN_CLAUDE_CAP, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, totalTokens } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { CoreStatusMap } from './core-status.js';
 import { NSS_NICKNAME } from './environment.js';
@@ -293,6 +293,81 @@ function claudeJob(ctx: ActionContext, step: ClaudeStep, draftId: string, key: s
   return outcome;
 }
 
+/**
+ * The one Claude Code step of an install, as one job: read the repo, then
+ * check the links its docs name. Two runs, on purpose: the one that reads the
+ * repo's text has no connectors, and only its fixed form reaches the one that
+ * opens your Asana and Google links. One cap covers both, and an answer the
+ * draft already keeps is used again at no cost.
+ */
+function projectReadJob(ctx: ActionContext, input: ActionInput<'org.readProject'>): HandlerOutcome | ExecResult[] {
+  const { draftId, fullName, branch } = input;
+  const key = readKey(fullName, branch);
+  const noted = ctx.drafts?.get(draftId)?.jobs?.read;
+  const running = noted?.key === key ? ctx.jobs.get(noted.id) : undefined;
+  if (running && (running.status === 'running' || running.status === 'queued')) return { results: [{ code: 0, stdout: `already running as ${running.id}`, stderr: '' }], data: { jobId: running.id }, detached: true };
+  const where = ctx.claudeCode;
+  const bin = where ? findClaude(where.home, where.searchPath) : null;
+  if (!where || !bin) return [{ code: 1, stdout: '', stderr: 'Claude Code is not installed or not found: install it and sign in with claude auth login' }];
+  const done = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
+  const activityOf = (job: { activity?: (line: string) => void }): Activity => {
+    const activity: Activity = {
+      lines: [],
+      add(line) {
+        activity.lines = [...activity.lines, line].slice(-KEPT_ACTIVITY);
+        job.activity?.(line);
+      },
+    };
+    return activity;
+  };
+  // What reading cost, so the links get what is left of the cap.
+  let spent = 0;
+  const outcome = startJob(
+    ctx,
+    [
+      {
+        id: 'read',
+        label: `Claude Code reads the docs of ${fullName}`,
+        run: async (job) => {
+          if (ctx.drafts?.get(draftId)?.results?.read?.key === key) return done(`the answer kept for ${fullName} (${branch}) is used: nothing ran`);
+          const activity = activityOf(job);
+          const { facts, files, ...usage } = await readRepo(ctx.exec, where.workDir, { bin, ...input.settings }, input, activity.add);
+          spent = usage.costUsd;
+          ctx.drafts?.saveResult(draftId, 'read', { key, facts, files, ...usage, activity: activity.lines });
+          return done(`Read ${files.length} files of ${fullName} (${branch}): ${usageText(usage)}`);
+        },
+      },
+      {
+        id: 'access',
+        label: 'Claude Code checks the links the docs name',
+        run: async (job) => {
+          const facts = ctx.drafts?.get(draftId)?.results?.read?.facts;
+          const links = [...(facts?.asanaLinks ?? []), ...(facts?.googleLinks ?? [])];
+          const hints = facts?.dumpHints ?? [];
+          if (!input.checkLinks) return done('the links are left unchecked, as asked');
+          if (links.length === 0) return done('the docs link no Asana tasks or Google files: nothing to check');
+          const linksKey = accessKey(fullName, links, hints);
+          if (ctx.drafts?.get(draftId)?.results?.access?.key === linksKey) return done('the answer kept for these links is used: nothing ran');
+          const left = Math.floor((input.settings.budgetUsd - spent) * 100) / 100;
+          if (left < MIN_CLAUDE_CAP) {
+            const cap = input.settings.budgetUsd.toFixed(2);
+            return { code: 1, stdout: '', stderr: `Reading the repo used the spending cap of ${cap} dollars, so the links were not checked. Check them again: the repo's answer is kept, so the whole cap goes to the links` };
+          }
+          const activity = activityOf(job);
+          const { report, ...usage } = await checkAccess(ctx.exec, where.workDir, { bin, model: input.settings.model, effort: LINKS_EFFORT, budgetUsd: left }, { fullName }, links, hints, activity.add);
+          ctx.drafts?.saveResult(draftId, 'access', { key: linksKey, report, ...usage, activity: activity.lines });
+          return done(`Checked ${report.links.length} links and found ${report.dumps.length} dumps: ${usageText(usage)}`);
+        },
+      },
+    ],
+    `Read ${fullName} and its links with Claude Code`,
+    draftId,
+  );
+  const jobId = outcome.data?.jobId;
+  if (typeof jobId === 'string') ctx.drafts?.noteJob(draftId, 'read', jobId, key);
+  return outcome;
+}
+
 /** A Claude Code run for Run history: its time, tokens and estimate at API prices. */
 const usageText = (u: ClaudeUsage) =>
   [u.durationMs !== undefined ? `${Math.round(u.durationMs / 1000)} s` : '', u.tokens ? `${totalTokens(u.tokens)} tokens` : '', `$${u.costUsd.toFixed(2)} at API prices`].filter(Boolean).join(', ');
@@ -449,6 +524,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       ctx.drafts?.saveResult(input.draftId, 'read', { key: readKey(input.fullName, input.branch), facts, files, ...usage, activity: activity.lines });
       return `Read ${files.length} files of ${input.fullName} (${input.branch}): ${usageText(usage)}`;
     }),
+  'org.readProject': async (ctx, input) => projectReadJob(ctx, input),
   'org.checkAccess': async (ctx, input) =>
     claudeJob(ctx, 'access', input.draftId, accessKey(input.fullName, input.links, input.dumpHints), `Check the links of ${input.fullName} with Claude Code`, `Claude Code checks ${input.links.length} links`, input.settings, async (claude, workDir, activity) => {
       const r = await checkAccess(ctx.exec, workDir, claude, { fullName: input.fullName }, input.links, input.dumpHints, activity.add);
@@ -634,7 +710,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       upload: input.uploadId,
     }),
   'db.cleanCopy': async (ctx, input) =>
-    startJob(ctx, planCleanCopy(ctx, input), `Prepare ${input.domain}${input.path ?? ''} from production`, `${input.domain}${input.path ?? ''}`, {
+    startJob(ctx, planCleanCopy(ctx, input), `Import a cleaned dump into ${input.domain}${input.path ?? ''}`, `${input.domain}${input.path ?? ''}`, {
       // The dump goes once it is in, or once the job is undone; a failed job keeps it for Retry.
       onDone: () => removeUpload(ctx.uploadsDir, input.uploadId),
       onUndone: () => removeUpload(ctx.uploadsDir, input.uploadId),

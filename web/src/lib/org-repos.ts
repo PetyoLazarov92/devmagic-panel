@@ -42,7 +42,7 @@ export function switchRepo(s: WizardState, repo: OrgRepo, blank: WizardState, no
   const rest = newest(kept);
   const others = Object.keys(rest).length ? { earlier: rest } : {};
   // This install's Claude Code settings stay with the install, not the repo.
-  const claude = org.claude ? { claude: org.claude } : {};
+  const claude = org.run ? { run: org.run } : {};
   if (back) return { ...back.state, org: { ...back.org, ...claude, ...others } };
   return {
     ...blank,
@@ -59,7 +59,7 @@ export function switchOrg(s: WizardState, name: string, now = Date.now()): Wizar
   const org = s.org;
   if (!org || org.name === name) return s;
   const rest = newest(putAside(s, now));
-  return { ...s, org: { name, repo: null, read: { status: 'idle' }, access: { status: 'idle' }, useClaude: org.useClaude, ...(org.claude ? { claude: org.claude } : {}), ...(Object.keys(rest).length ? { earlier: rest } : {}) } };
+  return { ...s, org: { name, repo: null, read: { status: 'idle' }, access: { status: 'idle' }, useClaude: org.useClaude, ...(org.run ? { run: org.run } : {}), ...(Object.keys(rest).length ? { earlier: rest } : {}) } };
 }
 
 /** The dumps the repos put aside use, kept with the draft so they are not removed while you look elsewhere. */
