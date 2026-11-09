@@ -1,6 +1,6 @@
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import type { RepoPreset, Site, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
-import { branchName, coreVersion, hostname, isLocalName, repoKey, repoPreset, wpSlug } from '@devmagic-panel/shared';
+import { branchName, coreVersion, hostname, isLocalName, placementForLayout, repoKey, repoPreset, wpSlug } from '@devmagic-panel/shared';
 import { z } from 'zod';
 import type { Executor } from '../exec.js';
 import { inspectRepo } from '../sites/repo.js';
@@ -48,7 +48,7 @@ Follow the repo's docs and the last install's answers first, then the convention
 const compact = (s: Site) => ({ domain: s.domain, aliases: s.aliases.length, core: s.core, multisite: s.network?.mode, remote: s.git?.remote, ...(s.repos?.length ? { innerRepos: s.repos.map((r) => ({ folder: r.folder, remote: r.git.remote })) } : {}), database: s.db?.name });
 
 /** Turns Claude's answer into a repo preset, dropping anything the panel would refuse. */
-export function toPreset(out: z.infer<typeof Output>, cores: string[]): RepoPreset {
+export function toPreset(out: z.infer<typeof Output>, cores: string[], url = ''): RepoPreset {
   const domains = out.domains.flatMap((d) => {
     const local = d.local.trim().toLowerCase();
     if (!isLocalName(local)) return [];
@@ -59,7 +59,7 @@ export function toPreset(out: z.infer<typeof Output>, cores: string[]): RepoPres
   const core = out.core && coreVersion.safeParse(out.core.version).success && cores.includes(out.core.version) ? out.core : undefined;
   return repoPreset.parse({
     domains: domains.filter((d, i) => domains.findIndex((x) => x.local === d.local) === i),
-    layout: out.layout,
+    placement: placementForLayout(out.layout, url),
     ...(core ? { core } : {}),
     deactivate: out.deactivate.filter((p) => wpSlug.safeParse(p).success),
     ...(out.uploadsFrom && hostname.safeParse(out.uploadsFrom).success ? { uploadsFrom: out.uploadsFrom } : {}),
@@ -104,5 +104,5 @@ export async function suggestWizard(claude: ClaudeFactory, apiKey: string | unde
   if (response.stop_reason === 'refusal' || !out) throw new WizardRefused('Claude did not fill in the wizard this time; fill it by hand');
   const fallback = repo && 'branch' in repo ? repo.branch : 'master';
   const branch = branchName.safeParse(out.branch).success ? out.branch : fallback;
-  return { preset: toPreset(out, cores), branch, notes: out.notes, sent };
+  return { preset: toPreset(out, cores, input.repoUrl ?? ''), branch, notes: out.notes, sent };
 }

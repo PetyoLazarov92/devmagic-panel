@@ -85,7 +85,7 @@ async function setup(overrides: Record<string, FakeResponse> | ((wpBase: string)
     source: 'repo',
     domain: 'local.new.com',
     aliases: ['local.new.de'],
-    repo: { url: 'git@github.com:WandworksCo/new-site.git', branch: 'master', layout: 'site-root' },
+    repos: [{ url: 'git@github.com:WandworksCo/new-site.git', branch: 'master', dir: '', folder: '' }],
     uploadId: upload.id,
     replace: [{ from: 'www.new.com', to: 'local.new.com' }],
     core: { mode: 'wpcore', version: '7.1.3' },
@@ -212,8 +212,8 @@ describe('site.create from a repo', () => {
     const result = await runAction(s.ctx, 'site.create', s.input);
     expect((await settle(s.jobs, result.data?.jobId ?? '')).status).toBe('done');
     expect(existsSync(join(s.docroot, '.devmagic.json'))).toBe(false);
-    expect(s.store.preset(repoKey(s.input.repo.url) as string)).toMatchObject({
-      layout: 'site-root',
+    expect(s.store.preset(repoKey((s.input.repos[0]?.url ?? '')) as string)).toMatchObject({
+      placement: { dir: '', folder: '' },
       domains: [{ production: 'www.new.com', local: 'local.new.com' }, { local: 'local.new.de' }],
       deactivate: ['wp-rocket', 'wordfence'],
     });
@@ -223,7 +223,7 @@ describe('site.create from a repo', () => {
     const s = await setup({ 'mysql --user root --host localhost': { code: 1, stderr: 'ERROR 1007: database exists' } });
     const result = await runAction(s.ctx, 'site.create', s.input);
     expect((await settle(s.jobs, result.data?.jobId ?? '')).status).toBe('failed');
-    expect(s.store.preset(repoKey(s.input.repo.url) as string)).toBeUndefined();
+    expect(s.store.preset(repoKey(s.input.repos[0]?.url ?? '') as string)).toBeUndefined();
   });
 
   it("writes the local constants from Settings into wp-config.php, over the repo's own value", async () => {
@@ -246,7 +246,7 @@ describe('site.create from a repo', () => {
     expect(view.steps.map((x) => x.id)).toEqual(['space', 'folder', 'clone', 'content', 'core', 'cert', 'vhost', 'hosts', 'db', 'config', 'import', 'replace', 'check', 'plugins', 'admin', 'build', 'htaccess', 'local', 'flush']);
 
     const all = lines(s.calls);
-    expect(all).toContain(`git clone --progress -c core.fileMode=false --branch master --single-branch -- git@github.com:WandworksCo/new-site.git ${s.docroot}/.dmp-clone`);
+    expect(all).toContain(`git clone --progress --no-recurse-submodules -c core.fileMode=false -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always --branch master --single-branch -- git@github.com:WandworksCo/new-site.git ${s.docroot}/.dmp-clone`);
     expect(all).toContain(`sudo -n ${DMP} vhost-write local.new.com --uploads-proxy www.new.com local.new.de`);
     expect(all).toContain(`wp --path=${s.docroot} --url=https://local.new.com/ plugin deactivate wp-rocket --skip-plugins --skip-themes`);
     expect(all.filter((l) => l.includes(' search-replace //www.new.com //local.new.com '))).toHaveLength(1);
@@ -558,5 +558,85 @@ describe('site.create under a path of an existing site', () => {
     await expect(runAction(s.ctx, 'site.create', s.input)).rejects.toThrow(/already served/);
     await expect(runAction(s.ctx, 'site.create', { ...s.input, path: '/docs', aliases: ['local.docs.com'] })).rejects.toBeInstanceOf(ActionInputError);
     await expect(runAction(s.ctx, 'site.create', { ...s.input, path: '/docs', source: 'empty' })).rejects.toBeInstanceOf(ActionInputError);
+  });
+});
+
+describe('site.create with several repos', () => {
+  const PLUGIN = { url: 'git@github.com:wandworks/wandworks-blocks.git', branch: 'main', dir: 'wp-content/plugins', folder: 'wandworks-blocks' };
+
+  it('clones the site root first, then each repo into its folder, kept out of the outer repo locally', async () => {
+    const s = await setup();
+    const exec = s.ctx.exec;
+    // git rev-parse answers as a real repo at the site root would.
+    s.ctx.exec = async (file, args, options) => {
+      if (file === 'git' && args[0] === '-C' && args[2] === 'rev-parse' && args[3] === '--show-toplevel') return { code: 0, stdout: `${s.docroot}\n`, stderr: '' };
+      if (file === 'git' && args[0] === '-C' && args[2] === 'rev-parse' && args[3] === '--git-path') return { code: 0, stdout: '.git/info/exclude\n', stderr: '' };
+      return exec(file, args, options);
+    };
+    const input = { ...s.input, repos: [...s.input.repos, PLUGIN] };
+    const view = await settle(s.jobs, (await runAction(s.ctx, 'site.create', input)).data?.jobId ?? '');
+    expect(view.status).toBe('done');
+    const clones = lines(s.calls).filter((l) => l.startsWith('git clone'));
+    expect(clones).toHaveLength(2);
+    expect(clones[0]).toContain(`${s.docroot}/.dmp-clone`);
+    expect(clones[1]).toContain(`-- ${PLUGIN.url} ${s.docroot}/wp-content/plugins/wandworks-blocks`);
+    expect(view.steps.map((x) => x.id)).toEqual(expect.arrayContaining(['clone', 'clone-2']));
+    expect(existsSync(join(s.docroot, 'wp-content/plugins/wandworks-blocks/.git'))).toBe(true);
+    expect(readFileSync(join(s.docroot, '.git/info/exclude'), 'utf8')).toContain('/wp-content/plugins/wandworks-blocks');
+    // How it was installed lists every repo with its path, for the Git card.
+    expect(s.store.installs().get('local.new.com')?.repos).toEqual([
+      { url: 'git@github.com:WandworksCo/new-site.git', branch: 'master', path: '' },
+      { url: PLUGIN.url, branch: 'main', path: 'wp-content/plugins/wandworks-blocks' },
+    ]);
+    // And the next install of the main repo remembers the other one with its place.
+    expect(s.store.preset(repoKey(s.input.repos[0]?.url ?? '') as string)).toMatchObject({ extra: [{ url: PLUGIN.url, dir: 'wp-content/plugins', folder: 'wandworks-blocks' }] });
+  });
+
+  it('refuses to clone through a link or into a folder that holds files', async () => {
+    const { cloneTargetProblem } = await import('../src/sites/create.js');
+    const s = await setup();
+    mkdirSync(join(s.docroot, 'wp-content/plugins/full'), { recursive: true });
+    writeFileSync(join(s.docroot, 'wp-content/plugins/full/x.php'), '<?php');
+    mkdirSync(join(s.root, 'elsewhere'));
+    const { symlinkSync } = await import('node:fs');
+    symlinkSync(join(s.root, 'elsewhere'), join(s.docroot, 'wp-admin'));
+    expect(cloneTargetProblem(s.docroot, join(s.docroot, 'wp-content/plugins/new'))).toBeNull();
+    expect(cloneTargetProblem(s.docroot, join(s.docroot, 'wp-content/plugins/full'))).toMatch(/already holds files/);
+    expect(cloneTargetProblem(s.docroot, join(s.docroot, 'wp-admin/tools'))).toMatch(/is a link to/);
+    expect(cloneTargetProblem(s.docroot, join(s.root, 'outside'))).toMatch(/outside the site's folder/);
+  });
+
+  it('refuses a repo in a core folder with a shared core, before anything runs', async () => {
+    const s = await setup();
+    await expect(runAction(s.ctx, 'site.create', { ...s.input, repos: [...s.input.repos, { ...PLUGIN, dir: 'wp-admin', folder: 'tools' }] })).rejects.toThrow(/folder of WordPress core/);
+    expect(lines(s.calls).filter((l) => l.startsWith('git clone'))).toEqual([]);
+  });
+
+  it("uses the repo's own WordPress without a link or a download, and fails when it has none", async () => {
+    const withCore = await setup({
+      'git clone': (call) => {
+        const into = call.args.at(-1) as string;
+        mkdirSync(join(into, '.git'), { recursive: true });
+        mkdirSync(join(into, 'wp-includes'), { recursive: true });
+        writeFileSync(join(into, 'wp-includes/version.php'), "<?php\n$wp_version = '6.9.1';\n");
+        writeFileSync(join(into, 'wp-config-local-sample.php'), "<?php\ndefine( 'DB_NAME', 'x' );\n$table_prefix = 'wp_';\n/* That's all, stop editing! */\n");
+        return { stdout: 'Cloning...' };
+      },
+    });
+    const view = await settle(withCore.jobs, (await runAction(withCore.ctx, 'site.create', { ...withCore.input, core: { mode: 'repo' }, build: { composer: false, npm: false } })).data?.jobId ?? '');
+    expect(view.steps.find((x) => x.id === 'core')?.output).toContain('WordPress 6.9.1');
+    expect(lines(withCore.calls).some((l) => l.includes('wpcore') || l.includes('core download'))).toBe(false);
+
+    const without = await setup();
+    const failed = await settle(without.jobs, (await runAction(without.ctx, 'site.create', { ...without.input, core: { mode: 'repo' }, build: { composer: false, npm: false } })).data?.jobId ?? '');
+    expect(failed.status).toBe('failed');
+    expect(failed.steps.find((x) => x.id === 'core')?.output).toMatch(/holds no WordPress core/);
+  });
+
+  it('remembers nothing when asked not to', async () => {
+    const s = await setup();
+    const view = await settle(s.jobs, (await runAction(s.ctx, 'site.create', { ...s.input, remember: false })).data?.jobId ?? '');
+    expect(view.status).toBe('done');
+    expect(s.store.preset(repoKey(s.input.repos[0]?.url ?? '') as string)).toBeUndefined();
   });
 });

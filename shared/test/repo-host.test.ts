@@ -82,6 +82,6 @@ describe('repos inside a site', () => {
       ['/docs', undefined, '/docs'],
     ]);
     expect(siteRepos({ path: '/learn', repos: [repos[1] as (typeof repos)[number]] })).toMatchObject([{ label: 'Theme: wandworks', repo: 'wp-content/themes/wandworks', mount: '/learn' }]);
-    expect([siteRepoLabel({ kind: 'plugin', name: 'wandworks-blocks' }), siteRepoLabel({ kind: 'mu-plugin', name: 'tools' })]).toEqual(['Plugin: wandworks-blocks', 'Must-use plugin: tools']);
+    expect([siteRepoLabel({ kind: 'plugin', name: 'wandworks-blocks' }), siteRepoLabel({ kind: 'mu-plugin', name: 'tools' }), siteRepoLabel({ kind: 'folder', name: 'blocks', folder: 'app/blocks' })]).toEqual(['Plugin: wandworks-blocks', 'Must-use plugin: tools', 'Repo: app/blocks']);
   });
 });

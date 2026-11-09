@@ -1,4 +1,4 @@
-import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
@@ -838,6 +838,30 @@ function mockSalts(constants: SiteConstant[]): SiteSalts {
 }
 
 let mockLocalConstants: LocalConstant[] = [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'WANDWORKS_DEV', value: true }];
+let mockRemembered: RememberedRepo[] = [
+  {
+    key: 'https://github.com/wandworks/site',
+    name: 'github.com/wandworks/site',
+    updatedAt: '2026-11-02T09:14:00.000Z',
+    preset: {
+      domains: [{ production: 'www.spellbook.example', local: 'local.spellbook.example' }],
+      placement: { dir: '', folder: '' },
+      extra: [{ url: 'git@github.com:wandworks/wandworks-blocks.git', branch: 'main', dir: 'wp-content/plugins', folder: 'wandworks-blocks' }],
+      core: { mode: 'wpcore', version: '7.1.3' },
+      deactivate: ['wp-rocket', 'wordfence'],
+      activate: ['query-monitor'],
+      uploadsFrom: 'www.spellbook.example',
+      uploadsVia: 'redirect',
+      builds: [{ repo: 0, dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'build' }],
+    },
+  },
+  {
+    key: 'https://gitlab.com/wandworks/web/store',
+    name: 'gitlab.com/wandworks/web/store',
+    updatedAt: '2026-10-21T15:40:00.000Z',
+    preset: { domains: [{ production: 'www.wandworks-store.example', local: 'local.wandworks-store.example' }], placement: { dir: '', folder: 'wp-content' }, extra: [], deactivate: [], activate: [] },
+  },
+];
 
 // Kept for the browser session, as the panel keeps them in its database.
 const mockPreferences: Preferences = (() => {
@@ -1106,6 +1130,15 @@ export const mockApi: Api = {
     }
     return { runId: 42, ok: true, exitCode: 0, output: 'ok: done (mockup)' };
   },
+  rememberedRepos: async () => structuredClone(mockRemembered),
+  saveRememberedRepo: async (key, preset) => {
+    mockRemembered = mockRemembered.map((r) => (r.key === key ? { ...r, preset: structuredClone(preset), updatedAt: new Date().toISOString() } : r));
+    return { ok: true };
+  },
+  forgetRememberedRepo: async (key) => {
+    mockRemembered = mockRemembered.filter((r) => r.key !== key);
+    return { ok: true };
+  },
   localConstants: async () => structuredClone(mockLocalConstants),
   saveLocalConstants: async (list) => {
     mockLocalConstants = structuredClone(list);
@@ -1157,7 +1190,8 @@ export const mockApi: Api = {
           { production: 'www.wandworks.example', local: 'local.wandworks.example' },
           { production: 'shop.wandworks.example', local: 'local.shop.wandworks.example' },
         ],
-        layout: 'wp-content',
+        placement: { dir: '', folder: 'wp-content' },
+        extra: [],
         activate: [],
         core: { mode: 'wpcore', version: '7.1.3' },
         deactivate: ['wp-rocket', 'wordfence'],
@@ -1564,7 +1598,8 @@ export const mockApi: Api = {
           { production: 'www.spellbook.de', local: 'local.spellbook.de' },
           { production: 'www.spellbook.fr', local: 'local.spellbook.fr' },
         ],
-        layout: 'site-root',
+        placement: { dir: '', folder: '' },
+        extra: [],
         activate: ['query-monitor'],
         core: { mode: 'wpcore', version: '7.1.3' },
         deactivate: ['wp-rocket', 'wordfence', 'cloudflare'],

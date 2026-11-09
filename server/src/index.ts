@@ -8,7 +8,7 @@ import { defaultHostPaths } from './environment.js';
 import { runCommand } from './exec.js';
 import { putBackBeforeExit, putBackLeftRaised } from './mysql-limits.js';
 import { readSecrets, removeGithubToken } from './secrets.js';
-import { purgeTrash } from './sites/trash.js';
+import { listTrash, purgeTrash, sweepArchives } from './sites/trash.js';
 import { RunStore } from './store.js';
 import { readVersion } from './version.js';
 
@@ -54,7 +54,15 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 // Deleted sites older than TRASH_DAYS go for good: now, and every six hours.
-const purge = () => void purgeTrash(runCommand, process.env.DEVMAGIC_PANEL_DMP_ROOT ?? DMP_ROOT).then((r) => r.code !== 0 && app.log.warn(`trash purge: ${r.stderr.trim()}`));
+// The panel's records of the archives that went go with them.
+const dmpRootBin = process.env.DEVMAGIC_PANEL_DMP_ROOT ?? DMP_ROOT;
+const purge = () =>
+  void purgeTrash(runCommand, dmpRootBin)
+    .then(async (r) => {
+      if (r.code !== 0) return app.log.warn(`trash purge: ${r.stderr.trim()}`);
+      sweepArchives(store, await listTrash(runCommand, dmpRootBin));
+    })
+    .catch((error: Error) => app.log.warn(`trash purge: ${error.message}`));
 purge();
 setInterval(purge, 6 * 60 * 60_000).unref();
 

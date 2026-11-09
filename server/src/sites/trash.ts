@@ -7,6 +7,7 @@ import type { ExecResult, Executor } from '../exec.js';
 import { runRoot } from '../exec.js';
 import type { JobStep } from '../jobs.js';
 import type { Secrets } from '../secrets.js';
+import type { RunStore } from '../store.js';
 import { importSql } from './db.js';
 import { isPolicyRefusal, mysqlPassword } from './mysql-password.js';
 import type { LimitsMemo } from '../mysql-limits.js';
@@ -55,6 +56,18 @@ export async function listTrash(exec: Executor, dmpRoot: string): Promise<TrashE
 
 /** Drops entries older than TRASH_DAYS; the panel runs it at start and every few hours. */
 export const purgeTrash = (exec: Executor, dmpRoot: string) => runRoot(exec, dmpRoot, ['trash-purge', String(TRASH_DAYS)]);
+
+/**
+ * After a purge: the panel's records of archives dmp-root no longer has (how
+ * the site was installed, what a restore would have put back) go too.
+ * Returns the archives forgotten.
+ */
+export function sweepArchives(store: Pick<RunStore, 'archiveIds' | 'forgetArchive'>, entries: readonly Pick<TrashEntry, 'id'>[]): string[] {
+  const there = new Set(entries.map((e) => e.id));
+  const gone = store.archiveIds().filter((id) => !there.has(id));
+  for (const id of gone) store.forgetArchive(id);
+  return gone;
+}
 
 /** Free space where the trash lives, for the remove dialog; STATE_DIR may not exist yet, so its parent is asked. */
 export function trashFreeBytes(config: SystemConfig): number | undefined {

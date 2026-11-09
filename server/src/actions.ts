@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ActionId, ActionInput, ActionRunResult, ClaudeRun, ClaudeStep, ClaudeUsage } from '@devmagic-panel/shared';
-import { accessKey, actions, presetFromCreate, readKey, repoKey, SITE_SERVER_LABEL, totalTokens } from '@devmagic-panel/shared';
+import { accessKey, actions, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, totalTokens } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { CoreStatusMap } from './core-status.js';
 import { NSS_NICKNAME } from './environment.js';
@@ -421,7 +421,8 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     const before = ctx.store.archivedInstall(input.id);
     return startJob(ctx, steps, `Restore ${domain}`, domain, {
       onDone: async () => {
-        ctx.store.setInstall(domain, undefined, { ...(before?.repo ? { repo: before.repo } : {}), ...(before?.org ? { org: before.org } : {}), how: 'restore', at: new Date().toISOString(), archivedAt: stampDate(input.id.slice(-15)) });
+        ctx.store.setInstall(domain, undefined, { ...(before?.repo ? { repo: before.repo } : {}), ...(before?.repos ? { repos: before.repos } : {}), ...(before?.org ? { org: before.org } : {}), how: 'restore', at: new Date().toISOString(), archivedAt: stampDate(input.id.slice(-15)) });
+        ctx.store.restoreArchiveMeta(input.id);
         ctx.store.forgetArchive(input.id);
         await restoreCronTasks(ctx, domain);
       },
@@ -645,15 +646,16 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
         // Steps skipped on the way stay on the site's page, with what is left to do.
         const skipped = job.steps.filter((s) => s.status === 'skipped').map((s) => ({ label: s.label, todo: s.skippable ?? '' }));
         ctx.store.setInstall(input.domain, input.path, {
-          how: input.organization && input.repo ? 'organization' : input.source,
+          how: input.source,
           at: new Date().toISOString(),
-          ...(input.repo ? { repo: input.repo.url } : {}),
+          ...(input.repos[0] ? { repo: input.repos[0].url } : {}),
+          ...(input.repos.length ? { repos: input.repos.map((r) => ({ url: r.url, branch: r.branch, path: repoTarget(r) })) } : {}),
           ...(input.organization ? { org: input.organization } : {}),
           ...(skipped.length ? { skipped } : {}),
         });
-        const key = input.repo ? repoKey(input.repo.url) : null;
+        const key = input.repos[0] ? repoKey(input.repos[0].url) : null;
         const preset = presetFromCreate(input);
-        if (key && preset) ctx.store.savePreset(key, preset);
+        if (key && preset && input.remember) ctx.store.savePreset(key, preset);
       },
     });
     if (draft) ctx.drafts?.installing(draft, view.id);

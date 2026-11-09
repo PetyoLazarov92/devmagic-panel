@@ -1,4 +1,4 @@
-import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RememberedRepo, RepoPreset, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -173,6 +173,9 @@ export interface Api {
   /** The constants every local site should have, from Settings. */
   localConstants: () => Promise<LocalConstant[]>;
   saveLocalConstants: (list: LocalConstant[]) => Promise<LocalConstant[]>;
+  rememberedRepos: () => Promise<RememberedRepo[]>;
+  saveRememberedRepo: (key: string, preset: RepoPreset) => Promise<{ ok: true }>;
+  forgetRememberedRepo: (key: string) => Promise<{ ok: true }>;
   run: (id: number) => Promise<RunDetail>;
   cores: () => Promise<string[]>;
   /** fresh: ask WordPress.org for its release list now, not the panel's hour-old copy. */
@@ -370,6 +373,9 @@ const realApi: Api = {
   savePreferences: (update) => request('PUT', '/api/preferences', update),
   localConstants: () => request('GET', '/api/local-constants'),
   saveLocalConstants: (list) => request('PUT', '/api/local-constants', list),
+  rememberedRepos: () => request('GET', '/api/remembered/repos'),
+  saveRememberedRepo: (key, preset) => request('PUT', '/api/remembered/repos', { key, preset }),
+  forgetRememberedRepo: (key) => request('POST', '/api/remembered/repos/forget', { key }),
   cores: () => request('GET', '/api/cores'),
   coresReport: (fresh) => request('GET', `/api/cores/report${fresh ? '?fresh=1' : ''}`),
   playRun: notWired,

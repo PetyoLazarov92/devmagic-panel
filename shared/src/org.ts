@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { type ClaudeRun, claudeRun, hostname } from './actions.js';
 import { gitlabHost, namespaceRef } from './repo-host.js';
-import { type InstallHow, type RepoLayout } from './sites.js';
+import { type InstallHow } from './sites.js';
+import { placementForKind, type RepoPlacement } from './site-repos.js';
 
 /**
  * Installing a site from a GitHub organization or a GitLab group: the repos
@@ -170,7 +171,8 @@ export const REPO_KIND_LABELS: Record<RepoKind, string> = {
   other: 'Not a WordPress site',
 };
 
-export const layoutForKind = (kind: RepoKind): RepoLayout => (kind === 'wp-content' ? 'wp-content' : kind === 'theme' ? 'theme' : kind === 'plugin' ? 'plugin' : 'site-root');
+/** Where a listed repo goes by default: by what it holds, else the site root. */
+export const placementOfRepo = (repo: Pick<OrgRepo, 'sshUrl' | 'kind'>): RepoPlacement => placementForKind(repo.kind, repo.sshUrl) ?? { dir: '', folder: '' };
 
 const text = z.string().max(500);
 
@@ -244,7 +246,7 @@ export function hostOf(value: string | null | undefined): string | null {
 export interface Prefill {
   repoUrl: string;
   branch: string;
-  layout: RepoLayout;
+  placement: RepoPlacement;
   coreVersion: string;
   /** The production address the docs give, offered for missing images when the dump holds none. */
   productionHint: string;
@@ -286,7 +288,7 @@ export function prefillFromFacts(repo: Pick<OrgRepo, 'sshUrl' | 'defaultBranch' 
   return {
     repoUrl: repo.sshUrl,
     branch,
-    layout: layoutForKind(repo.kind),
+    placement: placementOfRepo(repo),
     coreVersion,
     productionHint: repo.kind === 'site' || repo.kind === 'wp-content' ? (prod ?? '') : '',
     composer: facts?.composer ?? false,

@@ -72,7 +72,8 @@ export interface SiteGit {
 }
 
 /** Where a repo inside a site's folder sits; the site's own repo is `git` on the site. */
-export type SiteRepoKind = 'wp-content' | 'theme' | 'plugin' | 'mu-plugin';
+/** folder: a repo the panel cloned into another folder of the site, from how it was installed. */
+export type SiteRepoKind = 'wp-content' | 'theme' | 'plugin' | 'mu-plugin' | 'folder';
 
 /** A repo inside a site's own folder: wp-content, or a theme or plugin folder. */
 export interface SiteRepo {
@@ -84,10 +85,11 @@ export interface SiteRepo {
   git: SiteGit;
 }
 
-const REPO_KIND_NAMES: Record<SiteRepoKind, string> = { 'wp-content': 'wp-content', theme: 'Theme', plugin: 'Plugin', 'mu-plugin': 'Must-use plugin' };
+const REPO_KIND_NAMES: Record<SiteRepoKind, string> = { 'wp-content': 'wp-content', theme: 'Theme', plugin: 'Plugin', 'mu-plugin': 'Must-use plugin', folder: 'Repo' };
 
 /** wp-content, Theme: wandworks, Plugin: wandworks-blocks */
-export const siteRepoLabel = (repo: Pick<SiteRepo, 'kind' | 'name'>): string => (repo.kind === 'wp-content' ? 'wp-content' : `${REPO_KIND_NAMES[repo.kind]}: ${repo.name}`);
+export const siteRepoLabel = (repo: Pick<SiteRepo, 'kind' | 'name'> & { folder?: string }): string =>
+  repo.kind === 'wp-content' ? 'wp-content' : repo.kind === 'folder' ? `${REPO_KIND_NAMES.folder}: ${repo.folder ?? repo.name}` : `${REPO_KIND_NAMES[repo.kind]}: ${repo.name}`;
 
 /** The site's repos in the order the Git card shows them: its own, those inside it, then mounted folders'. */
 export function siteRepos(site: Pick<Site, 'git' | 'repos' | 'mounts' | 'path'>): Array<{ label: string; git: SiteGit; repo?: string; mount?: string }> {
@@ -344,8 +346,10 @@ export interface SiteInstall {
   how: InstallHow;
   /** When it was installed or restored; unknown for sites made by hand. */
   at?: string;
-  /** The repo it was cloned from. */
+  /** The repo it was cloned from (the main one). */
   repo?: string;
+  /** Every repo the install cloned, with its path in the site ('' for the site root). */
+  repos?: Array<{ url: string; branch: string; path: string }>;
   /** The organization it was picked from. */
   org?: string;
   /** For a restore: when the copy it came from was archived. */
@@ -876,6 +880,12 @@ export interface RepoLookup {
   helpers: LocalHelperPlugin[];
   mediaPlugin: boolean;
   builds: RepoBuild[];
+  /** What the repo holds by its top level: a whole site, wp-content, a theme or a plugin. */
+  kind?: 'site' | 'wp-content' | 'theme' | 'plugin' | 'other';
+  /** It holds WordPress core (wp-admin and wp-includes), and the version its wp-includes/version.php names. */
+  core?: { version?: string };
+  /** It keeps media in wp-content/uploads. */
+  uploads?: boolean;
 }
 
 /** What the site page needs to move a site between web servers. */

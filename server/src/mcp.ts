@@ -72,7 +72,10 @@ export async function runMcpStdio(version: string): Promise<void> {
   const hostPaths = defaultHostPaths(homedir());
   const store = new RunStore(paths.databaseFile);
   const coreStatus = coreStatusSource(join(paths.dataDir, 'wp-core-status.json'));
-  const sites = async () => discoverSites({ config, exec: runCommand, secrets: readSecrets(paths.secretsFile), wpcoreConf: hostPaths.wpcoreConf, coreStatus: await coreStatus() });
+  const sites = async () => {
+    const installs = store.installs();
+    return discoverSites({ config, exec: runCommand, secrets: readSecrets(paths.secretsFile), wpcoreConf: hostPaths.wpcoreConf, coreStatus: await coreStatus(), repoPaths: (site) => (installs.get(site)?.repos ?? []).map((r) => r.path) });
+  };
   const deps: ChatDeps = {
     config,
     exec: runCommand,

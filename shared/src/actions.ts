@@ -14,6 +14,7 @@ const htaccessChoice = z.object({
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
 import { cronSchedule } from './cron.js';
 import { namespaceRef } from './repo-host.js';
+import { cloneFolder, MAX_SITE_REPOS_PER_INSTALL, placementForLayout, placementProblems, repoTarget, siteDir } from './site-repos.js';
 
 /** A row's primary key values, in the key's column order. */
 const rowKey = z.array(z.string().max(4096)).min(1).max(16);
@@ -112,6 +113,13 @@ export const branchName = z
   .string()
   .max(200)
   .regex(/^(?!-)(?!.*\.\.)(?!.*\/\/)[\w./-]+(?<![./])$/, 'A branch name like master or feature/cart');
+
+/** One repo of a site: cloned from url at branch into dir/folder of the site (see site-repos.ts). */
+export const siteRepo = z.object({ url: gitUrl, branch: branchName, dir: siteDir, folder: cloneFolder });
+/** A build of the install, in a folder of one of its repos (by its place in repos). */
+export const siteBuild = buildStep.extend({ repo: z.number().int().min(0).max(MAX_SITE_REPOS_PER_INSTALL - 1).default(0) });
+/** How WordPress core comes to a site: a shared core linked with wpcore, its own download, or the repo's own (no download, no link). */
+export const CORE_MODES = ['wpcore', 'standalone', 'repo'] as const;
 
 export const wpSlug = z.string().regex(/^[a-z0-9_-]{1,100}$/, 'A plugin slug like wp-rocket');
 
@@ -230,8 +238,13 @@ export const networkChoice = z.object({
 export const repoPreset = z.object({
   /** The first local name is the site's primary domain; production hosts are replaced with their local name after an import. */
   domains: z.array(z.object({ production: dumpHost.optional(), local: localName })).min(1).max(50),
-  layout: z.enum(['site-root', 'wp-content', 'theme', 'plugin']),
-  core: z.object({ mode: z.enum(['wpcore', 'standalone']).default('wpcore'), version: coreVersion }).optional(),
+  /** Where the repo goes in the site (1.28 on). */
+  placement: z.object({ dir: siteDir, folder: cloneFolder }).optional(),
+  /** Where it went before 1.28: read as a placement (presetPlacement). */
+  layout: z.enum(['site-root', 'wp-content', 'theme', 'plugin']).optional(),
+  /** The other repos of the site, each with its place. */
+  extra: z.array(z.object({ url: gitUrl, branch: branchName.optional(), dir: siteDir, folder: cloneFolder })).max(MAX_SITE_REPOS_PER_INSTALL - 1).default([]),
+  core: z.object({ mode: z.enum(CORE_MODES).default('wpcore'), version: coreVersion.optional() }).optional(),
   /** Production-only plugins to deactivate after an import. */
   deactivate: z.array(wpSlug).max(50).default([]),
   /** Local helper plugins to activate when the repo has them. */
@@ -239,10 +252,18 @@ export const repoPreset = z.object({
   /** Production host that serves uploads missing locally. */
   uploadsFrom: hostname.optional(),
   uploadsVia: uploadsVia.optional(),
-  build: z.object({ composer: z.boolean().default(false), npm: z.boolean().default(false) }).default({ composer: false, npm: false }),
+  /** Before 1.28: composer and npm at the repo root. */
+  build: z.object({ composer: z.boolean().default(false), npm: z.boolean().default(false) }).optional(),
+  /** The builds that ran, each in a folder of one of the repos. */
+  builds: z.array(siteBuild).max(40).optional(),
   /** For a network: its layout here and where each site went. */
   network: networkChoice.optional(),
 });
+
+/** Where a remembered repo goes: its placement, or what its old layout meant. */
+export function presetPlacement(preset: Pick<z.infer<typeof repoPreset>, 'placement' | 'layout'>, url: string) {
+  return preset.placement ?? placementForLayout(preset.layout ?? 'site-root', url);
+}
 
 /** Xdebug settings the panel offers; dmp-root holds the same lists. */
 export const XDEBUG_MODES = ['debug', 'develop', 'profile', 'trace', 'gcstats', 'coverage'] as const;
@@ -476,6 +497,17 @@ const cronFields = {
 };
 
 export const APACHE_MODULES = ['ssl', 'rewrite', 'headers', 'proxy', 'proxy_http', 'proxy_wstunnel'] as const;
+
+/** A site.create input from before 1.28, with one repo and a layout: its repo becomes repos[0], at the layout's place. */
+export function legacyCreateInput(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('repo' in value)) return value;
+  const { repo, ...rest } = value as { repo?: unknown; repos?: unknown };
+  if (rest.repos !== undefined || !repo || typeof repo !== 'object') return rest;
+  const r = repo as { url?: unknown; branch?: unknown; layout?: unknown };
+  const layouts = ['site-root', 'wp-content', 'theme', 'plugin'] as const;
+  const layout = layouts.find((l) => l === r.layout) ?? 'site-root';
+  return { ...rest, repos: [{ url: r.url, branch: r.branch, ...placementForLayout(layout, typeof r.url === 'string' ? r.url : '') }] };
+}
 
 export const actions = {
   'apache.enableModule': {
@@ -1400,19 +1432,24 @@ export const actions = {
     description:
       'Creates a local site: folder, certificate, vhost and hosts line, and for WordPress the core, database and wp-config.php. From a repo it clones the project, imports the uploaded dump, replaces production domains, moves the sites of a network to the layout chosen for them, deactivates production-only plugins and runs the build. Starts a job; follow it with the job id it returns.',
     changesSystem: true,
-    input: z
+    // An input from before 1.28 (one repo and its layout) is read as repos[0].
+    input: z.preprocess(
+      legacyCreateInput,
+      z
       .object({
         source: z.enum(['empty', 'wordpress', 'repo']),
         domain: localName,
         /** Install under this path of an existing site's domain, like /learn, in a folder of its own; the domain's vhost serves it. */
         path: sitePath,
         aliases: z.array(localName).max(100).default([]),
-        repo: z.object({ url: gitUrl, branch: branchName, layout: z.enum(['site-root', 'wp-content', 'theme', 'plugin']) }).optional(),
+        /** The repos to clone, the main one first, each into its folder of the site. */
+        repos: z.array(siteRepo).max(MAX_SITE_REPOS_PER_INSTALL).default([]),
         /** An upload from POST /api/uploads holding the database dump. */
         uploadId: z.string().regex(/^[0-9a-f-]{36}$/).optional(),
         /** Production host to local domain pairs for search and replace. */
         replace: z.array(z.object({ from: dumpHost, to: localName })).max(50).default([]),
-        core: z.object({ mode: z.enum(['wpcore', 'standalone']), version: coreVersion }).optional(),
+        /** repo: the main repo holds WordPress core (version is only what it has, for the record). */
+        core: z.object({ mode: z.enum(CORE_MODES), version: coreVersion.optional() }).optional(),
         admin: z
           .object({
             user: z.string().regex(/^[A-Za-z0-9._@-]{1,60}$/, 'Letters, digits and . _ @ -'),
@@ -1433,10 +1470,12 @@ export const actions = {
         /** redirect: the panel's vhost (Local mode under a path); plugin: BE Media from Production, which the repo must have. */
         uploadsVia: uploadsVia.default('redirect'),
         build: z.object({ composer: z.boolean(), npm: z.boolean() }).default({ composer: false, npm: false }),
-        /** The builds to run, in order, each in its folder of the repo; when given, build above is not used. */
-        builds: z.array(buildStep).max(40).optional(),
+        /** The builds to run, in order, each in its folder of one of the repos; when given, build above is not used. */
+        builds: z.array(siteBuild).max(40).optional(),
         /** The site at this domain goes to the archive first, and Undo puts it back. Not for a site under a path. */
         replaceExisting: z.boolean().default(false),
+        /** Remember the answers for the next install of the main repo (Settings, Remembered, lists and forgets them). */
+        remember: z.boolean().default(true),
         /** The install draft this comes from: it is kept while the install runs and goes, with its files, once it is done. */
         draftId: z.string().uuid().optional(),
         /** The GitHub organization or GitLab group the repo was picked from, for how the site was installed. */
@@ -1447,7 +1486,12 @@ export const actions = {
         server: z.enum(SITE_SERVERS).default('apache'),
       })
       .superRefine((v, ctx) => {
-        if (v.source === 'repo' && !v.repo) ctx.addIssue({ code: 'custom', path: ['repo'], message: 'A repo is required' });
+        if (v.source === 'repo' && v.repos.length === 0) ctx.addIssue({ code: 'custom', path: ['repos'], message: 'A repo is required' });
+        if (v.source !== 'repo' && v.repos.length > 0) ctx.addIssue({ code: 'custom', path: ['repos'], message: 'Only an install from a project clones repos' });
+        for (const problem of placementProblems(v.repos)) ctx.addIssue({ code: 'custom', path: ['repos'], message: problem });
+        if (v.core && v.core.mode !== 'repo' && !v.core.version) ctx.addIssue({ code: 'custom', path: ['core'], message: 'Choose a WordPress version' });
+        if (v.core?.mode === 'repo' && !v.repos.some((r) => repoTarget(r) === '')) ctx.addIssue({ code: 'custom', path: ['core'], message: "WordPress from the repo needs a repo at the site root" });
+        for (const [i, b] of (v.builds ?? []).entries()) if (b.repo >= Math.max(1, v.repos.length)) ctx.addIssue({ code: 'custom', path: ['builds', i, 'repo'], message: 'A build of a repo the install does not have' });
         if (v.path && v.source === 'empty') ctx.addIssue({ code: 'custom', path: ['path'], message: 'Only a WordPress site can go under a path' });
         if (v.path && v.aliases.length > 0) ctx.addIssue({ code: 'custom', path: ['aliases'], message: 'A site under a path uses its parent\'s domains' });
         if (v.path && !mountFolder(v.domain, v.path)) ctx.addIssue({ code: 'custom', path: ['path'], message: 'This path gives no usable folder name' });
@@ -1469,6 +1513,7 @@ export const actions = {
           if (new Set(addresses).size !== addresses.length) ctx.addIssue({ code: 'custom', path: ['network'], message: 'Two sites of the network have the same address' });
         }
       }),
+    ),
   },
 } as const;
 

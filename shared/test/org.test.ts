@@ -37,7 +37,7 @@ describe('prefillFromFacts', () => {
     expect(p).toMatchObject({
       repoUrl: 'git@github.com:wandworks/site.git',
       branch: 'main',
-      layout: 'site-root',
+      placement: { dir: '', folder: '' },
       coreVersion: '7.1.3',
       productionHint: 'www.wandworks.example',
       composer: true,

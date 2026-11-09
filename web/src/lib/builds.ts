@@ -41,11 +41,11 @@ export function buildChoice(build: RepoBuild, picks: Record<string, BuildPick>, 
   return { on, ...(script ? { script } : {}), fromDocs: docs !== undefined && !pick };
 }
 
-/** The builds the install runs, in the lookup's order; an npm-like one without a script only installs. */
-export function buildSteps(builds: RepoBuild[], picks: Record<string, BuildPick>, commands: DocsCommand[]): Array<{ dir: string; tool: BuildTool; script?: string }> {
+/** The builds the install runs, in the lookup's order; an npm-like one without a script only installs. repo: which repo of the install they are in. */
+export function buildSteps(builds: RepoBuild[], picks: Record<string, BuildPick>, commands: DocsCommand[], repo = 0): Array<{ repo: number; dir: string; tool: BuildTool; script?: string }> {
   return builds.flatMap((build) => {
     const choice = buildChoice(build, picks, commands);
     if (!choice.on) return [];
-    return [{ dir: build.dir, tool: build.tool, ...(build.tool !== 'composer' && choice.script ? { script: choice.script } : {}) }];
+    return [{ repo, dir: build.dir, tool: build.tool, ...(build.tool !== 'composer' && choice.script ? { script: choice.script } : {}) }];
   });
 }

@@ -51,3 +51,15 @@ describe('when a draft goes', () => {
     expect(keptUntil(new Date(2026, 9, 28, 0, 0).toISOString(), now)).toBe('Oct 28 00:00');
   });
 });
+
+describe('drafts from before 1.28', () => {
+  it('read the old layout as where the repo goes', async () => {
+    const { migrateDraftState } = await import('../src/lib/drafts.js');
+    expect(migrateDraftState({ repoUrl: 'git@github.com:wandworks/wandworks.git', layout: 'theme', branch: 'main' })).toEqual({ repoUrl: 'git@github.com:wandworks/wandworks.git', branch: 'main', placement: { dir: 'wp-content/themes', folder: 'wandworks' } });
+    expect(migrateDraftState({ layout: 'site-root' })).toEqual({ placement: { dir: '', folder: '' } });
+    // A placement already there wins; something odd is dropped.
+    expect(migrateDraftState({ layout: 'plugin', placement: { dir: 'app', folder: '' } })).toEqual({ placement: { dir: 'app', folder: '' } });
+    expect(migrateDraftState({ layout: 'nonsense' })).toEqual({});
+    expect(migrateDraftState(null)).toEqual({});
+  });
+});

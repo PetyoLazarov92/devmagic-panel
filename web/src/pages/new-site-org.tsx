@@ -61,7 +61,7 @@ export function applyOrgAnswers(state: WizardState, upload: UploadResult, cores:
     ...state,
     upload,
     repoUrl: prefill.repoUrl,
-    layout: prefill.layout,
+    placement: prefill.placement,
     domains: domains.length ? domains : [{ prod: '', local: '' }],
     // The newest core you have, or the one you picked; a version the docs name is a note.
     coreVersion: state.coreVersion || prefill.coreVersion,

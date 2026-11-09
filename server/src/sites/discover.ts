@@ -1,7 +1,7 @@
 import { type Dirent, existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, type Stats, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { Site, SiteCert, SiteConstant, SiteGit, SiteIssue, SiteNetwork, SiteRepo, SiteRepoKind } from '@devmagic-panel/shared';
-import { isLocalName, isSecretConstant, onNginxAddress, SITE_SERVER_LABEL, MEDIA_PLUGIN, MEDIA_PLUGIN_URL, networkType, SYSTEM_DATABASES, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
+import { isLocalName, siteDir, isSecretConstant, onNginxAddress, SITE_SERVER_LABEL, MEDIA_PLUGIN, MEDIA_PLUGIN_URL, networkType, SYSTEM_DATABASES, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import { latestOf, type CoreStatusMap } from '../core-status.js';
 import { hostsNames } from '../environment.js';
@@ -31,6 +31,8 @@ export interface DiscoverContext {
   coreStatus?: CoreStatusMap | null;
   /** The .htaccess checksums of a change to a site on nginx you put off (Not now), from the panel's database. */
   htaccessDismissed?: (domain: string) => Record<string, string> | undefined;
+  /** Folders of a site (domain and path) the panel cloned repos into, from how it was installed. */
+  repoPaths?: (site: string) => string[];
   now?: () => number;
 }
 
@@ -124,10 +126,12 @@ const isRealDir = (path: string) => {
  * plugin and must-use plugin folder one level down that has a .git, by name.
  * A folder reached through a symlink is left out, as it is another place.
  */
-export function findSiteRepos(docroot: string): Array<Omit<SiteRepo, 'git'>> {
-  const content = join(docroot, 'wp-content');
-  if (!isRealDir(content)) return [];
+export function findSiteRepos(docroot: string, cloned: readonly string[] = []): Array<Omit<SiteRepo, 'git'>> {
   const found: Array<Omit<SiteRepo, 'git'>> = [];
+  // Repos the panel cloned elsewhere in the site: only real folders inside it, reached without a link, that still have a .git.
+  const extra = cloned.filter((p) => p && siteDir.safeParse(p).success && p.split('/').every((_, i, parts) => isRealDir(join(docroot, ...parts.slice(0, i + 1)))) && existsSync(join(docroot, p, '.git')));
+  const content = join(docroot, 'wp-content');
+  if (!isRealDir(content)) return [...new Set(extra)].slice(0, MAX_SITE_REPOS).map((p) => ({ folder: p, kind: 'folder' as const, name: p.split('/').pop() as string }));
   if (existsSync(join(content, '.git'))) found.push({ folder: 'wp-content', kind: 'wp-content', name: 'wp-content' });
   const kinds: Array<[string, SiteRepoKind]> = [['themes', 'theme'], ['plugins', 'plugin'], ['mu-plugins', 'mu-plugin']];
   for (const [dir, kind] of kinds) {
@@ -144,6 +148,8 @@ export function findSiteRepos(docroot: string): Array<Omit<SiteRepo, 'git'>> {
       if (isRealDir(folder) && existsSync(join(folder, '.git'))) found.push({ folder: `wp-content/${dir}/${name}`, kind, name });
     }
   }
+  const known = new Set(found.map((r) => r.folder));
+  for (const p of new Set(extra)) if (!known.has(p)) found.push({ folder: p, kind: 'folder', name: p.split('/').pop() as string });
   return found.slice(0, MAX_SITE_REPOS);
 }
 
@@ -431,7 +437,7 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
   // Folders mounted into the site that are not WordPress installs of their own; those show as sites.
   const folders = mount ? [] : vhost.mounts.filter((m) => !isWordPressMount(m));
 
-  const inner = findSiteRepos(docroot);
+  const inner = findSiteRepos(docroot, ctx.repoPaths?.(`${domain}${path ?? ''}`) ?? []);
   const [cert, git, mountGits, innerGits, wpData, mediaActive] = await Promise.all([
     vhost.certFile && !mount ? readCert(ctx.exec, vhost.certFile, shared.legacyIssuer) : Promise.resolve(undefined),
     readGit(ctx.exec, docroot),

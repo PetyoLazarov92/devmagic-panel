@@ -27,7 +27,8 @@ describe('toPreset', () => {
   it('keeps only what the panel accepts: local names, real hosts, installed cores, plugin slugs', () => {
     expect(toPreset(OUT, ['7.1.3'])).toEqual({
       domains: [{ production: 'www.wandworks.example', local: 'local.wandworks.example' }, { local: 'local.shop.wandworks.example' }],
-      layout: 'wp-content',
+      placement: { dir: '', folder: 'wp-content' },
+      extra: [],
       core: { mode: 'wpcore', version: '7.1.3' },
       deactivate: ['wp-rocket'],
       activate: [],
@@ -87,6 +88,6 @@ describe('suggestWizard', () => {
     expect(result.sent).toBe(sent);
     // A branch git could read as an option falls back to the repo's default.
     expect(result.branch).toBe('main');
-    expect(result.preset.layout).toBe('wp-content');
+    expect(result.preset.placement).toEqual({ dir: '', folder: 'wp-content' });
   });
 });

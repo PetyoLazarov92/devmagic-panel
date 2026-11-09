@@ -1,8 +1,9 @@
-import type { AddressInput, InstallDraft, NginxState, NewSiteSource, SiteServer, OrgStatus, RepoBuild, RepoInspection, RepoLayout, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
-import { actions, addressSummary, branchName, branchWebUrl, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin, repoWeb, sameRepo } from '@devmagic-panel/shared';
-import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, CircleX, Copy, ExternalLink, FileArchive, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, Upload, Wand2, X } from 'lucide-react';
+import type { AddressInput, InstallDraft, NginxState, NewSiteSource, SiteServer, OrgStatus, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
+import { actions, addressSummary, placementForKind, placementProblems, presetPlacement, repoTarget, branchName, branchWebUrl, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin, repoWeb, sameRepo } from '@devmagic-panel/shared';
+import { ArrowLeft, ArrowRight, Check, TriangleAlert, ChevronRight, CircleAlert, CircleCheck, CircleX, Copy, ExternalLink, FileArchive, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, Upload, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BranchPicker } from '@/components/branch-picker';
+import { PlacementFields, placementError } from '@/components/repo-placement';
 import { DumpFactsCard } from '@/components/dump-facts';
 import { JobScreen } from '@/components/job-screen';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +26,7 @@ import { toast } from '@/lib/toast';
 import { adminChoices, adminCreateOf, dumpAdmins } from '@/lib/admin-choice';
 import { type BuildPick, buildChoice, buildId, buildSteps } from '@/lib/builds';
 import { orgCardState, type OrgCardState, skipAccess, unskipAccess } from '@/lib/claude-steps';
-import { draftHref, type InstallKind, KIND_LABEL, keptUntil, kindOf, landingStep, STEP_LABEL, stepsFor, type WizardStep } from '@/lib/drafts';
+import { draftHref, migrateDraftState, type InstallKind, KIND_LABEL, keptUntil, kindOf, landingStep, STEP_LABEL, stepsFor, type WizardStep } from '@/lib/drafts';
 import { type NetworkAnswers, networkPlan, type NetworkPlan, NO_NETWORK_ANSWERS } from '@/lib/network';
 import { pluginMatches } from '@/lib/plugin-search';
 import { answersHash, stepViews } from '@/lib/steps';
@@ -49,10 +50,12 @@ export interface WizardState {
   /** The repo's branches, default first; null until read, or when the lookup failed (the branch is typed then). */
   branches: string[] | null;
   defaultBranch?: string;
-  layout: RepoLayout;
+  /** Where the repo goes in the site; null until you or a last install chose: then by what the repo holds. */
+  placement: RepoPlacement | null;
   upload: UploadResult | null;
   domains: DomainRow[];
-  coreMode: 'wpcore' | 'standalone';
+  /** repo: the repo holds WordPress core, used as it is. */
+  coreMode: 'wpcore' | 'standalone' | 'repo';
   coreVersion: string;
   /** null until you type one: admin, or superadmin for a network. */
   adminUser: string | null;
@@ -69,7 +72,7 @@ export interface WizardState {
   deactivate: string[];
   activate: LocalHelperPlugin[];
   /** The local helpers the repo's branch has, and whether it has BE Media from Production, read in the background for repo URL and branch `key`. */
-  helpers: { key: string; list?: LocalHelperPlugin[]; media?: boolean; builds?: RepoBuild[]; error?: string } | null;
+  helpers: { key: string; list?: LocalHelperPlugin[]; media?: boolean; builds?: RepoBuild[]; kind?: RepoLookup['kind']; core?: RepoLookup['core']; uploads?: boolean; error?: string } | null;
   /** Your ticks and scripts in the build checklist, by row (lib/builds); unset rows follow the lookup and the docs. */
   buildPicks: Record<string, BuildPick>;
   /** Where missing images load from; null until set: the first step 2 address that is not a local name. Empty: none. */
@@ -92,6 +95,8 @@ export interface WizardState {
   server: SiteServer | null;
   /** Installing from a GitHub organization or GitLab group: the repo, what Claude Code read and the dump; null for the other starts. */
   org: OrgState | null;
+  /** Remember the answers for the next install of this repo. */
+  remember: boolean;
   /** A hash of each step's answers when you continued from it, so the step list can open the steps you reached (lib/steps). */
   passed: Partial<Record<Step, string>>;
 }
@@ -110,7 +115,8 @@ const initial: WizardState = {
   repoUrl: '',
   branch: '',
   branches: null,
-  layout: 'site-root',
+  placement: null,
+  remember: true,
   upload: null,
   domains: [{ prod: '', local: '' }],
   coreMode: 'wpcore',
@@ -166,35 +172,36 @@ function applyPreset(state: WizardState, found: RepoInspection, cores: string[])
   const branch = found.branch;
   const read = { branch, branches: found.branches ?? state.branches, ...(found.defaultBranch ? { defaultBranch: found.defaultBranch } : {}) };
   if (!project) return { ...state, ...read, inspection: { status: 'none', url: state.repoUrl.trim() } };
-  const coreOk = project.core && cores.includes(project.core.version);
+  const coreOk = project.core?.mode === 'repo' || (project.core?.version !== undefined && cores.includes(project.core.version));
+  const placement = presetPlacement(project, state.repoUrl.trim());
+  const composer = project.builds ? project.builds.some((b) => b.tool === 'composer') : (project.build?.composer ?? false);
+  const npm = project.builds ? project.builds.some((b) => b.tool !== 'composer') : (project.build?.npm ?? false);
   const parts = [
-    LAYOUTS.find((l) => l.value === project.layout)?.label.toLowerCase() ?? project.layout,
-    project.core ? (coreOk ? `WordPress ${project.core.version}` : `WordPress ${project.core.version} (not installed here, pick another)`) : null,
-    project.build.composer || project.build.npm ? `${[project.build.composer && 'composer', project.build.npm && 'npm'].filter(Boolean).join(' and ')} build` : null,
+    `into ${repoTarget(placement) || 'the site root'}`,
+    project.core?.mode === 'repo' ? "the repo's own WordPress" : project.core?.version ? (coreOk ? `WordPress ${project.core.version}` : `WordPress ${project.core.version} (not installed here, pick another)`) : null,
+    composer || npm ? `${[composer && 'composer', npm && 'npm'].filter(Boolean).join(' and ')} build` : null,
   ].filter(Boolean);
   return {
     ...state,
     ...read,
-    layout: project.layout,
+    placement,
     // Local addresses always come from the dump (or you), never from the last install; helpers are always your pick.
-    ...(project.core && coreOk ? { coreMode: project.core.mode, coreVersion: project.core.version } : {}),
+    ...(project.core && coreOk ? { coreMode: project.core.mode, ...(project.core.version ? { coreVersion: project.core.version } : {}) } : {}),
     deactivate: project.deactivate,
     // A network's layout and its sites' addresses, by blog id, as you set them last time.
     ...(project.network ? { network: networkAnswersOf(project.network) } : {}),
     uploadsFrom: project.uploadsFrom ?? '',
     uploadsVia: project.uploadsVia ?? null,
-    composer: project.build.composer,
-    npm: project.build.npm,
+    composer,
+    npm,
     inspection: { status: 'found', url: state.repoUrl.trim(), branch, summary: parts.join(', ') },
   };
 }
 
-const LAYOUTS: Array<{ value: RepoLayout; label: string; hint: string }> = [
-  { value: 'site-root', label: 'Full site root', hint: 'wp-content and wp-config in the repo' },
-  { value: 'wp-content', label: 'wp-content only', hint: 'cloned into wp-content/' },
-  { value: 'theme', label: 'A theme', hint: 'cloned into wp-content/themes/' },
-  { value: 'plugin', label: 'A plugin', hint: 'cloned into wp-content/plugins/' },
-];
+/** Where the repo goes: what you or a last install chose, else by what the repo holds, else the site root. */
+export function placementOf(state: Pick<WizardState, 'placement' | 'helpers' | 'repoUrl'>): RepoPlacement {
+  return state.placement ?? (state.helpers?.kind ? placementForKind(state.helpers.kind, state.repoUrl.trim()) : null) ?? { dir: '', folder: '' };
+}
 
 /**
  * The answers each step owns, to tell whether one changed since you continued
@@ -205,7 +212,7 @@ const STEP_ANSWERS: Record<Step, (s: WizardState) => unknown> = {
   org: (s) => [s.org?.name, s.org?.repo?.fullName, s.branch.trim()],
   read: (s) => [s.org?.read.status, s.org?.read.facts],
   access: (s) => [s.org?.access.status, s.upload?.id],
-  source: (s) => [s.repoUrl.trim(), s.branch.trim(), s.layout, s.upload?.id],
+  source: (s) => [s.repoUrl.trim(), s.branch.trim(), placementOf(s), s.upload?.id],
   domains: (s) => [s.domains, s.under, s.replaceExisting, s.replaceOn, s.network, s.server],
   wordpress: (s) => [s.coreMode, s.coreVersion, s.adminUser, s.adminEmail, s.adminIfExists, s.adminIfMissing, s.adminCreate, s.deactivate, s.activate, s.uploadsFrom, s.uploadsVia, s.composer, s.npm, s.buildPicks],
   review: () => null,
@@ -288,12 +295,13 @@ export function toInput(state: WizardState): CreateSiteInput {
     // The organization or group it came from; a pasted URL on another host has none.
     ...(state.org?.repo?.org && isRepo ? { organization: state.org.repo.org } : {}),
     aliases: locals.slice(1),
-    ...(isRepo ? { repo: { url: state.repoUrl.trim(), branch: state.branch.trim(), layout: state.layout } } : {}),
+    repos: isRepo ? [{ url: state.repoUrl.trim(), branch: state.branch.trim(), ...placementOf(state) }] : [],
+    remember: state.remember,
     ...(isRepo && state.upload ? { uploadId: state.upload.id } : {}),
     replace,
     ...(state.source !== 'empty'
       ? {
-          core: { mode: state.coreMode, version: state.coreVersion },
+          core: state.coreMode === 'repo' ? { mode: 'repo' as const, ...(state.helpers?.core?.version ? { version: state.helpers.core.version } : {}) } : { mode: state.coreMode, version: state.coreVersion },
           admin: {
             user: (state.adminUser ?? defaults.user).trim(),
             email: (state.adminEmail ?? defaults.email).trim(),
@@ -316,7 +324,7 @@ export function toInput(state: WizardState): CreateSiteInput {
 
 /** A draft's answers back in the wizard: never a password, and no dump that is gone. */
 export function stateFromDraft(draft: InstallDraft): WizardState {
-  const saved = (draft.state ?? {}) as Partial<WizardState>;
+  const saved = migrateDraftState(draft.state) as Partial<WizardState>;
   const upload = saved.upload && draft.uploads.includes(saved.upload.id) ? saved.upload : null;
   const kept: WizardState = { ...initial, ...saved, upload, adminPassword: null, org: saved.org ? keptOrg(saved.org, draft.uploads) : null };
   // Lookups that were still running when you left start again: the repo's and its helpers'.
@@ -602,9 +610,18 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
     const timer = window.setTimeout(() => {
       setState((s) => ({ ...s, helpers: { key: helpersKey } }));
       api.repoHelpers(repoUrl, state.branch).then(
-        ({ helpers: list, mediaPlugin, builds }) =>
-          // Nothing is ticked for you: you pick the helpers to turn on.
-          setState((s) => (s.helpers?.key !== helpersKey ? s : { ...s, helpers: { key: helpersKey, list, media: mediaPlugin, builds }, activate: s.activate.filter((slug) => list.includes(slug)) })),
+        ({ helpers: list, mediaPlugin, builds, kind, core, uploads }) =>
+          // Nothing is ticked for you: you pick the helpers to turn on. A repo with core of its own uses it, unless you chose.
+          setState((s) =>
+            s.helpers?.key !== helpersKey
+              ? s
+              : {
+                  ...s,
+                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}) },
+                  activate: s.activate.filter((slug) => list.includes(slug)),
+                  coreMode: core && !s.passed.wordpress ? 'repo' : !core && s.coreMode === 'repo' ? 'wpcore' : s.coreMode,
+                },
+          ),
         (err: Error) => setState((s) => (s.helpers?.key === helpersKey ? { ...s, helpers: { key: helpersKey, error: err.message } } : s)),
       );
     }, 400);
@@ -1190,20 +1207,19 @@ function SourceStep({ state, setState, sites, cores, assistantOn }: {
           </div>
         )}
 
-        <fieldset>
-          <legend className="text-sm font-medium">What the repo holds</legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {LAYOUTS.map((l) => (
-              <label key={l.value} className={cn('flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50', state.layout === l.value && 'border-primary bg-primary/5')}>
-                <input type="radio" name="layout" checked={state.layout === l.value} onChange={() => set('layout', l.value)} className="mt-0.5 accent-[var(--primary)]" />
-                <span>
-                  <span className="font-medium">{l.label}</span>
-                  <span className="block text-xs text-muted-foreground">{l.hint}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <section aria-label="Where the repo goes" className="grid gap-2 rounded-lg border p-4">
+          <h2 className="text-sm font-semibold">Where the repo goes</h2>
+          {state.placement === null && state.helpers?.kind && state.helpers.kind !== 'other' && (
+            <p className="-mt-1 text-xs text-muted-foreground">Picked for {state.helpers.kind === 'site' ? 'a whole site' : state.helpers.kind === 'wp-content' ? 'a wp-content folder' : `a ${state.helpers.kind}`}, from what the repo holds.</p>
+          )}
+          <PlacementFields
+            url={state.repoUrl.trim()}
+            value={placementOf(state)}
+            onChange={(p) => set('placement', p)}
+            site={state.domains[0]?.local.trim() || 'local.your-site.test'}
+            sharedCore={state.coreMode === 'wpcore'}
+          />
+        </section>
 
         <div>
           <p className="text-sm font-medium">Database dump</p>
@@ -1585,24 +1601,35 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
     if (!otherPicked && state.coreVersion === '' && latest) set('coreVersion', latest);
   }, [latest, state.coreVersion, otherPicked]);
   const addedNote = state.coreMode === 'wpcore' ? 'added to the shared cores' : 'downloaded';
+  // A repo with core of its own runs on it: no shared core, no download.
+  const repoCore = isRepo && state.helpers?.core ? state.helpers.core : null;
   const via = uploadsViaFor(state);
   const uploadsOn = Boolean(input.uploadsFrom);
   return (
     <div className="grid gap-8 lg:grid-cols-2">
       <section className="grid h-fit gap-4">
         <h2 className="text-sm font-semibold">Core</h2>
+        {repoCore && (
+          <p className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-xs text-muted-foreground">
+            <TriangleAlert className="mt-px size-3.5 shrink-0 text-warning" />
+            <span>The repo holds WordPress core{repoCore.version ? ` (${repoCore.version})` : ''}, so the site uses it as it is. Keeping core in git is unusual, but fine when the repo patches it on purpose.</span>
+          </p>
+        )}
         <div role="radiogroup" aria-label="Core" className="grid gap-2">
-          {([
-            ['wpcore', 'Shared core (recommended)', 'Symlinked to the shared cores folder; switch versions in seconds.'],
-            ['standalone', 'Own copy', 'Downloads WordPress into the site folder.'],
-          ] as const).map(([value, label, hint]) => (
+          {(repoCore
+            ? ([['repo', "The repo's own WordPress", `Used as it is${repoCore.version ? `, WordPress ${repoCore.version}` : ''}: no shared core and no download, so core files never mix with the repo's.`]] as const)
+            : ([
+                ['wpcore', 'Shared core (recommended)', 'Symlinked to the shared cores folder; switch versions in seconds.'],
+                ['standalone', 'Own copy', 'Downloads WordPress into the site folder.'],
+              ] as const)
+          ).map(([value, label, hint]) => (
             <label key={value} className={cn('flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm', state.coreMode === value && 'border-primary bg-primary/5')}>
               <input type="radio" name="core" checked={state.coreMode === value} onChange={() => set('coreMode', value)} className="mt-0.5 accent-[var(--primary)]" />
               <span><span className="font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
             </label>
           ))}
         </div>
-        <Field
+        {!repoCore && <Field
           label="Version"
           htmlFor="version"
           hint={
@@ -1645,7 +1672,7 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
               aria-invalid={state.coreVersion !== '' && !coreVersionSchema.safeParse(state.coreVersion).success ? true : undefined}
             />
           )}
-        </Field>
+        </Field>}
 
         <AdminSection state={state} set={set} input={input} defaults={defaults} />
       </section>
@@ -2134,7 +2161,12 @@ function ReviewStep({ state, set, input, dbName, cores }: { state: WizardState; 
           <ReviewRow label="Primary domain"><span className="font-mono">{input.domain}</span></ReviewRow>
         )}
         {input.aliases.length > 0 && <ReviewRow label="Aliases">{input.aliases.map((a) => <span key={a} className="block font-mono">{a}</span>)}</ReviewRow>}
-        {input.repo && <ReviewRow label="Repo"><span className="font-mono break-all">{input.repo.url}</span> <span className="text-muted-foreground">({input.repo.branch})</span></ReviewRow>}
+        {input.repos.map((r, i) => (
+          <ReviewRow key={`${r.url}|${repoTarget(r)}`} label={input.repos.length > 1 ? (i === 0 ? 'Main repo' : 'Repo') : 'Repo'}>
+            <span className="font-mono break-all">{r.url}</span> <span className="text-muted-foreground">({r.branch}) into </span>
+            <span className="font-mono break-all">{repoTarget(r) || 'the site root'}</span>
+          </ReviewRow>
+        ))}
         {state.upload && <ReviewRow label="Dump">{state.upload.name} <span className="text-muted-foreground">({bytes(state.upload.size)})</span></ReviewRow>}
         {input.replace.length > 0 && (
           <ReviewRow label="Replace">{input.replace.map((r) => <span key={r.from} className="block font-mono text-[13px]">{r.from} → {r.to}</span>)}</ReviewRow>
@@ -2155,7 +2187,7 @@ function ReviewStep({ state, set, input, dbName, cores }: { state: WizardState; 
             {summary ?? <span className="text-muted-foreground">skipped: every address in the dump already answers here on https</span>}
           </ReviewRow>
         )}
-        {input.core && <ReviewRow label="WordPress">{input.core.version} · {input.core.mode === 'wpcore' ? 'shared core' : 'own copy'}</ReviewRow>}
+        {input.core && <ReviewRow label="WordPress">{input.core.mode === 'repo' ? `the repo's own${input.core.version ? `, ${input.core.version}` : ''}` : `${input.core.version ?? ''} · ${input.core.mode === 'wpcore' ? 'shared core' : 'own copy'}`}</ReviewRow>}
         {input.core && <ReviewRow label="Database"><span className="font-mono">{dbName}</span></ReviewRow>}
         {input.admin && (
           <ReviewRow label="Admin">
@@ -2173,8 +2205,14 @@ function ReviewStep({ state, set, input, dbName, cores }: { state: WizardState; 
           </ReviewRow>
         )}
         {input.uploadsFrom && <ReviewRow label="Uploads">missing files load from {input.uploadsFrom}</ReviewRow>}
-        {input.repo && state.inspection.status === 'found' && <ReviewRow label="Settings">from your last install of this repo</ReviewRow>}
-        {input.repo && state.inspection.status === 'claude' && <ReviewRow label="Settings">filled by Claude, reviewed by you</ReviewRow>}
+        {input.repos.length > 0 && state.inspection.status === 'found' && <ReviewRow label="Settings">from your last install of this repo</ReviewRow>}
+        {input.repos.length > 0 && state.inspection.status === 'claude' && <ReviewRow label="Settings">filled by Claude, reviewed by you</ReviewRow>}
+        {input.repos.length > 0 && (
+          <div className="border-t pt-3">
+            <Switch checked={state.remember} label="Remember these answers for this repo" onChange={(on) => set('remember', on)} />
+            <p className="mt-1 text-xs text-muted-foreground">The next install of it fills itself from them. See or forget them in <Link href="/settings" className="text-primary hover:underline">Settings</Link>.</p>
+          </div>
+        )}
       </dl>
       <div>
         <p className="text-sm font-medium">The panel will run {steps.length} steps</p>

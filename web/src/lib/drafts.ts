@@ -1,4 +1,5 @@
 import type { InstallDraft, NewSiteSource } from '@devmagic-panel/shared';
+import { placementForLayout } from '@devmagic-panel/shared';
 import { canOpen } from './steps';
 
 /**
@@ -83,4 +84,21 @@ export function keptUntil(iso: string, now = new Date()): string {
   if (days === 0) return clock(at);
   if (days === 1) return `tomorrow ${clock(at)}`;
   return `${at.toLocaleDateString('en', { month: 'short', day: 'numeric' })} ${clock(at)}`;
+}
+
+/**
+ * A draft's saved answers in today's shape. Before 1.28 a draft kept where
+ * the repo goes as a layout (site-root, wp-content, theme, plugin): it becomes
+ * a placement, a folder of the site and a folder name.
+ */
+export function migrateDraftState(state: unknown): Record<string, unknown> {
+  const saved: Record<string, unknown> = state && typeof state === 'object' && !Array.isArray(state) ? { ...(state as Record<string, unknown>) } : {};
+  if ('layout' in saved) {
+    const layouts = ['site-root', 'wp-content', 'theme', 'plugin'] as const;
+    const layout = layouts.find((l) => l === saved.layout);
+    delete saved.layout;
+    const url = typeof saved.repoUrl === 'string' ? saved.repoUrl.trim() : '';
+    if (layout && saved.placement === undefined) saved.placement = placementForLayout(layout, url);
+  }
+  return saved;
 }

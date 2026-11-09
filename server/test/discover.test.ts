@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { discoverSites, folderTime, parseCertText } from '../src/sites/discover.js';
+import { discoverSites, findSiteRepos, folderTime, parseCertText } from '../src/sites/discover.js';
 import { VHOST_MARKER } from '../src/sites/vhost.js';
 import type { Secrets } from '../src/secrets.js';
 import { fakeExec, tempTree } from './helpers.js';
@@ -273,5 +273,20 @@ describe('when a site came here', () => {
     expect(at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(Math.abs(Date.parse(at as string) - Date.now())).toBeLessThan(60_000);
     expect(folderTime(join(dir, 'missing'))).toBeUndefined();
+  });
+});
+
+describe('repos inside a site', () => {
+  it('finds the usual places, and the folders an install cloned into, while they are real folders with a .git', () => {
+    const docroot = mkdtempSync(join(tmpdir(), 'dmp-repos-'));
+    for (const dir of ['wp-content/themes/wandworks/.git', 'wp-content/plugins/blocks/.git', 'app/modules/billing/.git', 'app/gone']) mkdirSync(join(docroot, dir), { recursive: true });
+    mkdirSync(join(docroot, 'elsewhere/.git'), { recursive: true });
+    symlinkSync(join(docroot, 'elsewhere'), join(docroot, 'linked'));
+    const found = findSiteRepos(docroot, ['app/modules/billing', 'app/gone', 'linked', '../outside', 'wp-content/plugins/blocks', '']);
+    expect(found).toEqual([
+      { folder: 'wp-content/themes/wandworks', kind: 'theme', name: 'wandworks' },
+      { folder: 'wp-content/plugins/blocks', kind: 'plugin', name: 'blocks' },
+      { folder: 'app/modules/billing', kind: 'folder', name: 'billing' },
+    ]);
   });
 });

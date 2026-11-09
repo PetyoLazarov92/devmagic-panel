@@ -15,21 +15,35 @@ export interface RepoInspection {
   preset?: RepoPreset;
 }
 
-/** The wizard's answers for a site installed from a repo, remembered for the next install of the same repo. */
+/** The wizard's answers for a site installed from a project, remembered for the next install of its main repo. */
 export function presetFromCreate(input: ActionInput<'site.create'>): RepoPreset | null {
-  if (!input.repo) return null;
+  const [main, ...others] = input.repos;
+  if (!main) return null;
   const locals = [input.domain, ...input.aliases];
   return {
     domains: locals.map((local) => {
       const production = input.replace.find((r) => r.to === local)?.from;
       return { ...(production ? { production } : {}), local };
     }),
-    layout: input.repo.layout,
+    placement: { dir: main.dir, folder: main.folder },
+    extra: others.map((r) => ({ url: r.url, branch: r.branch, dir: r.dir, folder: r.folder })),
     ...(input.core ? { core: input.core } : {}),
     deactivate: input.deactivate,
     activate: input.activate,
     ...(input.uploadsFrom ? { uploadsFrom: input.uploadsFrom, uploadsVia: input.uploadsVia } : {}),
-    build: input.build,
+    ...(input.builds ? { builds: input.builds } : { build: input.build }),
     ...(input.network ? { network: input.network } : {}),
   };
 }
+
+/** A repo's remembered answers, as Settings lists them. */
+export interface RememberedRepo {
+  /** The repo as the panel keys it: its web address in lower case. */
+  key: string;
+  /** Its host and path for the list: github.com/wandworks/site. */
+  name: string;
+  updatedAt: string;
+  /** null when the stored answers no longer read (Forget clears them). */
+  preset: RepoPreset | null;
+}
+

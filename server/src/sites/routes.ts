@@ -86,9 +86,14 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     if (!cached || Date.now() - cached.at > CACHE_MS || (deps.jobs?.finishedAt ?? 0) >= cached.at) {
       cached = {
         at: Date.now(),
-        sites: deps.coreStatus().then((coreStatus) =>
-          discoverSites({ config: deps.config, exec: deps.exec, secrets: deps.secrets(), wpcoreConf: deps.wpcoreConf, coreStatus, htaccessDismissed: (domain) => htaccessDismissed(deps.store, domain) }),
-        ),
+        sites: deps.coreStatus().then((coreStatus) => {
+          const installs = deps.store.installs();
+          return discoverSites({
+            config: deps.config, exec: deps.exec, secrets: deps.secrets(), wpcoreConf: deps.wpcoreConf, coreStatus,
+            htaccessDismissed: (domain) => htaccessDismissed(deps.store, domain),
+            repoPaths: (site) => (installs.get(site)?.repos ?? []).map((r) => r.path),
+          });
+        }),
       };
       cached.sites.catch(() => {
         cached = null;

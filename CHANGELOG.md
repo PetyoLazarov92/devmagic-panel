@@ -1,6 +1,11 @@
 # Changelog
 
 ### v1.28.0 (2026-11-09)
+* **Sites:** where a repo goes is now a folder of the site and a folder name, in place of the fixed whole site, wp-content, theme or plugin choice; the wizard picks it from what the repo holds, and the install clones each repo there, never through a link out of the site or into a folder that holds files
+* **Sites:** a repo that holds WordPress core is used as it is, with no shared core and no download, and core or uploads in a repo get a warning instead of a refusal; with a shared core a repo cannot go into its `wp-admin` or `wp-includes`, which link to the core every site uses
+* **Sites:** an install can clone several repos, each into its own folder, the site root first; a repo inside another one's folder is listed in that one's local `.git/info/exclude`, and the Git card finds repos in any folder an install cloned into
+* **Settings:** Remembered for new installs lists what the wizard remembers per repo, to edit or forget, and Review has a switch to not remember an install's answers
+* **Fix:** a removed site no longer leaves its .htaccess Not now, its cron tasks taken out and its WordPress report cache behind for a new site on the same domain: they move with the archive and come back on a restore, and the panel's records of an archive go once the 14-day purge removed it
 * **Panel:** dialogs come in four widths, from a short question to a table: the web server switch and the .htaccess rules review open wide enough for their options side by side, which stack on a narrow window
 
 ### v1.27.0 (2026-11-08)

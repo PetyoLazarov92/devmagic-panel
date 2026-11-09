@@ -74,6 +74,7 @@ export function archiveSteps(ctx: RemoveContext & TrashContext, domain: string, 
                 // Back as it was: how it had been installed comes back too.
                 const before = ctx.store?.archivedInstall(id);
                 if (before) ctx.store?.setInstall(domain, undefined, before);
+                ctx.store?.restoreArchiveMeta(id);
                 ctx.store?.forgetArchive(id);
                 return results;
               });

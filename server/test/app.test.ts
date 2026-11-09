@@ -349,3 +349,26 @@ describe('services tabs', () => {
     await app.close();
   });
 });
+
+describe('remembered repo answers', () => {
+  it('lists them, saves a change with its placement and forgets them, never making new ones', async () => {
+    const cookie = await login();
+    const headers = { host: HOST, origin: ORIGIN, cookie };
+    const key = 'https://github.com/wandworks/site';
+    store.savePreset(key, { domains: [{ local: 'local.spellbook.example' }], layout: 'theme', deactivate: [], build: { composer: true, npm: false } });
+    const listed = (await app.inject({ method: 'GET', url: '/api/remembered/repos', headers })).json() as Array<{ key: string; name: string; preset: { layout?: string } | null }>;
+    expect(listed.find((r) => r.key === key)).toMatchObject({ name: 'github.com/wandworks/site', preset: { layout: 'theme' } });
+
+    const preset = { domains: [{ local: 'local.spellbook.example' }], layout: 'theme', placement: { dir: 'wp-content/themes', folder: 'spellbook' }, extra: [], deactivate: ['wp-rocket'], activate: [] };
+    expect((await app.inject({ method: 'PUT', url: '/api/remembered/repos', headers, payload: { key, preset } })).statusCode).toBe(200);
+    // The old layout goes once a placement is saved.
+    expect(store.preset(key)).toMatchObject({ placement: { dir: 'wp-content/themes', folder: 'spellbook' }, deactivate: ['wp-rocket'] });
+    expect(store.preset(key)).not.toHaveProperty('layout');
+    expect((await app.inject({ method: 'PUT', url: '/api/remembered/repos', headers, payload: { key, preset: { ...preset, placement: { dir: '../etc', folder: '' } } } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PUT', url: '/api/remembered/repos', headers, payload: { key: 'https://github.com/wandworks/other', preset } })).statusCode).toBe(404);
+
+    expect((await app.inject({ method: 'POST', url: '/api/remembered/repos/forget', headers, payload: { key } })).statusCode).toBe(200);
+    expect(store.preset(key)).toBeUndefined();
+    expect((await app.inject({ method: 'POST', url: '/api/remembered/repos/forget', headers, payload: { key } })).statusCode).toBe(404);
+  });
+});

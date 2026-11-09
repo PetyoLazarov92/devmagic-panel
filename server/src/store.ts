@@ -20,6 +20,11 @@ export interface RunRecord {
   skipped: number | null;
 }
 
+/** Notes kept per domain that a restore needs back: the cron tasks a removal took out, .htaccess changes put off. */
+export const SITE_KEPT_META = ['cron-removed:', 'htaccess-dismissed:'] as const;
+/** Caches kept per site, by domain and path, that go with it. */
+const SITE_CACHE_META = 'wpdb-report:';
+
 /** A database the panel made to keep a site's tables from before a swap, purged after a while. */
 export interface KeptDatabase {
   name: string;
@@ -86,6 +91,12 @@ export class RunStore {
       CREATE TABLE IF NOT EXISTS archives (
         id TEXT PRIMARY KEY,
         record TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS archive_meta (
+        archive TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (archive, key)
       );
       CREATE TABLE IF NOT EXISTS drafts (
         id TEXT PRIMARY KEY,
@@ -282,6 +293,36 @@ export class RunStore {
     const own = this.db.prepare('SELECT record FROM installs WHERE site = ?').get(domain) as { record: string } | undefined;
     if (own) this.db.prepare('INSERT INTO archives (id, record) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET record = excluded.record').run(archiveId, own.record);
     this.db.prepare("DELETE FROM installs WHERE site = ? OR site LIKE ? ESCAPE '\\'").run(domain, `${domain.replace(/[\\%_]/g, '\\$&')}/%`);
+    this.forgetSite(domain, archiveId);
+  }
+
+  /**
+   * A site went: what the panel kept for it does not stay behind for a new
+   * site on the same domain. What a restore needs (the cron tasks its removal
+   * took out, the .htaccess changes put off) moves with the archive; caches
+   * of what it held go.
+   */
+  forgetSite(domain: string, archiveId?: string): void {
+    for (const key of SITE_KEPT_META.map((prefix) => `${prefix}${domain}`)) {
+      const value = this.getMeta(key);
+      if (value === undefined) continue;
+      if (archiveId) this.db.prepare('INSERT INTO archive_meta (archive, key, value) VALUES (?, ?, ?) ON CONFLICT(archive, key) DO UPDATE SET value = excluded.value').run(archiveId, key, value);
+      this.deleteMeta(key);
+    }
+    for (const key of [...this.metaKeys(`${SITE_CACHE_META}${domain}#`), ...this.metaKeys(`${SITE_CACHE_META}${domain}/`)]) this.deleteMeta(key);
+  }
+
+  /** A restore: what the archive kept for the site goes back where the site's own things live. */
+  restoreArchiveMeta(archiveId: string): void {
+    const rows = this.db.prepare('SELECT key, value FROM archive_meta WHERE archive = ?').all(archiveId) as Array<{ key: string; value: string }>;
+    for (const row of rows) this.setMeta(row.key, row.value);
+    this.db.prepare('DELETE FROM archive_meta WHERE archive = ?').run(archiveId);
+  }
+
+  /** Every archive the panel keeps a record for, to drop the ones dmp-root purged. */
+  archiveIds(): string[] {
+    const rows = this.db.prepare('SELECT id FROM archives UNION SELECT DISTINCT archive AS id FROM archive_meta').all() as Array<{ id: string }>;
+    return rows.map((r) => r.id);
   }
 
   /** How the site in an archive had been installed, when the panel knew. */
@@ -292,6 +333,7 @@ export class RunStore {
 
   forgetArchive(archiveId: string): void {
     this.db.prepare('DELETE FROM archives WHERE id = ?').run(archiveId);
+    this.db.prepare('DELETE FROM archive_meta WHERE archive = ?').run(archiveId);
   }
 
   start(action: string, input: unknown): number {
@@ -398,6 +440,17 @@ export class RunStore {
   preset(repo: string): unknown {
     const row = this.db.prepare('SELECT preset FROM repo_presets WHERE repo = ?').get(repo) as { preset: string } | undefined;
     return row ? (JSON.parse(row.preset) as unknown) : undefined;
+  }
+
+  /** Every repo's remembered answers, the last used first, for Settings. */
+  presets(): Array<{ repo: string; preset: unknown; updatedAt: string }> {
+    const rows = this.db.prepare('SELECT repo, preset, updated_at FROM repo_presets ORDER BY updated_at DESC').all() as Array<{ repo: string; preset: string; updated_at: string }>;
+    return rows.map((r) => ({ repo: r.repo, preset: JSON.parse(r.preset) as unknown, updatedAt: r.updated_at }));
+  }
+
+  /** Forgets a repo's answers: the next install of it starts empty. */
+  deletePreset(repo: string): boolean {
+    return Number(this.db.prepare('DELETE FROM repo_presets WHERE repo = ?').run(repo).changes) > 0;
   }
 
   /** The last compatibility scan of a site (its key, like local.wandworks.example@learn) against one PHP version. */

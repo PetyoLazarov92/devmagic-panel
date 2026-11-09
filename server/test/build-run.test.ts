@@ -60,7 +60,7 @@ describe('running the builds of an install', () => {
 
   it('keeps the two older switches as builds at the repo root', () => {
     const base = { build: { composer: true, npm: true } } as Parameters<typeof buildsFor>[0];
-    expect(buildsFor(base)).toEqual([{ dir: '', tool: 'composer' }, { dir: '', tool: 'npm', script: 'build' }]);
+    expect(buildsFor(base)).toEqual([{ repo: 0, dir: '', tool: 'composer' }, { repo: 0, dir: '', tool: 'npm', script: 'build' }]);
     expect(buildsFor({ ...base, builds: [] })).toEqual([]);
   });
 });

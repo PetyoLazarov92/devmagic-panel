@@ -85,6 +85,7 @@ describe('inspectRepo', () => {
         { dir: '', tool: 'composer', scripts: [], needed: true, why: 'vendor/ is ignored by git' },
         { dir: 'wp-content/themes/wandworks', tool: 'npm', scripts: ['build'], script: 'build', needed: true, why: 'build/ is ignored by git' },
       ],
+      kind: 'site',
     });
     // A big repo's file list fits: far more than the usual 8 MB.
     expect(fake.calls.find((c) => c.args.includes('ls-tree'))?.maxBufferBytes).toBeGreaterThanOrEqual(64 * 1024 * 1024);
@@ -119,16 +120,21 @@ describe('inspectRepo', () => {
 });
 
 describe('repo presets', () => {
-  it('pairs each local name with its production host and leaves the branch out', () => {
+  it('pairs each local name with its production host, keeps where each repo went and leaves the main branch out', () => {
     expect(
       presetFromCreate({
-        source: 'repo', domain: 'local.shop.com', aliases: ['local.shop.de'], repo: { url: 'git@github.com:x/y.git', branch: 'feature/x', layout: 'theme' },
+        source: 'repo', domain: 'local.shop.com', aliases: ['local.shop.de'],
+        repos: [
+          { url: 'git@github.com:x/y.git', branch: 'feature/x', dir: 'wp-content/themes', folder: 'y' },
+          { url: 'git@github.com:x/blocks.git', branch: 'main', dir: 'wp-content/plugins', folder: 'blocks' },
+        ],
         replace: [{ from: 'www.shop.com', to: 'local.shop.com' }], core: { mode: 'wpcore', version: '7.1.3' }, deactivate: ['wp-rocket'],
-        uploadsFrom: 'www.shop.com', uploadsVia: 'plugin', build: { composer: false, npm: true }, activate: ['query-monitor'], replaceExisting: false, server: 'apache',
+        uploadsFrom: 'www.shop.com', uploadsVia: 'plugin', build: { composer: false, npm: true }, activate: ['query-monitor'], replaceExisting: false, remember: true, server: 'apache',
       }),
     ).toEqual({
       domains: [{ production: 'www.shop.com', local: 'local.shop.com' }, { local: 'local.shop.de' }],
-      layout: 'theme',
+      placement: { dir: 'wp-content/themes', folder: 'y' },
+      extra: [{ url: 'git@github.com:x/blocks.git', branch: 'main', dir: 'wp-content/plugins', folder: 'blocks' }],
       core: { mode: 'wpcore', version: '7.1.3' },
       deactivate: ['wp-rocket'],
       activate: ['query-monitor'],

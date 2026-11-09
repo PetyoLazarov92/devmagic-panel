@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
-import { basename, join, relative, sep } from 'node:path';
-import type { ActionInput } from '@devmagic-panel/shared';
-import { addressSummary, databaseNameFor, hostMapper, isLocalName, MEDIA_PLUGIN, MEDIA_PLUGIN_URL, mountFolder, networkMoves } from '@devmagic-panel/shared';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import type { ActionInput, RepoPlacement } from '@devmagic-panel/shared';
+import { addressSummary, placementWarnings, repoTarget, throughCoreLink, databaseNameFor, hostMapper, isLocalName, MEDIA_PLUGIN, MEDIA_PLUGIN_URL, mountFolder, networkMoves } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusMap } from '../core-status.js';
 import type { ExecResult, Executor } from '../exec.js';
@@ -31,6 +31,8 @@ import { readSiteVhosts } from './vhost.js';
 import { mysqlPassword } from './mysql-password.js';
 import { setConstant, setTablePrefix } from './wpconfig-edit.js';
 import { readLocalConstants } from '../local-constants.js';
+import { excludeLocally } from './mu-plugins.js';
+import { NO_PROMPTS } from './git.js';
 
 export interface CreateContext {
   config: SystemConfig;
@@ -93,10 +95,16 @@ export async function precheck(ctx: CreateContext, input: CreateInput): Promise<
     // A core the shared folder lacks is added first, as on the WordPress page; one with known security issues is added there, after confirming.
     const conf = readWpcoreConfig(ctx.wpcoreConf);
     if (!conf) throw new CreateRefused('wpcore has no config yet; run the installer first');
-    if (!installedCores(conf.coresDir).includes(input.core.version)) {
-      const status = (await ctx.coreStatus?.())?.[input.core.version];
-      if (status === 'insecure') throw new CreateRefused(`WordPress ${input.core.version} has known security issues; add it on the WordPress page first, where you confirm it`);
+    const version = input.core.version ?? '';
+    if (!installedCores(conf.coresDir).includes(version)) {
+      const status = (await ctx.coreStatus?.())?.[version];
+      if (status === 'insecure') throw new CreateRefused(`WordPress ${version} has known security issues; add it on the WordPress page first, where you confirm it`);
     }
+  }
+  // A shared core links wp-admin and wp-includes into the site: a repo there would go through the link into the core every site uses.
+  const inCore = input.repos.find((r) => throughCoreLink(repoTarget(r)));
+  if (inCore && input.core?.mode === 'wpcore') {
+    throw new CreateRefused(`${repoTarget(inCore)} is a folder of WordPress core, which a shared core links into the site: pick WordPress from the repo or a download of its own on the WordPress step, or another folder`);
   }
   if (input.uploadId) {
     const upload = await currentUpload(ctx.exec, ctx.uploadsDir, input.uploadId);
@@ -106,23 +114,69 @@ export async function precheck(ctx: CreateContext, input: CreateInput): Promise<
   return {};
 }
 
-/** Folder a repo is cloned into, by what the repo holds. */
-function cloneTarget(docroot: string, repo: NonNullable<CreateInput['repo']>): string {
-  const name = basename(repo.url.replace(/\.git$/, '').replace(/[:/]+$/, ''));
-  if (!/^[\w.-]+$/.test(name) || name.startsWith('.')) throw new CreateRefused(`cannot name a folder after ${repo.url}`);
-  switch (repo.layout) {
-    case 'site-root':
-      return docroot;
-    case 'wp-content':
-      return join(docroot, 'wp-content');
-    case 'theme':
-      return join(docroot, 'wp-content', 'themes', name);
-    case 'plugin':
-      return join(docroot, 'wp-content', 'plugins', name);
-  }
+/** The folder a repo of the site is cloned into: its place in the site's folder. */
+export function cloneDir(docroot: string, repo: RepoPlacement): string {
+  const target = repoTarget(repo);
+  return target ? join(docroot, ...target.split('/')) : docroot;
 }
 
-/** Builds the steps for a new site. */
+/**
+ * Why a repo cannot be cloned into its folder now, or null: every part of
+ * the path that is there already must be a real folder (never a link, so a
+ * clone never lands in a shared core's wp-admin or outside the site), the
+ * folder stays inside the site's folder, and it is missing or empty.
+ */
+export function cloneTargetProblem(docroot: string, target: string): string | null {
+  const rel = relative(docroot, target);
+  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return `${target} is outside the site's folder`;
+  let at = docroot;
+  for (const part of rel ? rel.split(sep) : []) {
+    at = join(at, part);
+    let st;
+    try {
+      st = lstatSync(at);
+    } catch {
+      // The rest of the path is made by the clone.
+      break;
+    }
+    if (st.isSymbolicLink()) return `${at} is a link to ${readlinkSync(at)}, so the repo would land there: pick another folder`;
+    if (!st.isDirectory()) return `${at} is a file: pick another folder`;
+  }
+  if (existsSync(target) && readdirSync(target).length > 0) return `${target} already holds files: pick another folder name`;
+  return null;
+}
+
+/** The repos of an install in the order they are cloned: the site root first, then by depth, so an outer repo is there before one inside it. */
+export function cloneOrder(repos: readonly CreateInput['repos'][number][]): Array<{ repo: CreateInput['repos'][number]; index: number }> {
+  const depth = (r: RepoPlacement) => (repoTarget(r) ? repoTarget(r).split('/').length : 0);
+  return repos.map((repo, index) => ({ repo, index })).sort((a, b) => depth(a.repo) - depth(b.repo) || a.index - b.index);
+}
+
+/**
+ * Links a clone holds that point out of the site's folder, from git's own
+ * list (mode 120000), so the install can say so: PHP served from the site
+ * could read what they point at.
+ */
+export async function linksOutOfSite(exec: Executor, clone: string, docroot: string): Promise<string[]> {
+  const listed = await exec('git', ['-C', clone, 'ls-files', '-s', '-z'], { timeoutMs: 60_000, maxBufferBytes: 256 * 1024 * 1024 });
+  if (listed.code !== 0) return [];
+  const out: string[] = [];
+  for (const entry of listed.stdout.split('\0')) {
+    const m = /^120000 [0-9a-f]+ \d+\t(.+)$/s.exec(entry);
+    if (!m) continue;
+    const link = join(clone, m[1] as string);
+    try {
+      const to = resolve(dirname(link), readlinkSync(link));
+      const rel = relative(docroot, to);
+      if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) out.push(`${relative(docroot, link)} -> ${readlinkSync(link)}`);
+    } catch {
+      // not checked out as a link
+    }
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 /** git's "Receiving objects:  45% (450/1000)" and "Resolving deltas" lines as one bar for the whole clone. */
 export function cloneProgress(text: string): { fraction: number; note: string } | undefined {
   const lines = text.split(/[\r\n]+/).reverse();
@@ -137,6 +191,8 @@ export function cloneProgress(text: string): { fraction: number; note: string } 
 
 /** Room a clone gets before it starts; repos with history and vendored plugins easily reach a few hundred MB. */
 const CLONE_ROOM = 2 * 1024 ** 3;
+/** Room each further repo gets: themes and plugins are smaller. */
+const EXTRA_CLONE_ROOM = 512 * 1024 ** 2;
 
 export interface SpaceNeed {
   path: string;
@@ -218,10 +274,10 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
   const add = (id: string, label: string, run: (job: JobRuntime) => Promise<ExecResult | ExecResult[]>, weight?: number, skippable?: string) =>
     steps.push({ id, label, run, ...(weight ? { weight } : {}), ...(skippable ? { skippable } : {}) });
 
-  if (input.repo || dumpFile) {
+  if (input.repos.length > 0 || dumpFile) {
     add('space', 'Check free disk space', async () => {
       const needs: SpaceNeed[] = [];
-      if (input.repo) needs.push({ path: ctx.config.WEB_DIR, bytes: CLONE_ROOM, what: 'the clone' });
+      if (input.repos.length > 0) needs.push({ path: ctx.config.WEB_DIR, bytes: CLONE_ROOM + (input.repos.length - 1) * EXTRA_CLONE_ROOM, what: input.repos.length === 1 ? 'the clone' : `${input.repos.length} clones` });
       if (dumpFile && mysql) {
         const datadir = await exec('mysql', ['--batch', '--skip-column-names', '--user', mysql.user, '--host', mysql.host, '-e', 'SELECT @@datadir'], { env: { MYSQL_PWD: mysql.password } });
         const dir = datadir.code === 0 ? datadir.stdout.trim() : '';
@@ -237,16 +293,22 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     return r;
   });
 
-  if (input.repo) {
-    const repo = input.repo;
-    const target = cloneTarget(docroot, repo);
-    add('clone', `Clone ${repo.url} (${repo.branch})`, async (job) => {
+  for (const { repo, index } of cloneOrder(input.repos)) {
+    const target = cloneDir(docroot, repo);
+    const atRoot = target === docroot;
+    const where = repoTarget(repo) || 'the site root';
+    add(index === 0 ? 'clone' : `clone-${index + 1}`, `Clone ${repo.url} (${repo.branch}) into ${where}`, async (job) => {
+      if (!atRoot) {
+        const problem = cloneTargetProblem(docroot, target);
+        if (problem) return { code: 1, stdout: '', stderr: problem };
+      }
       // A site-root repo goes into a scratch folder first, then moves up, so the files land in the very folder dmp-root registered.
-      const into = repo.layout === 'site-root' ? join(docroot, '.dmp-clone') : target;
-      if (repo.layout !== 'site-root') mkdirSync(join(into, '..'), { recursive: true });
-      // core.fileMode false: a chmod on the site's files never shows as a change in git.
-      const cloned = await exec('git', ['clone', '--progress', '-c', 'core.fileMode=false', '--branch', repo.branch, '--single-branch', '--', repo.url, into], {
+      const into = atRoot ? join(docroot, '.dmp-clone') : target;
+      if (!atRoot) mkdirSync(dirname(into), { recursive: true });
+      // core.fileMode false: a chmod on the site's files never shows as a change in git. Only SSH and HTTPS, never a local or ext:: transport.
+      const cloned = await exec('git', ['clone', '--progress', '--no-recurse-submodules', '-c', 'core.fileMode=false', '-c', 'protocol.allow=never', '-c', 'protocol.https.allow=always', '-c', 'protocol.ssh.allow=always', '--branch', repo.branch, '--single-branch', '--', repo.url, into], {
         timeoutMs: 30 * 60_000,
+        env: NO_PROMPTS,
         onStderr: (chunk) => {
           const at = cloneProgress(chunk);
           if (at) job.progress(at.fraction, at.note);
@@ -254,10 +316,18 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
       });
       // git's progress lines would bury the real output.
       const r = { ...cloned, stderr: cloned.stderr.split(/[\r\n]+/).filter((l) => l && !/\d+%/.test(l)).join('\n') };
-      if (r.code !== 0 || repo.layout !== 'site-root') return r;
-      for (const entry of readdirSync(into)) renameSync(join(into, entry), join(docroot, entry));
-      rmdirSync(into);
-      return r;
+      if (r.code !== 0) return r;
+      if (atRoot) {
+        for (const entry of readdirSync(into)) renameSync(join(into, entry), join(docroot, entry));
+        rmdirSync(into);
+      } else {
+        // A repo inside another one's folder stays out of that one's git status, locally.
+        await excludeLocally(exec, target, `devmagic-panel: ${repo.url} is a repo of its own here`);
+      }
+      const notes = [...placementWarnings(repoTarget(repo)).map((w) => `note: ${w}`)];
+      const away = await linksOutOfSite(exec, target, docroot);
+      if (away.length) notes.push(`note: the repo has links out of the site's folder, which PHP served from it can follow:\n  ${away.join('\n  ')}`);
+      return notes.length ? [r, ok(notes.join('\n'))] : r;
     }, 4);
   }
 
@@ -270,18 +340,20 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     });
 
     const core = input.core as NonNullable<CreateInput['core']>;
+    const version = core.version ?? '';
     const conf = readWpcoreConfig(ctx.wpcoreConf);
-    if (core.mode === 'wpcore' && conf && !installedCores(conf.coresDir).includes(core.version)) {
-      add('addcore', `Add WordPress ${core.version} to the shared cores`, () =>
-        exec('sudo', ['-n', ctx.wpcoreBin, 'add', core.version], { input: 'n\n', timeoutMs: 10 * 60_000 }),
+    if (core.mode === 'wpcore' && conf && !installedCores(conf.coresDir).includes(version)) {
+      add('addcore', `Add WordPress ${version} to the shared cores`, () =>
+        exec('sudo', ['-n', ctx.wpcoreBin, 'add', version], { input: 'n\n', timeoutMs: 10 * 60_000 }),
       );
     }
     add(
       'core',
-      core.mode === 'wpcore' ? `Link WordPress ${core.version} with wpcore` : `Download WordPress ${core.version}`,
+      core.mode === 'wpcore' ? `Link WordPress ${version} with wpcore` : core.mode === 'repo' ? "Use the repo's own WordPress" : `Download WordPress ${version}`,
       async () => {
-        if (core.mode !== 'wpcore') return exec('wp', ['core', 'download', `--version=${core.version}`, `--path=${docroot}`, '--skip-content'], { timeoutMs: 600_000 });
-        const linked = await exec('sudo', ['-n', ctx.wpcoreBin, 'link', folder, core.version], { timeoutMs: 120_000 });
+        if (core.mode === 'repo') return repoCore(docroot);
+        if (core.mode !== 'wpcore') return exec('wp', ['core', 'download', `--version=${version}`, `--path=${docroot}`, '--skip-content'], { timeoutMs: 600_000 });
+        const linked = await exec('sudo', ['-n', ctx.wpcoreBin, 'link', folder, version], { timeoutMs: 120_000 });
         if (linked.code !== 0) return linked;
         const kept = await keepRepoIndex(exec, docroot);
         return { ...linked, stdout: [linked.stdout.trim(), kept.stdout].filter(Boolean).join('\n') };
@@ -549,18 +621,18 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     }, undefined, `Missing uploads do not load from ${input.uploadsFrom}: set ${MEDIA_PLUGIN_URL} to ${url} in wp-config.php and turn on BE Media from Production in wp-admin.`);
   }
 
-  const builds = input.repo ? buildsFor(input) : [];
-  if (input.repo && builds.length > 0) {
-    const dir = cloneTarget(docroot, input.repo);
+  const builds = input.repos.length > 0 ? buildsFor(input) : [];
+  if (builds.length > 0) {
+    const dirOf = (b: BuildStep) => cloneDir(docroot, input.repos[b.repo] ?? (input.repos[0] as RepoPlacement));
     add('build', builds.length === 1 ? 'Run the build' : `Run ${builds.length} builds`, async () => {
       const results: ExecResult[] = [];
       for (const build of builds) {
-        const ran = await runBuild(exec, dir, build, ctx.home ? { home: ctx.home } : {});
+        const ran = await runBuild(exec, dirOf(build), build, ctx.home ? { home: ctx.home } : {});
         results.push(...ran);
         if (ran.some((r) => r.code !== 0)) return results;
       }
       return results;
-    }, undefined, `The build did not run, so built theme or plugin files may be missing. Run it in a terminal: ${builds.map((b) => buildCommand(dir, b)).join('; ')}`);
+    }, undefined, `The build did not run, so built theme or plugin files may be missing. Run it in a terminal: ${builds.map((b) => buildCommand(dirOf(b), b)).join('; ')}`);
   }
 
   if (isWp) {
@@ -578,17 +650,30 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
 }
 
 type BuildStep = NonNullable<CreateInput['builds']>[number];
+/** One build as it runs, in its folder of a clone. */
+type BuildRun = Omit<BuildStep, 'repo'>;
 
 /** The builds to run: the list the wizard sends, else the two older switches at the repo root. */
 export function buildsFor(input: CreateInput): BuildStep[] {
   if (input.builds) return input.builds;
-  return [...(input.build.composer ? [{ dir: '', tool: 'composer' as const }] : []), ...(input.build.npm ? [{ dir: '', tool: 'npm' as const, script: 'build' }] : [])];
+  return [...(input.build.composer ? [{ repo: 0, dir: '', tool: 'composer' as const }] : []), ...(input.build.npm ? [{ repo: 0, dir: '', tool: 'npm' as const, script: 'build' }] : [])];
+}
+
+/** The repo holds WordPress core: it is used as it is, with no link and no download. */
+export function repoCore(docroot: string): ExecResult {
+  try {
+    const text = readFileSync(join(docroot, 'wp-includes', 'version.php'), 'utf8');
+    const version = /\$wp_version\s*=\s*'([^']+)'/.exec(text)?.[1];
+    return ok(`the repo has WordPress ${version ?? '(version unknown)'}; it is used as it is, with no shared core and no download`);
+  } catch {
+    return { code: 1, stdout: '', stderr: "the repo has no wp-includes/version.php, so it holds no WordPress core: pick a shared core or a download of its own on the WordPress step" };
+  }
 }
 
 const MANIFEST = { composer: 'composer.json', npm: 'package.json', yarn: 'package.json', pnpm: 'package.json' } as const;
 
 /** A build as you would run it in a terminal, for a skipped build step. */
-export function buildCommand(clone: string, build: BuildStep): string {
+export function buildCommand(clone: string, build: BuildRun): string {
   const run = build.tool === 'composer' ? 'composer install' : `${build.tool} install${build.script ? ` && ${build.tool} run ${build.script}` : ''}`;
   return `cd ${join(clone, build.dir)} && ${run}`;
 }
@@ -598,7 +683,7 @@ export function buildCommand(clone: string, build: BuildStep): string {
  * manager's install (ci with a lock file) and the script. A folder that left
  * the clone through a link, or has no manifest any more, is skipped with a note.
  */
-export async function runBuild(exec: Executor, clone: string, build: BuildStep, node: NodeOptions = {}): Promise<ExecResult[]> {
+export async function runBuild(exec: Executor, clone: string, build: BuildRun, node: NodeOptions = {}): Promise<ExecResult[]> {
   const where = build.dir || '/';
   const folder = join(clone, build.dir);
   const inside = existsSync(folder) && relative(realpathSync(clone), realpathSync(folder)).split(sep)[0] !== '..';

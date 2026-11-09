@@ -2,9 +2,10 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
+import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
 import { cronReport } from './cron.js';
 import { GlobalLock, LoginLimiter, SESSION_COOKIE, Sessions } from './auth.js';
@@ -607,6 +608,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const next = preferences.parse({ ...readPreferences(), ...update.data });
       deps.store.setMeta(PREFERENCES_KEY, JSON.stringify(next));
       return next;
+    });
+
+    // What the new site wizard remembers per repo: listed, changed and forgotten in Settings. Panel settings, not an action.
+    const rememberedName = (key: string) => key.replace(/^https?:\/\//, '');
+    api.get('/api/remembered/repos', async (): Promise<RememberedRepo[]> =>
+      deps.store.presets().map(({ repo, preset, updatedAt }) => {
+        const read = repoPreset.safeParse(preset);
+        return { key: repo, name: rememberedName(repo), updatedAt, preset: read.success ? read.data : null };
+      }),
+    );
+    const rememberedKey = z.string().min(1).max(600);
+    api.put<{ Body: unknown }>('/api/remembered/repos', async (request, reply) => {
+      const body = z.object({ key: rememberedKey, preset: repoPreset }).safeParse(request.body);
+      if (!body.success) return reply.code(400).send({ error: body.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ') });
+      // Only answers the wizard made can be changed: nothing new is remembered from here.
+      if (deps.store.preset(body.data.key) === undefined) return reply.code(404).send({ error: 'Nothing is remembered for this repo' });
+      // Placement replaces the old layout once you save.
+      const { layout: _old, ...preset } = body.data.preset;
+      deps.store.savePreset(body.data.key, preset);
+      return { ok: true };
+    });
+    api.post<{ Body: unknown }>('/api/remembered/repos/forget', async (request, reply) => {
+      const body = z.object({ key: rememberedKey }).safeParse(request.body);
+      if (!body.success) return reply.code(400).send({ error: 'Which repo?' });
+      if (!deps.store.deletePreset(body.data.key)) return reply.code(404).send({ error: 'Nothing is remembered for this repo' });
+      return { ok: true };
     });
 
     // The constants every local site should have, written on new installs and checked by Aura. Panel settings, not an action.

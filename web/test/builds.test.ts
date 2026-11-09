@@ -8,7 +8,7 @@ const root: RepoBuild = { dir: '', tool: 'composer', scripts: [], needed: true, 
 
 describe('the build checklist', () => {
   it('runs what the lookup ticked, with its script', () => {
-    expect(buildSteps([root, theme, slider], {}, [])).toEqual([{ dir: '', tool: 'composer' }, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'build' }]);
+    expect(buildSteps([root, theme, slider], {}, [])).toEqual([{ repo: 0, dir: '', tool: 'composer' }, { repo: 0, dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'build' }]);
   });
 
   it('ticks a build the docs name, with their script, and marks it as from the docs', () => {
@@ -28,6 +28,6 @@ describe('the build checklist', () => {
 
   it('follows your ticks and scripts over the docs and the lookup', () => {
     const picks = { 'npm:wp-content/themes/wandworks': { on: false }, 'npm:wp-content/plugins/wandworks-slider': { on: true, script: 'dev' } };
-    expect(buildSteps([theme, slider], picks, [{ folder: 'wp-content/themes/wandworks', command: 'npm run prod' }])).toEqual([{ dir: 'wp-content/plugins/wandworks-slider', tool: 'npm', script: 'dev' }]);
+    expect(buildSteps([theme, slider], picks, [{ folder: 'wp-content/themes/wandworks', command: 'npm run prod' }])).toEqual([{ repo: 0, dir: 'wp-content/plugins/wandworks-slider', tool: 'npm', script: 'dev' }]);
   });
 });
