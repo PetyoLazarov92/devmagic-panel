@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+import { savePreferences, usePreferences } from '@/lib/preferences';
+import type { UseClaude } from '@devmagic-panel/shared';
 import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS, CLAUDE_STEP_LABELS } from '@/pages/new-site-org';
 
 const STEP_TEXT: Record<ClaudeStep, string> = {
@@ -70,8 +72,9 @@ export function ClaudeDefaultsCard() {
         <Badge tone={claude?.claudeAi ? 'success' : 'neutral'}>{claude?.claudeAi ? 'signed in' : claude?.signedIn ? 'no claude.ai' : 'not ready'}</Badge>
       </CardHeader>
       <div className="grid gap-4 p-5 text-sm">
+        <UseClaudeField />
         <div>
-          <p className="flex items-center gap-1.5 font-medium"><Sparkles className="size-4 text-primary" />Defaults for installs from an organization</p>
+          <p className="flex items-center gap-1.5 font-medium"><Sparkles className="size-4 text-primary" />Defaults for each Claude Code step</p>
           <p className="text-xs text-muted-foreground">Claude Code runs with your own sign-in, never an API key. Model, effort and spending cap per run for each step, saved as you change them. They apply to the next Claude Code step of every install, unless that install changed its own on its Claude Code card.</p>
           <p className="mt-1 flex min-h-4 items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
             {saved === 'saving' && <><LoaderCircle className="size-3.5 animate-spin" />Saving...</>}
@@ -148,6 +151,27 @@ function StepDefaults({ step, value, onChange }: { step: ClaudeStep; value: Clau
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Whether a new install from a project lets Claude Code read the repo: on unless switched off, off unless switched on, or never offered. */
+function UseClaudeField() {
+  const { useClaude } = usePreferences();
+  const hints: Record<UseClaude, string> = {
+    always: 'The Code step has the switch on; switch it off for one install.',
+    ask: 'The switch starts off; switch it on for an install that needs it.',
+    never: 'No switch and no Claude steps in new installs.',
+  };
+  return (
+    <div className="grid gap-1.5">
+      <label htmlFor="use-claude" className="font-medium">Use Claude Code in new installs</label>
+      <Select id="use-claude" value={useClaude} onChange={(e) => void savePreferences({ useClaude: e.target.value as UseClaude })} wrapClassName="max-w-64">
+        <option value="always">Always, switch off per install</option>
+        <option value="ask">Off, switch on per install</option>
+        <option value="never">Never</option>
+      </Select>
+      <p className="text-xs text-muted-foreground">{hints[useClaude]}</p>
     </div>
   );
 }

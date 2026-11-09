@@ -34,7 +34,8 @@ import { planAddNetworkAdmin } from './sites/network-admin.js';
 import { openTerminal } from './terminal.js';
 import type { Drafts } from './drafts.js';
 import { findClaude } from './org/claude-code.js';
-import { DumpRefused, planDriveDownload, planUseDownloaded } from './org/dumps.js';
+import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded } from './org/dumps.js';
+import { type Getter, shownUrl, urlProblem } from './sites/fetch-dump.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
 import { planRemove, RemoveRefused, stampDate } from './sites/remove.js';
@@ -84,6 +85,10 @@ export interface ActionContext {
   download?: Downloader;
   /** The panel's own repository and logs, for panel.update. */
   update?: UpdateContext;
+  /** How a URL download asks the server; tests pass their own. */
+  fetchGet?: Getter;
+  /** Whether code from a repo may run here (repo-trust.ts). */
+  repoTrusted?: (url: string) => boolean;
   /** Install drafts, which site.create keeps while it runs and finishes once it is done. */
   drafts?: Drafts;
   /** Where Claude Code is looked for and works, for the organization install's steps. */
@@ -453,7 +458,25 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       upload = id;
       if (input.draftId) ctx.drafts?.attach(input.draftId, id);
     });
-    return noteDump(ctx, input.draftId, startJob(ctx, steps, `Download ${input.name}`, input.draftId ?? input.fileId, { onUndone: () => upload && input.draftId && ctx.drafts?.detach(input.draftId, upload) }));
+    return noteDump(ctx, input.draftId, startJob(ctx, steps, `Download ${input.name ?? 'a dump from Google Drive'}`, input.draftId ?? input.fileId ?? 'drive', { onUndone: () => upload && input.draftId && ctx.drafts?.detach(input.draftId, upload) }));
+  },
+  'dump.fromRemote': async (ctx, input) => {
+    let upload: string | undefined;
+    const steps = await planRemoteDownload(ctx, input, (id) => {
+      upload = id;
+      if (input.draftId) ctx.drafts?.attach(input.draftId, id);
+    });
+    return noteDump(ctx, input.draftId, startJob(ctx, steps, `Download ${input.path.split('/').pop() ?? 'a dump'} from ${input.remote}`, input.draftId ?? input.remote, { onUndone: () => upload && input.draftId && ctx.drafts?.detach(input.draftId, upload) }));
+  },
+  'dump.fetch': async (ctx, input) => {
+    let upload: string | undefined;
+    const problem = urlProblem(input.url);
+    if (problem) throw new DumpRefused(problem);
+    const steps = planFetch(ctx, input, (id) => {
+      upload = id;
+      if (input.draftId) ctx.drafts?.attach(input.draftId, id);
+    }, ctx.fetchGet);
+    return noteDump(ctx, input.draftId, startJob(ctx, steps, `Download a dump from ${new URL(input.url).host}`, input.draftId ?? 'fetch', { onUndone: () => upload && input.draftId && ctx.drafts?.detach(input.draftId, upload) }));
   },
   'dump.useDownloaded': async (ctx, input) => {
     let upload: string | undefined;
@@ -695,11 +718,11 @@ export function lockKey(id: ActionId, input: unknown): string | undefined {
 /** Inputs run history never keeps: passwords, and a row's values and key or SQL that writes (data from a database). */
 const HIDDEN_INPUTS = new Set(['password', 'rowKey', 'rowKeys', 'rowValues', 'rowWas', 'sql']);
 
-/** The input as run history keeps it: any field called password, or holding a row's data, is blanked out. */
+/** The input as run history keeps it: any field called password, or holding a row's data, is blanked out, and an address keeps no query (signed links carry tokens there). */
 export function withoutPasswords(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutPasswords);
   if (value === null || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, HIDDEN_INPUTS.has(k) ? '(hidden)' : withoutPasswords(v)]));
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, HIDDEN_INPUTS.has(k) ? '(hidden)' : (k === 'url' || k === 'link') && typeof v === 'string' && /^https?:\/\//i.test(v) ? shownUrl(v) : withoutPasswords(v)]));
 }
 
 /**

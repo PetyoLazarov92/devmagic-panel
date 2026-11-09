@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { CronRunStatus, CronRunView, InstallHow, Proposal, QueuedProposal, SiteInstall } from '@devmagic-panel/shared';
-import { actions, isActionId } from '@devmagic-panel/shared';
+import { actions, isActionId, repoKey as repoKeyOf } from '@devmagic-panel/shared';
 
 /**
  * Run history in node:sqlite (no native module). One row per action run:
@@ -91,6 +91,12 @@ export class RunStore {
       CREATE TABLE IF NOT EXISTS archives (
         id TEXT PRIMARY KEY,
         record TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS trusted_owners (
+        host TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        trusted_at TEXT NOT NULL,
+        PRIMARY KEY (host, owner)
       );
       CREATE TABLE IF NOT EXISTS archive_meta (
         archive TEXT NOT NULL,
@@ -446,6 +452,33 @@ export class RunStore {
   presets(): Array<{ repo: string; preset: unknown; updatedAt: string }> {
     const rows = this.db.prepare('SELECT repo, preset, updated_at FROM repo_presets ORDER BY updated_at DESC').all() as Array<{ repo: string; preset: string; updated_at: string }>;
     return rows.map((r) => ({ repo: r.repo, preset: JSON.parse(r.preset) as unknown, updatedAt: r.updated_at }));
+  }
+
+  /** Owners whose repos you trust to run here (their PHP, their builds), by host and owner path. */
+  trustedOwners(): Array<{ host: string; owner: string; at: string }> {
+    const rows = this.db.prepare('SELECT host, owner, trusted_at FROM trusted_owners ORDER BY host, owner').all() as Array<{ host: string; owner: string; trusted_at: string }>;
+    return rows.map((r) => ({ host: r.host, owner: r.owner, at: r.trusted_at }));
+  }
+
+  trustOwner(host: string, owner: string): void {
+    this.db.prepare('INSERT INTO trusted_owners (host, owner, trusted_at) VALUES (?, ?, ?) ON CONFLICT(host, owner) DO NOTHING').run(host, owner, new Date().toISOString());
+  }
+
+  untrustOwner(host: string, owner: string): boolean {
+    return Number(this.db.prepare('DELETE FROM trusted_owners WHERE host = ? AND owner = ?').run(host, owner).changes) > 0;
+  }
+
+  /** Whether a repo is in a list the GitHub or GitLab CLI read, by repoKey: the CLI you signed in lists only repos you can reach. */
+  listedRepo(key: string): boolean {
+    const rows = this.db.prepare('SELECT record FROM org_repos').all() as Array<{ record: string }>;
+    return rows.some((r) => {
+      try {
+        const rec = JSON.parse(r.record) as { sshUrl?: string; url?: string };
+        return [rec.sshUrl, rec.url].some((u) => typeof u === 'string' && repoKeyOf(u) === key);
+      } catch {
+        return false;
+      }
+    });
   }
 
   /** Forgets a repo's answers: the next install of it starts empty. */

@@ -1,4 +1,5 @@
 import type { OrgRepo } from '@devmagic-panel/shared';
+import { gitUrl, parseNamespaceRef, repoWeb } from '@devmagic-panel/shared';
 import type { WizardState } from '@/pages/new-site';
 import type { OrgState } from '@/pages/new-site-org';
 
@@ -49,7 +50,7 @@ export function switchRepo(s: WizardState, repo: OrgRepo, blank: WizardState, no
     repoUrl: repo.sshUrl,
     branch: repo.defaultBranch ?? '',
     passed: s.passed.start ? { start: s.passed.start } : {},
-    org: { name: repo.org, repo, read: { status: 'idle' }, access: { status: 'idle' }, ...claude, ...others },
+    org: { name: repo.org, repo, read: { status: 'idle' }, access: { status: 'idle' }, useClaude: org.useClaude, ...claude, ...others },
   };
 }
 
@@ -58,8 +59,26 @@ export function switchOrg(s: WizardState, name: string, now = Date.now()): Wizar
   const org = s.org;
   if (!org || org.name === name) return s;
   const rest = newest(putAside(s, now));
-  return { ...s, org: { name, repo: null, read: { status: 'idle' }, access: { status: 'idle' }, ...(org.claude ? { claude: org.claude } : {}), ...(Object.keys(rest).length ? { earlier: rest } : {}) } };
+  return { ...s, org: { name, repo: null, read: { status: 'idle' }, access: { status: 'idle' }, useClaude: org.useClaude, ...(org.claude ? { claude: org.claude } : {}), ...(Object.keys(rest).length ? { earlier: rest } : {}) } };
 }
 
 /** The dumps the repos put aside use, kept with the draft so they are not removed while you look elsewhere. */
 export const asideUploads = (org: OrgState | null): string[] => Object.values(org?.earlier ?? {}).flatMap((p) => (p.state.upload ? [p.state.upload.id] : []));
+
+/**
+ * A pasted URL as a repo of the list: its whole path on the host, so a
+ * project in a GitLab subgroup (wandworks/web/site) keeps its groups. Null for
+ * anything that is not a git URL.
+ */
+export function pastedRepo(url: string): OrgRepo | null {
+  const web = gitUrl.safeParse(url).success ? repoWeb(url) : null;
+  if (!web) return null;
+  const parsed = new URL(web.repoUrl);
+  const path = parsed.pathname.slice(1);
+  const slash = path.lastIndexOf('/');
+  const group = path.slice(0, slash);
+  // The organization or group, when it is one the panel can list; other hosts install without one.
+  const ref = web.provider === 'GitHub' ? group : web.provider === 'GitLab' ? `${parsed.hostname}/${group}` : '';
+  const org = parseNamespaceRef(ref) ? ref : '';
+  return { org, name: path.slice(slash + 1), fullName: path, sshUrl: url, url: web.repoUrl, archived: false, kind: 'site' };
+}

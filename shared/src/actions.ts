@@ -1140,13 +1140,44 @@ export const actions = {
   'dump.download': {
     title: 'Download a database dump',
     description:
-      "Downloads a database dump from Google Drive with rclone (its own sign-in) into the panel's uploads, checks free space first, and reads it as for an upload: tables, prefix, addresses, multisite. A download that stops leaves nothing behind. Starts a job; the upload id is in its data.",
+      "Downloads a database dump from Google Drive with rclone (its own sign-in) into the panel's uploads, by its file id or a link to it, checks free space first and that it is a dump by its first bytes, and reads it as for an upload: tables, prefix, addresses, multisite. A download that stops leaves nothing behind. Starts a job; the upload id is in its data.",
+    changesSystem: true,
+    input: z
+      .object({
+        fileId: z.string().regex(/^[A-Za-z0-9_-]{10,120}$/, 'Not a Google Drive file id').optional(),
+        /** A link to the file, like https://drive.google.com/file/d/<id>/view; its id is taken from it. */
+        link: z.string().max(500).regex(/^https:\/\/(?:drive|docs)\.google\.com\/[\w/.?=&%-]+$/, 'A link to a Google Drive file').optional(),
+        /** Without one, the file keeps its name on Drive. */
+        name: z.string().regex(/^[^/\\\0]{1,200}\.(?:sql|sql\.gz|zip)$/i, 'A .sql, .sql.gz or .zip file name').optional(),
+        sizeBytes: z.number().int().nonnegative().optional(),
+        /** The install draft the dump is for: it keeps the dump until it goes. */
+        draftId: z.string().uuid().optional(),
+      })
+      .refine((v) => Boolean(v.fileId) !== Boolean(v.link), { message: 'A file id or a link, one of them', path: ['link'] }),
+  },
+  'dump.fromRemote': {
+    title: 'Download a database dump with rclone',
+    description:
+      "Downloads a database dump from one of rclone's remotes (Dropbox, OneDrive, S3, SFTP, WebDAV and the others rclone has, each with its own sign-in) into the panel's uploads, checks free space and that it is a dump by its first bytes, and reads it as for an upload. Starts a job; the upload id is in its data.",
     changesSystem: true,
     input: z.object({
-      fileId: z.string().regex(/^[A-Za-z0-9_-]{10,120}$/, 'Not a Google Drive file id'),
-      name: z.string().regex(/^[^/\\\0]{1,200}\.(?:sql|sql\.gz|zip)$/i, 'A .sql, .sql.gz or .zip file name'),
+      remote: z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_. -]{0,63}$/, 'An rclone remote name'),
+      path: z
+        .string()
+        .max(1000)
+        .regex(/^[^\0\n]+\.(?:sql|sql\.gz|zip)$/i, 'A .sql, .sql.gz or .zip file in the remote')
+        .refine((p) => !p.startsWith('/') && !p.startsWith('-') && !p.split('/').some((x) => x === '..' || x === '.' || x === ''), 'A path in the remote, like backups/spellbook.sql.gz'),
       sizeBytes: z.number().int().nonnegative().optional(),
-      /** The install draft the dump is for: it keeps the dump until it goes. */
+      draftId: z.string().uuid().optional(),
+    }),
+  },
+  'dump.fetch': {
+    title: 'Download a database dump from a URL',
+    description:
+      "Downloads a database dump from a public https:// address into the panel's uploads: never an address on this computer or a private network, at most five redirects, the free space checked against the size the server gives, the 20 GB limit kept while it streams, and refused unless its first bytes are SQL, a gzip or a zip. The address's query (signed links carry tokens) is never kept in run history. Starts a job; the upload id is in its data.",
+    changesSystem: true,
+    input: z.object({
+      url: z.string().max(2000).regex(/^https:\/\/[^\s@]+$/, 'An https:// address, with no user name or password'),
       draftId: z.string().uuid().optional(),
     }),
   },

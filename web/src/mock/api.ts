@@ -1,4 +1,4 @@
-import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, RepoBuild, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, RepoBuild, TrustedOwner, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
@@ -562,8 +562,13 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     ],
     'dump.download': [
       { id: 'space', label: 'Check free disk space' },
-      { id: 'download', label: `Download ${String(input.name)} from Google Drive and read it` },
+      { id: 'download', label: `Download ${String(input.name ?? 'the file')} from Google Drive and read it` },
     ],
+    'dump.fromRemote': [
+      { id: 'space', label: 'Check free disk space' },
+      { id: 'download', label: `Download ${String(input.path).split('/').pop()} from ${String(input.remote)} and read it` },
+    ],
+    'dump.fetch': [{ id: 'download', label: `Download the dump from ${(() => { try { return new URL(String(input.url)).host; } catch { return 'the address'; } })()} and read it` }],
     'dump.useDownloaded': [{ id: 'take', label: `Take ${String(input.file).split('/').pop()} from Downloads and read it` }],
     'db.searchReplace': input.dryRun
       ? [{ id: 'preview', label: `Count what replacing ${String(input.from)} would change` }]
@@ -692,7 +697,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     install: `${String(input.release)} installed, replacing v${CURRENT}`,
     preview: `+------------+--------------+--------------+------+\n| Table      | Column       | Replacements | Type |\n+------------+--------------+--------------+------+\n| wp_options | option_value | 4            | PHP  |\n| wp_posts   | post_content | 37           | SQL  |\n+------------+--------------+--------------+------+\nSuccess: 41 replacements to be made.`,
     replace: 'Success: Made 41 replacements.',
-    download: `downloaded ${String(input.name)} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example`,
+    download: `downloaded ${String(input.name ?? String(input.path ?? 'wandworks-store.sql.gz').split('/').pop())} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example`,
     take: `took ${String(input.file).split('/').pop()} (412 MB): upload ${MOCK_DUMP_UPLOAD}, for www.wandworks-store.example; your file stays in /home/wandworksco/Downloads`,
     clean: 'Users\n  wp_users removed, all but admin: about 18,239 rows\n  wp_usermeta removed with them: about 402,113 rows\nWooCommerce orders and customers\n  wp_wc_orders emptied: about 51,320 rows\n  wp_comments order notes: 88,412\nForm entries\n  wp_gf_entry emptied: about 9,804 rows\nLogs\n  wp_actionscheduler_logs emptied: about 1,204,511 rows\n  wp_wfHits emptied: about 603,220 rows\nPayment, mail and API keys\n  wp_options settings with keys: 7\nSettings: done',
     plugins: 'turned off: wp-mail-smtp, mailchimp-for-wp, wordfence, wp-rocket',
@@ -838,6 +843,7 @@ function mockSalts(constants: SiteConstant[]): SiteSalts {
 }
 
 let mockLocalConstants: LocalConstant[] = [{ name: 'WP_ENVIRONMENT_TYPE', value: 'local' }, { name: 'WANDWORKS_DEV', value: true }];
+let mockTrusted: TrustedOwner[] = [{ host: 'github.com', owner: 'sam-lee', at: '2026-10-30T12:00:00.000Z' }];
 let mockRemembered: RememberedRepo[] = [
   {
     key: 'https://github.com/wandworks/site',
@@ -1916,6 +1922,34 @@ export const mockApi: Api = {
   downloads: async () => {
     await wait(150);
     return [{ file: '/home/wandworksco/Downloads/wandworks-store-2026-10-24.sql.gz', name: 'wandworks-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: new Date(Date.now() - 20 * 60_000).toISOString() }];
+  },
+  rcloneRemotes: async () => {
+    await wait(120);
+    return { installed: true, remotes: [{ name: 'gdrive', type: 'drive' }, { name: 'backups', type: 's3' }] };
+  },
+  remoteList: async (remote, path) => {
+    await wait(200);
+    const at = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    if (!path) return [{ name: 'spellbook', path: 'spellbook', dir: true, sizeBytes: null, modifiedAt: at(2) }, { name: 'wandworks-store', path: 'wandworks-store', dir: true, sizeBytes: null, modifiedAt: at(6) }];
+    return [
+      { name: `${path.split('/').pop() ?? 'site'}-${new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)}.sql.gz`, path: `${path}/${path.split('/').pop() ?? 'site'}-latest.sql.gz`, dir: false, sizeBytes: remote === 'backups' ? 612_000_000 : 431_000_000, modifiedAt: at(1) },
+      { name: `${path.split('/').pop() ?? 'site'}-2026-10-01.sql.gz`, path: `${path}/${path.split('/').pop() ?? 'site'}-2026-10-01.sql.gz`, dir: false, sizeBytes: 598_000_000, modifiedAt: at(39) },
+    ];
+  },
+  repoTrust: async (url) => {
+    const owner = /[:/]([\w.-]+)\/[\w.-]+?(?:\.git)?$/.exec(url)?.[1]?.toLowerCase() ?? '';
+    const host = /^(?:git@|https:\/\/|ssh:\/\/[^@]+@)([\w.-]+)/.exec(url)?.[1] ?? 'github.com';
+    const trusted = owner === 'wandworks' || owner === 'wandworksco' || mockTrusted.some((t) => t.host === host && t.owner === owner);
+    return { owner: owner ? { host, owner } : null, trusted, ...(trusted ? { why: owner.startsWith('wandworks') ? ('namespace' as const) : ('trusted' as const) } : {}) };
+  },
+  trustedOwners: async () => structuredClone(mockTrusted),
+  trustOwner: async (host, owner) => {
+    if (!mockTrusted.some((t) => t.host === host && t.owner === owner)) mockTrusted.push({ host, owner, at: new Date().toISOString() });
+    return structuredClone(mockTrusted);
+  },
+  untrustOwner: async (host, owner) => {
+    mockTrusted = mockTrusted.filter((t) => !(t.host === host && t.owner === owner));
+    return structuredClone(mockTrusted);
   },
   drafts: async () => {
     await wait(150);

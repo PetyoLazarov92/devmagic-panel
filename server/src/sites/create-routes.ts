@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Executor } from '../exec.js';
 import type { Jobs } from '../jobs.js';
 import type { JobView, UploadResult } from '@devmagic-panel/shared';
-import { currentUpload, removeUpload, saveUpload, UploadError } from './uploads.js';
+import { currentUpload, DumpTypeError, removeUpload, saveUpload, UploadError } from './uploads.js';
 
 export interface CreateRouteDeps {
   exec: Executor;
@@ -31,7 +31,7 @@ export function registerCreateRoutes(api: FastifyInstance, deps: CreateRouteDeps
     try {
       return withSuggestions(await saveUpload(deps.exec, deps.uploadsDir, request.query.name ?? '', request.body as NodeJS.ReadableStream));
     } catch (error) {
-      if (error instanceof UploadError) return reply.code(400).send({ error: error.message });
+      if (error instanceof UploadError || error instanceof DumpTypeError) return reply.code(400).send({ error: error.message });
       throw error;
     }
   });

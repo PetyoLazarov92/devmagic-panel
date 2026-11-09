@@ -7,7 +7,8 @@ import type { Executor } from '../exec.js';
 import type { RunStore } from '../store.js';
 import { RepoRefused } from '../sites/repo.js';
 import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } from './claude-code.js';
-import { recentDownloads, rcloneRemote } from './dumps.js';
+import { DumpRefused, listRemote, rcloneRemotes, recentDownloads, rcloneRemote } from './dumps.js';
+import { z } from 'zod';
 import { ghStatus } from '../repo-hosts/github.js';
 import { type GitHostDetector, glabOverview, HostRefused, listNamespaces, remotesOf } from '../repo-hosts/index.js';
 import { OrgScanner } from './scan.js';
@@ -161,4 +162,21 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
 
   // Dumps you downloaded in the browser, to pick one when rclone is not set up.
   api.get('/api/downloads', async () => recentDownloads(deps.home));
+
+  // rclone's remotes and one folder of one, read only, for the Database step: names and sizes of dumps, never their contents.
+  api.get('/api/dumps/remotes', async () => rcloneRemotes(deps.exec));
+  const remoteFolder = z.object({
+    remote: z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_. -]{0,63}$/),
+    path: z.string().max(1000).refine((p) => p === '' || (!p.startsWith('/') && !p.startsWith('-') && !/[\0\n]/.test(p) && !p.split('/').some((x) => x === '..' || x === '.' || x === '')), 'A folder in the remote'),
+  });
+  api.post<{ Body: unknown }>('/api/dumps/remote-list', async (request, reply) => {
+    const body = remoteFolder.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'A remote and a folder in it' });
+    try {
+      return await listRemote(deps.exec, body.data.remote, body.data.path);
+    } catch (error) {
+      if (error instanceof DumpRefused) return reply.code(400).send({ error: error.message });
+      throw error;
+    }
+  });
 }

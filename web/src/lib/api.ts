@@ -1,4 +1,4 @@
-import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RememberedRepo, RepoPreset, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, RepoPreset, RepoTrustAnswer, TrustedOwner, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -207,6 +207,12 @@ export interface Api {
   orgRepos: (org: string, scan: OrgScanMode) => Promise<OrgRepoList>;
   /** Dumps in your Downloads folder from the last days. */
   downloads: () => Promise<Array<{ file: string; name: string; sizeBytes: number; modifiedAt: string }>>;
+  rcloneRemotes: () => Promise<RcloneRemotes>;
+  remoteList: (remote: string, path: string) => Promise<RemoteEntry[]>;
+  repoTrust: (url: string) => Promise<RepoTrustAnswer>;
+  trustedOwners: () => Promise<TrustedOwner[]>;
+  trustOwner: (host: string, owner: string) => Promise<TrustedOwner[]>;
+  untrustOwner: (host: string, owner: string) => Promise<TrustedOwner[]>;
   /** An upload's facts, for a dump a job brought in. */
   uploadInfo: (id: string) => Promise<UploadResult>;
   /** Unfinished installs, newest first. */
@@ -397,6 +403,12 @@ const realApi: Api = {
   gitHosts: () => request('GET', '/api/git-hosts'),
   orgRepos: (org, scan) => request('GET', `/api/org/repos?${new URLSearchParams({ org, scan })}`),
   downloads: () => request('GET', '/api/downloads'),
+  rcloneRemotes: () => request('GET', '/api/dumps/remotes'),
+  remoteList: (remote, path) => request('POST', '/api/dumps/remote-list', { remote, path }),
+  repoTrust: (url) => request('GET', `/api/repo-trust?url=${encodeURIComponent(url)}`),
+  trustedOwners: () => request('GET', '/api/trusted-owners'),
+  trustOwner: (host, owner) => request('POST', '/api/trusted-owners', { host, owner }),
+  untrustOwner: (host, owner) => request('POST', '/api/trusted-owners/remove', { host, owner }),
   uploadInfo: (id) => request('GET', `/api/uploads/${encodeURIComponent(id)}`),
   drafts: () => request('GET', '/api/drafts'),
   draft: (id) => request('GET', `/api/drafts/${encodeURIComponent(id)}`),

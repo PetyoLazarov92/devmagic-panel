@@ -3,7 +3,7 @@ import { ClaudeDefaultsCard } from '@/components/claude-defaults-card';
 import { LocalConstantsCard } from '@/components/local-constants-card';
 import { PageHeader } from '@/components/page';
 import { PanelPasswordCard } from '@/components/panel-password-card';
-import { RememberedCard } from '@/components/remembered-card';
+import { RememberedCard, TrustedOwnersCard } from '@/components/remembered-card';
 
 /** The panel's own settings: its password, the AI assistant, Claude Code's defaults and the constants new sites get. */
 export function SettingsPage() {
@@ -16,6 +16,7 @@ export function SettingsPage() {
         <ClaudeDefaultsCard />
         <LocalConstantsCard />
         <RememberedCard />
+        <TrustedOwnersCard />
       </div>
     </div>
   );

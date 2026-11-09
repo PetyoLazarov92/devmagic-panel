@@ -8,14 +8,14 @@ import { canOpen } from './steps';
  * browser's Back and Forward move between its steps and a reload stays.
  */
 
-export type WizardStep = 'start' | 'org' | 'read' | 'access' | 'source' | 'domains' | 'wordpress' | 'review';
+export type WizardStep = 'start' | 'code' | 'read' | 'access' | 'database' | 'domains' | 'wordpress' | 'review';
 
 export const STEP_LABEL: Record<WizardStep, string> = {
   start: 'Start',
-  org: 'Organization',
-  read: 'Read the repo',
-  access: 'Links and dump',
-  source: 'Repo and database',
+  code: 'Code',
+  read: 'Claude reads the repo',
+  access: 'Claude checks the links',
+  database: 'Database',
   domains: 'Domains',
   wordpress: 'WordPress',
   review: 'Review',
@@ -23,26 +23,36 @@ export const STEP_LABEL: Record<WizardStep, string> = {
 
 const SOURCES: readonly NewSiteSource[] = ['repo', 'wordpress', 'empty'];
 
-/** The steps of each kind of install. */
-export function stepsFor(source: NewSiteSource, fromOrg = false): WizardStep[] {
-  if (fromOrg) return ['start', 'org', 'read', 'access', 'domains', 'wordpress', 'review'];
-  if (source === 'repo') return ['start', 'source', 'domains', 'wordpress', 'review'];
+/** The steps of each kind of install; a project lets Claude Code read the repo and its links only when you switch it on. */
+export function stepsFor(source: NewSiteSource, claude = false): WizardStep[] {
+  if (source === 'repo') return ['start', 'code', ...(claude ? (['read', 'access'] as const) : []), 'database', 'domains', 'wordpress', 'review'];
   if (source === 'wordpress') return ['start', 'domains', 'wordpress', 'review'];
   return ['start', 'domains', 'review'];
 }
 
 /** What an install starts from: one of the start cards. */
-export type InstallKind = NewSiteSource | 'org';
+export type InstallKind = NewSiteSource;
 
 /** Each kind's name: the first step's label, and the badge by a draft's name. */
 export const KIND_LABEL: Record<InstallKind, string> = {
-  org: 'Organization install',
-  repo: 'Git and DB dump',
+  repo: 'From a project',
   wordpress: 'Fresh WordPress',
   empty: 'Empty site',
 };
 
-export const kindOf = (source: NewSiteSource, fromOrg: boolean): InstallKind => (fromOrg ? 'org' : source);
+export const kindOf = (source: NewSiteSource): InstallKind => source;
+
+/** Whether a draft's answers have Claude Code read the repo: switched on, or an organization install from before 1.28. */
+export function usesClaude(state: unknown): boolean {
+  const org = (state as { org?: { useClaude?: unknown } | null } | null)?.org;
+  if (!org) return false;
+  return org.useClaude === undefined ? true : org.useClaude === true;
+}
+
+/** A step a draft from before 1.28 stopped at, in today's steps. */
+export function migrateStep(step: string): string {
+  return step === 'source' || step === 'org' ? 'code' : step;
+}
 
 /** A draft's address; without a step it opens where the draft stopped. */
 export const draftHref = (id: string, step?: WizardStep) => `/sites/new/${encodeURIComponent(id)}${step ? `/${step}` : ''}`;
@@ -67,11 +77,10 @@ export interface DraftProgress {
 export function draftProgress(draft: InstallDraft): DraftProgress {
   const saved = (draft.state ?? {}) as { source?: unknown; org?: unknown };
   const source = SOURCES.find((s) => s === saved.source) ?? 'repo';
-  const fromOrg = Boolean(saved.org);
-  const flow = stepsFor(source, fromOrg);
-  const i = Math.max(0, flow.indexOf(draft.step as WizardStep));
+  const flow = stepsFor(source, usesClaude(saved));
+  const i = Math.max(0, flow.indexOf(migrateStep(draft.step) as WizardStep));
   const step = flow[i] ?? 'start';
-  return { kind: kindOf(source, fromOrg), at: i + 1, total: flow.length, step, label: STEP_LABEL[step] };
+  return { kind: kindOf(source), at: i + 1, total: flow.length, step, label: STEP_LABEL[step] };
 }
 
 const clock = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -93,6 +102,17 @@ export function keptUntil(iso: string, now = new Date()): string {
  */
 export function migrateDraftState(state: unknown): Record<string, unknown> {
   const saved: Record<string, unknown> = state && typeof state === 'object' && !Array.isArray(state) ? { ...(state as Record<string, unknown>) } : {};
+  // An organization install from before 1.28 had Claude Code read the repo.
+  if (saved.org && typeof saved.org === 'object' && (saved.org as { useClaude?: unknown }).useClaude === undefined) saved.org = { ...(saved.org as object), useClaude: true };
+  // Passed steps of the old flow name the step that replaced them.
+  if (saved.passed && typeof saved.passed === 'object') {
+    const passed = { ...(saved.passed as Record<string, unknown>) };
+    for (const old of ['source', 'org']) {
+      if (passed[old] !== undefined) passed.code ??= passed[old];
+      delete passed[old];
+    }
+    saved.passed = passed;
+  }
   if ('layout' in saved) {
     const layouts = ['site-root', 'wp-content', 'theme', 'plugin'] as const;
     const layout = layouts.find((l) => l === saved.layout);

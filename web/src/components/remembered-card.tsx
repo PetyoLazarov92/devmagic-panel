@@ -240,3 +240,52 @@ function EditDialog({ repo, preset, onClose, onSaved }: { repo: RememberedRepo; 
     </Dialog>
   );
 }
+
+/**
+ * Owners whose repos may run here besides your organizations and groups:
+ * trusted once from the wizard's Code step, listed here to take back.
+ */
+export function TrustedOwnersCard() {
+  const list = useAsync(() => api.trustedOwners(), []);
+  const [busy, setBusy] = useState<string | null>(null);
+  async function remove(host: string, owner: string) {
+    setBusy(`${host}/${owner}`);
+    try {
+      await api.untrustOwner(host, owner);
+      toast({ tone: 'success', title: `${owner} on ${host} is no longer trusted` });
+      list.reload();
+    } catch (err) {
+      toast({ tone: 'danger', title: 'Not changed', detail: (err as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <Card>
+      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+        <CardTitle>Trusted repo owners</CardTitle>
+        <ScopeLabel>new installs</ScopeLabel>
+      </CardHeader>
+      <div className="grid gap-3 p-5 text-sm">
+        <p className="text-xs text-muted-foreground">
+          Code from a repo runs on this computer: its PHP when the site loads, its composer and npm builds as you. Repos of the organizations and groups you scan, and ones your signed-in GitHub or GitLab CLI lists, may run; any other needs its owner trusted here once, from the wizard.
+        </p>
+        {list.error && <p role="alert" className="text-danger">{list.error}</p>}
+        {list.data && list.data.length === 0 && <p className="text-muted-foreground">None. A pasted repo from another owner asks you first.</p>}
+        {list.data && list.data.length > 0 && (
+          <ul className="grid divide-y rounded-lg border">
+            {list.data.map((t) => (
+              <li key={`${t.host}/${t.owner}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                <span className="min-w-0 flex-1"><span className="font-mono text-[13px] font-medium">{t.owner}</span> <span className="text-muted-foreground">on {t.host}, trusted {timeAgo(t.at)}</span></span>
+                <Button size="sm" variant="ghost" disabled={busy === `${t.host}/${t.owner}`} onClick={() => void remove(t.host, t.owner)}>
+                  <X />
+                  Stop trusting
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  );
+}

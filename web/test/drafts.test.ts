@@ -9,15 +9,19 @@ const draft = (step: string, state: unknown): InstallDraft => ({
 
 describe('a draft in the lists', () => {
   it('says which step of its kind it stopped at', () => {
-    expect(draftProgress(draft('domains', { source: 'repo' }))).toEqual({ kind: 'repo', at: 3, total: 5, step: 'domains', label: 'Domains' });
-    expect(draftProgress(draft('access', { source: 'repo', org: { name: 'wandworks' } }))).toEqual({ kind: 'org', at: 4, total: 7, step: 'access', label: 'Links and dump' });
+    expect(draftProgress(draft('domains', { source: 'repo' }))).toEqual({ kind: 'repo', at: 4, total: 6, step: 'domains', label: 'Domains' });
+    expect(draftProgress(draft('database', { source: 'repo', org: { name: '', useClaude: false } }))).toMatchObject({ at: 3, total: 6, label: 'Database' });
+    // An organization install from before 1.28 had Claude read the repo; its old step names map to today's.
+    expect(draftProgress(draft('access', { source: 'repo', org: { name: 'wandworks' } }))).toEqual({ kind: 'repo', at: 4, total: 8, step: 'access', label: 'Claude checks the links' });
+    expect(draftProgress(draft('org', { source: 'repo', org: { name: 'wandworks' } }))).toMatchObject({ at: 2, step: 'code' });
+    expect(draftProgress(draft('source', { source: 'repo' }))).toMatchObject({ at: 2, step: 'code' });
     expect(draftProgress(draft('wordpress', { source: 'wordpress' }))).toMatchObject({ kind: 'wordpress', at: 3, total: 4 });
   });
 
   it('starts over at the first step when its step or kind is not one the wizard knows', () => {
     expect(draftProgress(draft('source', { source: 'empty' }))).toMatchObject({ kind: 'empty', at: 1, step: 'start' });
-    expect(draftProgress(draft('domains', { source: 'ftp' }))).toMatchObject({ kind: 'repo', at: 3 });
-    expect(draftProgress(draft('domains', null))).toMatchObject({ kind: 'repo', at: 3 });
+    expect(draftProgress(draft('domains', { source: 'ftp' }))).toMatchObject({ kind: 'repo', at: 4 });
+    expect(draftProgress(draft('domains', null))).toMatchObject({ kind: 'repo', at: 4 });
   });
 });
 
@@ -29,13 +33,13 @@ describe('a draft address', () => {
 
   it('opens the step it names when the draft got that far', () => {
     const flow = stepsFor('repo');
-    expect(landingStep(flow, 'domains', { start: 'a', source: 'b' })).toBe('domains');
-    expect(landingStep(flow, 'source', { start: 'a', source: 'b' })).toBe('source');
+    expect(landingStep(flow, 'domains', { start: 'a', code: 'b', database: 'c' })).toBe('domains');
+    expect(landingStep(flow, 'code', { start: 'a', code: 'b', database: 'c' })).toBe('code');
   });
 
   it('opens the furthest step it can for a step ahead of the draft, of another kind, or none', () => {
     const flow = stepsFor('repo');
-    const passed = { start: 'a', source: 'b' };
+    const passed = { start: 'a', code: 'b', database: 'c' };
     expect(landingStep(flow, 'review', passed)).toBe('domains');
     expect(landingStep(flow, 'org', passed)).toBe('domains');
     expect(landingStep(flow, 'nonsense', passed)).toBe('domains');
@@ -61,5 +65,7 @@ describe('drafts from before 1.28', () => {
     expect(migrateDraftState({ layout: 'plugin', placement: { dir: 'app', folder: '' } })).toEqual({ placement: { dir: 'app', folder: '' } });
     expect(migrateDraftState({ layout: 'nonsense' })).toEqual({});
     expect(migrateDraftState(null)).toEqual({});
+    // An organization draft keeps Claude on; the old steps it passed count for the Code step.
+    expect(migrateDraftState({ org: { name: 'wandworks' }, passed: { start: 'a', org: 'b' } })).toEqual({ org: { name: 'wandworks', useClaude: true }, passed: { start: 'a', code: 'b' } });
   });
 });

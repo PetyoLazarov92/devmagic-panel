@@ -3,7 +3,7 @@ import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
+import { gitUrl, isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -50,6 +50,7 @@ import { sitesByVersion } from './php/pools.js';
 import { registerPhpRoutes } from './php/routes.js';
 import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
 import { readOrgSettings, registerOrgRoutes } from './org/routes.js';
+import { repoTrust } from './repo-trust.js';
 import { GitHostDetector, gitlabHostsInUse, remotesOf } from './repo-hosts/index.js';
 import { listTrash } from './sites/trash.js';
 import type { RunStore } from './store.js';
@@ -302,6 +303,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Everything below needs a session.
   app.register(async (api) => {
     const orgSettingsFile = join(deps.settingsFile ? dirname(deps.settingsFile) : join(deps.hostPaths.home, '.config', 'devmagic-panel'), 'organizations.json');
+    // Whether code from a repo may run here: your organizations and groups, owners you trusted, repos your CLI listed.
+    const trustOf = (url: string) => repoTrust(url, deps.store, readOrgSettings(orgSettingsFile).selected);
     // What runs the hosts in the sites' remotes, when their name does not say: asked over SSH once a week.
     const gitHosts = new GitHostDetector(deps.exec, deps.store);
     gitHosts.apply();
@@ -364,6 +367,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             ...(deps.mailpit ? { mailpit: deps.mailpit } : {}), ...(deps.download ? { download: deps.download } : {}), update, drafts,
             claudeCode: { home: deps.hostPaths.home, searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '', workDir: join(deps.uploadsDir, '..', 'tmp') },
             ...(deps.cron ? { cron: deps.cron } : {}),
+            repoTrusted: (url: string) => trustOf(url).trusted,
           },
           id,
           request.body,
@@ -634,6 +638,27 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       if (!body.success) return reply.code(400).send({ error: 'Which repo?' });
       if (!deps.store.deletePreset(body.data.key)) return reply.code(404).send({ error: 'Nothing is remembered for this repo' });
       return { ok: true };
+    });
+
+    // Owners whose repos may run here, trusted once in the wizard or Settings. Panel settings, not an action.
+    api.get<{ Querystring: { url?: string } }>('/api/repo-trust', async (request, reply) => {
+      const url = gitUrl.safeParse(request.query.url);
+      if (!url.success) return reply.code(400).send({ error: 'A git URL' });
+      return trustOf(url.data);
+    });
+    api.get('/api/trusted-owners', async () => deps.store.trustedOwners());
+    const ownerBody = z.object({ host: z.string().regex(/^[a-z0-9.-]{1,253}(:\d{1,5})?$/), owner: z.string().regex(/^[a-z0-9_.-]{1,100}(\/[a-z0-9_.-]{1,100}){0,20}$/).refine((o) => !o.split('/').some((p) => p === '.' || p === '..')) });
+    api.post<{ Body: unknown }>('/api/trusted-owners', async (request, reply) => {
+      const body = ownerBody.safeParse(request.body);
+      if (!body.success) return reply.code(400).send({ error: 'A host and an owner like github.com and wandworks' });
+      deps.store.trustOwner(body.data.host, body.data.owner);
+      return deps.store.trustedOwners();
+    });
+    api.post<{ Body: unknown }>('/api/trusted-owners/remove', async (request, reply) => {
+      const body = ownerBody.safeParse(request.body);
+      if (!body.success) return reply.code(400).send({ error: 'A host and an owner like github.com and wandworks' });
+      deps.store.untrustOwner(body.data.host, body.data.owner);
+      return deps.store.trustedOwners();
     });
 
     // The constants every local site should have, written on new installs and checked by Aura. Panel settings, not an action.

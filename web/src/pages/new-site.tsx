@@ -1,37 +1,40 @@
-import type { AddressInput, InstallDraft, NginxState, NewSiteSource, SiteServer, OrgStatus, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
-import { actions, addressSummary, placementForKind, placementProblems, presetPlacement, repoTarget, branchName, branchWebUrl, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin, repoWeb, sameRepo } from '@devmagic-panel/shared';
-import { ArrowLeft, ArrowRight, Check, TriangleAlert, ChevronRight, CircleAlert, CircleCheck, CircleX, Copy, ExternalLink, FileArchive, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, Upload, Wand2, X } from 'lucide-react';
+import type { AddressInput, InstallDraft, RepoTrustAnswer, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
+import { actions, addressSummary, presetPlacement, repoTarget, branchName, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin } from '@devmagic-panel/shared';
+import { ArrowLeft, ArrowRight, Check, TriangleAlert, ChevronRight, CircleAlert, CircleCheck, FolderGit2, Globe, LoaderCircle, Plus, Search, Sparkles, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { BranchPicker } from '@/components/branch-picker';
-import { PlacementFields, placementError } from '@/components/repo-placement';
-import { DumpFactsCard } from '@/components/dump-facts';
+import {} from '@/components/branch-picker';
+import {} from '@/components/dump-facts';
 import { JobScreen } from '@/components/job-screen';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { installLabel } from '@/components/site-bits';
-import { AccessStep, linksOf, newOrgState, type OrgState, OrgStep, ReadStep } from './new-site-org';
+import { AccessStep, linksOf, newOrgState, type OrgState, ReadStep } from './new-site-org';
+import { ClaudeSwitch, CodeStep, codeProblem, placedRows, SitePlan, useRepoLookups } from './new-site-code';
+import { DatabaseStep, type DumpSource } from './new-site-database';
 import { NetworkSection } from './new-site-network';
 import { Input, Textarea } from '@/components/ui/input';
 import { SecretInput } from '@/components/ui/secret-input';
 import { Switch } from '@/components/ui/switch';
 import { ReleaseListLink } from '@/components/release-link';
-import { api, type DraftInput, isMockup } from '@/lib/api';
+import { api, type DraftInput } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { type CreateSiteInput, PRODUCTION_ONLY_PLUGINS, previewSteps } from '@/lib/plan';
 import { Link, navigate } from '@/lib/router';
-import { siteHref } from '@/lib/site-ref';
+import {} from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { adminChoices, adminCreateOf, dumpAdmins } from '@/lib/admin-choice';
 import { type BuildPick, buildChoice, buildId, buildSteps } from '@/lib/builds';
-import { orgCardState, type OrgCardState, skipAccess, unskipAccess } from '@/lib/claude-steps';
-import { draftHref, migrateDraftState, type InstallKind, KIND_LABEL, keptUntil, kindOf, landingStep, STEP_LABEL, stepsFor, type WizardStep } from '@/lib/drafts';
+import { skipAccess, unskipAccess } from '@/lib/claude-steps';
+import { draftHref, migrateDraftState, migrateStep, type InstallKind, KIND_LABEL, keptUntil, kindOf, landingStep, STEP_LABEL, stepsFor, type WizardStep } from '@/lib/drafts';
 import { type NetworkAnswers, networkPlan, type NetworkPlan, NO_NETWORK_ANSWERS } from '@/lib/network';
 import { pluginMatches } from '@/lib/plugin-search';
 import { answersHash, stepViews } from '@/lib/steps';
 import { useAsync } from '@/lib/use-async';
-import { usePreferences } from '@/lib/preferences';
+import { savePreferences, usePreferences } from '@/lib/preferences';
+import { allRows, placementOf, type RepoRow, rowPlacement } from '@/lib/project-repos';
+import { pastedRepo } from '@/lib/org-repos';
 import { asideUploads } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
 
@@ -97,6 +100,14 @@ export interface WizardState {
   org: OrgState | null;
   /** Remember the answers for the next install of this repo. */
   remember: boolean;
+  /** The other repos of the site, each with its branch and folder; the main one is repoUrl and the fields around it. */
+  extra: RepoRow[];
+  /** Whether each picked repo may run here, by URL, as the server answered. */
+  trust: Record<string, RepoTrustAnswer>;
+  /** Where the dump comes from on the Database step. */
+  dumpSource?: DumpSource;
+  /** No dump: a fresh WordPress on the repo's code. */
+  noDump: boolean;
   /** A hash of each step's answers when you continued from it, so the step list can open the steps you reached (lib/steps). */
   passed: Partial<Record<Step, string>>;
 }
@@ -117,6 +128,9 @@ const initial: WizardState = {
   branches: null,
   placement: null,
   remember: true,
+  extra: [],
+  trust: {},
+  noDump: false,
   upload: null,
   domains: [{ prod: '', local: '' }],
   coreMode: 'wpcore',
@@ -151,13 +165,6 @@ export function cleanAddress(value: string, keepPort = true): string {
   return keepPort ? host : host.replace(/:\d*$/, '');
 }
 
-/** The dump's own address goes into the first row, even when the rows came from your last install of the repo. */
-function withDumpAddress(domains: DomainRow[], upload: UploadResult | null): DomainRow[] {
-  const host = upload?.facts.hosts[0];
-  if (!host) return domains;
-  return domains.map((d, i) => (i === 0 ? { ...d, prod: host } : d));
-}
-
 /** A remembered network layout as the answers the Domains step starts from: the main site keeps its own address. */
 function networkAnswersOf(network: NonNullable<RepoPreset['network']>): NetworkAnswers {
   const others = network.sites.filter((x) => x.id !== 1);
@@ -181,9 +188,19 @@ function applyPreset(state: WizardState, found: RepoInspection, cores: string[])
     project.core?.mode === 'repo' ? "the repo's own WordPress" : project.core?.version ? (coreOk ? `WordPress ${project.core.version}` : `WordPress ${project.core.version} (not installed here, pick another)`) : null,
     composer || npm ? `${[composer && 'composer', npm && 'npm'].filter(Boolean).join(' and ')} build` : null,
   ].filter(Boolean);
+  // The other repos it had, each where it went, unless picked already.
+  const known = new Set(allRows(state).map((r) => r.url));
+  const extra = [
+    ...state.extra,
+    ...project.extra
+      .filter((x) => !known.has(x.url))
+      .map((x): RepoRow => ({ url: x.url, branch: x.branch ?? '', branches: null, placement: { dir: x.dir, folder: x.folder }, helpers: null, buildPicks: {} })),
+  ];
+  if (project.extra.length) parts.push(`${project.extra.length} more repo${project.extra.length === 1 ? '' : 's'}`);
   return {
     ...state,
     ...read,
+    extra,
     placement,
     // Local addresses always come from the dump (or you), never from the last install; helpers are always your pick.
     ...(project.core && coreOk ? { coreMode: project.core.mode, ...(project.core.version ? { coreVersion: project.core.version } : {}) } : {}),
@@ -198,10 +215,6 @@ function applyPreset(state: WizardState, found: RepoInspection, cores: string[])
   };
 }
 
-/** Where the repo goes: what you or a last install chose, else by what the repo holds, else the site root. */
-export function placementOf(state: Pick<WizardState, 'placement' | 'helpers' | 'repoUrl'>): RepoPlacement {
-  return state.placement ?? (state.helpers?.kind ? placementForKind(state.helpers.kind, state.repoUrl.trim()) : null) ?? { dir: '', folder: '' };
-}
 
 /**
  * The answers each step owns, to tell whether one changed since you continued
@@ -209,10 +222,10 @@ export function placementOf(state: Pick<WizardState, 'placement' | 'helpers' | '
  */
 const STEP_ANSWERS: Record<Step, (s: WizardState) => unknown> = {
   start: (s) => [s.source, s.org !== null],
-  org: (s) => [s.org?.name, s.org?.repo?.fullName, s.branch.trim()],
+  code: (s) => [placedRows(s).map((r) => [r.url, r.branch, r.placement]), s.org?.useClaude],
   read: (s) => [s.org?.read.status, s.org?.read.facts],
-  access: (s) => [s.org?.access.status, s.upload?.id],
-  source: (s) => [s.repoUrl.trim(), s.branch.trim(), placementOf(s), s.upload?.id],
+  access: (s) => [s.org?.access.status],
+  database: (s) => [s.upload?.id, s.noDump],
   domains: (s) => [s.domains, s.under, s.replaceExisting, s.replaceOn, s.network, s.server],
   wordpress: (s) => [s.coreMode, s.coreVersion, s.adminUser, s.adminEmail, s.adminIfExists, s.adminIfMissing, s.adminCreate, s.deactivate, s.activate, s.uploadsFrom, s.uploadsVia, s.composer, s.npm, s.buildPicks],
   review: () => null,
@@ -252,7 +265,7 @@ function addressesOf(state: WizardState) {
   const under = state.source !== 'empty' && state.under ? { domain: state.under.domain, path: cleanPath(state.under.path) } : null;
   const locals = under ? [under.domain] : [...new Set(state.domains.map((d) => cleanAddress(d.local, false)).filter(Boolean))];
   // A row whose address is already its local name needs nothing replaced.
-  const pairs = state.source === 'repo'
+  const pairs = state.source === 'repo' && !state.noDump
     ? state.domains.map((d) => ({ from: cleanAddress(d.prod), to: under ? under.domain : cleanAddress(d.local, false) })).filter((p) => p.from && p.to && p.from !== p.to)
     : [];
   return { under, locals, replace: state.replaceOn ? pairs : [] };
@@ -284,7 +297,8 @@ export function toInput(state: WizardState): CreateSiteInput {
   const via = uploadsViaFor(state);
   const uploadsOk = hostname.safeParse(uploadsFrom).success && !isLocalName(uploadsFrom);
   const active = new Set(state.upload?.facts.activePlugins ?? []);
-  const helpers = state.helpers?.list;
+  // The local helpers any of the repos has.
+  const helpers = state.helpers?.list || state.extra.some((r) => r.helpers?.list) ? [...new Set([...(state.helpers?.list ?? []), ...state.extra.flatMap((r) => r.helpers?.list ?? [])])] : undefined;
   return {
     source: state.source,
     domain: locals[0] ?? '',
@@ -295,9 +309,9 @@ export function toInput(state: WizardState): CreateSiteInput {
     // The organization or group it came from; a pasted URL on another host has none.
     ...(state.org?.repo?.org && isRepo ? { organization: state.org.repo.org } : {}),
     aliases: locals.slice(1),
-    repos: isRepo ? [{ url: state.repoUrl.trim(), branch: state.branch.trim(), ...placementOf(state) }] : [],
+    repos: isRepo ? placedRows(state).map((r) => ({ url: r.url, branch: r.branch, ...r.placement })) : [],
     remember: state.remember,
-    ...(isRepo && state.upload ? { uploadId: state.upload.id } : {}),
+    ...(isRepo && state.upload && !state.noDump ? { uploadId: state.upload.id } : {}),
     replace,
     ...(state.source !== 'empty'
       ? {
@@ -312,11 +326,18 @@ export function toInput(state: WizardState): CreateSiteInput {
       : {}),
     // BE Media from Production loading the images is never also deactivated.
     deactivate: isRepo && state.upload ? state.deactivate.filter((slug) => !(via === 'plugin' && uploadsOk && slug === MEDIA_PLUGIN)) : [],
-    // Only helpers the repo has, not the ones the dump has on already, and never one set to deactivate.
+    // Only helpers a repo has, not the ones the dump has on already, and never one set to deactivate.
     activate: isRepo && helpers ? state.activate.filter((slug) => helpers.includes(slug) && !active.has(slug) && !state.deactivate.includes(slug)) : [],
     ...(isRepo && uploadsOk ? { uploadsFrom, uploadsVia: via } : { uploadsVia: 'redirect' as const }),
     build: { composer: isRepo && state.composer, npm: isRepo && state.npm },
-    ...(isRepo && state.helpers?.builds ? { builds: buildSteps(state.helpers.builds, state.buildPicks, state.org?.read.facts?.buildCommands ?? []) } : {}),
+    ...(isRepo && (state.helpers?.builds || state.extra.some((r) => r.helpers?.builds))
+      ? {
+          builds: [
+            ...buildSteps(state.helpers?.builds ?? [], state.buildPicks, state.org?.read.facts?.buildCommands ?? []),
+            ...state.extra.flatMap((r, i) => buildSteps(r.helpers?.builds ?? [], r.buildPicks, [], i + 1)),
+          ],
+        }
+      : {}),
     // Each site kept where it is: nothing moves, and new sites follow the dump's own setting.
     ...(network && network.layout !== 'keep' ? { network: { layout: network.layout, sites: network.rows.map((r) => ({ id: r.site.id, ...r.here })) } } : {}),
   };
@@ -325,6 +346,8 @@ export function toInput(state: WizardState): CreateSiteInput {
 /** A draft's answers back in the wizard: never a password, and no dump that is gone. */
 export function stateFromDraft(draft: InstallDraft): WizardState {
   const saved = migrateDraftState(draft.state) as Partial<WizardState>;
+  // An install from a repo and a dump from before 1.28 had no project state: its repo becomes the picked one.
+  if (saved.source === 'repo' && !saved.org) saved.org = { ...newOrgState('', false), repo: pastedRepo(saved.repoUrl?.trim() ?? '') };
   const upload = saved.upload && draft.uploads.includes(saved.upload.id) ? saved.upload : null;
   const kept: WizardState = { ...initial, ...saved, upload, adminPassword: null, org: saved.org ? keptOrg(saved.org, draft.uploads) : null };
   // Lookups that were still running when you left start again: the repo's and its helpers'.
@@ -335,19 +358,10 @@ export function stateFromDraft(draft: InstallDraft): WizardState {
   };
   if (saved.passed) return state;
   // A draft saved before steps kept their hashes: the steps before where it stopped count as passed.
-  const flow = stepsFor(state.source, Boolean(state.org));
-  return flow.slice(0, Math.max(0, flow.indexOf(draft.step as Step))).reduce(passStep, state);
+  const flow = stepsFor(state.source, Boolean(state.org?.useClaude));
+  return flow.slice(0, Math.max(0, flow.indexOf(migrateStep(draft.step) as Step))).reduce(passStep, state);
 }
 
-/** A link to the repo's page in a new tab, inside a field's hint. */
-function WebLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 whitespace-nowrap text-primary hover:underline">
-      {children}
-      <ExternalLink className="size-3" />
-    </a>
-  );
-}
 
 /** The repos an organization install put aside, each without a dump that is gone. */
 function keptOrg(org: OrgState, uploads: string[]): OrgState {
@@ -478,7 +492,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
         setSubmitError(null);
         setOpened({ status: 'ready' });
         // Without a step, or with one it cannot open yet, it opens where it stopped or as far as it got.
-        const land = landingStep(stepsFor(next.source, Boolean(next.org)), routeStep ?? draft.step, next.passed);
+        const land = landingStep(stepsFor(next.source, Boolean(next.org?.useClaude)), routeStep ?? migrateStep(draft.step), next.passed);
         if (land !== routeStep) navigate(draftHref(draft.id, land), { replace: true });
       },
       (err: Error & { status?: number }) => {
@@ -496,7 +510,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
     if (newest) setState((s) => (s.coreVersion ? s : { ...s, coreVersion: newest }));
   }, [cores.data]);
 
-  const flow = stepsFor(state.source, Boolean(state.org));
+  const flow = stepsFor(state.source, Boolean(state.org?.useClaude));
   const inDraft = opened.status === 'ready';
   const step: Step = inDraft ? landingStep(flow, routeStep, state.passed) : 'start';
   // A step the draft's kind has not, or one it cannot open yet: the address moves to the one it opens.
@@ -505,7 +519,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
   }, [inDraft, step, routeStep]);
   const index = flow.indexOf(step);
   const input = toInput(state);
-  const kind = kindOf(state.source, Boolean(state.org));
+  const kind = kindOf(state.source);
   const title = titleOf(state, input);
 
   /** Saves the draft and keeps what the header says about it. */
@@ -547,11 +561,26 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
   const goTo = (s: Step) => {
     if (draftId.current) navigate(draftHref(draftId.current, s));
   };
+  // Claude Code reads the repo when it can and Settings says so: on by default, off when asked for, never offered when turned off.
+  const { useClaude: claudePreference } = usePreferences();
+  const claudeReady = Boolean(orgStatus.data?.claude.found && orgStatus.data.claude.signedIn);
+  const claudeDefault = claudeReady && claudePreference === 'always';
   function applyKind(next: InstallKind) {
     setTouched(true);
     setSwitchTo(null);
-    setState((s) => (next === 'org' ? { ...s, source: 'repo', org: s.org ?? newOrgState(orgStatus.data?.settings.selected[0] ?? '') } : { ...s, source: next, org: null }));
+    setState((s) => (next === 'repo' ? { ...s, source: 'repo', org: s.org ?? newOrgState(orgStatus.data?.settings.selected[0] ?? '', claudeDefault) } : { ...s, source: next, org: null }));
   }
+  // A new install from a project: its Claude switch follows Settings once Claude Code's state is known.
+  useEffect(() => {
+    if (state.source !== 'repo') return;
+    if (!state.org) setState((s) => (s.source === 'repo' && !s.org ? { ...s, org: newOrgState(orgStatus.data?.settings.selected[0] ?? '', claudeDefault) } : s));
+    else if (!state.passed.code && !touchedClaude.current && state.org.useClaude !== claudeDefault) setState((s) => (s.org ? { ...s, org: { ...s.org, useClaude: claudeDefault } } : s));
+  }, [state.source, Boolean(state.org), claudeDefault]);
+  const touchedClaude = useRef(false);
+  const setUseClaude = (on: boolean) => {
+    touchedClaude.current = true;
+    setOrgState((s) => (s.org ? { ...s, org: { ...s.org, useClaude: on } } : s));
+  };
   // Past Start the draft has answers for its kind: switching asks first.
   const choose = (next: InstallKind) => (next === kind ? setSwitchTo(null) : state.passed.start !== undefined ? setSwitchTo(next) : applyKind(next));
 
@@ -602,6 +631,23 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
     if (networkDump && state.under) setState((s) => ({ ...s, under: null }));
   }, [networkDump, state.under]);
 
+  // The main repo: its branches and what the panel remembers of it, read once per URL.
+  const mainUrl = state.repoUrl.trim();
+  const mainInvalid = mainUrl !== '' && !gitUrl.safeParse(mainUrl).success;
+  useEffect(() => {
+    if (state.source !== 'repo' || mainInvalid || !mainUrl || state.inspection.url === mainUrl) return;
+    const timer = window.setTimeout(() => {
+      // Another repo: its branches and helpers are read again; the branch a list gave stays.
+      setState((s) => ({ ...s, branches: null, helpers: null, inspection: { status: 'reading', url: mainUrl } }));
+      api.inspectRepo(mainUrl).then(
+        (found) => setState((s) => (s.repoUrl.trim() === mainUrl ? applyPreset({ ...s, branch: s.branch || found.branch }, { ...found, branch: s.branch || found.branch }, cores.data ?? []) : s)),
+        (err: Error) => setState((s) => (s.repoUrl.trim() === mainUrl ? { ...s, branches: [], inspection: { status: 'error', url: mainUrl, message: err.message } } : s)),
+      );
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [state.source, mainUrl, mainInvalid, state.inspection.url, cores.data]);
+  useRepoLookups(state, setOrgState);
+
   // The local helpers the chosen branch has, read in the background so step 4 only offers those.
   const repoUrl = state.repoUrl.trim();
   const helpersKey = `${repoUrl}|${state.branch}`;
@@ -644,14 +690,14 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
 
   const canNext: Record<Step, boolean> = {
     start: true,
-    org: Boolean(state.org?.repo) && branchName.safeParse(state.branch.trim()).success,
+    code: codeProblem(state) === null,
     read: state.org?.read.status === 'done',
-    access: state.upload !== null,
-    source: gitUrl.safeParse(repoUrl).success && branchName.safeParse(state.branch.trim()).success && state.upload !== null,
+    access: state.org?.access.status === 'done' || state.org?.access.status === 'skipped',
+    database: state.upload !== null || state.noDump,
     domains: state.under && state.source !== 'empty'
       ? !underError && Boolean(input.path)
       : Boolean(input.domain) && domainErrors.every((e) => !e) && state.domains.every((d) => d.local.trim()) && !network?.rows.some((r) => r.error) && networkErrors.size === 0,
-    wordpress: Boolean(input.admin?.user) && Boolean(input.admin?.email.includes('@')) && coreVersionSchema.safeParse(state.coreVersion).success && !uploadsError,
+    wordpress: Boolean(input.admin?.user) && Boolean(input.admin?.email.includes('@')) && (state.coreMode === 'repo' || coreVersionSchema.safeParse(state.coreVersion).success) && !uploadsError,
     review: true,
   };
 
@@ -777,16 +823,31 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
                 </div>
               </div>
             )}
-            <StartStep
-              value={state.source}
-              fromOrg={Boolean(state.org)}
-              org={{ status: orgStatus.data ?? null, checking: orgStatus.loading, error: orgStatus.error, onRecheck: orgStatus.reload }}
-              onChange={choose}
-              onPickOrg={() => choose('org')}
-            />
+            <StartStep value={state.source} claude={claudeReady && claudePreference !== 'never'} onChange={choose} />
           </>
         )}
-        {wizard && step === 'org' && <OrgStep state={state} setState={setOrgState} status={orgStatus.data ?? null} blank={initial} onRecheck={orgStatus.reload} />}
+        {wizard && state.source === 'repo' && step !== 'start' && step !== 'code' && <div className="-mt-2 mb-5"><SitePlan state={state} compact /></div>}
+        {wizard && step === 'code' && (
+          <CodeStep
+            state={state}
+            setState={setOrgState}
+            status={orgStatus.data ?? null}
+            onRecheck={orgStatus.reload}
+            sites={sites.data ?? []}
+            mainExtras={
+              <>
+                <ProjectStatus inspection={state.inspection} />
+                {assistant.data?.enabled === true && (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-xs font-medium text-primary">Describe the site to Claude instead</summary>
+                    <div className="mt-2"><ClaudeFill state={state} setState={setOrgState} cores={cores.data ?? []} /></div>
+                  </details>
+                )}
+              </>
+            }
+            side={<ClaudeSwitch status={orgStatus.data ?? null} on={Boolean(state.org?.useClaude)} onChange={setUseClaude} preference={claudePreference} onPreference={(p) => void savePreferences({ useClaude: p })} />}
+          />
+        )}
         {wizard && step === 'read' && (
           <ReadStep
             state={state}
@@ -795,13 +856,13 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
             draftId={draftId.current ?? ''}
             saveNow={saveNow}
             onSkip={() => {
-              setOrgState((s) => passStep(s.org ? { ...s, org: { ...s.org, access: skipAccess(s.org.access) } } : s, 'read'));
-              goTo('access');
+              setOrgState((s) => passStep(passStep(s.org ? { ...s, org: { ...s.org, access: skipAccess(s.org.access) } } : s, 'read'), 'access'));
+              goTo('database');
             }}
           />
         )}
         {wizard && step === 'access' && <AccessStep state={state} setState={setOrgState} status={orgStatus.data ?? null} cores={cores.data ?? []} draftId={draftId.current ?? ''} saveNow={saveNow} />}
-        {wizard && step === 'source' && <SourceStep state={state} setState={setState} sites={sites.data ?? []} cores={cores.data ?? []} assistantOn={assistant.data?.enabled === true} />}
+        {wizard && step === 'database' && <DatabaseStep state={state} setState={setOrgState} status={orgStatus.data ?? null} cores={cores.data ?? []} draftId={draftId.current ?? ''} saveNow={saveNow} />}
         {wizard && step === 'domains' && <DomainsStep state={state} set={set} nginx={nginx.data ?? null} errors={domainErrors} sites={sites.data ?? []} underError={underError} underFolder={underFolder} existing={existing} network={network} networkErrors={networkErrors} summary={state.upload ? addressSummary(addressesFor(input, state, network), input.network?.layout) : null} />}
         {wizard && step === 'wordpress' && <WordPressStep state={state} set={set} cores={cores.data ?? []} input={input} uploadsError={uploadsError} />}
         {wizard && step === 'review' && <ReviewStep state={state} set={set} input={input} dbName={dbName} cores={cores.data} />}
@@ -922,348 +983,60 @@ function StartCardBody({ icon, active, badge, title, text, muted }: { icon: Reac
   );
 }
 
-type StartChoice = NewSiteSource | 'org';
-
-function StartStep({ value, fromOrg, org, onChange, onPickOrg }: { value: NewSiteSource; fromOrg: boolean; org: OrgCardProps; onChange: (v: NewSiteSource) => void; onPickOrg: () => void }) {
+function StartStep({ value, claude, onChange }: { value: NewSiteSource; claude: boolean; onChange: (v: NewSiteSource) => void }) {
   const options: Array<{ value: NewSiteSource; title: string; text: string; icon: ReactNode; recommended?: boolean }> = [
-    { value: 'repo', title: 'From Git and DB dump', text: 'Clone a project, import its database and map its domains to local ones.', icon: <FolderGit2 />, recommended: true },
+    {
+      value: 'repo',
+      title: 'From a project',
+      text: 'Pick its repos from your GitHub organizations and GitLab groups, or paste any git URL, then bring its database.',
+      icon: <FolderGit2 />,
+      recommended: true,
+    },
     { value: 'wordpress', title: 'Fresh WordPress', text: 'A clean install, linked to a shared core or with its own copy.', icon: <Wand2 /> },
     { value: 'empty', title: 'Empty site', text: 'Folder, certificate, vhost and hosts line only. For anything that is not WordPress.', icon: <Globe /> },
   ];
-  const usable = (['ready', 'api'] as OrgCardState[]).includes(orgCardState(org));
-  const picked: StartChoice = fromOrg ? 'org' : value;
-  const order: StartChoice[] = [...(usable ? (['org'] as const) : []), ...options.map((o) => o.value)];
+  const refs = useRef(new Map<NewSiteSource, HTMLButtonElement>());
   // One card is in the tab order, the picked one; arrow keys move the choice, as in any radio group.
-  const focusable = order.includes(picked) ? picked : order[0];
-  const refs = useRef(new Map<StartChoice, HTMLButtonElement>());
-  const keep = (id: StartChoice) => (el: HTMLButtonElement | null) => void (el ? refs.current.set(id, el) : refs.current.delete(id));
-  const pick = (id: StartChoice) => (id === 'org' ? onPickOrg() : onChange(id));
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     const move = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
     if (!move || !(e.target instanceof HTMLElement) || e.target.getAttribute('role') !== 'radio') return;
     e.preventDefault();
-    const next = order[(Math.max(0, order.indexOf(picked)) + move + order.length) % order.length] as StartChoice;
-    pick(next);
+    const order = options.map((o) => o.value);
+    const next = order[(Math.max(0, order.indexOf(value)) + move + order.length) % order.length] as NewSiteSource;
+    onChange(next);
     refs.current.get(next)?.focus();
   }
   return (
-    <div role="radiogroup" aria-label="What are you setting up?" onKeyDown={onKeyDown} className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <OrgCard {...org} checked={fromOrg} onPick={onPickOrg} buttonRef={keep('org')} tabIndex={focusable === 'org' ? 0 : -1} />
+    <div role="radiogroup" aria-label="What are you setting up?" onKeyDown={onKeyDown} className="grid gap-3 md:grid-cols-3">
       {options.map((o) => {
-        const on = !fromOrg && value === o.value;
+        const on = value === o.value;
+        const ai = o.value === 'repo' && claude;
         return (
           <button
             key={o.value}
-            ref={keep(o.value)}
+            ref={(el) => void (el ? refs.current.set(o.value, el) : refs.current.delete(o.value))}
             type="button"
             role="radio"
             aria-checked={on}
-            tabIndex={focusable === o.value ? 0 : -1}
+            tabIndex={on ? 0 : -1}
             onClick={() => onChange(o.value)}
-            className={cn(START_CARD, 'border bg-card hover:border-primary/50', on && START_PICKED)}
+            className={cn(START_CARD, ai ? 'ai-border p-[19px] hover:shadow-md' : 'border bg-card hover:border-primary/50', on && (ai ? 'ai-picked' : START_PICKED))}
           >
-            <StartCardBody icon={o.icon} active={on} badge={o.recommended && <Badge tone="success">Most used</Badge>} title={o.title} text={o.text} />
+            <StartCardBody
+              icon={o.icon}
+              active={on}
+              badge={
+                <span className="flex gap-1.5">
+                  {o.recommended && <Badge tone="success">Most used</Badge>}
+                  {ai && <Badge tone="primary"><Sparkles className="size-3" />Claude</Badge>}
+                </span>
+              }
+              title={o.title}
+              text={ai ? `${o.text} Claude can read the repo and its links for you.` : o.text}
+            />
           </button>
         );
       })}
-    </div>
-  );
-}
-
-interface OrgCardProps {
-  status: OrgStatus | null;
-  checking: boolean;
-  error: string | null;
-  onRecheck: () => void;
-}
-
-/**
- * The organization start. It can be picked once Claude Code is installed and
- * signed in, and gets the animated border with a claude.ai sign-in, the one
- * that reaches Asana and Google. One status line of fixed height says where it
- * stands, and How to set up opens over the cards, so no card changes height.
- */
-function OrgCard({ status, checking, error, onRecheck, checked, onPick, buttonRef, tabIndex }: OrgCardProps & { checked: boolean; onPick: () => void; buttonRef: (el: HTMLButtonElement | null) => void; tabIndex: number }) {
-  const state = orgCardState({ status, checking });
-  const usable = state === 'ready' || state === 'api';
-  const on = checked && usable;
-  const [help, setHelp] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!help) return;
-    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setHelp(false);
-    const escape = (e: globalThis.KeyboardEvent) => e.key === 'Escape' && setHelp(false);
-    document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('mousedown', away);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [help]);
-  useEffect(() => setHelp(false), [state]);
-  const recheck = () => {
-    setHelp(false);
-    onRecheck();
-  };
-  const link = (label: string, onClick: () => void, expanded?: boolean) => (
-    <button type="button" onClick={onClick} aria-expanded={expanded} className="pointer-events-auto font-medium text-primary hover:underline">{label}</button>
-  );
-  const howTo = link('How to set up', () => setHelp((v) => !v), help);
-  const command = (
-    <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/60 py-1 pr-1 pl-2.5">
-      <code className="font-mono text-[12px] whitespace-nowrap text-foreground">claude auth login</code>
-      <button
-        type="button"
-        aria-label="Copy the command"
-        className="rounded-md p-1.5 hover:bg-foreground/8 hover:text-foreground"
-        onClick={() => void navigator.clipboard?.writeText('claude auth login').then(() => toast({ tone: 'success', title: 'Command copied' }))}
-      >
-        <Copy className="size-3.5" />
-      </button>
-    </div>
-  );
-  return (
-    <div ref={box} className="relative flex">
-      <button
-        ref={buttonRef}
-        type="button"
-        role="radio"
-        aria-checked={on}
-        disabled={!usable}
-        tabIndex={tabIndex}
-        onClick={onPick}
-        className={cn(
-          START_CARD,
-          'pb-12',
-          // The Claude border is 2px: a pixel less padding keeps the card the size of the others.
-          state === 'ready' ? 'ai-border p-[19px] pb-[47px] hover:shadow-md' : usable ? 'border bg-card hover:border-primary/50' : 'cursor-not-allowed border border-dashed bg-card/60',
-          on && (state === 'ready' ? 'ai-picked' : START_PICKED),
-        )}
-      >
-        <StartCardBody
-          icon={<FolderGit2 />}
-          active={on}
-          badge={<Badge tone="primary"><Sparkles className="size-3" />Claude</Badge>}
-          title="From an organization or group"
-          text="Pick a repo from a GitHub organization or a GitLab group. Claude reads its docs and links and fills in the rest."
-          muted={!usable}
-        />
-      </button>
-      <p role="status" title={state === 'error' ? (error ?? undefined) : undefined} className="pointer-events-none absolute inset-x-5 bottom-4 flex h-5 items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground [&>svg]:size-3.5 [&>svg]:shrink-0">
-        {state === 'checking' && <><LoaderCircle className="animate-spin text-primary" />Checking Claude Code...</>}
-        {state === 'ready' && <><CircleCheck className="text-success" />Signed in with claude.ai</>}
-        {state === 'api' && <><CircleAlert className="text-warning" />Signed in without claude.ai ·{howTo}</>}
-        {state === 'signed-out' && <><CircleAlert className="text-warning" />Not signed in ·{howTo}</>}
-        {state === 'missing' && <><CircleAlert className="text-warning" />Not installed ·{howTo}</>}
-        {state === 'error' && <><CircleX className="text-danger" />Could not check ·{link('Check again', recheck)}</>}
-      </p>
-      {help && (
-        <div role="dialog" aria-label="Set up Claude Code" className="absolute inset-x-2 top-full z-20 mt-2 grid gap-2.5 rounded-lg border bg-card p-3.5 text-xs text-muted-foreground shadow-lg">
-          {state === 'missing' ? (
-            <p>
-              Claude Code is not installed. Install it, then sign in with <code className="font-mono text-foreground">claude auth login</code>. Aura's <Link href="/aura/machine" className="font-medium text-primary hover:underline">Machine checks</Link> have the steps.
-            </p>
-          ) : (
-            <>
-              <p>{state === 'api' ? 'Asana and Google links need a claude.ai sign-in.' : 'Claude Code is not signed in.'} Run this in a terminal:</p>
-              {command}
-            </>
-          )}
-          <Button variant="soft" size="sm" className="justify-self-start" onClick={recheck}>
-            <RefreshCw />
-            Check again
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Repo and database ────────────────────────────────────────
-
-/** Existing sites (their themes and plugins, and their mounted folders) whose git remote is this repo. */
-export function sitesUsingRepo(sites: Site[], url: string): Array<{ domain: string; path?: string; branch: string }> {
-  if (!gitUrl.safeParse(url).success) return [];
-  return sites.flatMap((site) => [
-    ...(site.git?.remote && sameRepo(site.git.remote, url) ? [{ domain: site.domain, ...(site.path ? { path: site.path } : {}), branch: site.git.branch }] : []),
-    ...(site.repos ?? []).flatMap((r) =>
-      r.git.remote && sameRepo(r.git.remote, url) ? [{ domain: site.domain, ...(site.path ? { path: site.path } : {}), branch: r.git.branch }] : [],
-    ),
-    ...(site.mounts ?? []).flatMap((m) =>
-      m.git?.remote && sameRepo(m.git.remote, url) ? [{ domain: site.domain, path: m.path, branch: m.git.branch }] : [],
-    ),
-  ]);
-}
-
-function SourceStep({ state, setState, sites, cores, assistantOn }: {
-  state: WizardState;
-  setState: (fn: (s: WizardState) => WizardState) => void;
-  sites: Site[];
-  cores: string[];
-  assistantOn: boolean;
-}) {
-  const file = useRef<HTMLInputElement>(null);
-  const [progress, setProgress] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const set: Setter = (key, value) => setState((s) => ({ ...s, [key]: value }));
-  const urlInvalid = state.repoUrl.trim() !== '' && !gitUrl.safeParse(state.repoUrl.trim()).success;
-  const usedBy = sitesUsingRepo(sites, state.repoUrl.trim());
-  const facts = state.upload?.facts;
-  const repoUrl = state.repoUrl.trim();
-  const inspection = state.inspection;
-  // The repo and its branch on GitHub, GitLab or Bitbucket, from an SSH URL too.
-  const web = urlInvalid || !repoUrl ? null : repoWeb(repoUrl);
-  const branchUrl = web && state.branches?.includes(state.branch) ? branchWebUrl(repoUrl, state.branch) : null;
-
-  // Looks the repo up shortly after a valid URL is pasted or typed, once per URL.
-  useEffect(() => {
-    if (urlInvalid || !repoUrl || inspection.url === repoUrl) return;
-    const timer = window.setTimeout(() => {
-      // Another repo: its branches and helpers are read again.
-      setState((s) => ({ ...s, branch: '', branches: null, helpers: null, inspection: { status: 'reading', url: repoUrl } }));
-      api.inspectRepo(repoUrl).then(
-        (found) => setState((s) => (s.repoUrl.trim() === repoUrl ? applyPreset(s, found, cores) : s)),
-        (err: Error) => setState((s) => (s.repoUrl.trim() === repoUrl ? { ...s, inspection: { status: 'error', url: repoUrl, message: err.message } } : s)),
-      );
-    }, 600);
-    return () => window.clearTimeout(timer);
-  }, [repoUrl, urlInvalid, inspection.url, cores, setState]);
-
-  async function pickDump(f: File | undefined) {
-    if (!f) return;
-    setError(null);
-    setProgress(0);
-    try {
-      const upload = await api.upload(f, setProgress);
-      // The dump this one replaces is not used by anything: drop it now rather than at the daily prune.
-      const previous = state.upload?.id;
-      if (previous && previous !== upload.id) void api.deleteUpload(previous).catch(() => undefined);
-      setState((s) => ({
-        ...s,
-        upload,
-        // Every address and its local name come from this dump; you change them in step 2.
-        domains: upload.suggestions.replace.length ? upload.suggestions.replace.map((r) => ({ prod: r.from, local: r.to })) : withDumpAddress(s.domains, upload),
-      }));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setProgress(null);
-    }
-  }
-
-  return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] xl:gap-12">
-      <div className="grid gap-5">
-        <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
-          <Field label="Git repository" htmlFor="repo" hint={urlInvalid ? <span className="text-danger">Use an SSH or HTTPS URL, like git@github.com:team/repo.git or git@gitlab.com:group/sub/repo.git</span> : <>SSH or HTTPS, from GitHub, GitLab or any git host. Cloned as you, so your SSH key works for private repos.{web && <> <WebLink href={web.repoUrl}>Open on {web.name}</WebLink></>}</>}>
-            <Input id="repo" value={state.repoUrl} onChange={(e) => set('repoUrl', e.target.value)} placeholder="git@github.com:WandworksCo/spellbook.git" className="font-mono text-[13px]" spellCheck={false} aria-invalid={urlInvalid || undefined} />
-          </Field>
-          <Field label="Branch" htmlFor="branch" hint={(state.branches && state.branch === state.defaultBranch) || branchUrl ? <>{state.branches && state.branch === state.defaultBranch ? 'The default branch' : ''}{branchUrl && <> <WebLink href={branchUrl}>Open</WebLink></>}</> : undefined}>
-            {state.branches && state.branches.length > 0 ? (
-              <BranchPicker
-                id="branch"
-                branches={state.branches.map((name) => ({ name, current: name === state.defaultBranch, remoteOnly: false }))}
-                value={state.branch}
-                onChange={(name) => set('branch', name)}
-                currentLabel="default"
-              />
-            ) : (
-              // Typed only when the branches could not be read; until then it waits for the repo.
-              <Input
-                id="branch"
-                value={state.branch}
-                onChange={(e) => set('branch', e.target.value.trim())}
-                placeholder={inspection.status === 'reading' ? 'Reading the repo...' : inspection.status === 'error' ? 'Type the branch' : 'After the repo URL'}
-                disabled={inspection.status !== 'error'}
-                className="font-mono text-[13px]"
-                spellCheck={false}
-              />
-            )}
-          </Field>
-        </div>
-
-        <ProjectStatus inspection={inspection} />
-        {assistantOn && <ClaudeFill state={state} setState={setState} cores={cores} />}
-
-        {usedBy.length > 0 && (
-          <div role="status" className="rounded-lg border border-warning/40 bg-warning/8 px-4 py-3 text-sm">
-            <p className="flex items-center gap-2 font-medium">
-              <CircleAlert className="size-4 shrink-0 text-warning" />
-              {usedBy.length === 1 ? 'A site on this machine already uses this repo' : `${usedBy.length} sites on this machine already use this repo`}
-            </p>
-            <ul className="mt-2 grid gap-1 pl-6">
-              {usedBy.map((u) => (
-                <li key={`${u.domain}${u.path ?? ''}`}>
-                  <Link href={siteHref(u)} className="font-mono text-[13px] font-medium hover:underline">
-                    {u.domain}
-                    {u.path ?? ''}
-                  </Link>
-                  <span className="text-muted-foreground"> on </span>
-                  <span className="font-mono text-[13px]">{u.branch}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-muted-foreground">Open it instead, or continue to set up a second copy (for example to test another branch next to it).</p>
-          </div>
-        )}
-
-        <section aria-label="Where the repo goes" className="grid gap-2 rounded-lg border p-4">
-          <h2 className="text-sm font-semibold">Where the repo goes</h2>
-          {state.placement === null && state.helpers?.kind && state.helpers.kind !== 'other' && (
-            <p className="-mt-1 text-xs text-muted-foreground">Picked for {state.helpers.kind === 'site' ? 'a whole site' : state.helpers.kind === 'wp-content' ? 'a wp-content folder' : `a ${state.helpers.kind}`}, from what the repo holds.</p>
-          )}
-          <PlacementFields
-            url={state.repoUrl.trim()}
-            value={placementOf(state)}
-            onChange={(p) => set('placement', p)}
-            site={state.domains[0]?.local.trim() || 'local.your-site.test'}
-            sharedCore={state.coreMode === 'wpcore'}
-          />
-        </section>
-
-        <div>
-          <p className="text-sm font-medium">Database dump</p>
-          <button
-            type="button"
-            disabled={progress !== null}
-            onClick={() => file.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              void pickDump(e.dataTransfer.files[0]);
-            }}
-            className="mt-2 flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center text-sm transition-colors hover:border-primary/50 hover:bg-muted/40 disabled:cursor-progress"
-          >
-            {progress !== null ? (
-              <>
-                <LoaderCircle className="size-6 animate-spin text-primary" />
-                <span className="font-medium">{progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : 'Reading the dump...'}</span>
-                <span className="h-1.5 w-48 overflow-hidden rounded-full bg-muted">
-                  <span className="block h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round(progress * 100)}%` }} />
-                </span>
-              </>
-            ) : state.upload ? (
-              <>
-                <FileArchive className="size-6 text-primary" />
-                <span className="font-medium">{state.upload.name}</span>
-                <span className="text-xs text-muted-foreground">{bytes(state.upload.size)} · click to choose another</span>
-              </>
-            ) : (
-              <>
-                <Upload className="size-6 text-muted-foreground" />
-                <span><span className="font-medium">Drop a dump here</span> or click to choose</span>
-                <span className="text-xs text-muted-foreground">.sql, .sql.gz or .zip. It stays on this machine.</span>
-              </>
-            )}
-          </button>
-          <input ref={file} type="file" accept=".sql,.gz,.zip" className="sr-only" onChange={(e) => void pickDump(e.target.files?.[0])} tabIndex={-1} />
-          {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
-        </div>
-      </div>
-
-      <DumpFactsCard facts={facts ?? null}>
-        {isMockup && <p className="mt-4 text-xs text-muted-foreground">Mockup: any file works, nothing is uploaded.</p>}
-      </DumpFactsCard>
     </div>
   );
 }
@@ -1287,7 +1060,7 @@ function DomainsStep({ state, set, nginx, errors, sites, underError, underFolder
   /** The site the primary domain belongs to already, if any. */
   existing: Site | undefined;
 }) {
-  const fromDump = state.source === 'repo';
+  const fromDump = state.source === 'repo' && !state.noDump;
   const under = state.source !== 'empty' ? state.under : null;
   const facts = state.upload?.facts;
   const update = (i: number, row: Partial<DomainRow>) => set('domains', state.domains.map((d, j) => (j === i ? { ...d, ...row } : d)));
@@ -1678,7 +1451,7 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
       </section>
 
       <section className="grid h-fit gap-4">
-        {state.source === 'repo' && (
+        {state.source === 'repo' && !state.noDump && (
           <>
             {searchable && <PluginSearch value={find} onChange={setFind} found={found.length} total={deactivatable.length} ticked={ticked} />}
             <h2 className="text-sm font-semibold">Deactivate after import</h2>
@@ -1759,7 +1532,8 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
  * dump it could not read keeps the two choices. Fresh WordPress always makes one.
  */
 function AdminSection({ state, set, input, defaults }: { state: WizardState; set: Setter; input: CreateSiteInput; defaults: { user: string; password: string; email: string } }) {
-  const isRepo = state.source === 'repo';
+  // A project without a dump gets its admin from the fresh install, as a fresh WordPress does.
+  const isRepo = state.source === 'repo' && !state.noDump;
   const found = dumpAdmins(state);
   const network = Boolean(state.upload?.facts.multisite);
   const create = adminCreateOf(state);
@@ -1913,7 +1687,8 @@ function PluginSearch({ value, onChange, found, total, ticked }: { value: string
 }
 
 function HelpersSection({ state, set, query }: { state: WizardState; set: Setter; query: string }) {
-  const helpers = state.helpers;
+  // The helpers any repo of the site has; the main repo's lookup says when the list is read.
+  const helpers = state.helpers?.list ? { ...state.helpers, list: [...new Set([...state.helpers.list, ...state.extra.flatMap((r) => r.helpers?.list ?? [])])] } : state.helpers;
   const active = new Set(state.upload?.facts.activePlugins ?? []);
   const list = helpers?.list?.filter((slug) => pluginMatches(slug, query));
   const toggle = (slug: LocalHelperPlugin, on: boolean) => set('activate', on ? [...state.activate, slug] : state.activate.filter((s) => s !== slug));
@@ -1977,10 +1752,64 @@ function BuildSection({ state, set }: { state: WizardState; set: Setter }) {
   const commands = state.org?.read.facts?.buildCommands ?? [];
   const docsFile = state.org?.read.facts?.sources.find((s) => s.field === 'buildCommands')?.file ?? 'the docs';
   const builds = helpers?.builds;
-  const pick = (build: RepoBuild, patch: BuildPick) => set('buildPicks', { ...state.buildPicks, [buildId(build)]: { ...buildChoice(build, state.buildPicks, commands), ...patch } });
+  // The other repos' builds, each under its name; their picks are kept on their own row.
+  const others = state.extra.filter((r) => r.helpers?.builds?.length);
+  return (
+    <>
+      <h2 className="mt-2 text-sm font-semibold">Build</h2>
+      {!helpers || (!helpers.list && !helpers.error) ? (
+        <>
+          <p className="-mt-2 text-xs text-muted-foreground">Reading the repo's composer.json and package.json files...</p>
+          <Placeholders rows={2} />
+        </>
+      ) : !builds ? (
+        <>
+          <p className="-mt-2 text-xs text-warning">Could not read the repo's build files, so these run at the repo root when they are there.</p>
+          <div className="grid gap-2.5">
+            <Checkbox id="composer" checked={state.composer} onChange={(v) => set('composer', v)} label={<>Run <code className="font-mono">composer install</code></>} hint="When a composer.json is found" />
+            <Checkbox id="npm" checked={state.npm} onChange={(v) => set('npm', v)} label={<>Run <code className="font-mono">npm ci && npm run build</code></>} hint="When a package.json with a build script is found" />
+          </div>
+        </>
+      ) : builds.length === 0 && others.length === 0 ? (
+        <p className="-mt-2 text-xs text-muted-foreground">No composer.json or package.json in the repos has something to build.</p>
+      ) : (
+        <>
+          <p className="-mt-2 text-xs text-muted-foreground">Ticked where a repo does not hold what the build makes. Each runs in its folder, as you, after the clones.</p>
+          {builds.length > 0 && (
+            <BuildRows prefix="main" title={others.length ? `${state.org?.repo?.fullName ?? 'The main repo'}, at ${repoTarget(placementOf(state)) || 'the site root'}` : null} builds={builds} picks={state.buildPicks} commands={commands} docsFile={docsFile} onPick={(picks) => set('buildPicks', picks)} />
+          )}
+          {others.map((r) => (
+            <BuildRows
+              key={r.url}
+              prefix={r.url}
+              title={`${r.fullName ?? r.url}, in ${repoTarget(rowPlacement(r)) || 'the site root'}`}
+              builds={r.helpers?.builds ?? []}
+              picks={r.buildPicks}
+              commands={[]}
+              docsFile=""
+              onPick={(picks) => set('extra', state.extra.map((x) => (x.url === r.url ? { ...x, buildPicks: picks } : x)))}
+            />
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
+/** One repo's builds: the ones it needs ticked, the ones it ships built folded away. */
+function BuildRows({ prefix, title, builds, picks, commands, docsFile, onPick }: {
+  prefix: string;
+  title: string | null;
+  builds: RepoBuild[];
+  picks: Record<string, BuildPick>;
+  commands: Parameters<typeof buildChoice>[2];
+  docsFile: string;
+  onPick: (picks: Record<string, BuildPick>) => void;
+}) {
+  const pick = (build: RepoBuild, patch: BuildPick) => onPick({ ...picks, [buildId(build)]: { ...buildChoice(build, picks, commands), ...patch } });
   const row = (build: RepoBuild) => {
-    const choice = buildChoice(build, state.buildPicks, commands);
-    const id = `b-${buildId(build).replace(/[^\w-]/g, '-')}`;
+    const choice = buildChoice(build, picks, commands);
+    const id = `b-${`${prefix}-${buildId(build)}`.replace(/[^\w-]/g, '-')}`;
     const install = build.tool === 'composer' ? 'composer install' : build.tool === 'npm' ? 'npm ci' : `${build.tool} install`;
     return (
       <div key={id} className="flex items-start gap-2.5 text-sm">
@@ -2009,42 +1838,22 @@ function BuildSection({ state, set }: { state: WizardState; set: Setter }) {
     );
   };
   // A build the docs name stays in view even when it is off, with why.
-  const needed = (builds ?? []).filter((b) => {
-    const choice = buildChoice(b, state.buildPicks, commands);
+  const needed = builds.filter((b) => {
+    const choice = buildChoice(b, picks, commands);
     return choice.on || choice.fromDocs || b.needed;
   });
-  const rest = (builds ?? []).filter((b) => !needed.includes(b));
+  const rest = builds.filter((b) => !needed.includes(b));
   return (
-    <>
-      <h2 className="mt-2 text-sm font-semibold">Build</h2>
-      {!helpers || (!helpers.list && !helpers.error) ? (
-        <>
-          <p className="-mt-2 text-xs text-muted-foreground">Reading the repo's composer.json and package.json files...</p>
-          <Placeholders rows={2} />
-        </>
-      ) : !builds ? (
-        <>
-          <p className="-mt-2 text-xs text-warning">Could not read the repo's build files, so these run at the repo root when they are there.</p>
-          <div className="grid gap-2.5">
-            <Checkbox id="composer" checked={state.composer} onChange={(v) => set('composer', v)} label={<>Run <code className="font-mono">composer install</code></>} hint="When a composer.json is found" />
-            <Checkbox id="npm" checked={state.npm} onChange={(v) => set('npm', v)} label={<>Run <code className="font-mono">npm ci && npm run build</code></>} hint="When a package.json with a build script is found" />
-          </div>
-        </>
-      ) : builds.length === 0 ? (
-        <p className="-mt-2 text-xs text-muted-foreground">No composer.json or package.json in this repo has something to build.</p>
-      ) : (
-        <>
-          <p className="-mt-2 text-xs text-muted-foreground">Ticked where the repo does not hold what the build makes. Each runs in its folder, as you, after the clone.</p>
-          {needed.length > 0 ? <div className="grid gap-3">{needed.map(row)}</div> : <p className="text-xs text-muted-foreground">Nothing needs a build.</p>}
-          {rest.length > 0 && (
-            <details className="rounded-lg border bg-card px-3 py-2 text-sm">
-              <summary className="cursor-pointer font-medium">Ships its built files ({rest.length})</summary>
-              <div className="mt-3 grid gap-3">{rest.map(row)}</div>
-            </details>
-          )}
-        </>
+    <div className="grid gap-3">
+      {title && <h3 className="font-mono text-xs font-medium text-muted-foreground">{title}</h3>}
+      {needed.length > 0 ? <div className="grid gap-3">{needed.map(row)}</div> : <p className="text-xs text-muted-foreground">Nothing needs a build.</p>}
+      {rest.length > 0 && (
+        <details className="rounded-lg border bg-card px-3 py-2 text-sm">
+          <summary className="cursor-pointer font-medium">Ships its built files ({rest.length})</summary>
+          <div className="mt-3 grid gap-3">{rest.map(row)}</div>
+        </details>
       )}
-    </>
+    </div>
   );
 }
 
@@ -2209,7 +2018,10 @@ function ReviewStep({ state, set, input, dbName, cores }: { state: WizardState; 
         {input.repos.length > 0 && state.inspection.status === 'claude' && <ReviewRow label="Settings">filled by Claude, reviewed by you</ReviewRow>}
         {input.repos.length > 0 && (
           <div className="border-t pt-3">
-            <Switch checked={state.remember} label="Remember these answers for this repo" onChange={(on) => set('remember', on)} />
+            <span className="flex items-center gap-2.5 font-medium">
+              <Switch checked={state.remember} label="Remember these answers for this repo" onChange={(on) => set('remember', on)} />
+              Remember these answers for this repo
+            </span>
             <p className="mt-1 text-xs text-muted-foreground">The next install of it fills itself from them. See or forget them in <Link href="/settings" className="text-primary hover:underline">Settings</Link>.</p>
           </div>
         )}

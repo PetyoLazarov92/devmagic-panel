@@ -264,15 +264,15 @@ describe('preferences', () => {
     const cookie = await login();
     const headers = { host: HOST, origin: ORIGIN, cookie };
     expect((await app.inject({ method: 'GET', url: '/api/preferences', headers: { host: HOST } })).statusCode).toBe(401);
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', rowDialogFull: false });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', rowDialogFull: false, useClaude: 'always' });
     const saved = await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { theme: 'dark', sitesView: 'list' } });
-    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', rowDialogFull: false });
+    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', rowDialogFull: false, useClaude: 'always' });
     await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { sitesSort: 'newest', tablesSort: 'size', rowDialogFull: true } });
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', rowDialogFull: true });
-    for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }, { rowDialogFull: 'yes' }]) {
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', rowDialogFull: true, useClaude: 'always' });
+    for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }, { rowDialogFull: 'yes' }, { useClaude: 'sometimes' }]) {
       expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload })).statusCode).toBe(400);
     }
-    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', rowDialogFull: true });
+    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', rowDialogFull: true, useClaude: 'always' });
   });
 });
 
@@ -370,5 +370,19 @@ describe('remembered repo answers', () => {
     expect((await app.inject({ method: 'POST', url: '/api/remembered/repos/forget', headers, payload: { key } })).statusCode).toBe(200);
     expect(store.preset(key)).toBeUndefined();
     expect((await app.inject({ method: 'POST', url: '/api/remembered/repos/forget', headers, payload: { key } })).statusCode).toBe(404);
+  });
+});
+
+describe('trusted repo owners', () => {
+  it('says whether a repo may run here, and trusts and untrusts an owner', async () => {
+    const cookie = await login();
+    const headers = { host: HOST, origin: ORIGIN, cookie };
+    const ask = async (url: string) => (await app.inject({ method: 'GET', url: `/api/repo-trust?url=${encodeURIComponent(url)}`, headers })).json() as { trusted: boolean; owner: { host: string; owner: string } | null };
+    expect(await ask('git@github.com:stranger/plugin.git')).toMatchObject({ trusted: false, owner: { host: 'github.com', owner: 'stranger' } });
+    expect((await app.inject({ method: 'POST', url: '/api/trusted-owners', headers, payload: { host: 'github.com', owner: 'stranger' } })).json()).toMatchObject([{ host: 'github.com', owner: 'stranger' }]);
+    expect(await ask('git@github.com:stranger/plugin.git')).toMatchObject({ trusted: true, why: 'trusted' });
+    expect((await app.inject({ method: 'POST', url: '/api/trusted-owners/remove', headers, payload: { host: 'github.com', owner: 'stranger' } })).json()).toEqual([]);
+    expect((await app.inject({ method: 'POST', url: '/api/trusted-owners', headers, payload: { host: 'github.com', owner: '../x' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/api/repo-trust?url=ext::sh', headers })).statusCode).toBe(400);
   });
 });

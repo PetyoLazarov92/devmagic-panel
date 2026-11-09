@@ -118,3 +118,33 @@ export const throughCoreLink = (target: string): boolean => CORE_DIRS.some((d) =
 
 /** Folders of the repo's own top level that make it hold WordPress core, as the lookup reads them. */
 export const holdsCore = (topLevel: readonly string[]): boolean => CORE_DIRS.every((d) => topLevel.includes(d));
+
+/** Whose a repo is: its host and the path before its name (wandworks, or wandworks/web on GitLab). */
+export interface RepoOwner {
+  host: string;
+  owner: string;
+}
+
+/** The host and owner of a git URL, or null when it names none. */
+export function repoOwner(url: string, web: { repoUrl: string } | null): RepoOwner | null {
+  if (!web) return null;
+  try {
+    const u = new URL(web.repoUrl);
+    const path = u.pathname.replace(/^\/+|\/+$/g, '');
+    const slash = path.lastIndexOf('/');
+    if (slash <= 0) return null;
+    return { host: u.hostname.toLowerCase(), owner: path.slice(0, slash).toLowerCase() };
+  } catch {
+    return null;
+  }
+}
+
+/** A repo whose owner, or a group above it, is one of these: wandworks/web/site is under wandworks. */
+export function ownedBy(owner: RepoOwner, list: readonly RepoOwner[]): boolean {
+  return list.some((t) => t.host === owner.host && (owner.owner === t.owner || owner.owner.startsWith(`${t.owner}/`)));
+}
+
+/** A trusted owner as Settings and the wizard show it. */
+export interface TrustedOwner extends RepoOwner {
+  at: string;
+}

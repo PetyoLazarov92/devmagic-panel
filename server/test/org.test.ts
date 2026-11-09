@@ -456,7 +456,7 @@ describe('dumps for an organization install', () => {
     });
     const done = await settle(s.jobs, (await runAction(ctxOf(s, ok.exec), 'dump.download', { fileId: '1AbCdEfGhIjKlMn', name: 'wandworks.sql', sizeBytes: body.length })).data?.jobId ?? '');
     expect(done.status).toBe('done');
-    expect(ok.calls.find((c) => c.args[0] === 'backend')?.args.at(-1)).toMatch(/wandworks\.sql\.part$/);
+    expect(ok.calls.find((c) => c.args[0] === 'backend')?.args.at(-1)).toMatch(/\.drive-[0-9a-f-]+\/dump\.part$/);
     const id = uploadIdOf(done.steps.at(-1)?.output ?? '') as string;
     expect(readUpload(s.uploads, id)?.name).toBe('wandworks.sql');
 
@@ -467,6 +467,17 @@ describe('dumps for an organization install', () => {
     expect(readdirSync(s.uploads)).toHaveLength(before);
 
     await expect(runAction(ctxOf(s, fakeExec({}).exec), 'dump.download', { fileId: '1AbCdEfGhIjKlMn', name: 'wandworks.sql' })).rejects.toThrow('rclone is not installed');
+
+    // A link alone: rclone keeps the file's own name in a folder of its own, taken from there.
+    const byLink = fakeExec({
+      'rclone listremotes --long': { stdout: 'gdrive:  drive\n' },
+      'rclone backend copyid gdrive: 1AbCdEfGhIjKlMn': (call: FakeCall) => (writeFileSync(join(call.args.at(-1) as string, 'spellbook-latest.sql'), body), { stdout: '' }),
+    });
+    const linked = await settle(s.jobs, (await runAction(ctxOf(s, byLink.exec), 'dump.download', { link: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMn/view?usp=sharing' })).data?.jobId ?? '');
+    expect(linked.status).toBe('done');
+    expect(readUpload(s.uploads, uploadIdOf(linked.steps.at(-1)?.output ?? '') as string)?.name).toBe('spellbook-latest.sql');
+    expect(readdirSync(s.uploads).some((n) => n.startsWith('.drive-'))).toBe(false);
+    await expect(runAction(ctxOf(s, byLink.exec), 'dump.download', { link: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMn/view', fileId: '1AbCdEfGhIjKlMn' })).rejects.toThrow(/one of them/);
   });
 });
 

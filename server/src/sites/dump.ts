@@ -1,9 +1,10 @@
-import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { createReadStream, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { createGunzip } from 'node:zlib';
 import type { DumpFacts } from '@devmagic-panel/shared';
 import { DUMP_SCAN_GB } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
+import { freeSpace } from './space.js';
 
 export type { DumpFacts };
 
@@ -402,23 +403,46 @@ export async function analyzeDump(file: string, onRead?: (fraction: number) => v
   return { ...facts, ...adminsOf(state, facts, !facts.partial) };
 }
 
+/** The most a zip's .sql may unpack to: past this it is refused before anything is written. */
+export const MAX_UNZIPPED_BYTES = 100 * 1024 ** 3;
+
+/** The entries `unzip -l` lists: their unpacked size and name. */
+export function parseZipList(text: string): Array<{ size: number; name: string }> {
+  return [...text.matchAll(/^\s*(\d+)\s+\d{2,4}-\d{2}-\d{2,4}\s+\d{2}:\d{2}\s+(.+)$/gm)].map((m) => ({ size: Number(m[1]), name: (m[2] as string).trimEnd() }));
+}
+
+/** The .sql a zip holds, as the import takes it: the first outside __MACOSX, with a name unzip reads literally. */
+export function sqlEntry(entries: Array<{ size: number; name: string }>): { size: number; name: string } | null {
+  return entries.find((e) => /\.sql$/i.test(e.name) && !e.name.split('/').includes('__MACOSX') && !/[*?[\]\\]/.test(e.name) && !e.name.startsWith('-')) ?? null;
+}
+
 /**
  * The file an import streams: .sql and .sql.gz as they are (a gzip is
- * unpacked on the way into MySQL), .zip unpacked once with unzip (the first
- * .sql inside), as a zip cannot be read as a stream.
+ * unpacked on the way into MySQL), .zip unpacked once with unzip, as a zip
+ * cannot be read as a stream. Only its first .sql comes out, flat into the
+ * folder (no paths from the zip), after its unpacked size is checked against
+ * the limit and the free space: no zip bomb, and nothing else is written.
  */
-export async function sqlFileFor(exec: Executor, file: string, workDir: string): Promise<string> {
-  if (file.endsWith('.zip')) {
-    const dir = join(workDir, 'unzipped');
-    if (!existsSync(dir)) {
-      const res = await exec('unzip', ['-o', '-q', file, '-d', dir], { timeoutMs: 30 * 60_000 });
-      if (res.code !== 0) throw new Error(`could not unzip ${file}: ${res.stderr.trim()}`);
-    }
-    const sql = findSql(dir);
-    if (!sql) throw new Error('the zip holds no .sql file');
-    return sql;
+export async function sqlFileFor(exec: Executor, file: string, workDir: string, free: (path: string) => { bytes: number } = freeSpace): Promise<string> {
+  if (!file.endsWith('.zip')) return file;
+  const dir = join(workDir, 'unzipped');
+  if (existsSync(dir)) {
+    const found = findSql(dir);
+    if (found) return found;
   }
-  return file;
+  const listed = await exec('unzip', ['-l', file], { timeoutMs: 5 * 60_000 });
+  if (listed.code !== 0) throw new Error(`could not read ${file}: ${listed.stderr.trim()}`);
+  const entry = sqlEntry(parseZipList(listed.stdout));
+  if (!entry) throw new Error('the zip holds no .sql file');
+  if (entry.size > MAX_UNZIPPED_BYTES) throw new Error(`the .sql in the zip unpacks to ${Math.round(entry.size / 1024 ** 3)} GB, more than the ${MAX_UNZIPPED_BYTES / 1024 ** 3} GB the panel takes`);
+  const room = free(existsSync(workDir) ? workDir : dirname(workDir)).bytes;
+  if (room < entry.size + 1024 ** 3) throw new Error(`not enough free disk space to unpack the zip: ${Math.round(entry.size / 1024 ** 2)} MB needed, ${Math.round(room / 1024 ** 2)} MB free`);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const res = await exec('unzip', ['-o', '-q', '-j', file, entry.name, '-d', dir], { timeoutMs: 30 * 60_000 });
+  if (res.code !== 0) throw new Error(`could not unzip ${file}: ${res.stderr.trim()}`);
+  const sql = findSql(dir);
+  if (!sql) throw new Error('the zip holds no .sql file');
+  return sql;
 }
 
 function findSql(dir: string): string | null {

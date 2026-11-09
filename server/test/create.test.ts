@@ -640,3 +640,12 @@ describe('site.create with several repos', () => {
     expect(s.store.preset(repoKey(s.input.repos[0]?.url ?? '') as string)).toBeUndefined();
   });
 });
+
+describe('site.create and trust', () => {
+  it('refuses a repo whose owner is not trusted, before anything runs', async () => {
+    const s = await setup();
+    s.ctx.repoTrusted = (url) => url.includes('WandworksCo/');
+    await expect(runAction(s.ctx, 'site.create', { ...s.input, repos: [...s.input.repos, { url: 'git@github.com:stranger/plugin.git', branch: 'main', dir: 'wp-content/plugins', folder: 'plugin' }] })).rejects.toThrow(/stranger\/plugin\.git is not from your organizations or groups/);
+    expect(lines(s.calls).filter((l) => l.startsWith('git clone') || l.includes('site-dir-create'))).toEqual([]);
+  });
+});

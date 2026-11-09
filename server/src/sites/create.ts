@@ -48,6 +48,8 @@ export interface CreateContext {
   store?: RunStore;
   /** Your home folder, where nvm keeps the Node versions builds run with. */
   home?: string;
+  /** Whether code from a repo may run here (repo-trust.ts); without it every repo may. */
+  repoTrusted?: (url: string) => boolean;
 }
 
 export type CreateInput = ActionInput<'site.create'>;
@@ -101,6 +103,9 @@ export async function precheck(ctx: CreateContext, input: CreateInput): Promise<
       if (status === 'insecure') throw new CreateRefused(`WordPress ${version} has known security issues; add it on the WordPress page first, where you confirm it`);
     }
   }
+  // A repo's PHP runs when the site loads and its builds run as you: only repos you trust, or your organizations' and groups'.
+  const untrusted = ctx.repoTrusted ? input.repos.find((r) => !ctx.repoTrusted?.(r.url)) : undefined;
+  if (untrusted) throw new CreateRefused(`${untrusted.url} is not from your organizations or groups, and its owner is not trusted on this computer: trust it in the wizard or in Settings first`);
   // A shared core links wp-admin and wp-includes into the site: a repo there would go through the link into the core every site uses.
   const inCore = input.repos.find((r) => throughCoreLink(repoTarget(r)));
   if (inCore && input.core?.mode === 'wpcore') {
@@ -529,7 +534,9 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     }
   }
 
-  if (input.source === 'wordpress') {
+  // A fresh WordPress, or a project without a dump: its code on new, empty tables.
+  const freshInstall = input.source === 'wordpress' || (input.source === 'repo' && !dumpFile);
+  if (freshInstall) {
     const admin = input.admin as NonNullable<CreateInput['admin']>;
     add('install', 'Install WordPress', async () => {
       // Your password, or a random one nobody needs (one-click login signs in from the panel). Always on stdin.
@@ -561,7 +568,7 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     });
   }
 
-  if (input.source === 'repo' && input.admin && !(input.admin.ifExists === 'keep' && input.admin.ifMissing === 'skip')) {
+  if (input.source === 'repo' && dumpFile && input.admin && !(input.admin.ifExists === 'keep' && input.admin.ifMissing === 'skip')) {
     const admin = input.admin;
     const label = admin.ifExists === 'keep' ? `Add ${admin.user} unless the database has it` : `Make sure ${admin.user} is an administrator${admin.password ? ' with your password' : ''}`;
     add('admin', label, async () => {

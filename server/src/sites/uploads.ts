@@ -5,6 +5,9 @@ import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Executor } from '../exec.js';
 import { analyzeDump, sqlFileFor, type DumpFacts } from './dump.js';
+import { checkDumpFile, DumpTypeError } from './dump-type.js';
+
+export { DumpTypeError };
 
 /**
  * Database dumps uploaded for the new site wizard, kept in the panel's data
@@ -73,6 +76,7 @@ export async function saveUpload(
   });
   try {
     await pipeline(body, counter, createWriteStream(file, { mode: 0o600 }));
+    checkDumpFile(file, fileName);
     const sql = file.endsWith('.zip') ? await sqlFileFor(exec, file, dir) : file;
     const facts = await analyzeDump(sql);
     const info: UploadInfo = { id, name: fileName, size, facts };
@@ -140,6 +144,7 @@ export async function adoptUpload(exec: Executor, uploadsDir: string, name: stri
     await put(file);
     const size = statSync(file).size;
     if (size > MAX_UPLOAD_BYTES) throw new UploadError(`The dump is larger than ${Math.round(MAX_UPLOAD_BYTES / 1024 ** 3)} GB`);
+    checkDumpFile(file, fileName);
     const sql = file.endsWith('.zip') ? await sqlFileFor(exec, file, dir) : file;
     const facts = await analyzeDump(sql, onRead);
     const info: UploadInfo = { id, name: fileName, size, facts };

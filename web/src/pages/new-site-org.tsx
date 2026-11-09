@@ -1,22 +1,22 @@
-import type { AccessReport, AccessResult, ClaudeEffort, ClaudeUsage, ClaudeModel, ClaudeRun, ClaudeStep, OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, Prefill, ReadResult, RepoFacts, Site, UploadResult } from '@devmagic-panel/shared';
-import { accessKey, CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE_STEPS, gitlabHost, isShared, namespaceLabel, namespaceShortLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, REPO_KIND_LABELS, gitUrl, repoWeb } from '@devmagic-panel/shared';
-import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, ExternalLink, FileArchive, LoaderCircle, RefreshCw, Search, Sparkles, Upload } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { BranchPicker } from '@/components/branch-picker';
-import { settled, StepList, useJob } from '@/components/job-steps';
+import type { AccessReport, AccessResult, ClaudeEffort, ClaudeUsage, ClaudeModel, ClaudeRun, ClaudeStep, OrgRepo, OrgStatus, Prefill, ReadResult, RepoFacts, UploadResult } from '@devmagic-panel/shared';
+import { accessKey, CLAUDE_EFFORTS, CLAUDE_MODELS, DEFAULT_CLAUDE_STEPS, gitlabHost, namespaceShortLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, repoWeb } from '@devmagic-panel/shared';
+import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, ExternalLink, LoaderCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import {} from '@/components/branch-picker';
+import { settled, useJob } from '@/components/job-steps';
 import { DumpFactsCard } from '@/components/dump-facts';
-import { Badge } from '@/components/ui/badge';
+import {} from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
-import { Menu } from '@/components/ui/menu';
+import {} from '@/components/ui/menu';
 import { api } from '@/lib/api';
 import { failureOf, resumeStep, runSource, unskipAccess, usageHover, usageText } from '@/lib/claude-steps';
-import { bytes, shortDate, timeAgo } from '@/lib/format';
+import { bytes } from '@/lib/format';
 import { Link } from '@/lib/router';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
-import { asideUploads, type RepoProgress, switchOrg, switchRepo } from '@/lib/org-repos';
+import type { RepoProgress } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './new-site';
 import { Notice } from '@/components/page';
@@ -33,15 +33,14 @@ export interface OrgState {
   prefill?: Prefill;
   /** The other repos you picked in this install, by full name, as you left them (lib/org-repos). */
   earlier?: Record<string, RepoProgress>;
+  /** Claude Code reads the repo and its links: the Claude steps are in the install. */
+  useClaude: boolean;
 }
 
-export const newOrgState = (name = ''): OrgState => ({ name, repo: null, read: { status: 'idle' }, access: { status: 'idle' } });
+export const newOrgState = (name = '', useClaude = false): OrgState => ({ name, repo: null, read: { status: 'idle' }, access: { status: 'idle' }, useClaude });
 
 type SetState = (update: (s: WizardState) => WizardState) => void;
 const setOrg = (setState: SetState, update: (o: OrgState) => OrgState) => setState((s) => (s.org ? { ...s, org: update(s.org) } : s));
-
-/** A Drive file's page, where it opens and downloads in the browser. */
-const driveUrl = (fileId: string) => `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
 
 /** The links Claude Code checks: the Asana tasks and Google files the docs name. */
 export const linksOf = (facts?: RepoFacts) => [...(facts?.asanaLinks ?? []), ...(facts?.googleLinks ?? [])];
@@ -60,8 +59,6 @@ export function applyOrgAnswers(state: WizardState, upload: UploadResult, cores:
   return {
     ...state,
     upload,
-    repoUrl: prefill.repoUrl,
-    placement: prefill.placement,
     domains: domains.length ? domains : [{ prod: '', local: '' }],
     // The newest core you have, or the one you picked; a version the docs name is a note.
     coreVersion: state.coreVersion || prefill.coreVersion,
@@ -73,202 +70,7 @@ export function applyOrgAnswers(state: WizardState, upload: UploadResult, cores:
   };
 }
 
-// ── 1. The organization and the repo ─────────────────────────
-
-/** How long ago, as a phrase that fits after "checked". */
-const ago = (iso: string) => {
-  const text = timeAgo(iso);
-  return text === 'now' ? 'just now' : text;
-};
-
-export function OrgStep({ state, setState, status, blank, onRecheck }: { state: WizardState; setState: SetState; status: OrgStatus | null; blank: WizardState; onRecheck?: () => void }) {
-  const org = state.org as OrgState;
-  const [query, setQuery] = useState('');
-  const [sitesOnly, setSitesOnly] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [pasted, setPasted] = useState('');
-  const selected = status?.settings.selected ?? [];
-  const current = org.name || selected[0] || '';
-  // Signed in to the CLI of the namespace shown (gh or glab on its host), and to any of them for picking.
-  const signedIn = status ? cliSignedIn(status, current) : false;
-  const anySignedIn = status ? status.gh.signedIn || status.glab.hosts.some((h) => h.signedIn) : false;
-  // The stored list shows at once, without the CLI; then, signed in, what is due is read behind it.
-  const [list, setList] = useState<OrgRepoList | null>(null);
-  const [listError, setListError] = useState<string | null>(null);
-  const [scanning, setScanning] = useState<OrgScanMode | null>(null);
-  const shownOrg = useRef('');
-  async function scan(name: string, mode: OrgScanMode) {
-    if (mode !== 'none') setScanning(mode);
-    try {
-      const r = await api.orgRepos(name, mode);
-      if (shownOrg.current === name) {
-        setList(r);
-        setListError(null);
-      }
-    } catch (e) {
-      if (shownOrg.current === name) setListError((e as Error).message);
-    } finally {
-      if (mode !== 'none' && shownOrg.current === name) setScanning(null);
-    }
-  }
-  useEffect(() => {
-    shownOrg.current = current;
-    setList(null);
-    setListError(null);
-    setScanning(null);
-    if (!current) return;
-    void scan(current, 'none').then(() => (signedIn ? scan(current, 'auto') : undefined));
-  }, [current, signedIn]);
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (list?.repos ?? []).filter((r) => (!sitesOnly || r.kind === 'site' || r.kind === 'wp-content') && (!q || `${r.name} ${r.description ?? ''}`.toLowerCase().includes(q)));
-  }, [list, query, sitesOnly]);
-  const stored = Boolean(list?.listedAt);
-
-  function pick(repo: OrgRepo) {
-    setState((s) => switchRepo(s, repo, blank));
-  }
-  function pickPasted() {
-    const url = pasted.trim();
-    const repo = pastedRepo(url);
-    if (repo) pick(repo);
-  }
-
-  if (!status) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Checking Claude Code, the GitHub CLI and the GitLab CLI...</p>;
-  const shownNs = parseNamespaceRef(current);
-  return (
-    <WithClaudeCard card={<ClaudeCard status={status} org={org} setState={setState} next={nextClaudeStep(org)} />}>
-    <div className="grid max-w-4xl gap-4">
-      {!anySignedIn ? (
-        <Notice tone="warning">
-          The GitHub CLI lists your organizations' repos and the GitLab CLI your groups' projects: {status.gh.problem ?? 'gh is not set up'}; {status.glab.hosts[0]?.problem ?? 'glab is not set up'}. Install the one for your host (
-          <code className="font-mono">sudo apt install gh</code> or <code className="font-mono">sudo apt install glab</code>), sign in with <code className="font-mono">gh auth login</code> or{' '}
-          <code className="font-mono">glab auth login</code>, then come back. {stored ? 'The list below is from the last check and still installs, as cloning uses git.' : 'Or paste a repo URL below.'}
-        </Notice>
-      ) : (
-        current && !signedIn && shownNs && (
-          <Notice tone="warning">
-            {shownNs.provider === 'github' ? (
-              <>The GitHub CLI checks for new repos of {namespaceShortLabel(current)}: {status.gh.problem ?? 'it is not set up'}. Sign in with <code className="font-mono">gh auth login</code>.</>
-            ) : (
-              <>The GitLab CLI checks for new projects on {shownNs.host}: {status.glab.hosts.find((h) => h.host === shownNs.host)?.problem ?? 'it is not set up'}. Sign in with <code className="font-mono">glab auth login{shownNs.host === 'gitlab.com' ? '' : ` --hostname ${shownNs.host}`}</code>.</>
-            )}{' '}
-            The list below is from the last check and still installs, as cloning uses git.
-          </Notice>
-        )
-      )}
-      {(anySignedIn || selected.length > 0) && (
-        <>
-          <div className="flex flex-wrap items-end gap-3">
-            <Field htmlFor="org" label="Organization or group">
-              <Select id="org" value={current} onChange={(e) => setState((s) => switchOrg(s, e.target.value))} wrapClassName="min-w-56">
-                {selected.length === 0 && <option value="">Pick organizations or groups first</option>}
-                {selected.map((o) => <option key={o} value={o}>{namespaceLabel(o)}</option>)}
-              </Select>
-            </Field>
-            {anySignedIn && <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Done' : 'Organizations and groups to scan'}</Button>}
-            <span className="flex-1" />
-            {signedIn && (
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="sm" disabled={scanning !== null || !current} onClick={() => void scan(current, 'check')}>
-                  <RefreshCw className={cn(scanning && 'animate-spin')} />
-                  Check now
-                </Button>
-                <Menu
-                  label="More ways to scan"
-                  items={[{ label: 'Rescan all repos', icon: <RefreshCw />, disabled: scanning !== null || !current, onSelect: () => void scan(current, 'full') }]}
-                />
-              </div>
-            )}
-          </div>
-          {anySignedIn && !editing && selected.length > 0 && !status.glab.hosts.some((h) => h.signedIn) && (
-            <p className="-mt-2 text-xs text-muted-foreground">
-              GitLab repos list here once the GitLab CLI is {status.glab.installed ? 'signed in' : 'installed and signed in'}:{' '}
-              <button type="button" className="font-medium text-primary hover:underline" onClick={() => setEditing(true)}>how</button>.
-            </p>
-          )}
-          {anySignedIn && (editing || selected.length === 0) && <OrgPicker status={status} {...(onRecheck ? { onRecheck } : {})} />}
-          {current && (
-            <>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isShared(shownNs ?? { path: '' }) ? 'Filter the repos shared with you' : `Filter the repos of ${namespaceShortLabel(current)}`} aria-label="Filter repos" className="pl-9" />
-                </div>
-                <Checkbox id="sites-only" checked={sitesOnly} onChange={setSitesOnly} label="WordPress sites only" />
-              </div>
-              {listError && <p role="alert" className="text-sm text-danger">{listError}</p>}
-              {list?.problem && (
-                <p role="alert" className="flex items-start gap-2 text-sm text-warning">
-                  <CircleAlert className="mt-0.5 size-4 shrink-0" />
-                  <span>Could not read {shownNs?.host === 'github.com' ? 'GitHub' : (shownNs?.host ?? 'the host')}: {list.problem}.{stored && list.checkedAt ? ` Showing the list from ${ago(list.checkedAt)}.` : ''}</span>
-                </p>
-              )}
-              {scanning && !stored ? (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the repos of {namespaceShortLabel(current)}; the first scan looks into each one, later ones only into new pushes...</p>
-              ) : (
-                (scanning || list?.checkedAt) && (
-                  <p className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-                    {scanning && <LoaderCircle className="size-3.5 animate-spin" />}
-                    {scanning === 'full' ? 'Reading every repo of ' + namespaceShortLabel(current) + '...' : scanning ? 'Checking for new repos...' : `${list?.repos.length === 1 ? '1 repo' : `${list?.repos.length ?? 0} repos`}, checked for new ones ${ago(list?.checkedAt as string)}`}
-                    {!scanning && list?.listedAt && `, all listed ${ago(list.listedAt)}`}
-                  </p>
-                )
-              )}
-              <ul role="radiogroup" aria-label="Repos" className="grid max-h-[28rem] gap-2 overflow-y-auto">
-                {shown.map((r) => (
-                  <li key={r.fullName} className="relative">
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={org.repo?.fullName === r.fullName}
-                      onClick={() => pick(r)}
-                      className={cn('grid w-full gap-1 rounded-lg border bg-card py-3 pr-11 pl-4 text-left text-sm transition-colors hover:border-primary/50', org.repo?.fullName === r.fullName && 'border-primary ring-3 ring-primary/15')}
-                    >
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[13px] font-medium">{shownNs && isShared(shownNs) ? r.fullName : shownNs && r.fullName.toLowerCase().startsWith(`${shownNs.path.toLowerCase()}/`) ? r.fullName.slice(shownNs.path.length + 1) : r.name}</span>
-                        <Badge>{REPO_KIND_LABELS[r.kind]}</Badge>
-                        {r.local?.installed?.map((i) => <Badge key={`${i.domain}${i.path ?? ''}`} tone="warning">installed as {i.domain}{i.path ?? ''}</Badge>)}
-                        {r.local?.archived && <Badge>{r.local.archived.count === 1 ? '1 archived copy' : `${r.local.archived.count} archived copies`}</Badge>}
-                        {r.local?.draft && <Badge tone="warning">unfinished install</Badge>}
-                        <span className="flex-1" />
-                        {r.pushedAt && <span className="text-xs text-muted-foreground">pushed {timeAgo(r.pushedAt)}</span>}
-                      </span>
-                      {r.description && <span className="text-muted-foreground">{r.description}</span>}
-                    </button>
-                    <RepoLink url={r.url || repoWeb(r.sshUrl)?.repoUrl} name={r.fullName} />
-                  </li>
-                ))}
-                {list && !scanning && shown.length === 0 && <li className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">No repo matches.</li>}
-              </ul>
-            </>
-          )}
-        </>
-      )}
-      <details className="rounded-lg border bg-card px-4 py-3 text-sm" open={!signedIn && !stored}>
-        <summary className="cursor-pointer font-medium">Paste a repo URL instead</summary>
-        <div className="mt-3 flex gap-2">
-          <Input value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="git@gitlab.com:wandworks/web/site.git" className="font-mono text-[13px]" spellCheck={false} aria-label="Repo URL" />
-          <Button variant="outline" disabled={!pastedRepo(pasted.trim())} onClick={pickPasted}>Use it</Button>
-        </div>
-      </details>
-      {org.repo && (
-        <OrgBranch url={org.repo.sshUrl} defaultBranch={org.repo.defaultBranch} branch={state.branch} setState={setState} />
-      )}
-    </div>
-    </WithClaudeCard>
-  );
-}
-
-/** The Claude Code step still ahead for this repo: none once it was read and its links checked or skipped. */
-const nextClaudeStep = (org: OrgState): ClaudeStep | null => (org.read.status !== 'done' ? 'read' : org.access.status === 'done' || org.access.status === 'skipped' ? null : 'access');
-
-/**
- * What each host still needs before it lists anything: the CLI, or its
- * sign-in. Cloning needs neither, only your SSH key, so this is only for
- * listing your repos, the ones shared with you and your groups.
- */
-function CliHints({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => void }) {
+export function CliHints({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => void }) {
   const lines: Array<{ host: string; text: ReactNode }> = [];
   if (!status.gh.signedIn) {
     lines.push({
@@ -306,32 +108,14 @@ function CliHints({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => 
 }
 
 /** Signed in to the CLI that lists this namespace: gh for a GitHub organization, glab on the group's host. */
-function cliSignedIn(status: OrgStatus, ref: string): boolean {
+export function cliSignedIn(status: OrgStatus, ref: string): boolean {
   const ns = parseNamespaceRef(ref);
   if (!ns) return false;
   return ns.provider === 'github' ? status.gh.signedIn : Boolean(status.glab.hosts.find((h) => h.host === ns.host)?.signedIn);
 }
 
-/**
- * A pasted URL as a repo of the list: its whole path on the host, so a
- * project in a GitLab subgroup (wandworks/web/site) keeps its groups. Null for
- * anything that is not a git URL.
- */
-function pastedRepo(url: string): OrgRepo | null {
-  const web = gitUrl.safeParse(url).success ? repoWeb(url) : null;
-  if (!web) return null;
-  const parsed = new URL(web.repoUrl);
-  const path = parsed.pathname.slice(1);
-  const slash = path.lastIndexOf('/');
-  const group = path.slice(0, slash);
-  // The organization or group, when it is one the panel can list; other hosts install without one.
-  const ref = web.provider === 'GitHub' ? group : web.provider === 'GitLab' ? `${parsed.hostname}/${group}` : '';
-  const org = parseNamespaceRef(ref) ? ref : '';
-  return { org, name: path.slice(slash + 1), fullName: path, sshUrl: url, url: web.repoUrl, archived: false, kind: 'site' };
-}
-
 /** Opens a repo of the list on its host in a new tab, beside its row's button. */
-function RepoLink({ url, name }: { url: string | undefined; name: string }) {
+export function RepoLink({ url, name }: { url: string | undefined; name: string }) {
   if (!url) return null;
   const where = repoWeb(url)?.name ?? 'its host';
   return (
@@ -349,57 +133,10 @@ function RepoLink({ url, name }: { url: string | undefined; name: string }) {
 }
 
 /**
- * The branch to clone, picked from the repo's branches as in an install from
- * a git repo and a dump; typed only when they could not be read.
- */
-function OrgBranch({ url, defaultBranch, branch, setState }: { url: string; defaultBranch: string | undefined; branch: string; setState: SetState }) {
-  const [read, setRead] = useState<{ url: string; branches?: string[]; defaultBranch?: string; error?: string } | null>(null);
-  // The wizard's setter is new on every render: read once per repo, not per render.
-  const update = useRef(setState);
-  update.current = setState;
-  useEffect(() => {
-    let current = true;
-    setRead(null);
-    api.inspectRepo(url).then(
-      (found) => {
-        if (!current) return;
-        setRead({ url, branches: found.branches ?? [], ...(found.defaultBranch ? { defaultBranch: found.defaultBranch } : {}) });
-        // A pasted URL has no default branch from its host: take the remote's.
-        if (found.defaultBranch) update.current((s) => (s.repoUrl === url && !s.branch ? { ...s, branch: found.defaultBranch as string } : s));
-      },
-      (err: Error) => current && setRead({ url, error: err.message }),
-    );
-    return () => {
-      current = false;
-    };
-  }, [url]);
-  const shown = read?.url === url ? read : null;
-  const main = shown?.defaultBranch ?? defaultBranch;
-  const hint = !shown ? 'Reading the branches...' : shown.error ? `The branches could not be read (${shown.error}): type one.` : branch === main ? 'The default branch' : main ? `The default branch is ${main}` : undefined;
-  return (
-    <Field htmlFor="org-branch" label="Branch" hint={hint}>
-      <div className="max-w-sm">
-        {shown?.branches && shown.branches.length > 0 ? (
-          <BranchPicker
-            id="org-branch"
-            branches={shown.branches.map((name) => ({ name, current: name === main, remoteOnly: false }))}
-            value={branch}
-            onChange={(name) => setState((s) => ({ ...s, branch: name }))}
-            currentLabel="default"
-          />
-        ) : (
-          <Input id="org-branch" value={branch} onChange={(e) => setState((s) => ({ ...s, branch: e.target.value.trim() }))} disabled={!shown} className="font-mono text-[13px]" spellCheck={false} />
-        )}
-      </div>
-    </Field>
-  );
-}
-
-/**
  * Which of your organizations and groups the panel scans, from every CLI that
  * is signed in, and your own GitLab hosts; saved in the panel's settings.
  */
-function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => void }) {
+export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => void }) {
   const orgs = useAsync(() => api.orgOrgs(), []);
   const [settings, setSettings] = useState(status.settings);
   const [saving, setSaving] = useState(false);
@@ -592,15 +329,8 @@ export function AccessStep({ state, setState, status, cores, draftId, saveNow }:
   const links = linksOf(org.read.facts);
   const hints = org.read.facts?.dumpHints ?? [];
   const key = accessKey(repo.fullName, links, hints);
-  const job = useJob();
   const check = useJob();
   const started = useRef<string | null>(null);
-  const [chosen, setChosen] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
-  // Which step of the download job shows its output, as on a job's own page.
-  const [openStep, setOpenStep] = useState<string | null>(null);
-  const downloads = useAsync(() => api.downloads(), []);
 
   const take = ({ key: _key, ...r }: AccessResult) => setOrg(setState, (o) => ({ ...o, access: { status: 'done', ...r } }));
   const fail = (error: string) => setOrg(setState, (o) => ({ ...o, access: { status: 'error', error } }));
@@ -653,53 +383,6 @@ export function AccessStep({ state, setState, status, cores, draftId, saveNow }:
     if (check.error) fail(check.error);
   }, [check.error]);
 
-  // Back from another page while a dump came in: follow its download, or take the dump it brought.
-  useEffect(() => {
-    if (state.upload) return;
-    let live = true;
-    void (async () => {
-      const draft = await api.draft(draftId).catch(() => null);
-      const noted = draft?.jobs?.dump;
-      const view = noted ? await api.job(noted.id).catch(() => null) : null;
-      if (!live || !draft) return;
-      if (view && !settled(view)) return void job.follow(Promise.resolve(view.id));
-      // Never the dump of a repo you put aside.
-      const aside = asideUploads(state.org);
-      const kept = draft.attached?.filter((u) => !aside.includes(u)).at(-1);
-      if (kept) api.uploadInfo(kept).then((up) => live && setState((s) => (s.upload ? s : applyOrgAnswers(s, up, cores))), () => undefined);
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  const dumps = org.access.report?.dumps ?? [];
-  const pick = chosen ?? dumps[0]?.fileId ?? null;
-  const dump = dumps.find((d) => d.fileId === pick);
-
-  // A dump job that finished hands its upload to the wizard, filled in from the docs and the dump.
-  useEffect(() => {
-    if (!job.job || job.job.status !== 'done') return;
-    const id = /\bupload ([0-9a-f-]{36})\b/.exec(job.job.steps.map((s) => s.output ?? '').join('\n'))?.[1];
-    if (!id) return;
-    api.uploadInfo(id).then((upload) => setState((s) => applyOrgAnswers(s, upload, cores)), (err: Error) => setError(err.message));
-  }, [job.job?.status]);
-
-  async function upload(file: File | undefined) {
-    if (!file) return;
-    setError(null);
-    setProgress(0);
-    try {
-      const up = await api.upload(file, setProgress);
-      setState((s) => applyOrgAnswers(s, up, cores));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setProgress(null);
-    }
-  }
-  const working = job.job !== null && !settled(job.job);
-
   return (
     <WithClaudeCard card={status && <ClaudeCard status={status} org={org} setState={setState} next={org.access.status === 'skipped' && links.length > 0 ? 'access' : null} />}>
     <div className="grid max-w-3xl gap-5">
@@ -739,88 +422,20 @@ export function AccessStep({ state, setState, status, cores, draftId, saveNow }:
         </>
       )}
 
-      {(org.access.status === 'done' || org.access.status === 'skipped') && !state.upload && (
-        <div className="grid gap-3">
-          <h3 className="font-medium">The database dump</h3>
-          {dumps.length > 0 ? (
-            <ul role="radiogroup" aria-label="Dumps" className="grid gap-2">
-              {dumps.map((d) => (
-                <li key={d.fileId}>
-                  <button type="button" role="radio" aria-checked={pick === d.fileId} onClick={() => setChosen(d.fileId)} className={cn('flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-card px-4 py-3 text-left text-sm', pick === d.fileId && 'border-primary ring-3 ring-primary/15')}>
-                    <FileArchive className="size-4 text-muted-foreground" />
-                    <span className="font-mono text-[13px]">{d.name}</span>
-                    <span className="text-xs text-muted-foreground">{[d.sizeBytes !== null ? bytes(d.sizeBytes) : null, d.modifiedAt ? shortDate(d.modifiedAt) : null, d.foundIn].filter(Boolean).join(' · ')}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">No dump was found through the links. Download one in your browser or upload it.</p>
-          )}
-          {dump && status?.rclone.remote && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <Button className="w-fit" disabled={working} onClick={() => void job.follow(api.startJob('dump.download', { fileId: dump.fileId, name: dump.name, ...(dump.sizeBytes !== null ? { sizeBytes: dump.sizeBytes } : {}), draftId }))}>
-                {working ? <LoaderCircle className="animate-spin" /> : <FileArchive />}
-                Download it with rclone
-              </Button>
-              {/* The file itself, to look at it or download it in the browser instead. */}
-              <a href={driveUrl(dump.fileId)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-                Open in Google Drive <ExternalLink className="size-3" />
-              </a>
-            </div>
-          )}
-          {dump && !status?.rclone.remote && (
-            <p className="text-sm">
-              rclone is not set up, so download it in your browser:{' '}
-              <a href={driveUrl(dump.fileId)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-                open {dump.name} in Google Drive <ExternalLink className="size-3" />
-              </a>
-              , then pick it below.
-            </p>
-          )}
-          <div className="rounded-lg border bg-card p-4 text-sm">
-            <p className="flex items-center gap-2 font-medium">
-              From your Downloads folder
-              <Button variant="ghost" size="sm" onClick={downloads.reload}><RefreshCw className={cn(downloads.loading && 'animate-spin')} />Look again</Button>
-            </p>
-            {(downloads.data ?? []).length === 0 && <p className="text-muted-foreground">No .sql, .sql.gz or .zip from the last three days yet.</p>}
-            <ul className="mt-1 grid gap-1.5">
-              {(downloads.data ?? []).map((d) => (
-                <li key={d.file} className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[13px]">{d.name}</span>
-                  <span className="text-xs text-muted-foreground">{bytes(d.sizeBytes)} · {timeAgo(d.modifiedAt)}</span>
-                  <Button size="sm" variant="outline" disabled={working} onClick={() => void job.follow(api.startJob('dump.useDownloaded', { file: d.file, draftId }))}>Use this file</Button>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <label className="inline-flex w-fit cursor-pointer items-center gap-2 text-sm font-medium text-primary hover:underline">
-            <Upload className="size-4" />
-            {progress !== null ? `Uploading ${Math.round(progress * 100)}%` : 'Or upload a dump'}
-            <input type="file" accept=".sql,.gz,.zip" className="sr-only" onChange={(e) => void upload(e.target.files?.[0])} />
-          </label>
-          {job.job && <StepList steps={job.job.steps} open={openStep} setOpen={setOpenStep} />}
-          {(job.error || error) && <p role="alert" className="text-sm text-danger">{job.error ?? error}</p>}
-        </div>
+      {(org.access.status === 'done' || org.access.status === 'skipped') && (
+        <p className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          {org.access.report?.dumps.length
+            ? `Next, pick the dump: Claude found ${org.access.report.dumps.length === 1 ? 'one' : org.access.report.dumps.length} in Google Drive, and every other way to get one is there too.`
+            : 'Next, pick the database dump: upload it, take it from your Downloads folder, a cloud drive or a URL, or go on without one.'}
+        </p>
       )}
-
-      {state.upload && org.prefill && <PrefillSummary prefill={org.prefill} upload={state.upload} onChange={() => {
-        // The dump you set aside goes, so coming back to the step does not bring it in again.
-        const previous = state.upload?.id;
-        if (previous) void api.deleteUpload(previous).catch(() => undefined);
-        setState((s) => {
-          if (!s.org) return { ...s, upload: null };
-          const { prefill: _old, ...org } = s.org;
-          return { ...s, upload: null, org };
-        });
-      }} />}
     </div>
     </WithClaudeCard>
   );
 }
 
 /** What the next steps start from: the dump and what it holds, where the docs differ from your setup, and what is left to you. */
-function PrefillSummary({ prefill, upload, onChange }: { prefill: Prefill; upload: UploadResult; onChange: () => void }) {
+export function PrefillSummary({ prefill, upload, onChange }: { prefill: Prefill; upload: UploadResult; onChange: () => void }) {
   return (
     <div className="grid gap-3">
     <div className="grid gap-3 rounded-lg border bg-card p-4 text-sm">

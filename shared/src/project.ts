@@ -36,6 +36,28 @@ export function presetFromCreate(input: ActionInput<'site.create'>): RepoPreset 
   };
 }
 
+/** Whether a repo may run here, and whose it is: see server/src/repo-trust.ts. */
+export interface RepoTrustAnswer {
+  owner: { host: string; owner: string } | null;
+  trusted: boolean;
+  why?: 'namespace' | 'trusted' | 'listed';
+}
+
+/** An rclone remote, by name and type (drive, dropbox, onedrive, s3, sftp, webdav...). */
+export interface RcloneRemotes {
+  installed: boolean;
+  remotes: Array<{ name: string; type: string }>;
+}
+
+/** A folder or a dump in an rclone remote. */
+export interface RemoteEntry {
+  name: string;
+  path: string;
+  dir: boolean;
+  sizeBytes: number | null;
+  modifiedAt: string | null;
+}
+
 /** A repo's remembered answers, as Settings lists them. */
 export interface RememberedRepo {
   /** The repo as the panel keys it: its web address in lower case. */
