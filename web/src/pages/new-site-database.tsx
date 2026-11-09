@@ -421,14 +421,14 @@ function FromServer({ working, onTake }: { working: boolean; onTake: (input: { h
   return (
     <div className="grid gap-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <label htmlFor="ssh-host" className="font-medium">Host</label>
           <Input id="ssh-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="staging-spellbook or alex@www.spellbook.example" className="font-mono text-[13px]" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
           <p className="text-xs text-muted-foreground">An alias from your ~/.ssh/config, or user@host.</p>
         </div>
-        <div className="grid gap-1.5">
+        <div className="grid content-start gap-1.5">
           <span className="font-medium">What to take</span>
-          <Segmented label="What to take" value={mode} onChange={setMode} options={[['export', 'Export now with WP-CLI'], ['file', 'A dump file there']]} className="justify-self-start" />
+          <Segmented label="What to take" value={mode} onChange={setMode} options={[['export', 'Export now with WP-CLI'], ['file', 'A dump file there']]} className="h-10 justify-self-start" />
         </div>
       </div>
       <div className="grid gap-1.5">

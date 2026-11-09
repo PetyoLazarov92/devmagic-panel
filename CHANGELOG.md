@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.29.1 (2026-11-09)
+* **Fix:** on the Database step, A server over SSH has What to take and its choice level with the Host field, at the same height
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.29.0 (2026-11-09)
 * **Sites:** plugins a dump has that none of the install's repos brings show on the wizard's WordPress step as Missing plugins: active ones on WordPress.org install from there after the import at production's version, others can be turned off or left, and ones production had installed but not active are listed apart. The next install of the repo ticks the same ones
 * **Sites:** a site's Plugins tab has a Missing plugins card after a database import or a pull, to install the ones on WordPress.org, with Undo
