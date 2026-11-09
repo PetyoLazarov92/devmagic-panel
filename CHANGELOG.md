@@ -10,6 +10,7 @@
 * **Security:** a repo outside your organizations and groups runs only once you trust its owner, in the wizard or Settings; the install refuses it otherwise. A dump from a URL reaches only public addresses over https, with at most five redirects, a size limit and free space checked first, and the address's query never kept; every dump must start like SQL, a gzip or a zip, and a zip has only its .sql unpacked, after its size is checked
 * **Settings:** Remembered for new installs lists what the wizard remembers per repo, to edit or forget, and Review has a switch to not remember an install's answers
 * **Fix:** a removed site no longer leaves its .htaccess Not now, its cron tasks taken out and its WordPress report cache behind for a new site on the same domain: they move with the archive and come back on a restore, and the panel's records of an archive go once the 14-day purge removed it
+* **Docs:** New site follows the new steps: Code, Claude Code as an option, Database with every way to bring a dump, and what the wizard remembers per repo; the README's screenshots of the wizard are new
 * **Panel:** dialogs come in four widths, from a short question to a table: the web server switch and the .htaccess rules review open wide enough for their options side by side, which stack on a narrow window
 
 ### v1.27.0 (2026-11-08)

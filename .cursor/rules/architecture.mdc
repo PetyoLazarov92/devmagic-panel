@@ -22,7 +22,9 @@ browser ─https─> Apache (local.devmagic, local CA cert) ─proxy─> Fastify
 | `server/src/exec.ts` | `Executor` (no shell) and `runRoot()` for `sudo -n dmp-root` |
 | `server/src/config.ts` | `config.env` parser (same rules as `scripts/lib/config.sh`), user paths |
 | `server/src/cli.ts` | `setup`, `set-password` and `mcp`, run by install.sh and MCP clients |
-| `server/src/org/` | Installing from an organization or group: Claude Code runs (`claude-code.ts`), repo scans (`scan.ts`), reading a repo and its links (`read.ts`), dump downloads (`dumps.ts`), routes |
+| `server/src/org/` | Installing a project: Claude Code runs (`claude-code.ts`), repo scans (`scan.ts`), reading a repo and its links (`read.ts`), dump downloads from Drive, any rclone remote, your Downloads folder and a public URL (`dumps.ts`), routes |
+| `server/src/repo-trust.ts` | Whether a repo may run here: your organizations and groups, repos your CLI listed, or an owner you trusted (`trusted_owners`); `site.create` refuses any other |
+| `shared/src/site-repos.ts` | Where a repo goes in a site (`dir` and `folder`), placement problems and warnings, repo owners; `web/src/lib/project-repos.ts` picks the repos of an install |
 | `server/src/repo-hosts/` | Where site repos are listed from, each through its own CLI and sign-in: GitHub (`github.ts`, gh) and GitLab (`gitlab.ts`, `glab api --hostname`), behind one `RepoHost`; open pull and merge requests; the GitLab hosts in use; what runs the hosts in the sites' remotes (`detect.ts`: `ssh -G` for aliases, `ssh -T` once a week, kept in the `git_hosts` table). Namespace refs (`wandworks`, `gitlab.com/wandworks/web`) are in `shared/src/repo-host.ts` |
 | `server/src/drafts.ts` | Install drafts: the wizard's answers for 24 hours after the last change, kept while their install runs |
 | `server/src/sites/archive.ts` | Archiving the current site before a reinstall or a restore over it, with an Undo that puts it back |
@@ -46,7 +48,7 @@ browser ─https─> Apache (local.devmagic, local CA cert) ─proxy─> Fastify
 | `server/src/cron-run.ts` | The runner cron starts as `cli.js cron-run`: checks a task's arguments again, runs it without a shell, one at a time, and records the run |
 | `server/src/sites/wp-cron.ts` | A site's WP-Cron through WP-CLI: events, intervals, run, delete with Undo, and the switch to run it from cron |
 | `server/src/jobs.ts` | Long installs as steps with output, retry and undo; the browser polls them. Also the lock: `runAction` refuses any action on a site (domain, or domain and path), a Deleted sites entry's domain or a core version while a job or another action works on it (`lockKey`, `busyFor`) |
-| `server/src/sites/uploads.ts`, `dump.ts` | Dump uploads and what is read from them without importing. A job that reads a dump names it (`upload`), so the hourly prune (`pruneUploads`) keeps it while the job may retry |
+| `server/src/sites/uploads.ts`, `dump.ts`, `dump-type.ts`, `fetch-dump.ts` | Dump uploads and what is read from them without importing; every dump's type from its first bytes; a zip unpacks only its `.sql`; downloads from a public https:// address (public addresses only, checked on connect, five redirects, size limit, the query never kept). A job that reads a dump names it (`upload`), so the hourly prune (`pruneUploads`) keeps it while the job may retry |
 | `install.sh` | Installer; `--dry-run` prints every system change |
 | `scripts/package.sh` | Packs the build into a release (`npm run package`), as `.github/workflows/release.yml` does for a tag |
 | `get.sh` | First install from GitHub: downloads, checks and unpacks a release, runs its `install.sh` |

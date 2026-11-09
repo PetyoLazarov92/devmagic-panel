@@ -31,7 +31,7 @@ listens on localhost.
 - [Quick start](#-quick-start)
 - [Pages](#-pages)
 - [Living with your existing setup](#-living-with-your-existing-setup)
-- [Install from an organization](#-install-from-an-organization)
+- [Install a project](#-install-a-project)
 - [AI assistant](#-ai-assistant)
 - [Undo and backups](#%EF%B8%8F-undo-and-backups)
 - [Updates](#-updates)
@@ -46,7 +46,7 @@ listens on localhost.
 ## ✨ Features
 
 - ✅ **Sites at a glance**: health, certificate, core, git, database and logs for every site, made by the panel or by hand. [More](docs/sites.md)
-- ✅ **New site wizard**: from a git repo and a dump, a fresh WordPress, an empty site, or your organization's repos; multisite and paths included. [More](docs/new-site.md)
+- ✅ **New site wizard**: a project's repos, each in its own folder, with its dump from anywhere; or a fresh WordPress or empty site. [More](docs/new-site.md)
 - ✅ **SSL from a local CA**: one certificate covers every domain of a site, trusted in the system, Chrome, Edge and Firefox. [More](docs/sites.md#domains-and-ssl)
 - ✅ **Apache and hosts**: vhosts with the panel's marker and one marked block in `/etc/hosts`; what you made by hand stays. [More](docs/existing-setup.md)
 - ✅ **nginx next to Apache**: each site on Apache, nginx in front of Apache, or nginx alone with its .htaccess rules translated, with Undo. [More](docs/services.md#nginx-servicesnginx)
@@ -82,11 +82,11 @@ listens on localhost.
   <img src="assets/screenshots/aura-light.png" alt="The Aura page: problems per site and for this machine, each with a one-click fix">
 </picture>
 
-**New site**: four ways to start, and unfinished installs to continue
+**New site**: three ways to start, and unfinished installs to continue
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/new-site-dark.png">
-  <img src="assets/screenshots/new-site-light.png" alt="The new site wizard: from an organization, from a git repo and a database dump, fresh WordPress or an empty site">
+  <img src="assets/screenshots/new-site-light.png" alt="The new site wizard: from a project, a fresh WordPress or an empty site">
 </picture>
 
 **A site's server and PHP**: Apache, nginx + Apache or nginx, and a PHP version and settings of its own
@@ -304,17 +304,18 @@ what is its own:
 
 [⬆️ Back to top](#-table-of-contents)
 
-## 🏢 Install from an organization
+## 🏢 Install a project
 
-Optional. The new site wizard's first start, **From an organization or
-group**, lists the repos of your GitHub organizations and GitLab groups,
-lets Claude Code read a repo's docs for where the database dumps are, checks
-the Asana and Google links they name, and fills in the install from what it
-found. It opens once Claude Code is installed and signed in
-(`claude auth login`). The panel stores no token: Claude Code, `gh`, `glab`
-and rclone keep their own sign-ins.
+The new site wizard's **From a project** lists the repos of your GitHub
+organizations and GitLab groups to tick, several at once, or takes any git
+URL, and puts each repo in a folder of the site you choose. The dump comes
+from an upload, your Downloads folder, any rclone remote, a public URL, or
+none. With Claude Code signed in (`claude auth login`), a switch lets it read
+the repo's docs and the Asana and Google links they name, and find the dumps.
+The panel stores no token: Claude Code, `gh`, `glab` and rclone keep their own
+sign-ins.
 
-📖 Every step: [From an organization or group](docs/new-site.md#from-an-organization-or-group).
+📖 Every step: [New site](docs/new-site.md).
 
 [⬆️ Back to top](#-table-of-contents)
 

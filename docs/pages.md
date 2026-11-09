@@ -69,8 +69,11 @@ when it is missing.
 
 ## Settings
 
-The panel password, the AI assistant, the Claude Code defaults for installs
-from an organization, and the constants new sites get (`/settings`).
+The panel password, the AI assistant, Claude Code for installs (whether new
+installs use it, and the model, effort and cap per step), the constants new
+sites get, what the wizard remembers per repo (**Remembered for new
+installs**, to edit or forget), and the repo owners you trusted, to take back
+(`/settings`).
 
 ## Activity
 

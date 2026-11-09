@@ -291,7 +291,11 @@ const mockDrafts = new Map<string, InstallDraft>([
     'd1e2f3a4-0000-4000-8000-000000000001',
     {
       id: 'd1e2f3a4-0000-4000-8000-000000000001', kind: 'manual', title: 'local.shop.com', step: 'domains',
-      state: { source: 'repo', repoUrl: 'git@github.com:wandworks/shop.git', branch: 'main', domains: [{ prod: 'www.shop.com', local: 'local.shop.com' }] },
+      state: {
+        source: 'repo', repoUrl: 'git@github.com:wandworks/shop.git', branch: 'main', placement: { dir: '', folder: '' }, extra: [], trust: {}, noDump: true, dumpSource: 'none',
+        domains: [{ prod: 'www.shop.com', local: 'local.shop.com' }],
+        org: { name: 'wandworks', repo: null, read: { status: 'idle' }, access: { status: 'idle' }, useClaude: false },
+      },
       uploads: [], status: 'open', createdAt: new Date(Date.now() - 2.2 * 3_600_000).toISOString(), updatedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
       expiresAt: new Date(Date.now() + 22 * 3_600_000).toISOString(),
     },

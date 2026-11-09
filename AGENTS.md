@@ -88,7 +88,8 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    Passwords go to MySQL through `MYSQL_PWD` or stdin, and to WP-CLI through
    stdin (`--prompt`), never argv. Run history stores any input field called
    `password`, and a row's values and keys (`rowKey`, `rowKeys`, `rowValues`,
-   `rowWas`) and SQL that writes (`sql`), as `(hidden)`. Never log them or send them to an AI.
+   `rowWas`) and SQL that writes (`sql`), as `(hidden)`, and an http(s)
+   `url` or `link` without its query (signed links carry tokens there). Never log them or send them to an AI.
    A slow query's sample (`server/src/mysql-slow.ts`) holds real values: it
    goes to the browser only, shown on request, never stored or sent to an AI.
    The panel password changes in the panel (the current one first) and resets
@@ -200,6 +201,16 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       from Production, when the repo has it and you pick it, gets its
       `BE_MEDIA_FROM_PRODUCTION_URL` in wp-config.php (never over one
       already there). No other file goes into a site.
+    - **Repos go where you place them**: each repo of an install has a folder
+      of the site and a folder name (`dir`, `folder` in `site.create`),
+      cloned as you, never through a link (a shared core's `wp-admin` is one)
+      or into a folder that holds files; a repo inside another is listed in
+      that one's local `.git/info/exclude`. Core or uploads in a repo get a
+      warning, not a refusal. A repo runs only when it is from your
+      organizations or groups, your CLI listed it, or you trusted its owner
+      (`server/src/repo-trust.ts`). A dump from a URL comes through
+      `fetch-dump.ts` only: https, public addresses checked on connect, no
+      shell, and every dump's type is read from its first bytes.
     - **Removed sites go to the trash first**, made by the panel or not:
       `dmp-root trash-site` archives the folder (`WEB_DIR/<domain>`), the
       vhosts (`<domain>-ssl.conf` or `<domain>.conf`), the certificate and the
