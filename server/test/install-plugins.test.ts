@@ -1,0 +1,106 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { installPlugins, missingOnSite, pluginPresent, removeInstalled, slugOf } from '../src/sites/install-plugins.js';
+import { RunStore } from '../src/store.js';
+import { wporgPlugins } from '../src/wporg-plugins.js';
+import { fakeExec, type FakeCall, wpSiteTree } from './helpers.js';
+
+const base = (docroot: string) => `wp --path=${docroot} --url=https://local.shop.com/`;
+
+describe('installing missing plugins from WordPress.org', () => {
+  it('tries every plugin: one that fails is noted and the rest go on, as wp-cli-plugin-install-missing did not', async () => {
+    const t = wpSiteTree();
+    const plugins = join(t.docroot, 'wp-content', 'plugins');
+    const install = (call: FakeCall) => {
+      const slug = call.args[4] as string;
+      if (slug === 'wandworks-pro') return { code: 1, stderr: 'Warning: wandworks-pro: Plugin not found.\nError: No plugins installed.' };
+      mkdirSync(join(plugins, slug), { recursive: true });
+      // A deprecation notice on stderr is not a failure: the exit code says.
+      return { stdout: `Success: Installed 1 of 1 plugins.`, stderr: 'PHP Deprecated:  something in wp-cli' };
+    };
+    const fake = fakeExec({
+      [`${base(t.docroot)} plugin install`]: install,
+      [`${base(t.docroot)} plugin verify-checksums`]: { stdout: 'Success: Verified 1 of 1 plugins.' },
+    });
+    const out = await installPlugins(fake.exec, t.docroot, 'local.shop.com', [{ slug: 'wandworks-pro' }, { slug: 'redirection', version: '5.5.1' }, { slug: 'duplicate-post' }]);
+    expect(out.failed).toEqual(['wandworks-pro']);
+    expect(out.installed).toEqual([join(plugins, 'redirection'), join(plugins, 'duplicate-post')]);
+    const text = out.results.map((r) => r.stdout).join('\n');
+    expect(text).toContain('warn: wandworks-pro was not installed: No plugins installed.');
+    expect(text).toContain('redirection: installed 5.5.1 from WordPress.org, checksums match');
+    expect(text).toContain('installed 2 of 3; not installed: wandworks-pro');
+    expect(out.results.every((r) => r.code === 0)).toBe(true);
+    // Nothing of the site runs during an install.
+    expect(fake.calls.filter((c) => c.args.includes('install')).every((c) => c.args.includes('--skip-plugins') && c.args.includes('--skip-themes'))).toBe(true);
+    expect(fake.calls.find((c) => c.args[4] === 'redirection')?.args).toContain('--version=5.5.1');
+    expect(removeInstalled(out.installed).code).toBe(0);
+    expect(existsSync(join(plugins, 'redirection'))).toBe(false);
+  });
+
+  it("takes the latest when production's version is gone, removes one that fails its checksums, and leaves a folder that is there", async () => {
+    const t = wpSiteTree();
+    const plugins = join(t.docroot, 'wp-content', 'plugins');
+    mkdirSync(join(plugins, 'akismet'), { recursive: true });
+    const fake = fakeExec({
+      [`${base(t.docroot)} plugin install`]: (call: FakeCall) => {
+        const slug = call.args[4] as string;
+        if (call.args.some((a) => a.startsWith('--version='))) return { code: 1, stderr: 'Error: Download failed. Not Found' };
+        mkdirSync(join(plugins, slug), { recursive: true });
+        return { stdout: 'Success' };
+      },
+      [`${base(t.docroot)} plugin verify-checksums tampered`]: { code: 1, stderr: "Warning: File doesn't verify against checksum: tampered.php\nError: No plugins verified." },
+      [`${base(t.docroot)} plugin verify-checksums old-slider`]: { code: 1, stderr: 'Warning: Could not retrieve the checksums for version 1.0 of plugin old-slider, skipping.' },
+    });
+    const out = await installPlugins(fake.exec, t.docroot, 'local.shop.com', [{ slug: 'old-slider', version: '1.0' }, { slug: 'tampered' }, { slug: 'akismet' }]);
+    const text = out.results.map((r) => r.stdout).join('\n');
+    expect(text).toContain("old-slider: 1.0, production's version, is not on WordPress.org");
+    expect(text).toContain('old-slider: installed the latest version from WordPress.org, WordPress.org has no checksums for it');
+    expect(text).toContain("warn: tampered did not match WordPress.org's checksums, so it was removed again");
+    expect(existsSync(join(plugins, 'tampered'))).toBe(false);
+    expect(text).toContain('akismet: wp-content/plugins/akismet is there already; left as it is');
+    expect(out.installed).toEqual([join(plugins, 'old-slider')]);
+  });
+
+  it('finds what a live site lacks: every site of a network, network-wide, and what production had installed', async () => {
+    const t = wpSiteTree({ multisite: true });
+    mkdirSync(join(t.docroot, 'wp-content/plugins/akismet'), { recursive: true });
+    const b = base(t.docroot);
+    const fake = fakeExec({
+      [`${b} site list`]: { stdout: JSON.stringify([{ url: 'https://local.shop.com/' }, { url: 'https://local.shop.com/de/' }]) },
+      [`${b} option get active_plugins`]: { stdout: JSON.stringify(['akismet/akismet.php', 'redirection/redirection.php']) },
+      ['wp --path=' + t.docroot + ' --url=https://local.shop.com/de/ option get active_plugins']: { stdout: JSON.stringify(['redirection/redirection.php', '../../etc/x.php']) },
+      [`${b} site option get active_sitewide_plugins`]: { stdout: JSON.stringify({ 'wandworks-sso/sso.php': 1762600000 }) },
+      [`${b} transient get update_plugins --network`]: { stdout: JSON.stringify({ checked: { 'redirection/redirection.php': '5.5.1', 'hello.php': '1.7.2', 'akismet/akismet.php': '5.3' }, no_update: { 'hello.php': { slug: 'hello-dolly' } } }) },
+      [`${b} option get recently_activated`]: { stdout: '[]' },
+    });
+    expect(await missingOnSite(fake.exec, t.docroot, 'local.shop.com')).toEqual([
+      { file: 'redirection/redirection.php', active: true, sites: 2, version: '5.5.1' },
+      { file: 'wandworks-sso/sso.php', active: true, network: true },
+      { file: 'hello.php', active: false, version: '1.7.2', slug: 'hello-dolly' },
+    ]);
+    expect(slugOf({ file: 'hello.php', slug: 'hello-dolly' })).toBe('hello-dolly');
+    expect(slugOf({ file: 'redirection/redirection.php' })).toBe('redirection');
+    writeFileSync(join(t.docroot, 'wp-content/plugins/hello.php'), '<?php');
+    expect(pluginPresent(t.docroot, 'hello.php')).toBe(true);
+    expect(pluginPresent(t.docroot, '../wp-config.php')).toBe(false);
+  });
+
+  it('asks WordPress.org once a day per slug, and keeps no answer from a failed request', async () => {
+    const store = new RunStore(':memory:');
+    const asked: string[] = [];
+    const fetcher = async (url: string) => {
+      const slug = /request\[slug\]=([^&]+)/.exec(url)?.[1] as string;
+      asked.push(slug);
+      if (slug === 'down') throw new Error('timeout');
+      if (slug === 'wandworks-pro') return { status: 404, body: null };
+      return { status: 200, body: { slug, name: 'Redirection <b>Pro</b>', version: '5.5.2' } };
+    };
+    const now = Date.parse('2026-11-09T10:00:00Z');
+    expect(await wporgPlugins(['redirection', 'wandworks-pro', 'down', 'Bad Slug'], store, fetcher, now)).toEqual({ redirection: { name: 'Redirection Pro', version: '5.5.2' }, 'wandworks-pro': null });
+    expect(asked.sort()).toEqual(['down', 'redirection', 'wandworks-pro']);
+    await wporgPlugins(['redirection', 'wandworks-pro', 'down'], store, fetcher, now + 3_600_000);
+    expect(asked.filter((s) => s === 'redirection')).toHaveLength(1);
+    expect(asked.filter((s) => s === 'down')).toHaveLength(2);
+  });
+});

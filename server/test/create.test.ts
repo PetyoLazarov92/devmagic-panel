@@ -649,3 +649,25 @@ describe('site.create and trust', () => {
     expect(lines(s.calls).filter((l) => l.startsWith('git clone') || l.includes('site-dir-create'))).toEqual([]);
   });
 });
+
+describe('site.create and missing plugins', () => {
+  it('installs the plugins the dump has after the import, notes one that fails and goes on, and Undo removes them', async () => {
+    const s = await setup((wpBase) => ({
+      [`${wpBase} plugin install`]: (call) => {
+        const slug = call.args[4] as string;
+        if (slug === 'wandworks-pro') return { code: 1, stderr: 'Error: Plugin not found.' };
+        mkdirSync(join(s.docroot, 'wp-content', 'plugins', slug), { recursive: true });
+        return { stdout: 'Success' };
+      },
+      [`${wpBase} plugin verify-checksums`]: { stdout: 'Success' },
+    }));
+    const view = await settle(s.jobs, (await runAction(s.ctx, 'site.create', { ...s.input, installPlugins: [{ slug: 'wandworks-pro' }, { slug: 'redirection', version: '5.5.1' }] })).data?.jobId ?? '');
+    expect(view.status).toBe('done');
+    const step = view.steps.find((x) => x.id === 'install-plugins');
+    expect(step?.status).toBe('done');
+    expect(step?.output).toContain('installed 1 of 2; not installed: wandworks-pro');
+    expect(existsSync(join(s.docroot, 'wp-content/plugins/redirection'))).toBe(true);
+    // The next install of the repo ticks it again.
+    expect(s.store.preset(repoKey(s.input.repos[0]?.url ?? '') as string)).toMatchObject({ installPlugins: ['wandworks-pro', 'redirection'] });
+  });
+});

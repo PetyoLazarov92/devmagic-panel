@@ -30,9 +30,10 @@ export const MAX_UPLOAD_BYTES = 20 * 1024 ** 3;
  * http:// links for, read to the end of the dump. 4: the hosts each table
  * has, so search and replace can leave out the tables without them. 5:
  * whether it makes views, triggers or routines, which decides whether an
- * import can go through a side database.
+ * import can go through a side database. 6: every plugin the dump names, by
+ * file, with its version and WordPress.org slug from the update check.
  */
-export const DUMP_SCAN_VERSION = 5;
+export const DUMP_SCAN_VERSION = 6;
 /** A dump no job needs goes after a day: a wizard left half way, or one uploaded again. */
 export const UPLOAD_KEEP_MS = 24 * 3_600_000;
 const EXTENSIONS = ['.sql', '.sql.gz', '.zip'];

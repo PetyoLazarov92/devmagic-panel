@@ -1,4 +1,4 @@
-import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, RepoBuild, TrustedOwner, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, RepoBuild, TrustedOwner, DumpPlugin, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, apacheModuleLock, DEFAULT_CLAUDE_STEPS, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
@@ -187,6 +187,16 @@ function advance(job: JobView, list: 'steps' | 'undo', failAt?: string, outputs:
 
 // An organization in the mockup: its repos, what Claude reads from one, and the dumps its links point to.
 const MOCK_DUMP_UPLOAD = '00000000-0000-4000-8000-0000000000d1';
+/** Plugins a sample dump names: active, installed on production only, one premium and one renamed. */
+const MOCK_DUMP_PLUGINS: DumpPlugin[] = [
+  { file: 'woocommerce/woocommerce.php', active: true, version: '9.4.1', slug: 'woocommerce' },
+  { file: 'woocommerce-gateway-stripe/woocommerce-gateway-stripe.php', active: true, version: '8.9.0', slug: 'woocommerce-gateway-stripe' },
+  { file: 'wandworks-pro-forms/loader.php', active: true, version: '3.2.0' },
+  { file: 'redirection/redirection.php', active: true, version: '5.5.1', slug: 'redirection' },
+  { file: 'wp-rocket/wp-rocket.php', active: true, version: '3.17.2' },
+  { file: 'duplicate-post/duplicate-post.php', active: false, version: '4.5', slug: 'duplicate-post' },
+  { file: 'hello.php', active: false, version: '1.7.2', slug: 'hello-dolly' },
+];
 let mockOrgSettings: OrgSettings = { selected: ['wandworks', 'gitlab.com/wandworks-web', 'gitlab.com/~shared'], gitlabHosts: ['git.wandworks.test'], accountHosts: ['github.com', 'gitlab.com'], ...structuredClone(DEFAULT_CLAUDE_STEPS) };
 // A GitLab group in the mockup, its projects in subgroups: two of one name, kept apart by their path.
 const mockGitlabRepos: OrgRepo[] = [
@@ -248,7 +258,7 @@ async function mockUpload(file: File, onProgress: (fraction: number) => void): P
   const tableHosts = Object.fromEntries(
     ['wp_options', 'wp_posts', 'wp_postmeta', 'wp_users', 'wp_usermeta', 'wp_comments', 'wp_wc_orders', 'wp_wc_orders_meta', 'wp_woocommerce_order_items', 'wp_woocommerce_sessions', 'wp_gf_entry', 'wp_gf_entry_meta', 'wp_actionscheduler_logs', 'wp_wfHits', 'wp_redirection_404'].map((t) => [t, ['www.spellbook.example']]),
   );
-  return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://www.spellbook.example', home: 'https://www.spellbook.example', dbVersion: 61833, multisite: false, hosts, activePlugins: plugins, partial: false, httpHosts: [], tableHosts, storedObjects: false, admins: ['admin', 'spellbookadmin'] }, suggestions: { replace: suggest(hosts) } };
+  return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://www.spellbook.example', home: 'https://www.spellbook.example', dbVersion: 61833, multisite: false, hosts, activePlugins: plugins, plugins: MOCK_DUMP_PLUGINS, partial: false, httpHosts: [], tableHosts, storedObjects: false, admins: ['admin', 'spellbookadmin'] }, suggestions: { replace: suggest(hosts) } };
 }
 
 /** The store dump an organization's links find in the mockup. */
@@ -256,7 +266,7 @@ async function mockStoreUpload(id: string): Promise<UploadResult> {
   await wait(150);
   return {
     id, name: 'wandworks-store-2026-10-24.sql.gz', size: 432_000_000,
-    facts: { tablePrefix: 'wp_', siteUrl: 'https://www.wandworks-store.example', home: 'https://www.wandworks-store.example', dbVersion: 58975, multisite: false, hosts: ['www.wandworks-store.example', 'wandworks-store.de'], activePlugins: ['woocommerce', 'woocommerce-gateway-stripe', 'wp-rocket'], partial: false, admins: ['admin', 'wandworksshop'] },
+    facts: { tablePrefix: 'wp_', siteUrl: 'https://www.wandworks-store.example', home: 'https://www.wandworks-store.example', dbVersion: 58975, multisite: false, hosts: ['www.wandworks-store.example', 'wandworks-store.de'], activePlugins: ['woocommerce', 'woocommerce-gateway-stripe', 'wp-rocket'], plugins: MOCK_DUMP_PLUGINS, partial: false, admins: ['admin', 'wandworksshop'] },
     suggestions: { replace: [{ from: 'www.wandworks-store.example', to: 'local.wandworks-store.example' }, { from: 'wandworks-store.de', to: 'local.wandworks-store.de' }] },
   };
 }
@@ -572,6 +582,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'space', label: 'Check free disk space' },
       { id: 'download', label: `Download ${String(input.path).split('/').pop()} from ${String(input.remote)} and read it` },
     ],
+    'site.installPlugins': [{ id: 'plugins', label: `Install ${(input.plugins as unknown[] | undefined)?.length ?? 0} plugins from WordPress.org` }],
     'site.takeOver': [
       { id: 'cert', label: 'Issue a certificate for 2 names from the local CA' },
       { id: 'vhost', label: "Put the panel's vhost in place of the site's own" },
@@ -1934,6 +1945,21 @@ export const mockApi: Api = {
   downloads: async () => {
     await wait(150);
     return [{ file: '/home/wandworksco/Downloads/wandworks-store-2026-10-24.sql.gz', name: 'wandworks-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: new Date(Date.now() - 20 * 60_000).toISOString() }];
+  },
+  missingPlugins: async () => {
+    await wait(300);
+    return MOCK_DUMP_PLUGINS.filter((p) => ['redirection/redirection.php', 'wandworks-pro-forms/loader.php', 'duplicate-post/duplicate-post.php'].includes(p.file));
+  },
+  wporgPlugins: async (slugs) => {
+    await wait(250);
+    const known: Record<string, { name: string; version: string }> = {
+      woocommerce: { name: 'WooCommerce', version: '9.5.2' },
+      'woocommerce-gateway-stripe': { name: 'WooCommerce Stripe Payment Gateway', version: '9.0.0' },
+      redirection: { name: 'Redirection', version: '5.5.2' },
+      'duplicate-post': { name: 'Yoast Duplicate Post', version: '4.5' },
+      'hello-dolly': { name: 'Hello Dolly', version: '1.7.2' },
+    };
+    return Object.fromEntries(slugs.map((s) => [s, known[s] ?? null]));
   },
   takeoverPreview: async (domain) => {
     await wait(300);

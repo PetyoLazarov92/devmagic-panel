@@ -122,6 +122,8 @@ export const siteBuild = buildStep.extend({ repo: z.number().int().min(0).max(MA
 export const CORE_MODES = ['wpcore', 'standalone', 'repo'] as const;
 
 export const wpSlug = z.string().regex(/^[a-z0-9_-]{1,100}$/, 'A plugin slug like wp-rocket');
+/** A plugin to install from WordPress.org: its slug there, and production's version when known. Never a zip or URL. */
+export const pluginInstall = z.object({ slug: wpSlug, version: z.string().regex(/^\d[0-9A-Za-z.+-]{0,39}$/, 'A version like 5.3.1').optional() });
 
 /** Plugins that help on a local copy; the wizard turns on the ones the repo has, when you tick them. Nothing is downloaded. */
 export const LOCAL_HELPER_PLUGINS = {
@@ -249,6 +251,8 @@ export const repoPreset = z.object({
   deactivate: z.array(wpSlug).max(50).default([]),
   /** Local helper plugins to activate when the repo has them. */
   activate: z.array(localHelper).max(10).default([]),
+  /** Plugins installed from WordPress.org because no repo had them, by slug. */
+  installPlugins: z.array(wpSlug).max(100).optional(),
   /** Production host that serves uploads missing locally. */
   uploadsFrom: hostname.optional(),
   uploadsVia: uploadsVia.optional(),
@@ -1484,6 +1488,13 @@ export const actions = {
       .object({ id: trashId, confirm: z.string() })
       .refine((v) => v.id.startsWith(`${v.confirm}-`) && localName.safeParse(v.confirm).success, { path: ['confirm'], message: 'Type the domain to confirm' }),
   },
+  'site.installPlugins': {
+    title: 'Install missing plugins from WordPress.org',
+    description:
+      "Installs plugins the site's database has but its files lack, from WordPress.org only, by slug, at production's version when given (else, or when that version is gone, the latest). Each is tried in turn: one that fails is noted and the rest go on. WordPress.org's checksums are checked after each, a folder inside a repo is kept out of its git status locally, and nothing is activated: the database says which are active. Undo removes what it installed. Starts a job.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, plugins: z.array(pluginInstall).min(1).max(100) }),
+  },
   'site.takeOver': {
     title: 'Take over a site made by hand',
     description:
@@ -1539,6 +1550,8 @@ export const actions = {
         deactivate: z.array(wpSlug).max(50).default([]),
         /** Local helper plugins the repo already has, to activate; one the site lacks is skipped, never downloaded. */
         activate: z.array(localHelper).max(10).default([]),
+        /** Plugins the dump has that no repo brings, installed from WordPress.org after the import; one that fails is noted and the rest go on. */
+        installPlugins: z.array(pluginInstall).max(100).default([]),
         /** Production host that serves uploads missing locally. */
         uploadsFrom: hostname.optional(),
         /** redirect: the panel's vhost (Local mode under a path); plugin: BE Media from Production, which the repo must have. */

@@ -1,8 +1,8 @@
 import { createReadStream, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createGunzip } from 'node:zlib';
-import type { DumpFacts } from '@devmagic-panel/shared';
-import { DUMP_SCAN_GB } from '@devmagic-panel/shared';
+import type { DumpFacts, DumpPlugin, PhpValue } from '@devmagic-panel/shared';
+import { DUMP_SCAN_GB, parsePhpSerialized } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { freeSpace } from './space.js';
 
@@ -120,12 +120,21 @@ interface OptionValues {
   dbVersion?: string;
   blogname?: string;
   activePlugins?: string[];
+  /** The active plugins by file, as active_plugins has them. */
+  activeFiles?: string[];
+  /** The plugins turned off in the last week, by file. */
+  recentFiles?: string[];
+  /** WordPress's update check, as stored (_site_transient_update_plugins on a single site). */
+  updatePlugins?: string;
 }
 
 /** What a network's meta table says. */
 interface NetworkMeta {
   subdomainInstall?: boolean;
   sitewide?: string[];
+  sitewideFiles?: string[];
+  /** A network's update check, kept in its meta table. */
+  updatePlugins?: string;
   admins?: string[];
 }
 
@@ -151,6 +160,8 @@ export interface ScanState {
   meta: Map<string, NetworkMeta>;
   /** A domain mapping plugin's table: the active domain of each blog. */
   mapping: Map<string, Map<number, string>>;
+  /** The update check read once: the scan resolves its facts after every chunk. */
+  updateCheck?: { raw: string; plugins: Map<string, { version?: string; slug?: string }> };
 }
 
 export const emptyScan = (): ScanState => ({ tables: [], logins: new Map(), adminIds: new Set(), prefixes: [], options: new Map(), blogs: new Map(), site: new Map(), meta: new Map(), mapping: new Map() });
@@ -168,6 +179,72 @@ const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Plugin slugs from a serialized list of plugin paths like akismet/akismet.php. */
 const pluginSlugs = (serialized: string) =>
   [...serialized.matchAll(/s:\d+:\\?"([^"\\]+)\\?"/g)].map((p) => (p[1] as string).split('/')[0]?.replace(/\.php$/, '') ?? '').filter((slug) => /^[a-z0-9_-]{1,100}$/.test(slug));
+
+/** A plugin's file in wp-content/plugins as WordPress names it: akismet/akismet.php or hello.php, nothing that leaves the folder. */
+export const PLUGIN_FILE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}(?:\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99})?\.php$/;
+
+/** Plugin files from a serialized list or map of them (active_plugins, active_sitewide_plugins, recently_activated). */
+const pluginFiles = (serialized: string) =>
+  [...new Set([...serialized.matchAll(/s:\d+:\\?"([^"\\]+)\\?"/g)].map((p) => p[1] as string).filter((f) => PLUGIN_FILE.test(f) && !f.includes('..')))];
+
+/**
+ * WordPress's update check for plugins, a serialized object: every plugin
+ * installed with its version (checked), and the WordPress.org slug of the
+ * ones the check found there (response, no_update). Nothing else is read.
+ */
+export function readUpdateCheck(serialized: string): Map<string, { version?: string; slug?: string }> {
+  const out = new Map<string, { version?: string; slug?: string }>();
+  const value = parsePhpSerialized(serialized);
+  if (!value || (value.type !== 'object' && value.type !== 'array')) return out;
+  const field = (v: PhpValue, name: string) => (v.type === 'object' || v.type === 'array' ? v.entries.find(([k]) => k.type === 'string' && k.value === name)?.[1] : undefined);
+  const text = (v: PhpValue | undefined) => (v?.type === 'string' ? v.value : undefined);
+  const checked = field(value, 'checked');
+  if (checked?.type === 'array') {
+    for (const [k, v] of checked.entries) {
+      const file = text(k);
+      const version = text(v);
+      if (file && PLUGIN_FILE.test(file) && !file.includes('..')) out.set(file, { ...(version && /^[\w.+-]{1,40}$/.test(version) ? { version } : {}) });
+    }
+  }
+  for (const list of ['response', 'no_update']) {
+    const known = field(value, list);
+    if (known?.type !== 'array') continue;
+    for (const [k, v] of known.entries) {
+      const file = text(k);
+      const slug = text(field(v, 'slug'));
+      if (file && PLUGIN_FILE.test(file) && slug && /^[a-z0-9_-]{1,100}$/.test(slug)) out.set(file, { ...out.get(file), slug });
+    }
+  }
+  return out;
+}
+
+/** Every plugin a dump names, from the main site, a network's other sites and meta, and the update check. */
+export function dumpPlugins(state: ScanState, prefix: string): DumpPlugin[] {
+  const main = state.options.get(`${prefix}options`) ?? {};
+  const meta = state.meta.get(`${prefix}sitemeta`) ?? {};
+  const byFile = new Map<string, DumpPlugin>();
+  const get = (file: string) => byFile.get(file) ?? { file, active: false };
+  const sub = new RegExp(`^${escapeRe(prefix)}\\d+_options$`);
+  const sites = [main, ...[...state.options].filter(([table]) => sub.test(table)).map(([, v]) => v)];
+  for (const site of sites) {
+    for (const file of site.activeFiles ?? []) {
+      const p = get(file);
+      byFile.set(file, { ...p, active: true, sites: (p.sites ?? 0) + 1 });
+    }
+  }
+  for (const file of meta.sitewideFiles ?? []) byFile.set(file, { ...get(file), active: true, network: true });
+  const raw = meta.updatePlugins ?? main.updatePlugins ?? '';
+  if (state.updateCheck?.raw !== raw) state.updateCheck = { raw, plugins: raw ? readUpdateCheck(unquote(raw)) : new Map() };
+  const check = state.updateCheck.plugins;
+  for (const [file, known] of check) byFile.set(file, { ...get(file), ...known });
+  for (const file of main.recentFiles ?? []) byFile.set(file, get(file));
+  // One site's count says nothing on a single site.
+  const network = sites.length > 1 || Boolean(meta.sitewideFiles);
+  return [...byFile.values()]
+    .map((p) => (network ? p : (({ sites: _n, ...rest }) => rest)(p)))
+    .sort((a, b) => Number(b.active) - Number(a.active) || a.file.localeCompare(b.file))
+    .slice(0, 1000);
+}
 
 /** A table prefix the scan has seen, from an options table (wp_ or a subsite's wp_10_) or the network's blogs table. */
 function notePrefix(state: ScanState, table: string): void {
@@ -196,13 +273,18 @@ function readRows(table: string | undefined, rows: string, state: ScanState): vo
   if (!table || !rows) return;
   if (table.endsWith('options')) {
     const values = state.options.get(table) ?? {};
-    for (const m of rows.matchAll(new RegExp(`\\(\\d+,'(siteurl|home|db_version|blogname|active_plugins)',${QUOTED}`, 'g'))) {
+    for (const m of rows.matchAll(new RegExp(`\\(\\d+,'(siteurl|home|db_version|blogname|active_plugins|recently_activated|_site_transient_update_plugins)',${QUOTED}`, 'g'))) {
       const value = m[2] ?? '';
       if (m[1] === 'siteurl') values.siteurl ??= unquote(value);
       else if (m[1] === 'home') values.home ??= unquote(value);
       else if (m[1] === 'blogname') values.blogname ??= plainName(unquote(value));
       else if (m[1] === 'db_version') values.dbVersion ??= value;
-      else values.activePlugins ??= pluginSlugs(value);
+      else if (m[1] === 'recently_activated') values.recentFiles ??= pluginFiles(value);
+      else if (m[1] === '_site_transient_update_plugins') values.updatePlugins ??= value;
+      else {
+        values.activePlugins ??= pluginSlugs(value);
+        values.activeFiles ??= pluginFiles(value);
+      }
     }
     if (Object.keys(values).length) state.options.set(table, values);
     return;
@@ -219,10 +301,14 @@ function readRows(table: string | undefined, rows: string, state: ScanState): vo
   }
   if (table.endsWith('sitemeta')) {
     const meta = state.meta.get(table) ?? {};
-    for (const m of rows.matchAll(new RegExp(`\\(\\d+,\\d+,'(subdomain_install|active_sitewide_plugins|site_admins)',${QUOTED}\\)`, 'g'))) {
+    for (const m of rows.matchAll(new RegExp(`\\(\\d+,\\d+,'(subdomain_install|active_sitewide_plugins|site_admins|_site_transient_update_plugins)',${QUOTED}\\)`, 'g'))) {
       const value = m[2] ?? '';
       if (m[1] === 'subdomain_install') meta.subdomainInstall ??= value === '1';
-      else if (m[1] === 'active_sitewide_plugins') meta.sitewide ??= pluginSlugs(value);
+      else if (m[1] === '_site_transient_update_plugins') meta.updatePlugins ??= value;
+      else if (m[1] === 'active_sitewide_plugins') {
+        meta.sitewide ??= pluginSlugs(value);
+        meta.sitewideFiles ??= pluginFiles(value);
+      }
       else meta.admins ??= [...value.matchAll(/s:\d+:\\?"([^"\\]+)\\?"/g)].map((x) => x[1] as string).filter((l) => LOGIN.test(l));
     }
     if (Object.keys(meta).length) state.meta.set(table, meta);
@@ -288,6 +374,8 @@ function resolve(facts: DumpFacts, state: ScanState): void {
   if (main.dbVersion && /^\d+$/.test(main.dbVersion)) facts.dbVersion = Number(main.dbVersion);
   const meta = state.meta.get(`${prefix}sitemeta`) ?? {};
   if (main.activePlugins || meta.sitewide) facts.activePlugins = [...new Set([...(main.activePlugins ?? []), ...(meta.sitewide ?? [])])];
+  const plugins = dumpPlugins(state, prefix);
+  if (plugins.length) facts.plugins = plugins;
   if (meta.admins) state.superAdmins = meta.admins;
   const blogs = state.blogs.get(`${prefix}blogs`) ?? [];
   if (blogs.length || state.tables.includes(`${prefix}blogs`)) facts.multisite = true;

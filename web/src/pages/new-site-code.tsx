@@ -69,8 +69,8 @@ export function useRepoLookups(state: WizardState, setState: SetState) {
         busy.current.add(key);
         setState((s) => updateRow(s, row.url, (r) => ({ ...r, helpers: { key } })));
         api.repoHelpers(row.url, row.branch).then(
-          ({ helpers: list, mediaPlugin, builds, kind, core, uploads }) =>
-            setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}) } }))),
+          ({ helpers: list, mediaPlugin, builds, kind, core, uploads, plugins }) =>
+            setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) } }))),
           (err: Error) => setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, error: err.message } }))),
         );
       }

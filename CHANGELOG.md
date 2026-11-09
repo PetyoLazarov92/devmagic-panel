@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.29.0 (2026-11-09)
+* **Sites:** plugins a dump has that none of the install's repos brings show on the wizard's WordPress step as Missing plugins: active ones on WordPress.org install from there after the import at production's version, others can be turned off or left, and ones production had installed but not active are listed apart. The next install of the repo ticks the same ones
+* **Sites:** a site's Plugins tab has a Missing plugins card after a database import or a pull, to install the ones on WordPress.org, with Undo
+* **Sites:** each plugin installs on its own: one that fails, like a premium plugin WordPress.org does not have, is noted and the rest go on; success is WP-CLI's exit code, nothing of the site is loaded, every plugin is checked against WordPress.org's checksums and kept out of git locally, and production's version falls back to the latest when it is gone
+* **Sites:** the dump scan reads every plugin a dump names: the active ones of every site of a network and network-wide ones, and from WordPress's update check the ones installed but not active, with their version and WordPress.org slug
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.28.1 (2026-11-09)
 * **Fix:** the Made by hand and Taken over card on a site's Overview has its icon on the right of its title, like the other cards
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

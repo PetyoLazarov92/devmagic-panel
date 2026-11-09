@@ -38,6 +38,7 @@ import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseD
 import { type Getter, shownUrl, urlProblem } from './sites/fetch-dump.js';
 import { MoreDumpsRefused, planLocalDump, planServerDump } from './sites/more-dumps.js';
 import { giveBack, planTakeOver, TakeoverRefused } from './sites/takeover.js';
+import { installPlugins, removeInstalled } from './sites/install-plugins.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
 import { planRemove, RemoveRefused, stampDate } from './sites/remove.js';
@@ -662,6 +663,19 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     const steps = [removeCronStep(ctx, input.domain), ...planRemove(ctx, input)];
     const view = ctx.jobs.start(steps, { runId: ctx.runId as number, title: `Remove ${input.domain}`, target: input.domain, kind: 'site.remove' });
     return { results: [{ code: 0, stdout: `started ${view.id}`, stderr: '' }], data: { jobId: view.id }, detached: true };
+  },
+  'site.installPlugins': async (ctx, input) => {
+    const site = siteFor(ctx.config, input.domain, input.path);
+    const step: JobStep = {
+      id: 'plugins',
+      label: `Install ${input.plugins.length} plugin${input.plugins.length === 1 ? '' : 's'} from WordPress.org`,
+      run: async (job) => {
+        const out = await installPlugins(ctx.exec, site.docroot, site.host, input.plugins);
+        if (out.installed.length) job.onUndo(`Remove the ${out.installed.length} plugin${out.installed.length === 1 ? '' : 's'} it installed`, async () => removeInstalled(out.installed));
+        return out.results;
+      },
+    };
+    return startJob(ctx, [step], `Install missing plugins on ${site.host}`, site.host);
   },
   'site.takeOver': async (ctx, input) => startJob(ctx, await planTakeOver(ctx, input), `Take over ${input.domain}`, input.domain),
   'site.giveBack': async (ctx, input) => giveBack(ctx, input),

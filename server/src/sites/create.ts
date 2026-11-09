@@ -32,6 +32,7 @@ import { mysqlPassword } from './mysql-password.js';
 import { setConstant, setTablePrefix } from './wpconfig-edit.js';
 import { readLocalConstants } from '../local-constants.js';
 import { excludeLocally } from './mu-plugins.js';
+import { installPlugins, removeInstalled } from './install-plugins.js';
 import { NO_PROMPTS } from './git.js';
 
 export interface CreateContext {
@@ -566,6 +567,16 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
       if (results.every((r) => !r.stdout)) results.push(ok('none of them were active'));
       return results;
     });
+  }
+
+  // Plugins the dump has that no repo brought: from WordPress.org, each on its own, a failure noted and the rest installed.
+  if (isWp && input.installPlugins.length > 0) {
+    const n = input.installPlugins.length;
+    add('install-plugins', `Install ${n} missing plugin${n === 1 ? '' : 's'} from WordPress.org`, async (job) => {
+      const out = await installPlugins(exec, docroot, host, input.installPlugins);
+      if (out.installed.length) job.onUndo(`Remove the ${out.installed.length} plugin${out.installed.length === 1 ? '' : 's'} installed from WordPress.org`, async () => removeInstalled(out.installed));
+      return out.results;
+    }, 2, `The plugins were not installed from WordPress.org: install them on the site's Plugins tab, under Missing plugins.`);
   }
 
   if (input.source === 'repo' && dumpFile && input.admin && !(input.admin.ifExists === 'keep' && input.admin.ifMissing === 'skip')) {

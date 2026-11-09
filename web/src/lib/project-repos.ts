@@ -12,6 +12,8 @@ export interface RepoHelpers {
   kind?: RepoLookup['kind'];
   core?: RepoLookup['core'];
   uploads?: boolean;
+  /** Its plugin folders, as paths in the repo. */
+  plugins?: string[];
   error?: string;
 }
 

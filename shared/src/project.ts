@@ -30,6 +30,7 @@ export function presetFromCreate(input: ActionInput<'site.create'>): RepoPreset 
     ...(input.core ? { core: input.core } : {}),
     deactivate: input.deactivate,
     activate: input.activate,
+    ...(input.installPlugins.length ? { installPlugins: input.installPlugins.map((p) => p.slug) } : {}),
     ...(input.uploadsFrom ? { uploadsFrom: input.uploadsFrom, uploadsVia: input.uploadsVia } : {}),
     ...(input.builds ? { builds: input.builds } : { build: input.build }),
     ...(input.network ? { network: input.network } : {}),

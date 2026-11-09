@@ -1,4 +1,4 @@
-import type { AddressInput, InstallDraft, RepoTrustAnswer, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
+import type { AddressInput, DumpPlugin, InstallDraft, RepoTrustAnswer, WporgPlugin, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
 import { actions, addressSummary, presetPlacement, repoTarget, branchName, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin } from '@devmagic-panel/shared';
 import { ArrowLeft, ArrowRight, Check, TriangleAlert, ChevronRight, CircleAlert, CircleCheck, FolderGit2, Globe, LoaderCircle, Plus, Search, Sparkles, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,6 +17,7 @@ import { NetworkSection } from './new-site-network';
 import { Input, Textarea } from '@/components/ui/input';
 import { SecretInput } from '@/components/ui/secret-input';
 import { Switch } from '@/components/ui/switch';
+import { Segmented } from '@/components/ui/segmented';
 import { ReleaseListLink } from '@/components/release-link';
 import { api, type DraftInput } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
@@ -33,7 +34,8 @@ import { pluginMatches } from '@/lib/plugin-search';
 import { answersHash, stepViews } from '@/lib/steps';
 import { useAsync } from '@/lib/use-async';
 import { savePreferences, usePreferences } from '@/lib/preferences';
-import { allRows, placementOf, type RepoRow, rowPlacement } from '@/lib/project-repos';
+import { allRows, placementOf, type RepoHelpers, type RepoRow, rowPlacement } from '@/lib/project-repos';
+import { defaultPick, missingPlugins, pluginChoices, type PluginPick, pluginSlug, repoPluginPaths } from '@/lib/missing-plugins';
 import { pastedRepo } from '@/lib/org-repos';
 import { asideUploads } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
@@ -75,7 +77,7 @@ export interface WizardState {
   deactivate: string[];
   activate: LocalHelperPlugin[];
   /** The local helpers the repo's branch has, and whether it has BE Media from Production, read in the background for repo URL and branch `key`. */
-  helpers: { key: string; list?: LocalHelperPlugin[]; media?: boolean; builds?: RepoBuild[]; kind?: RepoLookup['kind']; core?: RepoLookup['core']; uploads?: boolean; error?: string } | null;
+  helpers: RepoHelpers | null;
   /** Your ticks and scripts in the build checklist, by row (lib/builds); unset rows follow the lookup and the docs. */
   buildPicks: Record<string, BuildPick>;
   /** Where missing images load from; null until set: the first step 2 address that is not a local name. Empty: none. */
@@ -108,6 +110,12 @@ export interface WizardState {
   dumpSource?: DumpSource;
   /** No dump: a fresh WordPress on the repo's code. */
   noDump: boolean;
+  /** What you chose for each plugin the dump has that no repo brings, by its file; unset ones follow defaultPick. */
+  pluginPicks: Record<string, PluginPick>;
+  /** WordPress.org's answer for each missing plugin's slug: its name and latest version, or null when it does not have it. */
+  wporg: Record<string, WporgPlugin | null>;
+  /** The plugins the last install of the repo installed from WordPress.org, ticked again. */
+  rememberedPlugins: string[];
   /** A hash of each step's answers when you continued from it, so the step list can open the steps you reached (lib/steps). */
   passed: Partial<Record<Step, string>>;
 }
@@ -131,6 +139,9 @@ const initial: WizardState = {
   extra: [],
   trust: {},
   noDump: false,
+  pluginPicks: {},
+  wporg: {},
+  rememberedPlugins: [],
   upload: null,
   domains: [{ prod: '', local: '' }],
   coreMode: 'wpcore',
@@ -205,6 +216,7 @@ function applyPreset(state: WizardState, found: RepoInspection, cores: string[])
     // Local addresses always come from the dump (or you), never from the last install; helpers are always your pick.
     ...(project.core && coreOk ? { coreMode: project.core.mode, ...(project.core.version ? { coreVersion: project.core.version } : {}) } : {}),
     deactivate: project.deactivate,
+    rememberedPlugins: project.installPlugins ?? [],
     // A network's layout and its sites' addresses, by blog id, as you set them last time.
     ...(project.network ? { network: networkAnswersOf(project.network) } : {}),
     uploadsFrom: project.uploadsFrom ?? '',
@@ -227,7 +239,7 @@ const STEP_ANSWERS: Record<Step, (s: WizardState) => unknown> = {
   access: (s) => [s.org?.access.status],
   database: (s) => [s.upload?.id, s.noDump],
   domains: (s) => [s.domains, s.under, s.replaceExisting, s.replaceOn, s.network, s.server],
-  wordpress: (s) => [s.coreMode, s.coreVersion, s.adminUser, s.adminEmail, s.adminIfExists, s.adminIfMissing, s.adminCreate, s.deactivate, s.activate, s.uploadsFrom, s.uploadsVia, s.composer, s.npm, s.buildPicks],
+  wordpress: (s) => [s.coreMode, s.coreVersion, s.adminUser, s.adminEmail, s.adminIfExists, s.adminIfMissing, s.adminCreate, s.deactivate, s.activate, s.uploadsFrom, s.uploadsVia, s.composer, s.npm, s.buildPicks, s.pluginPicks],
   review: () => null,
 };
 
@@ -283,6 +295,16 @@ export function networkFor(state: WizardState): NetworkPlan | null {
   return under ? null : networkPlan(state.upload.facts, state.network ?? NO_NETWORK_ANSWERS, locals[0] ?? '', replace, locals);
 }
 
+/** The plugins the dump has that no repo brings, and whether every repo's lookup is in to tell. */
+export function missingOf(state: WizardState): { missing: DumpPlugin[]; reading: boolean } {
+  const plugins = state.upload?.facts.plugins;
+  if (state.source !== 'repo' || state.noDump || !plugins?.length) return { missing: [], reading: false };
+  const rows = placedRows(state);
+  const reading = rows.some((r) => !r.helpers || (!r.helpers.plugins && !r.helpers.error && !r.helpers.list));
+  const present = repoPluginPaths(rows.map((r) => ({ placement: r.placement, ...(r.helpers?.plugins ? { plugins: r.helpers.plugins } : {}) })));
+  return { missing: reading ? [] : missingPlugins(plugins, present), reading };
+}
+
 /** The request the server gets, built from what the wizard collected. */
 export function toInput(state: WizardState): CreateSiteInput {
   const { under, replace, locals: names } = addressesOf(state);
@@ -298,6 +320,7 @@ export function toInput(state: WizardState): CreateSiteInput {
   const uploadsOk = hostname.safeParse(uploadsFrom).success && !isLocalName(uploadsFrom);
   const active = new Set(state.upload?.facts.activePlugins ?? []);
   // The local helpers any of the repos has.
+  const missing = pluginChoices(missingOf(state).missing, state.pluginPicks, state.wporg, state.rememberedPlugins);
   const helpers = state.helpers?.list || state.extra.some((r) => r.helpers?.list) ? [...new Set([...(state.helpers?.list ?? []), ...state.extra.flatMap((r) => r.helpers?.list ?? [])])] : undefined;
   return {
     source: state.source,
@@ -324,8 +347,9 @@ export function toInput(state: WizardState): CreateSiteInput {
           },
         }
       : {}),
-    // BE Media from Production loading the images is never also deactivated.
-    deactivate: isRepo && state.upload ? state.deactivate.filter((slug) => !(via === 'plugin' && uploadsOk && slug === MEDIA_PLUGIN)) : [],
+    // BE Media from Production loading the images is never also deactivated; a missing plugin you chose to turn off joins the list.
+    deactivate: isRepo && state.upload && !state.noDump ? [...new Set([...state.deactivate, ...missing.off])].filter((slug) => !(via === 'plugin' && uploadsOk && slug === MEDIA_PLUGIN)) : [],
+    installPlugins: isRepo && state.upload && !state.noDump ? missing.install : [],
     // Only helpers a repo has, not the ones the dump has on already, and never one set to deactivate.
     activate: isRepo && helpers ? state.activate.filter((slug) => helpers.includes(slug) && !active.has(slug) && !state.deactivate.includes(slug)) : [],
     ...(isRepo && uploadsOk ? { uploadsFrom, uploadsVia: via } : { uploadsVia: 'redirect' as const }),
@@ -656,14 +680,14 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
     const timer = window.setTimeout(() => {
       setState((s) => ({ ...s, helpers: { key: helpersKey } }));
       api.repoHelpers(repoUrl, state.branch).then(
-        ({ helpers: list, mediaPlugin, builds, kind, core, uploads }) =>
+        ({ helpers: list, mediaPlugin, builds, kind, core, uploads, plugins }) =>
           // Nothing is ticked for you: you pick the helpers to turn on. A repo with core of its own uses it, unless you chose.
           setState((s) =>
             s.helpers?.key !== helpersKey
               ? s
               : {
                   ...s,
-                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}) },
+                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) },
                   activate: s.activate.filter((slug) => list.includes(slug)),
                   coreMode: core && !s.passed.wordpress ? 'repo' : !core && s.coreMode === 'repo' ? 'wpcore' : s.coreMode,
                 },
@@ -1478,6 +1502,8 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
               })}
             </div>
 
+            <MissingPluginsSection state={state} set={set} />
+
             <HelpersSection state={state} set={set} query={query} />
 
             <h2 className="mt-2 text-sm font-semibold">Load missing images from production</h2>
@@ -1683,6 +1709,78 @@ function PluginSearch({ value, onChange, found, total, ticked }: { value: string
         {ticked > 0 && ` · ${ticked} set to deactivate`}
       </p>
     </div>
+  );
+}
+
+/**
+ * Plugins the dump has that no repo brings: active ones on WordPress.org are
+ * installed after the import unless you choose otherwise, others can be
+ * turned off or left (WordPress turns a missing active plugin off itself).
+ * Inactive ones production had installed can be installed too.
+ */
+function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter }) {
+  const { missing, reading } = missingOf(state);
+  const unknown = [...new Set(missing.map(pluginSlug))].filter((slug) => !(slug in state.wporg));
+  const [asking, setAsking] = useState(false);
+  useEffect(() => {
+    if (unknown.length === 0 || asking) return;
+    setAsking(true);
+    api.wporgPlugins(unknown).then((answers) => set('wporg', { ...state.wporg, ...answers }), () => undefined).finally(() => setAsking(false));
+  }, [unknown.join('|')]);
+  if (!state.upload?.facts.plugins) return null;
+  const pick = (file: string, p: PluginPick) => set('pluginPicks', { ...state.pluginPicks, [file]: p });
+  const active = missing.filter((p) => p.active);
+  const inactive = missing.filter((p) => !p.active);
+  const row = (p: DumpPlugin) => {
+    const slug = pluginSlug(p);
+    const wp = state.wporg[slug];
+    const value = state.pluginPicks[p.file] ?? defaultPick(p, wp, state.rememberedPlugins);
+    const options: Array<[PluginPick, string]> = [
+      ...(wp ? ([['install', 'Install']] as Array<[PluginPick, string]>) : []),
+      ...(p.active ? ([['off', 'Turn off']] as Array<[PluginPick, string]>) : []),
+      ['leave', p.active ? 'Leave it' : 'Skip'],
+    ];
+    return (
+      <li key={p.file} className="grid gap-1.5 rounded-lg border px-3 py-2.5 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{wp?.name ?? slug}</span>
+          <code className="font-mono text-[12px] text-muted-foreground">{p.file}</code>
+          {p.network && <Badge>network</Badge>}
+          {p.sites !== undefined && p.sites > 1 && <Badge>{p.sites} sites</Badge>}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {wp === undefined
+            ? 'Asking WordPress.org...'
+            : wp
+              ? `On WordPress.org${p.version ? `: installs ${p.version}, production's version (latest ${wp.version})` : `, latest ${wp.version}`}.`
+              : 'Not on WordPress.org: a premium or custom plugin. Get it from its vendor or from production, or turn it off.'}
+        </p>
+        <Segmented label={`What to do with ${slug}`} value={value} onChange={(v) => pick(p.file, v)} options={options} className="justify-self-start" />
+      </li>
+    );
+  };
+  return (
+    <>
+      <h2 className="mt-2 text-sm font-semibold">Missing plugins</h2>
+      {reading ? (
+        <p className="-mt-2 text-xs text-muted-foreground">Comparing the dump's plugins with what the repos bring...</p>
+      ) : missing.length === 0 ? (
+        <p className="-mt-2 text-xs text-muted-foreground">The repos bring every plugin the dump has.</p>
+      ) : (
+        <>
+          <p className="-mt-2 text-xs text-muted-foreground">
+            In the dump, but in none of the repos. Installed from WordPress.org after the import, one at a time: one that fails is noted and the rest go on. They are kept out of git locally.
+          </p>
+          {active.length > 0 && <ul className="grid gap-2">{active.map(row)}</ul>}
+          {inactive.length > 0 && (
+            <details className="rounded-lg border bg-card px-3 py-2 text-sm">
+              <summary className="cursor-pointer font-medium">Installed on production, not active ({inactive.length})</summary>
+              <ul className="mt-3 grid gap-2">{inactive.map(row)}</ul>
+            </details>
+          )}
+        </>
+      )}
+    </>
   );
 }
 

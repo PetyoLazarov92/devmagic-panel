@@ -1,4 +1,4 @@
-import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -209,6 +209,8 @@ export interface Api {
   downloads: () => Promise<Array<{ file: string; name: string; sizeBytes: number; modifiedAt: string }>>;
   rcloneRemotes: () => Promise<RcloneRemotes>;
   takeoverPreview: (domain: string) => Promise<TakeoverPreview>;
+  missingPlugins: (domain: string, path?: string) => Promise<DumpPlugin[]>;
+  wporgPlugins: (slugs: string[]) => Promise<Record<string, WporgPlugin | null>>;
   remoteList: (remote: string, path: string) => Promise<RemoteEntry[]>;
   repoTrust: (url: string) => Promise<RepoTrustAnswer>;
   trustedOwners: () => Promise<TrustedOwner[]>;
@@ -406,6 +408,8 @@ const realApi: Api = {
   downloads: () => request('GET', '/api/downloads'),
   rcloneRemotes: () => request('GET', '/api/dumps/remotes'),
   takeoverPreview: (domain) => request('GET', `/api/sites/${encodeURIComponent(domain)}/takeover`),
+  missingPlugins: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/missing-plugins${atPath(path, '?')}`),
+  wporgPlugins: (slugs) => request('POST', '/api/wporg/plugins', { slugs }),
   remoteList: (remote, path) => request('POST', '/api/dumps/remote-list', { remote, path }),
   repoTrust: (url) => request('GET', `/api/repo-trust?url=${encodeURIComponent(url)}`),
   trustedOwners: () => request('GET', '/api/trusted-owners'),

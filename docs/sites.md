@@ -64,6 +64,18 @@ Each plugin on or off with one switch: search, filters, the updates WordPress
 already found, what each plugin needs and what needs it, and the plugins turned
 off at install and the local helpers marked. Undo is in the toast.
 
+**Missing plugins**, at the top while there are any: plugins the database
+names that the site's files lack, after a database import or a pull. Active
+ones (on any site of a network, or network-wide) and ones production had
+installed, read from WordPress's own update check, which also gives
+production's version and the plugin's WordPress.org slug. Ones on WordPress.org
+install from there, at production's version when it is known (else, or when
+that version is gone, the latest), one at a time: one that fails is noted and
+the rest go on. Each is checked against WordPress.org's checksums, kept out of
+git locally, and not activated: the database already says which are active.
+Undo removes what was installed. A premium or custom plugin is listed with
+where to get it.
+
 ### Database
 
 Overview (what needs a look, read from WordPress's tables), Tables, SQL,

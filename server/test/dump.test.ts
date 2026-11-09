@@ -118,6 +118,11 @@ CREATE TABLE \`wp_yoast_indexable\` (x int);
       hosts: ['local.wandworks.example'],
       // The main site's plugins only: a subsite's are its own.
       activePlugins: ['akismet'],
+      // Every plugin of the network, with how many sites use it, for the missing plugins.
+      plugins: [
+        { file: 'akismet/akismet.php', active: true, sites: 1 },
+        { file: 'outlet-only/outlet.php', active: true, sites: 1 },
+      ],
       partial: false,
       httpHosts: ['local.wandworks.example'],
       // The tables the dump creates and the hosts their rows link to: search and replace leaves out the ones without.
@@ -355,5 +360,33 @@ describe('wp-config edits', () => {
   it('sets the table prefix', () => {
     expect(setTablePrefix(sample, 'xyz_')).toContain("$table_prefix = 'xyz_';");
     expect(() => setTablePrefix(sample, "x'; evil")).toThrow();
+  });
+});
+
+describe('plugins a dump names', () => {
+  it('reads every plugin, active or installed, with production\'s version and WordPress.org slug from the update check', async () => {
+    const { readUpdateCheck } = await import('../src/sites/dump.js');
+    const check = 'O:8:"stdClass":4:{s:12:"last_checked";i:1762650000;s:7:"checked";a:3:{s:19:"akismet/akismet.php";s:5:"5.3.1";s:9:"hello.php";s:5:"1.7.2";s:24:"wandworks-pro/loader.php";s:5:"2.0.0";}s:8:"response";a:1:{s:19:"akismet/akismet.php";O:8:"stdClass":2:{s:4:"slug";s:7:"akismet";s:11:"new_version";s:5:"5.4.0";}}s:9:"no_update";a:1:{s:9:"hello.php";O:8:"stdClass":1:{s:4:"slug";s:11:"hello-dolly";}}}';
+    expect([...readUpdateCheck(check)]).toEqual([
+      ['akismet/akismet.php', { version: '5.3.1', slug: 'akismet' }],
+      ['hello.php', { version: '1.7.2', slug: 'hello-dolly' }],
+      ['wandworks-pro/loader.php', { version: '2.0.0' }],
+    ]);
+    // Nothing that leaves the plugins folder, and nothing that is not a plugin file.
+    expect([...readUpdateCheck('a:1:{s:7:"checked";a:2:{s:16:"../../evil/x.php";s:1:"1";s:8:"notes.md";s:1:"1";}}')]).toEqual([]);
+
+    const dir = mkdtempSync(join(tmpdir(), 'dump-'));
+    const file = join(dir, 'single.sql');
+    const escaped = check.replace(/"/g, '\\"');
+    writeFileSync(
+      file,
+      `CREATE TABLE \`wp_options\` (x int);\nINSERT INTO \`wp_options\` VALUES (1,'siteurl','https://www.spellbook.example','yes'),(2,'home','https://www.spellbook.example','yes'),(3,'active_plugins','a:2:{i:0;s:19:\\"akismet/akismet.php\\";i:1;s:24:\\"wandworks-pro/loader.php\\";}','yes'),(4,'recently_activated','a:1:{s:18:\\"old-slider/old.php\\";i:1762600000;}','yes'),(5,'_site_transient_update_plugins','${escaped}','no');\n`,
+    );
+    expect((await analyzeDump(file)).plugins).toEqual([
+      { file: 'akismet/akismet.php', active: true, version: '5.3.1', slug: 'akismet' },
+      { file: 'wandworks-pro/loader.php', active: true, version: '2.0.0' },
+      { file: 'hello.php', active: false, version: '1.7.2', slug: 'hello-dolly' },
+      { file: 'old-slider/old.php', active: false },
+    ]);
   });
 });

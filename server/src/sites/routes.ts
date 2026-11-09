@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TakeoverPreview, TrashEntry } from '@devmagic-panel/shared';
-import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin } from '@devmagic-panel/shared';
+import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
@@ -17,6 +17,9 @@ import { listSnapshots, snapshotDir } from './db.js';
 import { cleanDir, listCleanCopies } from './export.js';
 import { listKept } from './kept.js';
 import { takeoverPreview, TakeoverRefused } from './takeover.js';
+import { missingOnSite } from './install-plugins.js';
+import { wporgPlugins } from '../wporg-plugins.js';
+import { z } from 'zod';
 import { cleanPreview } from './clean-current.js';
 import { readLocalConstants } from '../local-constants.js';
 import { gitFolder, readGitDetails, readPullRequests } from './git.js';
@@ -269,6 +272,25 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     if (vhost?.names[0] !== domain || (path !== undefined && !vhost.mounts.some((m) => m.path === path))) return null;
     return siteKey(domain, path);
   };
+
+  // What a site's database names that its files lack, for the Plugins tab's Missing plugins. Read only.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/missing-plugins', async (request, reply): Promise<DumpPlugin[] | undefined> => {
+    const key = snapshotKey(request.params.domain, request.query.path);
+    if (!key) return reply.code(404).send({ error: `no site called ${request.params.domain}${request.query.path ?? ''}` });
+    try {
+      const site = siteFor(deps.config, request.params.domain, request.query.path);
+      return await missingOnSite(deps.exec, site.docroot, site.host);
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      throw error;
+    }
+  });
+  // Whether plugins are on WordPress.org, by slug, kept a day. Read only.
+  api.post<{ Body: unknown }>('/api/wporg/plugins', async (request, reply) => {
+    const body = z.object({ slugs: z.array(wpSlug).max(100) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'Plugin slugs like wp-rocket' });
+    return wporgPlugins(body.data.slugs, deps.store);
+  });
 
   // What taking over a site made by hand would do: read by dmp-root, which changes nothing with --check.
   api.get<{ Params: { domain: string } }>('/api/sites/:domain/takeover', async (request, reply): Promise<TakeoverPreview | undefined> => {

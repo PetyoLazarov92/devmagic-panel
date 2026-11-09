@@ -42,6 +42,7 @@ export function previewSteps(input: CreateSiteInput, dbName: string, dumpName?: 
     ['replace', replace ?? '', Boolean(input.uploadId) && replace !== null],
     ['install', 'Install WordPress', input.source === 'wordpress' || (input.source === 'repo' && !input.uploadId)],
     ['plugins', `Deactivate ${input.deactivate.length} production-only plugin${input.deactivate.length === 1 ? '' : 's'} when active`, Boolean(input.uploadId) && input.deactivate.length > 0],
+    ['install-plugins', `Install ${input.installPlugins.length} missing plugin${input.installPlugins.length === 1 ? '' : 's'} from WordPress.org`, isWp && input.installPlugins.length > 0],
     [
       'admin',
       input.admin?.ifExists === 'keep' ? `Add ${input.admin.user} unless the database has it` : `Make sure ${input.admin?.user ?? ''} is an administrator`,

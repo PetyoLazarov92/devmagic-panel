@@ -1,4 +1,5 @@
 import type { Site, SitePlugin, SitePlugins } from '@devmagic-panel/shared';
+import { MissingPluginsCard } from '@/components/missing-plugins-card';
 import { Lock, Plug, RefreshCw, Search, X } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -116,6 +117,7 @@ export function PluginsTab({ site }: { site: Site }) {
 
   return (
     <div className="grid gap-3">
+      <MissingPluginsCard site={site} onChanged={reload} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{plugins.filter(isOn).length} of {plugins.filter((p) => !always(p)).length}</span> plugins on

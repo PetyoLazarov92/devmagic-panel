@@ -206,7 +206,14 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       you tick them; the panel never downloads one into a site. BE Media
       from Production, when the repo has it and you pick it, gets its
       `BE_MEDIA_FROM_PRODUCTION_URL` in wp-config.php (never over one
-      already there). No other file goes into a site.
+      already there). Plugins the site's database has (active, or installed
+      on production by WordPress's update check) that its files lack may be
+      installed from WordPress.org only, by slug, when you tick them
+      (`site.installPlugins`, the wizard's Missing plugins): one at a time,
+      a failure noted and the rest installed, `--skip-plugins
+      --skip-themes`, checked with `wp plugin verify-checksums` and kept out
+      of git locally (`sites/install-plugins.ts`); never a zip, URL or path,
+      never activated by the panel. No other file goes into a site.
     - **Repos go where you place them**: each repo of an install has a folder
       of the site and a folder name (`dir`, `folder` in `site.create`),
       cloned as you, never through a link (a shared core's `wp-admin` is one)

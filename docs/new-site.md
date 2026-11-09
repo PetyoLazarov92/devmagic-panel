@@ -144,6 +144,13 @@ takes a different one.
 - **Plugins**: production-only plugins are deactivated (a search finds one in a
   long list), and the local helpers any repo has (as a plugin folder or in
   `composer.json`) are turned on.
+- **Missing plugins**: plugins the dump has that no repo brings (a project
+  whose repo is only its theme, say). Active ones on WordPress.org install
+  from there after the import, at production's version when the dump's update
+  check has it; others you can turn off or leave (WordPress turns a missing
+  active plugin off on its own). Ones production had installed but not active
+  are listed apart, to install if you want them. One that fails is noted and
+  the rest install; see [Sites](sites.md#plugins) for how.
 - **Uploads**: missing images load from the production domain you give.
 - **Build**: a checklist per repo lists every `composer.json` and
   `package.json` and ticks only the ones whose output the repo does not hold

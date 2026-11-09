@@ -360,6 +360,27 @@ export interface SiteInstall {
   takenOver?: { at: string; files: string[]; docroot: string; dropped: number };
 }
 
+/** A plugin on WordPress.org: its name and latest version. */
+export interface WporgPlugin {
+  name: string;
+  version: string;
+}
+
+/** A plugin a dump names: see DumpFacts.plugins. */
+export interface DumpPlugin {
+  /** Its file in wp-content/plugins: akismet/akismet.php, or hello.php. */
+  file: string;
+  /** Active on the main site, a network's other sites or network-wide. */
+  active: boolean;
+  network?: boolean;
+  /** On a network: on how many sites it is active. */
+  sites?: number;
+  /** The version production ran, from WordPress's update check. */
+  version?: string;
+  /** Its slug on WordPress.org, when WordPress's update check found it there. */
+  slug?: string;
+}
+
 /** What taking over a site made by hand would do, read by dmp-root vhost-adopt --check. */
 export interface TakeoverPreview {
   /** Its vhost files in sites-available, and the enabled ones. */
@@ -478,6 +499,14 @@ export interface DumpFacts {
   hosts: string[];
   /** Plugin slugs active on the main site, and network-wide for a multisite, when the dump says. */
   activePlugins?: string[];
+  /**
+   * Every plugin the dump names, by its file in wp-content/plugins: active on
+   * the main site, on other sites of a network (how many) or network-wide,
+   * and the ones production had installed but not active, from WordPress's
+   * own update check (its version there, and its WordPress.org slug when the
+   * check found it there) or the recently turned off list.
+   */
+  plugins?: DumpPlugin[];
   /** True when the scan stopped after DUMP_SCAN_GB of a very large dump, before its users. */
   partial: boolean;
   /**
@@ -905,6 +934,8 @@ export interface RepoLookup {
   core?: { version?: string };
   /** It keeps media in wp-content/uploads. */
   uploads?: boolean;
+  /** The plugins it holds, as paths in the repo of each plugins folder's entries: wp-content/plugins/akismet, plugins/hello.php. */
+  plugins?: string[];
 }
 
 /** What the site page needs to move a site between web servers. */

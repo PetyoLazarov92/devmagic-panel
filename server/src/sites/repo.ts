@@ -133,6 +133,7 @@ export async function repoLookup(exec: Executor, workDir: string, url: string, b
       kind: classifyRepo(top),
       ...(withCore ? { core: version ? { version } : {} } : {}),
       ...([...paths].some((p) => p.startsWith('wp-content/uploads/') || p.startsWith('uploads/')) ? { uploads: true } : {}),
+      plugins: [...new Set([...paths].flatMap((p) => /^((?:.*?\/)?plugins\/[^/]+)/.exec(p)?.[1] ?? []))].filter((p) => !p.split('/').includes('node_modules') && !p.split('/').includes('vendor')).slice(0, 2000),
     };
   } finally {
     rmSync(tmp, { recursive: true, force: true });
