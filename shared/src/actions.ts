@@ -1202,7 +1202,7 @@ export const actions = {
   'dump.fromServer': {
     title: 'Take a database dump from a server over SSH',
     description:
-      "Takes a database dump from a server over SSH, with your own ssh config and agent (an alias from ~/.ssh/config, or user@host; never a password, never a new host key trusted on the fly): mode file copies a .sql, .sql.gz or .zip there with sftp; mode export runs wp --path=<path> db export on the server (read only, --no-tablespaces, compressed on the way, again through php -d disable_functions= when WP-CLI dies quietly on a host that turns exec off) and streams it into a gzip here; the tables in excludeRows come as their structure only. A dump without mysqldump's last line was cut off and is refused. Checks its first bytes and reads it as for an upload. Starts a job; the upload id is in its data.",
+      "Takes a database dump from a server over SSH, with your own ssh config and agent (an alias from ~/.ssh/config, or user@host; signed in with your key, or with password for a server that asks for one: used for this run's connections only, never kept, and nothing is written on the server; never a new host key trusted on the fly): mode file copies a .sql, .sql.gz or .zip there with sftp; mode export runs wp --path=<path> db export on the server (read only, --no-tablespaces, compressed on the way, again through php -d disable_functions= when WP-CLI dies quietly on a host that turns exec off) and streams it into a gzip here; the tables in excludeRows come as their structure only. A dump without mysqldump's last line was cut off and is refused. Checks its first bytes and reads it as for an upload. Starts a job; the upload id is in its data.",
     changesSystem: true,
     input: z
       .object({
@@ -1212,6 +1212,8 @@ export const actions = {
         path: serverPath,
         /** export: tables whose rows stay on the server; they come as their structure only. */
         excludeRows: z.array(tableName).max(200).default([]),
+        /** The server's password, when it asks for one: for this run only. */
+        password: z.string().max(1024).optional(),
         draftId: z.string().uuid().optional(),
       })
       .refine((v) => v.mode !== 'file' || /\.(?:sql|sql\.gz|zip)$/i.test(v.path), { path: ['path'], message: 'A .sql, .sql.gz or .zip file' }),
@@ -1517,10 +1519,10 @@ export const actions = {
   'site.refreshFromProduction': {
     title: 'Refresh the database from production',
     description:
-      "Copies the site's database from production with the settings saved for it (the ssh host, the WordPress folder there, the tables whose rows stay there, clean or not): exports it over SSH as dump.fromServer does, reading only, then imports it as db.import does, or with clean on as db.cleanCopy does (one user kept: user, an administrator there or a new one). The tables from before are kept for 7 days. Replaces the production domains with the site's. Nothing is written on production. Starts a job.",
+      "Copies the site's database from production with the settings saved for it (the ssh host, the WordPress folder there, the tables whose rows stay there, clean or not): exports it over SSH as dump.fromServer does, reading only, then imports it as db.import does, or with clean on as db.cleanCopy does (one user kept: user, an administrator there or a new one). The tables from before are kept for 7 days. Replaces the production domains with the site's. Nothing is written on production. password is the server's own, when it asks for one: used for this run's connections only and never kept. Starts a job.",
     changesSystem: true,
     input: z
-      .object({ domain: localName, path: sitePath, user: cleanUser, confirm: z.string() })
+      .object({ domain: localName, path: sitePath, user: cleanUser, confirm: z.string(), password: z.string().max(1024).optional() })
       .refine(confirmDomain, { path: ['confirm'], message: 'Type the domain to confirm' }),
   },
   'site.installPlugins': {

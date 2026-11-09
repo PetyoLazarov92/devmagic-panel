@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.32.0 (2026-11-10)
+* **Sites:** a server over SSH that asks for a password can be used. The panel checks how the server signs you in as soon as the host is typed, and **Password on the server** shows under the host, in the new site wizard and in a site's Import a database, only when the server would ask for one; with your key signing in it says so and asks for nothing. Reading the tables, the export and the copy of a dump file then sign in with it, and Refresh from production has the same field
+* **Sites:** the password is used for that run's connections only and is never saved, logged or shown: it reaches ssh through a helper and a pipe only you can open, and a Retry asks for it again. Nothing is written on the server and no key is added to it. A host that is not in your known_hosts is still refused, and a wrong password is tried once
+* **Sites:** when a server refuses your key, the message says where to give its password
+* **Databases:** Refresh from production has the administrator a cleaned copy keeps and its password together by the button, in place of the user in the settings form and the password outside it. On a network it says that user is a super admin
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.31.1 (2026-11-10)
 * **Fix:** the wizard's Missing plugins are installed again. One plugin folder with a name WordPress.org could not have (capitals, a dot, a space), or more than 100 plugins, made the panel refuse the whole question to WordPress.org, so every plugin stayed on "Asking WordPress.org..." with no Install choice and none was installed. Such a name is now answered as not on WordPress.org, long lists are asked in parts, and the site's Plugins tab asks the same way
 * **Sites:** when WordPress.org gives no answer, Missing plugins says so with **Ask again**, and **Leave it** and **Skip** are now **Don't install**

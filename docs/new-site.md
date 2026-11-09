@@ -139,9 +139,18 @@ against the free space.
   `~/.ssh/config` (an alias, or `user@host`). **Export now with WP-CLI** runs
   `wp db export` in the WordPress folder you give on the server (it only
   reads; the server needs WP-CLI as `wp`) and streams it into a gzip here;
-  **A dump file there** copies a `.sql`, `.sql.gz` or `.zip` with sftp. Never a
-  password, and a host not in your `known_hosts` is refused with how to add
-  it, never trusted on the fly. Paths take letters, digits and `. _ - /`
+  **A dump file there** copies a `.sql`, `.sql.gz` or `.zip` with sftp. A host
+  not in your `known_hosts` is refused with how to add it, never trusted on
+  the fly. The panel signs in with your key, and checks how the server signs
+  you in as soon as you type the host (one connection that runs nothing):
+  with your key, it says so and asks for nothing. Only for a server that
+  would ask for a password does **Password on the server** show under the
+  host; a server that takes keys only and refuses yours, or one it cannot
+  reach, is said there too. The password is kept out of the browser's and
+  password managers' saved passwords, and it is used for that run's connections only (reading the
+  tables, the export or the copy) and never saved, logged or shown, so you
+  give it again next time. Nothing is written on the server, and no key is
+  added to it. A wrong password is tried once. Paths take letters, digits and `. _ - /`
   only, as ssh hands the command to the server's shell.
   The export is compressed on the way, writes no file on the server and
   leaves its database password there (WP-CLI reads `wp-config.php` and runs

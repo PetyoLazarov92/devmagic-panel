@@ -55,7 +55,7 @@ export function planRefresh(ctx: RefreshContext, input: ActionInput<'site.refres
   if (!settings) throw new DbRefused('Refresh from production is not set up for this site: save the server and folder first');
   const { site } = wordpressSite(ctx, input.domain, input.path);
   let uploadId: string | null = null;
-  const exporting = planServerDump(ctx, { host: settings.host, mode: 'export', path: settings.folder, excludeRows: settings.excludeRows }, (id) => {
+  const exporting = planServerDump(ctx, { host: settings.host, mode: 'export', path: settings.folder, excludeRows: settings.excludeRows, ...(input.password ? { password: input.password } : {}) }, (id) => {
     uploadId = id;
     onUpload(id);
   });

@@ -226,7 +226,12 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       shell, and every dump's type is read from its first bytes. A dump over
       SSH (`sites/more-dumps.ts`) uses your own ssh config with BatchMode and
       StrictHostKeyChecking, sftp for a file and only `wp db export` for an
-      export, with a path of plain characters.
+      export, with a path of plain characters. A server that asks for a
+      password gets the one you give for that run (`sites/ssh-password.ts`):
+      it reaches ssh through its askpass helper and a FIFO only you can
+      open, never argv, the environment, a file or a log, is handed out once
+      and never kept, and one prompt is allowed. Nothing is written on the
+      server, no key is added there, and the host key is still checked.
     - **Removed sites go to the trash first**, made by the panel or not:
       `dmp-root trash-site` archives the folder (`WEB_DIR/<domain>`), the
       vhosts (`<domain>-ssl.conf` or `<domain>.conf`), the certificate and the

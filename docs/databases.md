@@ -197,9 +197,14 @@ The runner never touches another database, accounts, rights, routines or files.
   before kept for 7 days under Kept databases.
   - **From production**: set up once per site with the SSH host, the
     WordPress folder there, the tables whose rows stay there and whether the
-    copy is cleaned (and which administrator it keeps); then **Refresh now**
-    exports production's database over SSH, reading only, and imports it.
-    Nothing is written on production, and the settings hold no secret.
+    copy is cleaned; then **Refresh now** exports production's database over
+    SSH, reading only, and imports it. For a cleaned copy the administrator
+    it keeps and that user's password sit together by the button: the login
+    is remembered for next time, the password never is. On a network that
+    user is a super admin and an administrator of every site.
+    Nothing is written on production, and the settings hold no secret: a
+    server that asks for a password gets it for that one refresh, typed
+    each time and never saved.
   - **From a dump**: a `.sql`, `.sql.gz` or `.zip` from any source the new
     site wizard has: an upload, the Downloads folder, a cloud drive or Drive
     link, a public URL, a server over SSH (with tables to leave the rows of)

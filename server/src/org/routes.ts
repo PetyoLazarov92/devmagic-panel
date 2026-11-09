@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { GitHosts, InstallDraft, OrgNamespace, OrgRepoList, OrgSettings, OrgStatus, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
-import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, knownLeftOut, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts } from '@devmagic-panel/shared';
+import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, knownLeftOut, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts, sshHost } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Executor } from '../exec.js';
 import type { RunStore } from '../store.js';
@@ -9,7 +9,8 @@ import { RepoRefused } from '../sites/repo.js';
 import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } from './claude-code.js';
 import { DumpRefused, listRemote, rcloneRemotes, recentDownloads, rcloneRemote } from './dumps.js';
 import { z } from 'zod';
-import { MoreDumpsRefused, serverTables } from '../sites/more-dumps.js';
+import { MoreDumpsRefused, refusalWithPassword, serverSignIn, serverTables } from '../sites/more-dumps.js';
+import { withSshPassword } from '../sites/ssh-password.js';
 import { ghStatus } from '../repo-hosts/github.js';
 import { type GitHostDetector, glabOverview, HostRefused, listNamespaces, remotesOf } from '../repo-hosts/index.js';
 import { OrgScanner } from './scan.js';
@@ -170,17 +171,27 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
   api.post<{ Body: unknown }>('/api/dumps/server-tables', async (request, reply) => {
     const body = serverFolder.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'An ssh host and an absolute folder' });
+    // The server's password, when it asks for one: for this one read, never kept or logged.
+    const password = z.string().max(1024).optional().safeParse((request.body as { password?: unknown } | null)?.password);
     try {
-      const tables = await serverTables(deps.exec, body.data.host, body.data.path);
+      const read = (exec: typeof deps.exec) => serverTables(exec, body.data.host, body.data.path);
+      const tables = password.success && password.data ? await withSshPassword({ exec: deps.exec }, password.data, read) : await read(deps.exec);
       const kept = deps.store.getMeta(`server-export:${body.data.host}|${body.data.path}`);
       return { tables, ...knownLeftOut(tables.map((t) => t.name)), ...(kept ? { remembered: JSON.parse(kept) as string[] } : {}) };
     } catch (error) {
-      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: error.message });
+      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: password.success && password.data ? refusalWithPassword(body.data.host, error.message) : error.message });
       throw error;
     }
   });
 
   // rclone's remotes and one folder of one, read only, for the Database step: names and sizes of dumps, never their contents.
+  // How a server signs you in, so the form asks for a password only when the server would. Read only: it runs `true` there.
+  api.post<{ Body: unknown }>('/api/dumps/server-sign-in', async (request, reply) => {
+    const body = z.object({ host: sshHost }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'An alias from ~/.ssh/config, or user@host' });
+    return serverSignIn(deps.exec, body.data.host);
+  });
+
   api.get('/api/dumps/remotes', async () => rcloneRemotes(deps.exec));
   const remoteFolder = z.object({
     remote: z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_. -]{0,63}$/),

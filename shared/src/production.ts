@@ -62,6 +62,17 @@ export interface ServerTables {
   remembered?: string[];
 }
 
+/**
+ * How a server signs you in over SSH, asked before anything runs there:
+ * key (your SSH key signs in, no password needed), password (your key does
+ * not, and the server takes a password), refused (it takes keys only, and
+ * not yours), or unknown, with why (not in known_hosts, not reachable).
+ */
+export interface ServerSignIn {
+  how: 'key' | 'password' | 'refused' | 'unknown';
+  problem?: string;
+}
+
 /** What a site keeps for Refresh from production: no secret, only where and how. */
 export interface ProductionSettings {
   host: string;

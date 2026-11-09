@@ -4,7 +4,7 @@ import { basename, join } from 'node:path';
 import { Transform, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
-import type { ActionInput } from '@devmagic-panel/shared';
+import type { ActionInput, ServerSignIn } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
 import { runRoot } from '../exec.js';
@@ -12,6 +12,7 @@ import type { JobRuntime, JobStep } from '../jobs.js';
 import { formatBytes, snapshotDir, wpFor } from './db.js';
 import { MAX_UNZIPPED_BYTES } from './dump.js';
 import { siteFor } from './site-actions.js';
+import { oncePassword, type SshPasswordContext, withSshPassword } from './ssh-password.js';
 import { adoptUpload, removeUpload, type UploadInfo } from './uploads.js';
 
 /**
@@ -27,6 +28,8 @@ export interface MoreDumpsContext {
   exec: Executor;
   uploadsDir: string;
   dmpRoot: string;
+  /** How a server's password reaches ssh, for a run that was given one; tests swap in a fake feeder. */
+  sshPassword?: Pick<SshPasswordContext, 'runtimeDir' | 'feed'>;
 }
 
 export class MoreDumpsRefused extends Error {}
@@ -37,10 +40,31 @@ const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 export const SSH_OPTIONS = ['-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=30', '-o', 'Compression=yes'];
 
 /** What ssh says when it stops, said plainly; a run that says nothing gets its exit code and what to try. */
-function sshProblem(host: string, stderr: string, code = 1, hint = ''): string {
+/**
+ * How a server would sign you in, from one connection in batch mode that
+ * runs nothing but `true`: with your key, or, when the key is refused, by
+ * the ways ssh says may go on ("Permission denied (publickey,password)").
+ * No password is used or needed to ask.
+ */
+export async function serverSignIn(exec: Executor, host: string): Promise<ServerSignIn> {
+  const r = await exec('ssh', [...SSH_OPTIONS, '--', host, 'true'], { timeoutMs: 30_000 });
+  if (r.code === 0) return { how: 'key' };
+  const denied = /Permission denied \(([^)]*)\)/i.exec(r.stderr);
+  if (denied) return /password|keyboard-interactive/i.test(denied[1] ?? '') ? { how: 'password' } : { how: 'refused', problem: `${host} takes SSH keys only, and refused yours (the panel uses your ssh-agent and ~/.ssh/config)` };
+  return { how: 'unknown', problem: sshProblem(host, r.stderr, r.code) };
+}
+
+/** What a refused sign-in says without a password given: where to give one. */
+const REFUSED = (host: string) => `${host} refused your SSH key (the panel uses your ssh-agent and ~/.ssh/config). When the server asks for a password, the field for it shows under the host: it is used for this run only and not kept`;
+/** The same with a password given: it was not taken either. */
+const refusedWithPassword = (host: string) => `${host} did not take the password, or it does not let you sign in with one. Nothing was kept`;
+/** What a refusal says once a password was given. */
+export const refusalWithPassword = (host: string, message: string) => (message === REFUSED(host) ? refusedWithPassword(host) : message);
+
+export function sshProblem(host: string, stderr: string, code = 1, hint = ''): string {
   const last = stderr.trim().split('\n').filter(Boolean).at(-1) ?? '';
   if (/Host key verification failed|No .* host key is known/i.test(stderr)) return `${host} is not in your known_hosts: connect once in a terminal with ssh ${host}, check its key, then try again`;
-  if (/Permission denied/i.test(stderr)) return `${host} refused your SSH key: the panel uses your ssh-agent and ~/.ssh/config, and never asks for a password`;
+  if (/Permission denied/i.test(stderr)) return REFUSED(host);
   if (/Could not resolve hostname/i.test(stderr)) return `${host} is not a host your ssh knows: use an alias from ~/.ssh/config or user@host`;
   if (last) return last;
   return `${host} ended with exit ${code} and printed nothing${hint ? `: ${hint}` : ''}`;
@@ -73,17 +97,30 @@ function scratch(ctx: MoreDumpsContext, name: string): string {
  * From a server over SSH, with your own ssh config and agent (an alias from
  * ~/.ssh/config, or user@host): a dump file there, copied with sftp, or a
  * fresh export with WP-CLI on the server, streamed into a gzip here. Only
- * reads on the server; the remote command is fixed, its path checked.
+ * reads on the server; the remote command is fixed, its path checked. A
+ * server that asks for a password gets the one given for this run, once
+ * (ssh-password.ts); nothing is written there and nothing of it is kept.
  */
 export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.fromServer'>, onUpload: (id: string) => void): JobStep[] {
   const from = `${input.host}:${input.path}`;
+  const secret = oncePassword(input.password);
+  /** The step's work with an executor that signs in: with the server's password when one was given, for this one run of the step. */
+  const signedIn = async (work: (exec: Executor) => Promise<ExecResult | ExecResult[]>): Promise<ExecResult | ExecResult[]> => {
+    if (!secret.given) return work(ctx.exec);
+    const password = secret.take();
+    // Dropped when the step ended the first time: a Retry has none.
+    if (password === undefined) return { code: 1, stdout: '', stderr: 'The password was used once and is gone: start this again and give the password' };
+    const out = await withSshPassword({ exec: ctx.exec, ...ctx.sshPassword }, password, work);
+    const said = (r: ExecResult): ExecResult => ({ ...r, stderr: refusalWithPassword(input.host, r.stderr) });
+    return Array.isArray(out) ? out.map(said) : said(out);
+  };
   if (input.mode === 'file') {
     return [
       {
         id: 'download',
         label: `Copy ${basename(input.path)} from ${input.host} and read it`,
         weight: 8,
-        run: async (job) => {
+        run: (job) => signedIn(async (exec) => {
           const name = basename(input.path);
           const part = scratch(ctx, name);
           const timer = setInterval(() => {
@@ -95,14 +132,14 @@ export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.f
           }, 1000);
           try {
             // sftp reads its commands from stdin; the remote path holds no spaces, quotes or shell characters.
-            const r = await ctx.exec('sftp', ['-q', '-b', '-', ...SSH_OPTIONS, '--', input.host], { input: `get ${input.path} ${part}\n`, timeoutMs: 3 * 60 * 60_000 });
+            const r = await exec('sftp', ['-q', '-b', '-', ...SSH_OPTIONS, '--', input.host], { input: `get ${input.path} ${part}\n`, timeoutMs: 3 * 60 * 60_000 });
             if (r.code !== 0 || !existsSync(part)) return { code: 1, stdout: '', stderr: sshProblem(input.host, r.stderr, r.code, 'sftp could not copy it; check the path and that the file is there') };
             return await adopt(ctx, job, name, part, onUpload, from);
           } finally {
             clearInterval(timer);
             rmSync(part, { force: true });
           }
-        },
+        }),
       },
     ];
   }
@@ -112,13 +149,13 @@ export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.f
       id: 'export',
       label: `Export the database on ${input.host} with WP-CLI${leftOut.length ? `, without the rows of ${leftOut.length} table${leftOut.length === 1 ? '' : 's'},` : ''} and read it`,
       weight: 8,
-      run: async (job) => {
+      run: (job) => signedIn(async (exec) => {
         const name = `${input.host.replace(/^.*@/, '').replace(/[^\w.-]/g, '_')}-${new Date().toISOString().slice(0, 10)}.sql.gz`;
         const part = scratch(ctx, name);
         const exported = { bytes: 0 };
         const timer = setInterval(() => job.progress(0.1, `${formatBytes(exported.bytes)} of SQL so far`), 1000);
         try {
-          const r = await exportOverSsh(ctx.exec, input.host, input.path, leftOut, part, exported);
+          const r = await exportOverSsh(exec, input.host, input.path, leftOut, part, exported);
           if ('error' in r) return { code: 1, stdout: '', stderr: r.error };
           const out = await adopt(ctx, job, name, part, onUpload, from);
           return r.notes.length ? [ok(r.notes.join('\n')), out] : out;
@@ -128,7 +165,7 @@ export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.f
           clearInterval(timer);
           rmSync(part, { force: true });
         }
-      },
+      }),
     },
   ];
 }

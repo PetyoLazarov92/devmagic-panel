@@ -1,4 +1,4 @@
-import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -209,7 +209,10 @@ export interface Api {
   downloads: () => Promise<Array<{ file: string; name: string; sizeBytes: number; modifiedAt: string }>>;
   rcloneRemotes: () => Promise<RcloneRemotes>;
   /** A server's tables with their sizes, over SSH and read only, for leaving the rows of some out. */
-  serverTables: (host: string, path: string) => Promise<ServerTables>;
+  /** How a server signs you in over SSH: with your key, or with a password. Runs nothing there but true. */
+  serverSignIn: (host: string) => Promise<ServerSignIn>;
+  /** password: the server's own, when it asks for one; for this read only. */
+  serverTables: (host: string, path: string, password?: string) => Promise<ServerTables>;
   /** What a site keeps for Refresh from production; null until it is set up. */
   productionSettings: (domain: string, path?: string) => Promise<ProductionSettings | null>;
   saveProductionSettings: (domain: string, path: string | undefined, settings: ProductionSettings) => Promise<ProductionSettings>;
@@ -412,7 +415,8 @@ const realApi: Api = {
   orgRepos: (org, scan) => request('GET', `/api/org/repos?${new URLSearchParams({ org, scan })}`),
   downloads: () => request('GET', '/api/downloads'),
   rcloneRemotes: () => request('GET', '/api/dumps/remotes'),
-  serverTables: (host, path) => request('POST', '/api/dumps/server-tables', { host, path }),
+  serverSignIn: (host) => request('POST', '/api/dumps/server-sign-in', { host }),
+  serverTables: (host, path, password) => request('POST', '/api/dumps/server-tables', { host, path, ...(password ? { password } : {}) }),
   productionSettings: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`),
   saveProductionSettings: (domain, path, settings) => request('PUT', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`, settings),
   takeoverPreview: (domain) => request('GET', `/api/sites/${encodeURIComponent(domain)}/takeover`),

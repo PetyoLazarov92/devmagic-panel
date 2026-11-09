@@ -26,7 +26,7 @@ import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { databaseHref, databaseView, type DbView } from '@/lib/database-href';
 import { useAsync } from '@/lib/use-async';
 import { ViewBar } from '@/components/page';
-import { DumpSourcePicker, FromServer } from './new-site-database';
+import { DumpSourcePicker, FromServer, ServerPassword } from './new-site-database';
 import { ReadingBlock } from '@/components/skeletons';
 
 type JobKind = 'snapshot' | 'restore' | 'import' | 'preview' | 'replace' | 'clean' | 'cleanCurrent' | 'export' | 'restoreKept' | 'refresh';
@@ -572,12 +572,7 @@ function KeepUserFields({ id, admins, multisite, value, onChange }: {
   const problem = keepUserProblem(value);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field
-        label="Keep this user"
-        htmlFor={`${id}-keep`}
-        className="sm:col-span-2"
-        hint="Every other user goes. Their posts and links become this user's, as wp user delete --reassign does; comments stay as they are."
-      >
+      <Field label={KEEP_LABEL} htmlFor={`${id}-keep`}>
         <Select
           id={`${id}-keep`}
           value={value.keep ?? ''}
@@ -587,18 +582,26 @@ function KeepUserFields({ id, admins, multisite, value, onChange }: {
           <option value="">A new user</option>
         </Select>
       </Field>
+      {/* An existing user has the password beside it; a new user's login and password share the row under the choice. */}
       {!value.keep && (
-        <Field label="Login" htmlFor={`${id}-login`}>
+        <Field label="Login" htmlFor={`${id}-login`} className="sm:col-start-1">
           <Input id={`${id}-login`} value={value.login} autoComplete="off" onChange={(e) => onChange({ ...value, login: e.target.value })} />
         </Field>
       )}
-      <Field label="Password" htmlFor={`${id}-secret`} hint={value.keep ? `Replaces ${value.keep}'s password.` : undefined}>
+      <Field label={PASSWORD_LABEL} htmlFor={`${id}-secret`}>
         <SecretInput id={`${id}-secret`} value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} />
       </Field>
       {problem && <p className="text-xs text-danger sm:col-span-2">{problem}</p>}
+      <p className="text-xs text-muted-foreground sm:col-span-2">{keepHint(multisite)}{value.keep ? ` The password replaces ${value.keep}'s, for this local copy only.` : ''}</p>
     </div>
   );
 }
+
+/** The same words wherever a clean-up asks which user stays. */
+const KEEP_LABEL = 'Keep this user';
+const PASSWORD_LABEL = 'Password';
+const keepHint = (multisite: boolean) =>
+  `Every other user goes. Their posts and links become this user's, as wp user delete --reassign does; comments stay as they are.${multisite ? ' On a network this user is a super admin and an administrator of every site.' : ''}`;
 
 /** Clean this database: the clean-up of a cleaned import on the database the site has now. */
 /** Below this, what the copy leaves out is not worth a line. */
@@ -858,13 +861,15 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
   const [clean, setClean] = useState(false);
   const [keep, setKeep] = useState('');
   const [password, setPassword] = useState('admin');
+  // The server's own password, when it asks for one: for the next refresh only, never saved with the settings.
+  const [serverSecret, setServerSecret] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     setClean(settings?.clean ?? false);
     setKeep(settings?.keep ?? '');
   }, [settings]);
-  const user = keep ? { keep, login: keep, password } : { login: 'admin', password };
+  const user = keep.trim() ? { keep: keep.trim(), login: keep.trim(), password } : { login: 'admin', password };
   const save = async (input: { host: string; path: string; excludeRows: string[] }) => {
     setError(null);
     try {
@@ -903,17 +908,7 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
             {...(settings ? { initial: { host: settings.host, path: settings.folder, excludeRows: settings.excludeRows } } : {})}
             onTake={(input) => void save(input)}
             actions={<Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>}
-            more={
-              <>
-                {clean && (
-                  <Field label="Keep this administrator" htmlFor="refresh-keep" hint="Its login on production; every other user goes. Empty: a new user, admin.">
-                    <Input id="refresh-keep" value={keep} onChange={(e) => setKeep(e.target.value)} placeholder="admin" autoComplete="off" spellCheck={false} aria-invalid={keepProblem ? true : undefined} />
-                  </Field>
-                )}
-                {keepProblem && <p className="text-xs text-danger">{keepProblem}</p>}
-                {error && <p role="alert" className="text-danger">{error}</p>}
-              </>
-            }
+            more={error && <p role="alert" className="text-danger">{error}</p>}
           />
         </>
       )}
@@ -925,15 +920,24 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
             <dt className="text-muted-foreground">Rows left out</dt>
             <dd>{settings.excludeRows.length ? `${settings.excludeRows.length} table${settings.excludeRows.length === 1 ? '' : 's'}` : 'none'}</dd>
             <dt className="text-muted-foreground">The copy</dt>
-            <dd>{settings.clean ? `cleaned, keeping ${settings.keep ?? 'a new admin'}` : 'as it is'}</dd>
+            <dd>{settings.clean ? 'cleaned' : 'as it is'}</dd>
           </dl>
+          {/* The one user a cleaned copy keeps and its password, together, where the refresh starts. */}
           {settings.clean && (
-            <Field label={settings.keep ? `Password for ${settings.keep}` : 'Password for admin'} htmlFor="refresh-secret" hint="For this local copy only; not saved.">
-              <SecretInput id="refresh-secret" value={password} onChange={(e) => setPassword(e.target.value)} />
-            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={KEEP_LABEL} htmlFor="refresh-keep">
+                <Input id="refresh-keep" value={keep} onChange={(e) => setKeep(e.target.value)} placeholder="admin" autoComplete="off" spellCheck={false} aria-invalid={keepProblem ? true : undefined} />
+              </Field>
+              <Field label={PASSWORD_LABEL} htmlFor="refresh-secret">
+                <SecretInput id="refresh-secret" value={password} onChange={(e) => setPassword(e.target.value)} />
+              </Field>
+              {keepProblem && <p className="text-xs text-danger sm:col-span-2">{keepProblem}</p>}
+              <p className="text-xs text-muted-foreground sm:col-span-2">An administrator's login on production, or empty for a new user, admin. {keepHint(Boolean(site.network))} The password is for this local copy only and is not saved.</p>
+            </div>
           )}
+          <ServerPassword id="refresh-server-secret" host={settings.host} value={serverSecret} onChange={setServerSecret} />
           <div className="flex flex-wrap gap-2">
-            <Button variant="danger" disabled={busy || (settings.clean && password === '')} onClick={() => setConfirming(true)}>
+            <Button variant="danger" disabled={busy || (settings.clean && (password === '' || keepProblem !== null))} onClick={() => setConfirming(true)}>
               <RefreshCw />
               Refresh {db} now
             </Button>
@@ -952,7 +956,13 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
         onClose={() => setConfirming(false)}
         onConfirm={(confirm) => {
           setConfirming(false);
-          start('refresh', { user, confirm });
+          // The administrator you keep is remembered for the next refresh; its password never is.
+          if (settings && settings.clean && keep.trim() !== (settings.keep ?? '')) {
+            const { keep: _old, ...rest } = settings;
+            void api.saveProductionSettings(site.domain, site.path, { ...rest, ...(keep.trim() ? { keep: keep.trim() } : {}) }).then(() => saved.reload(), () => undefined);
+          }
+          start('refresh', { user, confirm, ...(serverSecret ? { password: serverSecret } : {}) });
+          setServerSecret('');
         }}
       />
     </div>

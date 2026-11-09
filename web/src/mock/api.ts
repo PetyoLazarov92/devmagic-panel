@@ -2012,6 +2012,14 @@ export const mockApi: Api = {
     await wait(150);
     return [{ file: '/home/wandworksco/Downloads/wandworks-store-2026-10-24.sql.gz', name: 'wandworks-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: new Date(Date.now() - 20 * 60_000).toISOString() }];
   },
+  // In the mockup a host with "password" in its name asks for one, "locked" takes keys only, "new" is not in known_hosts.
+  serverSignIn: async (host) => {
+    await wait(500);
+    if (host.includes('password')) return { how: 'password' };
+    if (host.includes('locked')) return { how: 'refused', problem: `${host} takes SSH keys only, and refused yours (the panel uses your ssh-agent and ~/.ssh/config)` };
+    if (host.includes('new')) return { how: 'unknown', problem: `${host} is not in your known_hosts: connect once in a terminal with ssh ${host}, check its key, then try again` };
+    return { how: 'key' };
+  },
   serverTables: async (): Promise<ServerTables> => {
     await wait(500);
     const tables = [

@@ -1,4 +1,4 @@
-import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
+import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerSignIn, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
 import { defaultLeftOut, knownLeftOut } from '@devmagic-panel/shared';
 import { TablesPicker } from '@/components/tables-picker';
 import { ChevronRight, CircleAlert, Cloud, ExternalLink, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, LoaderCircle, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
@@ -8,6 +8,7 @@ import { DumpFactsCard } from '@/components/dump-facts';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SecretInput } from '@/components/ui/secret-input';
 import { Segmented } from '@/components/ui/segmented';
 import { Checkbox, Select } from '@/components/ui/field';
 import { api, isMockup } from '@/lib/api';
@@ -425,7 +426,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
   /** Clean the copy after the import; undefined where the caller has no such step. */
   clean?: boolean;
   setClean?: (on: boolean) => void;
-  onTake: (input: { host: string; mode: 'file' | 'export'; path: string; excludeRows: string[] }) => void;
+  onTake: (input: { host: string; mode: 'file' | 'export'; path: string; excludeRows: string[]; password?: string }) => void;
   initial?: { host: string; path: string; excludeRows: string[] };
   takeLabel?: string;
   /** Only an export with WP-CLI, as Refresh from production runs it. */
@@ -437,6 +438,8 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
 }) {
   const uid = useId();
   const [host, setHost] = useState(initial?.host ?? '');
+  // The server's password, when it asks for one: for the runs started from here, never kept.
+  const [secret, setSecret] = useState('');
   const [mode, setMode] = useState<'export' | 'file'>('export');
   const [path, setPath] = useState(initial?.path ?? '');
   const [found, setFound] = useState<ServerTables | null>(null);
@@ -453,7 +456,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
     setReading(true);
     setReadError(null);
     try {
-      const answer = await api.serverTables(host.trim(), path.trim());
+      const answer = await api.serverTables(host.trim(), path.trim(), secret || undefined);
       setFound(answer);
       setReadFor(where);
       setLeftOut(initial && initial.host === host.trim() && initial.path === path.trim() && initial.excludeRows.length ? initial.excludeRows : defaultLeftOut(answer, Boolean(clean)));
@@ -477,6 +480,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
           <label htmlFor={`${uid}-host`} className="font-medium">Host</label>
           <Input id={`${uid}-host`} value={host} onChange={(e) => setHost(e.target.value)} placeholder="staging-spellbook or alex@www.spellbook.example" className="font-mono text-[13px]" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
           <p className="text-xs text-muted-foreground">An alias from your ~/.ssh/config, or user@host.</p>
+          <ServerPassword id={`${uid}-secret`} host={host.trim()} value={secret} onChange={setSecret} />
         </div>
         <div className={cn('grid content-start gap-1.5', exportOnly && 'hidden')}>
           <span className="font-medium">What to take</span>
@@ -517,17 +521,63 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
       )}
       {more}
       <ul className="grid gap-1 text-xs text-muted-foreground">
-        <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />Your SSH key through your agent; never a password, and a host not in your known_hosts is refused, not trusted on the fly.</li>
+        <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />Your SSH key through your agent, or the server's password for this run only, never kept; a host not in your known_hosts is refused, not trusted on the fly.</li>
         <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />{mode === 'export' ? 'Runs only wp db export (and wp db size for the tables) on the server: it reads, writes no file there, and the database password stays there. Compressed on the way.' : 'Copies the file with sftp; nothing runs on the server.'}</li>
       </ul>
       {/* The button that takes it comes last, once everything above is chosen. */}
       <div className="flex flex-wrap gap-2 border-t pt-3">
-        <Button disabled={!hostOk || !pathOk || working || reading} onClick={() => onTake({ host: host.trim(), mode, path: path.trim(), excludeRows })}>
+        <Button disabled={!hostOk || !pathOk || working || reading} onClick={() => onTake({ host: host.trim(), mode, path: path.trim(), excludeRows, ...(secret ? { password: secret } : {}) })}>
           {working ? <LoaderCircle className="animate-spin" /> : <Server />}
           {takeLabel ?? (mode === 'export' ? 'Export' : 'Copy')}
         </Button>
         {actions}
       </div>
+    </div>
+  );
+}
+
+/**
+ * How the server signs you in, asked as soon as the host is typed, and the
+ * field for its password only when it would ask for one. With your key
+ * signing in, no field shows at all. The password goes with this run only, is
+ * kept nowhere, and nothing is written on the server. SecretInput keeps it
+ * from the browser's and every password manager's saved passwords.
+ */
+export function ServerPassword({ id, host, value, onChange }: { id: string; host: string; value: string; onChange: (value: string) => void }) {
+  const ok = /^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(host);
+  const [answer, setAnswer] = useState<{ host: string; signIn: ServerSignIn | null } | null>(null);
+  useEffect(() => {
+    if (!ok) return;
+    let live = true;
+    // Once you stop typing the host.
+    const timer = window.setTimeout(() => {
+      api.serverSignIn(host).then(
+        (signIn) => live && setAnswer({ host, signIn }),
+        () => live && setAnswer({ host, signIn: null }),
+      );
+    }, 700);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [host, ok]);
+  // A password typed for one host never goes to another.
+  useEffect(() => {
+    if (value !== '') onChange('');
+  }, [host]);
+  if (!ok) return null;
+  const known = answer?.host === host ? answer : null;
+  if (!known) return <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Checking how {host} signs you in...</p>;
+  const how = known.signIn?.how;
+  if (how === 'key') return <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><ShieldCheck className="size-3.5 shrink-0 text-success" />Your SSH key signs in to {host}: no password is needed.</p>;
+  if (how === 'refused' || how === 'unknown') return <p role="alert" className="flex items-start gap-1.5 text-xs text-warning"><CircleAlert className="mt-px size-3.5 shrink-0" />{known.signIn?.problem}</p>;
+  return (
+    <div className="grid gap-1.5 text-xs">
+      <label htmlFor={id} className="text-sm font-medium text-foreground">Password on the server</label>
+      <SecretInput id={id} value={value} onChange={(e) => onChange(e.target.value)} />
+      <p className="text-muted-foreground">
+        {how === 'password' ? `${host} asks for a password: your SSH key does not sign in there.` : `The panel could not check how ${host} signs you in: give its password only if it asks for one.`} Used for this run&apos;s connections and not saved, so you give it again next time. Nothing is written on the server.
+      </p>
     </div>
   );
 }
