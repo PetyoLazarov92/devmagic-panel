@@ -53,7 +53,7 @@ describe('a dump from a server over SSH', () => {
   });
 
   const DONE = `${SQL}-- Dump completed on 2026-11-09 10:00:00\n`;
-  const exportArgs = ['--path=/var/www/spellbook', 'db', 'export', '-', '--single-transaction', '--quick', '--no-tablespaces', '--skip-plugins', '--skip-themes'];
+  const exportArgs = ['--path=/var/www/spellbook', 'db', 'export', '-', '--single-transaction', '--quick', '--no-tablespaces=true', '--skip-plugins', '--skip-themes'];
   const serverCtx = (exec: ReturnType<typeof fakeExec>['exec'], uploadsDir: string, config: ReturnType<typeof wpSiteTree>['config']) => ({ config, exec, uploadsDir, dmpRoot: DMP });
 
   it('exports with WP-CLI on the server, compressed on the way and into a gzip here, and says plainly when the host key is unknown', async () => {
@@ -115,11 +115,13 @@ describe('a dump from a server over SSH', () => {
     const t = wpSiteTree();
     const uploadsDir = join(t.root, 'uploads');
     const STRUCTURE = 'CREATE TABLE `wp_actionscheduler_logs` (x int);\n-- Dump completed on 2026-11-09 10:00:01\n';
-    const fake = fakeExec({ ssh: (call: FakeCall) => ({ stdout: call.args.includes('--no-data') ? STRUCTURE : DONE }) });
+    const fake = fakeExec({ ssh: (call: FakeCall) => ({ stdout: call.args.includes('--no-data=true') ? STRUCTURE : DONE }) });
     const r = await run(planServerDump(serverCtx(fake.exec, uploadsDir, t.config), { host: 'staging-spellbook', mode: 'export', path: '/var/www/spellbook', excludeRows: ['wp_actionscheduler_logs', 'wp_wfhits'] }, () => undefined)) as unknown as Array<{ stdout: string }>;
     const all = Array.isArray(r) ? r : [r];
     expect(fake.calls[0]?.args.at(-1)).toBe('--exclude_tables=wp_actionscheduler_logs,wp_wfhits');
-    expect(fake.calls[1]?.args.slice(-2)).toEqual(['--tables=wp_actionscheduler_logs,wp_wfhits', '--no-data']);
+    expect(fake.calls[1]?.args.slice(-2)).toEqual(['--tables=wp_actionscheduler_logs,wp_wfhits', '--no-data=true']);
+    // WP-CLI turns a bare --no-x into --x= for mysqldump, which stops it: every such switch goes with =true.
+    expect(fake.calls.flatMap((c) => c.args).filter((arg) => /^--no-[^=]+$/.test(arg))).toEqual([]);
     const info = readUpload(uploadsDir, uploadOf(all.map((x) => x.stdout).join('\n')));
     expect(gunzipSync(readFileSync(info?.file as string)).toString()).toBe(DONE + STRUCTURE);
     expect(actions['dump.fromServer'].input.safeParse({ host: 'h', mode: 'export', path: '/a', excludeRows: ['wp_x; DROP'] }).success).toBe(false);
@@ -141,6 +143,13 @@ describe('a dump from this machine', () => {
     const site = await run(planLocalDump(ctx(wp.exec), { kind: 'site', domain: 'local.shop.com', excludeRows: [] }, () => undefined));
     expect(site.code).toBe(0);
     expect(wp.calls[0]?.args.slice(0, 4)).toEqual([`--path=${t.docroot}`, '--url=https://local.shop.com/', 'db', 'export']);
+
+    // Tables left out come as their structure, with the switch in the form WP-CLI hands to mysqldump as it is.
+    const left = fakeExec({ wp: (call: FakeCall) => (writeFileSync(call.args.find((a) => a.includes('.more-')) as string, SQL), { stdout: 'Success: Exported' }) });
+    const parts = [await run(planLocalDump(ctx(left.exec), { kind: 'site', domain: 'local.shop.com', excludeRows: ['wp_wfhits'] }, () => undefined))].flat();
+    expect(parts.map((x) => x.code)).toEqual([0, 0]);
+    expect(left.calls[1]?.args).toEqual(expect.arrayContaining(['--tables=wp_wfhits', '--no-data=true']));
+    expect(left.calls.flatMap((c) => c.args).filter((arg) => /^--no-[^=]+$/.test(arg))).toEqual([]);
 
     const snapshots = join(t.config.BACKUP_DIR, 'snapshots', 'local.shop.com');
     mkdirSync(snapshots, { recursive: true });

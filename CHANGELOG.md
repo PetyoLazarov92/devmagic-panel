@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.30.1 (2026-11-09)
+* **Fix:** an export over SSH with WP-CLI no longer stops with `unknown variable 'tablespaces='`: WP-CLI turned the panel's switch into one mysqldump and mariadb-dump refuse, on a server or for Refresh from production. Tables whose rows are left out, over SSH or from another site on this machine, had the same fault and come with their structure again
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.30.0 (2026-11-09)
 * **Fix:** a dump from a server over SSH works on hosts whose PHP turns `exec` and similar functions off: when WP-CLI stops there without a word, the export runs once more as `php -d disable_functions= <wp>`, for that one run only, and the job says so. Every export uses `--no-tablespaces`, so a host without the PROCESS privilege no longer refuses it
 * **Sites:** an export over SSH is compressed on the way, and one without mysqldump's last line (a dropped connection) is thrown away instead of imported

@@ -71,7 +71,7 @@ describe('Refresh from production', () => {
     expect(remote).toHaveLength(2);
     expect(remote.every((r) => r.includes('db export -') && r.includes('--path=/var/www/shop'))).toBe(true);
     expect(remote[0]).toContain('--exclude_tables=other_actionscheduler_logs');
-    expect(remote[1]).toContain('--tables=other_actionscheduler_logs --no-data');
+    expect(remote[1]).toContain('--tables=other_actionscheduler_logs --no-data=true');
     const copied = [await (steps[1] as JobStep).run(job())].flat();
     expect(copied.at(-1)).toMatchObject({ code: 1, stderr: expect.stringContaining('table prefix other_') });
   });

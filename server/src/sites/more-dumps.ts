@@ -161,20 +161,28 @@ async function fallbackWp(exec: Executor, host: string): Promise<WpRun | null> {
   return where.code === 0 && PROGRAM_PATH.test(path) ? ['php', '-d', 'disable_functions=', '-d', 'display_errors=stderr', path] : null;
 }
 
+/**
+ * mysqldump's switches as WP-CLI must get them: it reads a bare --no-x as
+ * "x is off" and hands mysqldump --x=, which stops it ("unknown variable
+ * 'tablespaces='"). With =true the switch goes through as it is.
+ */
+const NO_TABLESPACES = '--no-tablespaces=true';
+const NO_DATA = '--no-data=true';
+
 const quietDeath = (r: ExecResult, bytes: number) => r.code === 255 && bytes === 0 && !r.stderr.trim();
 
 /**
  * Exports a WordPress database over SSH into one gzip file here, streamed:
  * nothing is written on the server, and the database password never leaves
- * it. Compressed in transit (Compression=yes), --no-tablespaces for shared
+ * it. Compressed in transit (Compression=yes), no tablespaces for shared
  * hosts, the fallback above when WP-CLI dies without a word, and a dump that
  * does not end the way mysqldump ends one (a dropped connection) refused.
  * Tables in leftOut come as their structure only: a second export with
  * --no-data, appended as a second gzip member, read as one file.
  */
 export async function exportOverSsh(exec: Executor, host: string, path: string, leftOut: readonly string[], file: string, seen: { bytes: number } = { bytes: 0 }): Promise<{ notes: string[] } | { error: string }> {
-  const base = [`--path=${path}`, 'db', 'export', '-', '--single-transaction', '--quick', '--no-tablespaces', '--skip-plugins', '--skip-themes'];
-  const parts: string[][] = [[...base, ...(leftOut.length ? [`--exclude_tables=${leftOut.join(',')}`] : [])], ...(leftOut.length ? [[...base, `--tables=${leftOut.join(',')}`, '--no-data']] : [])];
+  const base = [`--path=${path}`, 'db', 'export', '-', '--single-transaction', '--quick', NO_TABLESPACES, '--skip-plugins', '--skip-themes'];
+  const parts: string[][] = [[...base, ...(leftOut.length ? [`--exclude_tables=${leftOut.join(',')}`] : [])], ...(leftOut.length ? [[...base, `--tables=${leftOut.join(',')}`, NO_DATA]] : [])];
   const gzip = createGzip({ level: 1 });
   const written = pipeline(gzip, createWriteStream(file, { mode: 0o600 }));
   written.catch(() => undefined);
@@ -291,7 +299,7 @@ export function planLocalDump(ctx: MoreDumpsContext, input: ActionInput<'dump.fr
             if (r.code !== 0) return r;
             // The tables left out come as their structure only, so a plugin finds its table, empty.
             if (leftOut.length) {
-              const s2 = await wp(['db', 'export', structure, `--tables=${leftOut.join(',')}`, '--no-data']);
+              const s2 = await wp(['db', 'export', structure, `--tables=${leftOut.join(',')}`, NO_DATA]);
               if (s2.code !== 0) return s2;
               appendFileSync(part, readFileSync(structure));
             }
