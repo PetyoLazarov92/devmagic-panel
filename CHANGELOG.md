@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.28.1 (2026-11-09)
+* **Fix:** the Made by hand and Taken over card on a site's Overview has its icon on the right of its title, like the other cards
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.28.0 (2026-11-09)
 * **Sites:** where a repo goes is now a folder of the site and a folder name, in place of the fixed whole site, wp-content, theme or plugin choice; the wizard picks it from what the repo holds, and the install clones each repo there, never through a link out of the site or into a folder that holds files
 * **Sites:** a repo that holds WordPress core is used as it is, with no shared core and no download, and core or uploads in a repo get a warning instead of a refusal; with a shared core a repo cannot go into its `wp-admin` or `wp-includes`, which link to the core every site uses

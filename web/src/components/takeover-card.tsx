@@ -3,7 +3,6 @@ import { CircleAlert, FileCode2, Hand, LoaderCircle, ShieldCheck, Undo2 } from '
 import { useEffect, useState } from 'react';
 import { JobFooter } from '@/components/job-box';
 import { useJob } from '@/components/job-steps';
-import { ScopeLabel } from '@/components/scope-label';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
@@ -29,10 +28,7 @@ export function TakeoverCard({ site, onChanged }: { site: Site; onChanged: () =>
   if (site.path || (site.vhostManaged && !takenOver)) return null;
   return (
     <Card>
-      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-        <CardTitle className="flex items-center gap-2"><Hand className="size-4 text-muted-foreground" />{takenOver ? 'Taken over' : 'Made by hand'}</CardTitle>
-        <ScopeLabel>this site</ScopeLabel>
-      </CardHeader>
+      <CardHeader><CardTitle>{takenOver ? 'Taken over' : 'Made by hand'}</CardTitle><Hand className="size-4 text-muted-foreground" /></CardHeader>
       <div className="grid gap-3 p-5 text-sm">
         {takenOver ? (
           <>
