@@ -271,7 +271,7 @@ function ExportDialog({ database, tables, onClose }: { database: string; tables:
   const size = (names: Iterable<string>) => [...names].reduce((n, name) => n + ((tables.find((t) => t.name === name)?.dataBytes ?? 0)), 0);
   const chosen = what === 'all' ? tables.map((t) => t.name) : [...ticked];
   return (
-    <Dialog open onClose={onClose} title={`Export ${database}`} description="A .sql.gz the browser downloads: the tables with their rows, and for a whole database its views, routines and events. It has no CREATE DATABASE or USE, so it imports into any database." className="w-[min(36rem,calc(100vw-2rem))]">
+    <Dialog open onClose={onClose} title={`Export ${database}`} description="A .sql.gz the browser downloads: the tables with their rows, and for a whole database its views, routines and events. It has no CREATE DATABASE or USE, so it imports into any database." size="lg">
       <div className="mt-4 grid gap-3">
         <Segmented label="What" value={what} onChange={setWhat} options={[['all', 'The whole database'], ['some', 'Tables I pick']]} className="justify-self-start" />
         {what === 'some' && (
@@ -681,7 +681,7 @@ function RowDialog({ row, page, database, table, onClose, onEdit, onDuplicate, o
       open={row !== null}
       onClose={onClose}
       title={`A row of ${table}`}
-      className="w-[min(48rem,calc(100vw-2rem))]"
+      size="xl"
       fullScreen={fullScreen}
       footer={
         <>

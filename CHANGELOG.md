@@ -1,5 +1,8 @@
 # Changelog
 
+### v1.28.0 (2026-11-09)
+* **Panel:** dialogs come in four widths, from a short question to a table: the web server switch and the .htaccess rules review open wide enough for their options side by side, which stack on a narrow window
+
 ### v1.27.0 (2026-11-08)
 * **Sites:** the panel watches the `.htaccess` files of sites on nginx while it runs and says when one changes: a notice on any page with Review, which opens the review of that site's rules. A change that leaves nginx's rules as they are, like a caching plugin saving its settings, stays quiet. Nothing is applied without the review
 * **Sites:** the .htaccess rules card tells a change nginx needs (with how many rules to add or take out) from one it does not, and Not now puts a change off: Aura and the notices stay quiet until a file changes again

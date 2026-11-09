@@ -179,7 +179,7 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
       onKeptOpen={() => setKeptOpen(true)}
       title={title}
       description={mode === 'edit' ? 'Saved only while the row still holds what you see here. Undo in the toast, or under Changes you can undo, puts it back for 14 days.' : 'Columns you leave alone get their default. Undo deletes the row again.'}
-      className="w-[min(52rem,calc(100vw-2rem))]"
+      size="xl"
       fullScreen={fullScreen}
       footer={
         <>

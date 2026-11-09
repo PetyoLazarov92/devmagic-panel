@@ -140,9 +140,9 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
         )}
       </div>
 
-      <Dialog open={open} onClose={() => setOpen(false)} title={`Web server for ${site.domain}`} description="Pick the setup the site runs on in production, so it behaves the same here." className="sm:max-w-3xl">
+      <Dialog open={open} onClose={() => setOpen(false)} title={`Web server for ${site.domain}`} description="Pick the setup the site runs on in production, so it behaves the same here." size="lg">
         <div className="grid gap-4 text-sm">
-          <fieldset className="grid gap-2 sm:grid-cols-3">
+          <fieldset className="grid gap-2 md:grid-cols-3">
             <legend className="sr-only">Web server</legend>
             {SITE_SERVERS.map((server) => {
               const why = server === site.server ? undefined : refusals[server];

@@ -65,6 +65,12 @@ globs: ["web/**"]
   content scrolls between the title and them; a row's dialogs also pass
   `fullScreen` (`useRowDialogFull`), remembered as a preference. Confirm
   dialogs stay small.
+- **Dialog widths come from `size`, never a class**: `sm` (24rem) a short
+  question, `md` (32rem, the default) a confirm or a few fields, `lg` (48rem)
+  choices side by side, lists and previews (the web server switch, .htaccess
+  rules, export), `xl` (64rem) tables, rows and diffs (the row editor, a
+  result row), and `fullScreen` on top. `web/test/dialog-sizes.test.ts` fails
+  on a width passed in `className`.
 - **The menu is three groups** (Work, Server, System, in
   `components/app-shell.tsx`), every page visible, each with a short hint or
   a live count on the right. Group by what a page is for, not by technology:

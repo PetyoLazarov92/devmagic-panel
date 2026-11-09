@@ -291,7 +291,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
           onConfirm={startWrite}
         />
       )}
-      <Dialog open={open !== null} onClose={() => setOpen(null)} title="A row of the result" className="w-[min(48rem,calc(100vw-2rem))]" fullScreen={fullScreen} footer={<Button variant="outline" onClick={() => setOpen(null)}>Close</Button>}>
+      <Dialog open={open !== null} onClose={() => setOpen(null)} title="A row of the result" size="xl" fullScreen={fullScreen} footer={<Button variant="outline" onClick={() => setOpen(null)}>Close</Button>}>
         {open !== null && result && (
           <div className="grid gap-3">
             {result.columns.map((c, i) => (

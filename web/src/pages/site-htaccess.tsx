@@ -243,7 +243,7 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
         )}
       </div>
 
-      <Dialog open={open} onClose={() => setOpen(false)} title={`Apply ${site.domain}'s .htaccess rules on nginx`} description="Untick a rule to leave it out. dmp-root checks every rule, nginx -t runs before the reload, the site is checked after, and Undo on the job puts the rules back as they were." className="sm:max-w-3xl">
+      <Dialog open={open} onClose={() => setOpen(false)} title={`Apply ${site.domain}'s .htaccess rules on nginx`} description="Untick a rule to leave it out. dmp-root checks every rule, nginx -t runs before the reload, the site is checked after, and Undo on the job puts the rules back as they were." size="lg">
         {data && (
           <div className="grid gap-4">
             <HtaccessReview report={data} skip={skip} onSkip={setSkip} applied={applied} />

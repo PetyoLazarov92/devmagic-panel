@@ -1,7 +1,9 @@
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { DIALOG_SIZES, type DialogSize } from '@/lib/dialog-sizes';
 import { cn } from '@/lib/utils';
+
 
 interface Props {
   open: boolean;
@@ -9,6 +11,9 @@ interface Props {
   title: string;
   description?: ReactNode;
   children: ReactNode;
+  /** Its width, from DIALOG_SIZES; md by default. */
+  size?: DialogSize;
+  /** Placement and the like; never a width (use size). */
   className?: string;
   /** Hide the visual title (it stays for screen readers), e.g. for the command palette. */
   bare?: boolean;
@@ -32,7 +37,7 @@ interface Props {
  * ends on the backdrop, so selecting text in a field and letting go outside
  * keeps it open.
  */
-export function Dialog({ open, onClose, title, description, children, className, bare, closeOnBackdrop = true, closeOnEscape = true, onKeptOpen, footer, fullScreen }: Props) {
+export function Dialog({ open, onClose, title, description, children, size = 'md', className, bare, closeOnBackdrop = true, closeOnEscape = true, onKeptOpen, footer, fullScreen }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const pressedOnBackdrop = useRef(false);
@@ -65,7 +70,8 @@ export function Dialog({ open, onClose, title, description, children, className,
         if (onBackdrop && closeOnBackdrop) onClose();
       }}
       className={cn(
-        'm-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl border bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-black/40 backdrop:backdrop-blur-[2px]',
+        'm-auto rounded-xl border bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-black/40 backdrop:backdrop-blur-[2px]',
+        DIALOG_SIZES[size],
         footer !== undefined && 'max-h-[calc(100dvh-2rem)] overflow-hidden',
         className,
         // Full screen wins over the width a caller gives.

@@ -156,7 +156,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
 
   let lastGroup = '';
   return (
-    <Dialog open={open} onClose={close} title="Command palette" bare className="mt-[12vh] mb-auto w-[min(36rem,calc(100vw-2rem))]">
+    <Dialog open={open} onClose={close} title="Command palette" bare className="mt-[12vh] mb-auto">
       {asking ? (
         <div
           className="grid gap-3 p-5"
