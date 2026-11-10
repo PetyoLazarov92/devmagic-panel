@@ -59,9 +59,3 @@ export function usePreferences(): Preferences {
     () => current,
   );
 }
-
-/** Full screen for a row's dialogs: chosen on one, the next opens the same way, Edit after View included. */
-export function useRowDialogFull(): { on: boolean; onChange: (on: boolean) => void } {
-  const { rowDialogFull } = usePreferences();
-  return { on: rowDialogFull, onChange: (on) => savePreferences({ rowDialogFull: on }) };
-}

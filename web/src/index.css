@@ -93,6 +93,12 @@
   }
   html {
     color-scheme: light;
+    /* The scrollbar's room stays, so the page does not move when a dialog stops its scrolling. */
+    scrollbar-gutter: stable;
+  }
+  /* An open modal dialog: the page behind it stays where it is. */
+  html:has(dialog:modal) {
+    overflow: hidden;
   }
   html.dark {
     color-scheme: dark;

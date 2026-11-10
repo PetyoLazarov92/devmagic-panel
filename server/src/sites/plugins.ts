@@ -33,6 +33,13 @@ export function requiredPlugins(header: string): string[] {
   return line.split(',').map((s) => s.trim()).filter((s) => /^[a-z0-9_-]{1,100}$/.test(s));
 }
 
+/** A plugin header's field, like Description, as plain text: no tags, at most 300 characters. */
+export function headerField(header: string, field: string): string {
+  const line = new RegExp(`^[ \\t/*#@]*${field}:(.*)$`, 'im').exec(header)?.[1] ?? '';
+  const text = line.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  return text.length > 300 ? `${text.slice(0, 299)}…` : text;
+}
+
 /** The first 8 KB of a plugin's main file, where WordPress reads its headers too; empty when it cannot be read. */
 function headerOf(file: string): string {
   try {
@@ -73,7 +80,13 @@ export async function readPlugins(exec: Executor, site: SiteRef, productionOnly:
     .filter((r) => STATUSES.has(r.status as SitePlugin['status']))
     .map((r): SitePlugin => {
       const status = r.status as SitePlugin['status'];
-      const requires = status === 'must-use' || status === 'dropin' ? [] : requiredPlugins(headerOf(join(pluginDir, r.file)));
+      const own = status !== 'must-use' && status !== 'dropin';
+      const header = own ? headerOf(join(pluginDir, r.file)) : '';
+      const requires = requiredPlugins(header);
+      const description = headerField(header, 'Description');
+      const author = headerField(header, 'Author');
+      // Its folder, or its one file for a plugin like hello.php: what Open folder goes to.
+      const top = r.file.split('/')[0] ?? '';
       return {
         name: r.name,
         title: r.title || r.name,
@@ -83,6 +96,9 @@ export async function readPlugins(exec: Executor, site: SiteRef, productionOnly:
         ...(requires.length ? { requires } : {}),
         ...(productionOnly.includes(r.name) ? { productionOnly: true as const } : {}),
         ...(r.name in LOCAL_HELPER_PLUGINS ? { localHelper: true as const } : {}),
+        ...(own && /^[A-Za-z0-9._-]+$/.test(top) && top !== '..' ? { path: `wp-content/plugins/${top}`, ...(r.file.includes('/') ? {} : { oneFile: true as const }) } : {}),
+        ...(description ? { description } : {}),
+        ...(author ? { author } : {}),
       };
     });
   const on = (p: SitePlugin) => p.status === 'active' || p.status === 'active-network';

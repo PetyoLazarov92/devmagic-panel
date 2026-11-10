@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { ActionInputError, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs, type JobStep } from '../src/jobs.js';
 import { discoverSites } from '../src/sites/discover.js';
-import { htaccessFolders, htaccessIgnored, staticRules } from '../src/sites/htaccess.js';
+import { htaccessFolders, htaccessIgnored, SCAN_FOLDERS, scanEnters, staticRules } from '../src/sites/htaccess.js';
 import { hostsBlockAddress, hostsOutsideBlock, HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { moveRefusal, planApplyHtaccess, planSetServer, planSetServerAll } from '../src/sites/server-switch.js';
 import { readHtaccessReport } from '../src/sites/htaccess-rules.js';
@@ -322,6 +322,28 @@ function inFront(t: ReturnType<typeof tree>, options: { static?: boolean; paths?
   symlinkSync(file, join(t.config.NGINX_SITES_ENABLED, 'local.shop.com.conf'));
   t.write('hosts', `127.0.0.1 localhost\n${HOSTS_BEGIN}\n127.0.0.2 local.shop.com local.shop.de\n${HOSTS_END}\n`);
 }
+
+describe('the scan for .htaccess files', () => {
+  it('reads the top of uploads and a page cache but not their deep trees or the year folders of uploads', () => {
+    expect(scanEnters('/wp-content/uploads/wc-logs')).toBe(true);
+    expect(scanEnters('/wp-content/uploads/wc-logs/deeper')).toBe(true);
+    expect(scanEnters('/wp-content/uploads/wc-logs/deeper/still')).toBe(false);
+    expect(scanEnters('/wp-content/uploads/2024')).toBe(false);
+    expect(scanEnters('/wp-content/cache/page')).toBe(true);
+    expect(scanEnters('/wp-content/cache/page/local.shop.com/shop')).toBe(false);
+    expect(scanEnters('/wp-content/themes/wandworks/assets/a/b/c')).toBe(true);
+  });
+
+  it('says where it stopped when a site has more folders than it reads', () => {
+    const t = tree();
+    for (let i = 0; i < SCAN_FOLDERS + 5; i++) mkdirSync(join(t.root, 'www/local.shop.com/many', `f${String(i).padStart(5, '0')}`), { recursive: true });
+    const report = readHtaccessReport(join(t.root, 'www/local.shop.com'), undefined, Date.now(), true);
+    expect(report.partial).toBe(true);
+    expect(report.foldersStopped?.limit).toBe(SCAN_FOLDERS);
+    expect(report.foldersStopped?.at).toMatch(/^\/many\/f\d{5}$/);
+    expect(report.rulesStopped).toBeUndefined();
+  });
+});
 
 describe('nginx in front of Apache', () => {
   it('reads the site as its Apache vhost with the front noted, on nginx address', () => {

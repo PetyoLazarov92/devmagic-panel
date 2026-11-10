@@ -76,7 +76,25 @@ export function HtaccessReview({ report, skip, onSkip, applied }: { report: Htac
           </ul>
         </section>
       ))}
-      {report.partial && <p className="text-xs text-warning">The panel read so many folders or rules that it stopped; some may be missing here.</p>}
+      {report.partial && <ScanLimits report={report} />}
+    </div>
+  );
+}
+
+/** Which limit the read reached, and what that leaves out; a report from before says it the short way. */
+function ScanLimits({ report }: { report: HtaccessReport }) {
+  const n = (v: number) => v.toLocaleString('en-US');
+  const lines: string[] = [];
+  if (report.foldersStopped) {
+    lines.push(`The site has more than ${n(report.foldersStopped.limit)} folders, so the panel stopped reading at ${report.foldersStopped.at}: an .htaccess in a folder after it is not listed here. Caches and the year folders of uploads are not counted.`);
+  }
+  if (report.rulesStopped) {
+    lines.push(`One nginx file takes ${n(report.rulesStopped.limit)} rules: the ${n(report.rulesStopped.left)} after them are marked to do by hand.`);
+  }
+  if (!lines.length) lines.push('The panel read so many folders or rules that it stopped; some may be missing here.');
+  return (
+    <div className="grid gap-1 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning">
+      {lines.map((l) => <p key={l}>{l}</p>)}
     </div>
   );
 }

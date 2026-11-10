@@ -264,15 +264,15 @@ describe('preferences', () => {
     const cookie = await login();
     const headers = { host: HOST, origin: ORIGIN, cookie };
     expect((await app.inject({ method: 'GET', url: '/api/preferences', headers: { host: HOST } })).statusCode).toBe(401);
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', rowDialogFull: false, useClaude: 'always' });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always' });
     const saved = await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { theme: 'dark', sitesView: 'list' } });
-    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', rowDialogFull: false, useClaude: 'always' });
-    await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { sitesSort: 'newest', tablesSort: 'size', rowDialogFull: true } });
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', rowDialogFull: true, useClaude: 'always' });
-    for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }, { rowDialogFull: 'yes' }, { useClaude: 'sometimes' }]) {
+    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always' });
+    await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { sitesSort: 'newest', tablesSort: 'size', sidebar: 'rail' } });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always' });
+    for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }, { sidebar: 'hidden' }, { useClaude: 'sometimes' }]) {
       expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload })).statusCode).toBe(400);
     }
-    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', rowDialogFull: true, useClaude: 'always' });
+    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always' });
   });
 });
 

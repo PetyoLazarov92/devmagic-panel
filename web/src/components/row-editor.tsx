@@ -5,11 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditorBoundary } from '@/components/editor-boundary';
-import { Dialog } from '@/components/ui/dialog';
+import { Dialog, useFullScreen } from '@/components/ui/dialog';
 import { Input, Textarea } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { shortDate, timeAgo } from '@/lib/format';
-import { useRowDialogFull } from '@/lib/preferences';
 import { fixSerializedLengths, looksSerialized, lostPropertyMarks, needsExactEditor, parseJsonValue, parsePhpSerialized, type PropertyName, withNulMarks } from '@/lib/php-serialized';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
@@ -92,7 +91,7 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
   const [error, setError] = useState<string | null>(null);
   const [keptOpen, setKeptOpen] = useState(false);
   const formId = useId();
-  const fullScreen = useRowDialogFull();
+  const fullScreen = useFullScreen();
 
   // The full values first: a long one shows only its start on the page.
   useEffect(() => {

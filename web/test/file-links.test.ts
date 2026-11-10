@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileMentions, filesHref } from '../src/lib/file-links.js';
+import { fileMentions, filesHref, pluginFolderHref, themeFolderHref } from '../src/lib/file-links.js';
 
 const root = '/var/www/local.spellbook.example';
 
@@ -26,5 +26,17 @@ describe('fileMentions', () => {
     expect(fileMentions(`in ${root}/../secret/a.php on line 3`, root)).toEqual([]);
     expect(fileMentions('Nothing to see', root)).toEqual([]);
     expect(fileMentions(`in ${root}/index.php`, '')).toEqual([]);
+  });
+});
+
+describe('themeFolderHref and pluginFolderHref', () => {
+  const site = { domain: 'local.spellbook.example' };
+  it('opens a theme at the folder it has, from the site folder, without adding the themes folder again', () => {
+    expect(themeFolderHref(site, { folder: 'wp-content/themes/wandworks' })).toBe('/sites/local.spellbook.example?tab=files&dir=wp-content%2Fthemes%2Fwandworks');
+    expect(themeFolderHref(site, { folder: 'wp-content/repos/theme-kit/wandworks' })).toBe('/sites/local.spellbook.example?tab=files&dir=wp-content%2Frepos%2Ftheme-kit%2Fwandworks');
+  });
+  it('opens a plugin at its folder, or at its file when it is one file', () => {
+    expect(pluginFolderHref(site, { path: 'wp-content/plugins/wandworks-blocks' })).toBe('/sites/local.spellbook.example?tab=files&dir=wp-content%2Fplugins%2Fwandworks-blocks');
+    expect(pluginFolderHref(site, { path: 'wp-content/plugins/hello-wands.php', oneFile: true })).toBe('/sites/local.spellbook.example?tab=files&file=wp-content%2Fplugins%2Fhello-wands.php');
   });
 });

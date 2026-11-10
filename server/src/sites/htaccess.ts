@@ -108,7 +108,30 @@ export const readHtaccess = (docroot: string): string | null => {
 const SKIP_FOLDERS = new Set(['node_modules', 'vendor', '.git', '.svn', 'bower_components']);
 /** Where the scan stops, so a site with a deep uploads tree is read in a moment. */
 const SCAN_DEPTH = 8;
-const SCAN_FOLDERS = 5000;
+export const SCAN_FOLDERS = 5000;
+/**
+ * Trees a site grows by itself, read only near their top: a page cache has a
+ * folder per address, and uploads one per year and month. Their .htaccess
+ * files sit at the top (uploads/wc-logs, cache/), so two levels below them
+ * are read and WordPress's own year folders are left out.
+ */
+const SHALLOW_TREES = ['/wp-content/cache', '/wp-content/uploads'];
+const SHALLOW_LEVELS = 2;
+
+/** Whether the scan goes into this folder, from the site's own: never deep into a cache or the year and month folders of uploads. */
+export function scanEnters(path: string): boolean {
+  if (/^\/wp-content\/uploads\/\d{4}$/.test(path)) return false;
+  const tree = SHALLOW_TREES.find((t) => path.startsWith(`${t}/`));
+  return !tree || path.slice(tree.length + 1).split('/').length <= SHALLOW_LEVELS;
+}
+
+/** A scan of a site's folders for .htaccess files: where it stopped at its limit of folders, if it did. */
+export interface HtaccessScan {
+  folders: string[];
+  partial: boolean;
+  /** The first folder left unread once the limit was reached. */
+  stoppedAt?: string;
+}
 
 /**
  * The site's folders, below its own, that have an .htaccess of their own,
@@ -125,7 +148,7 @@ export function htaccessFolders(docroot: string, fresh = false): string[] {
  * Every folder below the site's own with an .htaccess, sorted, and whether
  * the scan stopped at its limit of folders.
  */
-export function scanHtaccess(docroot: string, fresh = false): { folders: string[]; partial: boolean } {
+export function scanHtaccess(docroot: string, fresh = false): HtaccessScan {
   const hit = scans.get(docroot);
   if (!fresh && hit && Date.now() - hit.at < SCAN_TTL_MS) return hit.scan;
   const scan = walkHtaccess(docroot);
@@ -134,17 +157,17 @@ export function scanHtaccess(docroot: string, fresh = false): { folders: string[
 }
 
 /** Scans of a site's folders, kept a minute: the sites list reads them for every site. */
-const scans = new Map<string, { at: number; scan: { folders: string[]; partial: boolean } }>();
+const scans = new Map<string, { at: number; scan: HtaccessScan }>();
 const SCAN_TTL_MS = 60_000;
 
-function walkHtaccess(docroot: string): { folders: string[]; partial: boolean } {
+function walkHtaccess(docroot: string): HtaccessScan {
   const found: string[] = [];
   let seen = 0;
-  let partial = false;
+  let stoppedAt: string | undefined;
   const walk = (dir: string, at: string, depth: number) => {
     if (depth > SCAN_DEPTH) return;
     if (seen >= SCAN_FOLDERS) {
-      partial = true;
+      stoppedAt ??= at;
       return;
     }
     let entries;
@@ -157,11 +180,12 @@ function walkHtaccess(docroot: string): { folders: string[]; partial: boolean } 
     if (at && entries.some((e) => e.isFile() && e.name === '.htaccess')) found.push(at);
     for (const e of entries) {
       if (!e.isDirectory() || SKIP_FOLDERS.has(e.name) || !/^[A-Za-z0-9._-]+$/.test(e.name) || e.name === '.' || e.name === '..') continue;
+      if (!scanEnters(`${at}/${e.name}`)) continue;
       walk(join(dir, e.name), `${at}/${e.name}`, depth + 1);
     }
   };
   walk(docroot, '', 0);
-  return { folders: found.sort(), partial };
+  return { folders: found.sort(), partial: stoppedAt !== undefined, ...(stoppedAt !== undefined ? { stoppedAt } : {}) };
 }
 
 /** Files nginx serves itself in front of Apache (DMP_NGINX_STATIC_EXT in scripts/lib/nginx.sh). */

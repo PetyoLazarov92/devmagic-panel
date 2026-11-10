@@ -9,7 +9,7 @@ import { DeleteRowsDialog, deleteRowsNow, type EditorMode, RowChangesCard, RowEd
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
+import { Dialog, useFullScreen } from '@/components/ui/dialog';
 import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ import { Segmented } from '@/components/ui/segmented';
 import { api, dbExportUrl, isMockup } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { controlRuns, parseJsonValue, parsePhpSerialized, propertyName, type PhpValue } from '@/lib/php-serialized';
-import { savePreferences, usePreferences, useRowDialogFull } from '@/lib/preferences';
+import { savePreferences, usePreferences } from '@/lib/preferences';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
@@ -675,7 +675,7 @@ function RowDialog({ row, page, database, table, onClose, onEdit, onDuplicate, o
   onDuplicate?: (row: DbRow) => void;
   onDelete?: (row: DbRow) => void;
 }) {
-  const fullScreen = useRowDialogFull();
+  const fullScreen = useFullScreen();
   return (
     <Dialog
       open={row !== null}

@@ -336,6 +336,13 @@ export interface SitePlugin {
   productionOnly?: true;
   /** One of the local helpers, like Query Monitor. */
   localHelper?: true;
+  /** From the site's folder: its folder (wp-content/plugins/acf), or its one file for a plugin like hello.php. */
+  path?: string;
+  /** The plugin is one file right in the plugins folder, so path is a file. */
+  oneFile?: true;
+  /** From its header, as plain text. */
+  description?: string;
+  author?: string;
 }
 
 export interface SitePlugins {

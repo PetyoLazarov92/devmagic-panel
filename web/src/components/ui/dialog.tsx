@@ -1,5 +1,5 @@
 import { Maximize2, Minimize2 } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useRef } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DIALOG_SIZES, type DialogSize } from '@/lib/dialog-sizes';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,16 @@ interface Props {
 }
 
 /**
+ * Full screen for a dialog, or for several that take turns (a row's View,
+ * then Edit): it lasts while they are open, and every new open starts at the
+ * usual size, since a dialog that closes turns it off.
+ */
+export function useFullScreen(): { on: boolean; onChange: (on: boolean) => void } {
+  const [on, onChange] = useState(false);
+  return { on, onChange };
+}
+
+/**
  * Modal dialog on the native <dialog> element: focus trapping, Escape and the
  * backdrop come from the browser. A click closes it only when it starts and
  * ends on the backdrop, so selecting text in a field and letting go outside
@@ -47,6 +57,8 @@ export function Dialog({ open, onClose, title, description, children, size = 'md
     if (!el) return;
     if (open && !el.open) el.showModal();
     if (!open && el.open) el.close();
+    // Full screen is never kept: the next open is at the usual size.
+    if (!open && fullScreen?.on) fullScreen.onChange(false);
   }, [open]);
 
   return (

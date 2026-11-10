@@ -101,16 +101,17 @@ async function playRun(steps: RunStep[], onUpdate: (steps: RunStep[]) => void, f
 const mockPlugins: SitePlugin[] = [
   { name: 'devmagic-panel-local', title: 'devmagic-panel Local mode', status: 'must-use', version: '3' },
   { name: 'advanced-cache.php', title: 'advanced-cache.php', status: 'dropin', version: '' },
-  { name: 'advanced-custom-fields-pro', title: 'Advanced Custom Fields PRO', status: 'active', version: '6.4.2', requiredBy: ['ACF Blocks for Wandworks'] },
-  { name: 'wandworks-acf-blocks', title: 'ACF Blocks for Wandworks', status: 'active', version: '1.3.0', requires: ['advanced-custom-fields-pro'] },
-  { name: 'cloudflare', title: 'Cloudflare', status: 'inactive', version: '4.14.4', update: '4.14.5', productionOnly: true },
-  { name: 'wp-rocket', title: 'WP Rocket', status: 'inactive', version: '3.19.1', productionOnly: true },
-  { name: 'gravityforms', title: 'Gravity Forms', status: 'active', version: '2.9.8', update: '2.9.9' },
-  { name: 'query-monitor', title: 'Query Monitor', status: 'active', version: '3.17.0', localHelper: true },
-  { name: 'user-switching', title: 'User Switching', status: 'inactive', version: '1.9.1', localHelper: true },
-  { name: 'seo-by-rank-math', title: 'Rank Math SEO', status: 'active', version: '1.0.279', update: '1.0.280' },
-  { name: 'stream', title: 'Stream', status: 'active', version: '4.1.1' },
-  { name: 'wp-mail-smtp-pro', title: 'WP Mail SMTP Pro', status: 'active', version: '4.8.0' },
+  { name: 'advanced-custom-fields-pro', title: 'Advanced Custom Fields PRO', status: 'active', version: '6.4.2', requiredBy: ['ACF Blocks for Wandworks'], path: 'wp-content/plugins/advanced-custom-fields-pro', description: 'Custom fields and field groups for posts, pages and options.', author: 'Sam Lee' },
+  { name: 'wandworks-acf-blocks', title: 'ACF Blocks for Wandworks', status: 'active', version: '1.3.0', requires: ['advanced-custom-fields-pro'], path: 'wp-content/plugins/wandworks-acf-blocks', description: 'The block library of the Wandworks theme, built on ACF.', author: 'Wandworks' },
+  { name: 'cloudflare', title: 'Cloudflare', status: 'inactive', version: '4.14.4', update: '4.14.5', productionOnly: true, path: 'wp-content/plugins/cloudflare', description: 'Cache purging and settings for the Cloudflare in front of the site.', author: 'Alex Morgan' },
+  { name: 'wp-rocket', title: 'WP Rocket', status: 'inactive', version: '3.19.1', productionOnly: true, path: 'wp-content/plugins/wp-rocket', description: 'Page cache, file minification and lazy loading.', author: 'Sam Lee' },
+  { name: 'gravityforms', title: 'Gravity Forms', status: 'active', version: '2.9.8', update: '2.9.9', path: 'wp-content/plugins/gravityforms', description: 'Forms with conditional fields and entries kept in the database.', author: 'Wandworks' },
+  { name: 'query-monitor', title: 'Query Monitor', status: 'active', version: '3.17.0', localHelper: true, path: 'wp-content/plugins/query-monitor', description: 'The developer tools panel: queries, hooks, HTTP calls and errors.', author: 'Alex Morgan' },
+  { name: 'user-switching', title: 'User Switching', status: 'inactive', version: '1.9.1', localHelper: true, path: 'wp-content/plugins/user-switching', description: 'Switch between user accounts with one click.', author: 'Sam Lee' },
+  { name: 'seo-by-rank-math', title: 'Rank Math SEO', status: 'active', version: '1.0.279', update: '1.0.280', path: 'wp-content/plugins/seo-by-rank-math', description: 'Titles, sitemaps and schema for search engines.', author: 'Wandworks' },
+  { name: 'stream', title: 'Stream', status: 'active', version: '4.1.1', path: 'wp-content/plugins/stream', description: 'A log of what users do in wp-admin.', author: 'Alex Morgan' },
+  { name: 'wp-mail-smtp-pro', title: 'WP Mail SMTP Pro', status: 'active', version: '4.8.0', path: 'wp-content/plugins/wp-mail-smtp-pro', description: 'Sends WordPress mail through an SMTP server or a mail service.', author: 'Sam Lee' },
+  { name: 'hello-wands', title: 'Hello Wands', status: 'inactive', version: '1.7.2', path: 'wp-content/plugins/hello-wands.php', oneFile: true, description: 'A spell of the day in the top corner of every admin page.', author: 'Wandworks' },
 ];
 
 /** Refresh from production per site: Spellbook is set up, the others not yet. */
@@ -989,9 +990,9 @@ let mockRemembered: RememberedRepo[] = [
 // Kept for the browser session, as the panel keeps them in its database.
 const mockPreferences: Preferences = (() => {
   try {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', rowDialogFull: false, ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
   } catch {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', rowDialogFull: false };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const };
   }
 })();
 
@@ -2346,5 +2347,7 @@ function mockHtaccess(domain: string, server: Site['server']): HtaccessReport {
     report.changed = true;
     report.pending = true;
   }
+  // ?htaccess=limits in the address: a site with more folders than the scan reads.
+  if (new URLSearchParams(window.location.search).get('htaccess') === 'limits') Object.assign(report, { partial: true, foldersStopped: { limit: 5000, at: '/wp-content/plugins/wandworks-media/library/2019' } });
   return report;
 }

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { HtaccessFile, HtaccessReport, HtaccessRule, HtaccessRuleStatus } from '@devmagic-panel/shared';
-import { scanHtaccess } from './htaccess.js';
+import { SCAN_FOLDERS, scanHtaccess } from './htaccess.js';
 
 /**
  * A site's .htaccess files read for nginx: each rule sorted into what nginx
@@ -404,6 +404,7 @@ export function readHtaccessReport(
   const files: HtaccessFile[] = [];
   const rules: HtaccessRule[] = [];
   let partial = scan.partial;
+  let rulesLeft = 0;
   for (const folder of folders) {
     let text: string;
     try {
@@ -424,6 +425,7 @@ export function readHtaccessReport(
       delete rule.rule;
       delete rule.nginx;
       partial = true;
+      rulesLeft++;
     }
   }
   const report: HtaccessReport = {
@@ -432,6 +434,8 @@ export function readHtaccessReport(
     rules,
     nginx: rules.filter((r) => r.nginx).map((r) => r.nginx).join('\n'),
     ...(partial ? { partial } : {}),
+    ...(scan.stoppedAt !== undefined ? { foldersStopped: { limit: SCAN_FOLDERS, at: scan.stoppedAt || '/' } } : {}),
+    ...(rulesLeft ? { rulesStopped: { limit: MAX_RULES, left: rulesLeft } } : {}),
   };
   if (applied) {
     report.applied = applied;

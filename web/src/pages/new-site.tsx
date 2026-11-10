@@ -927,10 +927,6 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
             status={orgStatus.data ?? null}
             draftId={draftId.current ?? ''}
             saveNow={saveNow}
-            onSkip={() => {
-              setOrgState((s) => passStep(s.org ? { ...s, org: { ...s.org, access: skipAccess(s.org.access) } } : s, 'read'));
-              goTo('database');
-            }}
           />
         )}
         {wizard && step === 'database' && <DatabaseStep state={state} setState={setOrgState} status={orgStatus.data ?? null} cores={cores.data ?? []} draftId={draftId.current ?? ''} saveNow={saveNow} />}
@@ -948,11 +944,25 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
             <ArrowLeft />
             Back
           </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* While Claude Code reads, or after it failed: the step can be left out, next to Continue where the way on is. */}
+            {step === 'read' && ['idle', 'reading', 'error'].includes(state.org?.read.status ?? '') && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setOrgState((s) => passStep(s.org ? { ...s, org: { ...s.org, access: skipAccess(s.org.access) } } : s, 'read'));
+                  goTo('database');
+                }}
+              >
+                Go on without Claude
+              </Button>
+            )}
           <Button onClick={next} disabled={!canNext[step]}>
             {step === 'review' ? <Wand2 /> : null}
             {step === 'review' ? 'Create site' : 'Continue'}
             {step !== 'review' && <ArrowRight />}
           </Button>
+          </div>
         </div>
       )}
     </div>

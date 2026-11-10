@@ -10,12 +10,11 @@ import { Segmented } from '@/components/ui/segmented';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
+import { Dialog, useFullScreen } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/input';
 import { api, ApiError } from '@/lib/api';
 import { runWithToast } from '@/lib/site-actions';
 import { loadSqlEditor } from '@/lib/sql-editor-load';
-import { useRowDialogFull } from '@/lib/preferences';
 import { addHistory, clearHistory, readHistory, toCsv } from '@/lib/sql-history';
 import { bytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -115,7 +114,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
   const [needsAccount, setNeedsAccount] = useState(false);
   const [running, setRunning] = useState<'run' | 'explain' | null>(null);
   const [history, setHistory] = useState(() => readHistory(database));
-  const fullScreen = useRowDialogFull();
+  const fullScreen = useFullScreen();
   const [open, setOpen] = useState<number | null>(null);
   // Table and column names for the suggestions; without them the editor still suggests keywords.
   const schema = useAsync(() => api.dbSchema(database), [database]);

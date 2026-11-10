@@ -12,6 +12,13 @@ export function filesHref(site: SiteId, at: { dir?: string; file?: string; line?
   return `${siteHref(site)}?tab=files${query}`;
 }
 
+/** A theme's folder: WP-CLI's list and Local mode's repos both give it from the site's folder already. */
+export const themeFolderHref = (site: SiteId, theme: { folder: string }): string => filesHref(site, { dir: theme.folder });
+
+/** A plugin's folder, or its one file for a plugin like hello.php. */
+export const pluginFolderHref = (site: SiteId, plugin: { path?: string; oneFile?: true }): string =>
+  plugin.oneFile ? filesHref(site, { file: plugin.path ?? '' }) : filesHref(site, { dir: plugin.path ?? '' });
+
 /** Uploads from production, the Files tab's second view. */
 export const uploadsHref = (site: SiteId): string => `${siteHref(site)}?tab=files&view=uploads`;
 

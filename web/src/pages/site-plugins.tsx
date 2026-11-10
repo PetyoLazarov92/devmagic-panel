@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
-import { filesHref } from '@/lib/file-links';
+import { pluginFolderHref, themeFolderHref } from '@/lib/file-links';
 import { Link, navigate, useQueryParam } from '@/lib/router';
 import { siteHref } from '@/lib/site-ref';
 import { Switch } from '@/components/ui/switch';
@@ -140,7 +140,8 @@ function ThemesView({ site }: { site: Site }) {
                 <span className="font-mono">{t.folder}</span>
                 {t.version && <> · {t.version}</>}
                 {t.update && <span className="text-warning"> · {t.update} available</span>}
-                {t.inRepo ? ' · found through Local mode' : <> · <Link href={filesHref(site, { dir: `wp-content/themes/${t.folder}` })} className="font-medium text-primary hover:underline" aria-label={`Open the folder of ${t.title}`}>Open folder</Link></>}
+                {t.inRepo && ' · found through Local mode'}
+                {' · '}<Link href={themeFolderHref(site, t)} className="font-medium text-primary hover:underline" aria-label={`Open the folder of ${t.title}`}>Open folder</Link>
               </p>
             </li>
           ))}
@@ -295,7 +296,7 @@ function PluginsView({ site }: { site: Site }) {
                   {p.status === 'dropin' && ' · drop-in, always on'}
                   {p.requires && <> · needs {p.requires.join(', ')}</>}
                   {p.requiredBy && <> · needed by {p.requiredBy.join(', ')}</>}
-                  {!always(p) && <> · <Link href={filesHref(site, { dir: `wp-content/plugins/${p.name}` })} className="font-medium text-primary hover:underline" aria-label={`Open the folder of ${p.title}`}>Open folder</Link></>}
+                  {p.path && <> · <Link href={pluginFolderHref(site, p)} className="font-medium text-primary hover:underline" aria-label={p.oneFile ? `Open the file of ${p.title}` : `Open the folder of ${p.title}`}>{p.oneFile ? 'Open file' : 'Open folder'}</Link></>}
                 </p>
               </div>
             </li>

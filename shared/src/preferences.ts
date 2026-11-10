@@ -17,6 +17,9 @@ export const SITES_SORT_LABELS: Record<(typeof SITES_SORTS)[number], string> = {
 export const USE_CLAUDE = ['always', 'ask', 'never'] as const;
 export type UseClaude = (typeof USE_CLAUDE)[number];
 
+/** The sidebar: with its labels, or folded to a rail of icons for a wider page. */
+export const SIDEBAR_MODES = ['full', 'rail'] as const;
+
 /** How a database's tables list: by name, or biggest first. */
 export const TABLE_SORTS = ['name', 'size'] as const;
 
@@ -26,7 +29,7 @@ export type WpDbList = (typeof WP_DB_LISTS)[number];
 /** How many rows a list of the WordPress view shows before Show all. */
 export const WP_DB_LIST_ROWS = 7;
 
-const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), /** The web server a new site of its own gets, once nginx runs next to Apache. */ newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS), rowDialogFull: z.boolean(), /** Whether a new install from a project lets Claude Code read the repo and its links: always on, asked (off until you switch it on), or never offered. */ useClaude: z.enum(USE_CLAUDE) };
+const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), /** The web server a new site of its own gets, once nginx runs next to Apache. */ newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS), sidebar: z.enum(SIDEBAR_MODES), /** Whether a new install from a project lets Claude Code read the repo and its links: always on, asked (off until you switch it on), or never offered. */ useClaude: z.enum(USE_CLAUDE) };
 
 export const preferences = z.object({
   theme: fields.theme.default('system'),
@@ -34,8 +37,7 @@ export const preferences = z.object({
   sitesSort: fields.sitesSort.default('name'),
   newSiteServer: fields.newSiteServer.default('apache'),
   tablesSort: fields.tablesSort.default('name'),
-  /** A row's dialogs (view, edit, duplicate, add) open full screen, as last chosen. */
-  rowDialogFull: fields.rowDialogFull.default(false),
+  sidebar: fields.sidebar.default('full'),
   useClaude: fields.useClaude.default('always'),
 });
 

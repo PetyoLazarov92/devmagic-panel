@@ -56,6 +56,10 @@ export interface HtaccessReport {
   rules: HtaccessRule[];
   /** The scan stopped at its limit of folders or rules, so some may be missing. */
   partial?: boolean;
+  /** It read its limit of folders and left the rest, from this one on (in the order it reads them). */
+  foldersStopped?: { limit: number; at: string };
+  /** More rules than one nginx file takes: these many were left to do by hand. */
+  rulesStopped?: { limit: number; left: number };
   /** For a site on nginx: what its nginx file has now. */
   applied?: {
     rules: string[];

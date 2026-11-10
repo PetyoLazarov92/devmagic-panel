@@ -17,6 +17,7 @@ const LIST = [
   row('acf', 'active'),
   row('wandworks-blocks', 'active'),
   row('wandworks-old', 'inactive'),
+  row('hello', 'inactive', { file: 'hello.php' }),
   row('wp-rocket', 'inactive', { update: 'available', update_version: '3.20' }),
   row('query-monitor', 'active'),
   row('odd', 'recently-active'),
@@ -26,7 +27,7 @@ const LIST = [
 function setup(responses: Record<string, FakeResponse> = {}, options: { multisite?: boolean } = {}) {
   const t = wpSiteTree(options);
   for (const name of ['acf', 'wandworks-blocks', 'wandworks-old']) mkdirSync(join(t.docroot, 'wp-content/plugins', name), { recursive: true });
-  writeFileSync(join(t.docroot, 'wp-content/plugins/acf/acf.php'), '<?php\n/**\n * Plugin Name: ACF\n */\n');
+  writeFileSync(join(t.docroot, 'wp-content/plugins/acf/acf.php'), '<?php\n/**\n * Plugin Name: ACF\n * Description: Fields for <strong>Wandworks</strong>   themes.\n * Author: Alex Morgan\n */\n');
   writeFileSync(join(t.docroot, 'wp-content/plugins/wandworks-blocks/wandworks-blocks.php'), '<?php\n/**\n * Plugin Name: Wandworks Blocks\n * Requires Plugins: acf, not a slug!\n */\n');
   writeFileSync(join(t.docroot, 'wp-content/plugins/wandworks-old/wandworks-old.php'), '<?php\n/*\nPlugin Name: Wandworks Old\nRequires Plugins: acf\n*/\n');
   const fake = fakeExec({ 'wp': { stdout: JSON.stringify(LIST) }, ...responses });
@@ -57,11 +58,13 @@ describe('readPlugins', () => {
     expect(list.plugins.map((p) => p.name)).not.toContain('odd');
     const by = Object.fromEntries(list.plugins.map((p) => [p.name, p]));
     // Only the active wandworks-blocks counts: wandworks-old is off.
-    expect(by.acf).toEqual({ name: 'acf', title: 'ACF', status: 'active', version: '1.0', requiredBy: ['WANDWORKS-BLOCKS'] });
+    expect(by.acf).toEqual({ name: 'acf', title: 'ACF', status: 'active', version: '1.0', requiredBy: ['WANDWORKS-BLOCKS'], path: 'wp-content/plugins/acf', description: 'Fields for Wandworks themes.', author: 'Alex Morgan' });
     expect(by['wandworks-blocks']?.requires).toEqual(['acf']);
     expect(by['wandworks-old']?.requires).toEqual(['acf']);
     expect(by['wp-rocket']).toMatchObject({ update: '3.20', productionOnly: true });
     expect(by['query-monitor']?.localHelper).toBe(true);
+    // A plugin that is one file: Open folder goes to the file.
+    expect(by.hello).toMatchObject({ path: 'wp-content/plugins/hello.php', oneFile: true });
     expect(by['advanced-cache.php']).toEqual({ name: 'advanced-cache.php', title: 'advanced-cache.php', status: 'dropin', version: '1.0' });
   });
 

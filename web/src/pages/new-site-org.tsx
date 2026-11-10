@@ -208,7 +208,7 @@ const withoutKey = <T extends { key: string }>({ key: _key, ...rest }: T) => res
  * links are still checked. Both answers are kept on the draft, so coming back
  * runs nothing again, and either part can be skipped.
  */
-export function ProjectReadStep({ state, setState, onSkip, status, draftId, saveNow }: { state: WizardState; setState: SetState; onSkip: () => void; status: OrgStatus | null; draftId: string; saveNow: () => Promise<unknown> }) {
+export function ProjectReadStep({ state, setState, status, draftId, saveNow }: { state: WizardState; setState: SetState; status: OrgStatus | null; draftId: string; saveNow: () => Promise<unknown> }) {
   const org = state.org as OrgState;
   const repo = org.repo as OrgRepo;
   const key = readKey(repo.fullName, state.branch);
@@ -284,13 +284,11 @@ export function ProjectReadStep({ state, setState, onSkip, status, draftId, save
   }, [job.error]);
 
   const card = status && <ClaudeRunCard status={status} org={org} />;
-  const goOn = <Button variant="ghost" size="sm" className="w-fit" onClick={onSkip}>Go on without Claude</Button>;
   if (org.read.status === 'reading' || org.read.status === 'idle') {
     return (
       <WithClaudeCard card={card}>
         <div className="grid max-w-3xl gap-3">
           <Working title={`Claude Code is reading the README files, docs and build files of ${repo.fullName}...`} job={job.job} />
-          {goOn}
         </div>
       </WithClaudeCard>
     );
@@ -302,7 +300,6 @@ export function ProjectReadStep({ state, setState, onSkip, status, draftId, save
           <Notice tone="danger">{org.read.error}</Notice>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" className="w-fit" onClick={() => void start()}><RefreshCw />Read it again</Button>
-            {goOn}
           </div>
         </div>
       </WithClaudeCard>
