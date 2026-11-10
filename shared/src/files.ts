@@ -26,6 +26,10 @@ export interface FileShortcut {
   label: string;
   path: string;
   kind: 'dir' | 'file';
+  /** A folder's entries, without the hidden ones: how many themes or plugins. */
+  count?: number;
+  /** A file's size. */
+  sizeBytes?: number;
 }
 
 export interface FileListing {

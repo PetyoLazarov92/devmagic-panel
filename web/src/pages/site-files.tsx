@@ -2,6 +2,7 @@ import { type ActionId, type FileDiff, type FileEntry, type FileGitState, type F
 import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, GitBranch, GitCompare, KeyRound, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
 import { type DragEvent, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { DiffView } from '@/components/diff-view';
+import { FilePlaces } from '@/components/file-places';
 import { EditorBoundary } from '@/components/editor-boundary';
 import { DeleteDialog, FileTrashCard, FolderPicker, NameDialog, PermissionsDialog } from '@/components/file-dialogs';
 import { EmptyState, Notice, ViewBar } from '@/components/page';
@@ -555,6 +556,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
       }}
       onDrop={drop}
     >
+      {listing && <FilePlaces site={site} places={listing.shortcuts} dir={dir} />}
       <ViewBar
         onCheck={refresh}
         loading={loading}
@@ -568,12 +570,33 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
           )
         }
         actions={
-          hiddenCount > 0 && !find && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Switch checked={hidden} onChange={setHidden} label="Show .git and node_modules" />
-              Show hidden ({hiddenCount})
-            </label>
-          )
+          <>
+            {hiddenCount > 0 && !find && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Switch checked={hidden} onChange={setHidden} label="Show .git and node_modules" />
+                Show hidden ({hiddenCount})
+              </label>
+            )}
+            {canChange && (
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  multiple
+                  hidden
+                  aria-label={`Files to upload into ${dir || 'the site folder'}`}
+                  onChange={(e) => {
+                    const list = Array.from(e.target.files ?? []);
+                    e.target.value = '';
+                    void upload(list);
+                  }}
+                />
+                <Button size="sm" variant="outline" disabled={sending !== null} title="Or drop files on the list" onClick={() => fileInput.current?.click()}><Upload />Upload</Button>
+                <Button size="sm" variant="outline" onClick={() => setAsking({ kind: 'new', what: 'file' })}><FilePlus />New file</Button>
+                <Button size="sm" variant="outline" onClick={() => setAsking({ kind: 'new', what: 'dir' })}><FolderPlus />New folder</Button>
+              </>
+            )}
+          </>
         }
       >
         <Breadcrumb site={site} path={dir} />
@@ -630,41 +653,6 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
             />
             {mode !== 'filter' && <Button type="submit" size="sm" variant="outline">Find</Button>}
           </form>
-          <ul className="flex flex-wrap gap-1.5" aria-label="Places of this site">
-            {listing.shortcuts.map((s) => {
-              const here = s.kind === 'dir' && s.path === dir;
-              return (
-                <li key={s.path}>
-                  <Link
-                    href={filesHref(site, s.kind === 'dir' ? { dir: s.path } : { file: s.path })}
-                    aria-current={here ? 'page' : undefined}
-                    className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground', here && 'border-primary bg-primary/10 text-foreground')}
-                  >
-                    {s.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-          {canChange && (
-            <div className="ml-auto flex flex-wrap gap-2">
-              <input
-                ref={fileInput}
-                type="file"
-                multiple
-                hidden
-                aria-label={`Files to upload into ${dir || 'the site folder'}`}
-                onChange={(e) => {
-                  const list = Array.from(e.target.files ?? []);
-                  e.target.value = '';
-                  void upload(list);
-                }}
-              />
-              <Button size="sm" variant="outline" disabled={sending !== null} title="Or drop files on the list" onClick={() => fileInput.current?.click()}><Upload />Upload</Button>
-              <Button size="sm" variant="outline" onClick={() => setAsking({ kind: 'new', what: 'file' })}><FilePlus />New file</Button>
-              <Button size="sm" variant="outline" onClick={() => setAsking({ kind: 'new', what: 'dir' })}><FolderPlus />New folder</Button>
-            </div>
-          )}
         </div>
       )}
 

@@ -114,13 +114,23 @@ function entryOf(root: string, dir: Located, rel: string, name: string): FileEnt
   }
 }
 
-/** The places of a site worth one click, the ones that are there. */
+/** How many entries a folder has, leaving out hidden ones and index.php (WordPress puts one in each to stop listings). */
+function countOf(dir: string): { count?: number } {
+  try {
+    return { count: readdirSync(dir).filter((n) => !n.startsWith('.') && n !== 'index.php').length };
+  } catch {
+    return {};
+  }
+}
+
+/** The places of a site worth one click, the ones that are there, with how many entries a folder has and how big a file is. */
 export function shortcuts(root: string): FileShortcut[] {
   const found: FileShortcut[] = [];
   const add = (label: string, path: string, kind: FileShortcut['kind']) => {
     try {
       const st = statSync(join(root, path));
-      if (kind === 'dir' ? st.isDirectory() : st.isFile()) found.push({ label, path, kind });
+      if (kind === 'file' && st.isFile()) found.push({ label, path, kind, sizeBytes: st.size });
+      if (kind === 'dir' && st.isDirectory()) found.push({ label, path, kind, ...countOf(join(root, path)) });
     } catch {
       // not there
     }

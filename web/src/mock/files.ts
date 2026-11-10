@@ -144,13 +144,13 @@ const inCore = (path: string) => /^wp-(admin|includes)(\/|$)/.test(path);
 const rootOf = (domain: string) => `/var/www/${domain}`;
 
 const SHORTCUTS: FileShortcut[] = [
-  { label: 'wp-content', path: 'wp-content', kind: 'dir' },
-  { label: 'Themes', path: 'wp-content/themes', kind: 'dir' },
-  { label: 'Plugins', path: 'wp-content/plugins', kind: 'dir' },
-  { label: 'Uploads', path: 'wp-content/uploads', kind: 'dir' },
-  { label: 'Repo: wandworks', path: 'wp-content/themes/wandworks', kind: 'dir' },
-  { label: 'wp-config.php', path: 'wp-config.php', kind: 'file' },
-  { label: 'debug.log', path: 'wp-content/debug.log', kind: 'file' },
+  { label: 'wp-content', path: 'wp-content', kind: 'dir', count: 6 },
+  { label: 'Themes', path: 'wp-content/themes', kind: 'dir', count: 3 },
+  { label: 'Plugins', path: 'wp-content/plugins', kind: 'dir', count: 12 },
+  { label: 'Uploads', path: 'wp-content/uploads', kind: 'dir', count: 9 },
+  { label: 'Repo: wandworks', path: 'wp-content/themes/wandworks', kind: 'dir', count: 14 },
+  { label: 'wp-config.php', path: 'wp-config.php', kind: 'file', sizeBytes: 435 },
+  { label: 'debug.log', path: 'wp-content/debug.log', kind: 'file', sizeBytes: 24_800_000 },
 ];
 
 /** Folders whose permissions were changed in the mockup; the rest are 755. */

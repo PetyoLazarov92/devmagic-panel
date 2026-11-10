@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FILE_TEXT_MAX, isSitePath } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
@@ -102,6 +102,10 @@ describe('listFolder', () => {
     const { siteRoot } = siteTree();
     expect(repoFolders(siteRoot)).toEqual(['wp-content/themes/wandworks']);
     expect(shortcuts(siteRoot).map((s) => s.label)).toEqual(['wp-content', 'Themes', 'Uploads', 'Repo: wandworks', 'wp-config.php', 'debug.log']);
+    const by = Object.fromEntries(shortcuts(siteRoot).map((s) => [s.label, s]));
+    // How many themes: the hidden entries and index.php do not count.
+    expect(by.Themes?.count).toBe(readdirSync(join(siteRoot, 'wp-content/themes')).filter((n) => !n.startsWith('.') && n !== 'index.php').length);
+    expect(by['wp-config.php']?.sizeBytes).toBe(statSync(join(siteRoot, 'wp-config.php')).size);
   });
 });
 
