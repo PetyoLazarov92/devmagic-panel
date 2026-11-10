@@ -174,6 +174,26 @@ describe('site.setServer', () => {
     expect(undos).toEqual(['Remove the Apache vhost', 'Write the nginx site again and point the hosts line at nginx']);
   });
 
+  it("moves a taken-over site's own hosts line into its takeover record first, and refuses a line it shares with another host", async () => {
+    const input = { domain: 'local.shop.com', server: 'nginx' as const, static: true, acceptIgnored: false };
+    const t = tree();
+    mkdirSync(join(t.config.STATE_DIR, 'taken-over', 'local.shop.com'), { recursive: true });
+    t.write('hosts', `127.0.0.1 localhost\n127.0.0.1 local.shop.com\n${HOSTS_BEGIN}\n127.0.0.1 local.shop.com local.shop.de\n${HOSTS_END}\n`);
+    const { c, lines } = ctx(t);
+    const steps = planSetServer(c, input);
+    expect(steps[0]).toMatchObject({ id: 'hosts-own', label: expect.stringContaining('127.0.0.1 local.shop.com') });
+    await runSteps(steps);
+    expect(lines()[0]).toBe('hosts-adopt local.shop.com');
+    expect(lines()[1]).toMatch(/^nginx-site-write local.shop.com/);
+    // Without a line of its own outside the block there is no such step.
+    expect(planSetServer(ctx(tree()).c, input).map((x) => x.id)).not.toContain('hosts-own');
+
+    const shared = tree();
+    mkdirSync(join(shared.config.STATE_DIR, 'taken-over', 'local.shop.com'), { recursive: true });
+    shared.write('hosts', `127.0.0.1 local.shop.com local.other.com\n${HOSTS_BEGIN}\n127.0.0.1 local.shop.com local.shop.de\n${HOSTS_END}\n`);
+    expect(() => planSetServer(ctx(shared).c, input)).toThrow(/"127.0.0.1 local.shop.com local.other.com" outside the panel's block, naming local.shop.com with other hosts/);
+  });
+
   it('refuses before anything runs: nginx not set up, no PHP-FPM, a vhost made by hand, a hosts line outside the block, a site under a path from outside the web root', () => {
     const input = { domain: 'local.shop.com', server: 'nginx' as const, static: true, acceptIgnored: false };
     expect(() => planSetServer(ctx(tree({ nginxSetUp: false })).c, input)).toThrow(/not set up next to Apache/);
@@ -183,7 +203,7 @@ describe('site.setServer', () => {
     expect(() => planSetServer(ctx(hand).c, input)).toThrow(/made by hand/);
     const outside = tree();
     outside.write('hosts', `127.0.0.1 local.shop.de\n${HOSTS_BEGIN}\n127.0.0.1 local.shop.com local.shop.de\n${HOSTS_END}\n`);
-    expect(() => planSetServer(ctx(outside).c, input)).toThrow(/outside the panel's block/);
+    expect(() => planSetServer(ctx(outside).c, input)).toThrow(/"127.0.0.1 local.shop.de" outside the panel's block.*remove that line by hand/);
     const away = tree();
     mkdirSync(join(away.root, 'elsewhere'));
     away.write('sites-available/local.shop.com-ssl.conf', `${MARKER}\n<VirtualHost *:443>\n ServerName local.shop.com\n DocumentRoot ${away.docroot}\n Alias /learn ${join(away.root, 'elsewhere')}\n</VirtualHost>\n`);

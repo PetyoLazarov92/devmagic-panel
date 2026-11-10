@@ -379,7 +379,7 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
       if (!parent.managed) {
         // A vhost made by hand stays as it is: you add the lines.
         return ok(
-          `${parent.file} was made by hand, so the panel leaves it as it is. Add these lines inside its <VirtualHost *:443> block, then reload Apache on the Services page:\n` +
+          `${parent.file} was made by hand, so the panel leaves it as it is. Add these lines inside its <VirtualHost *:443> block, then reload Apache on the Services page (or take ${domain} over first, with Take over... on its Overview, and the panel adds them):\n` +
             `    Alias ${path} ${docroot}\n    <Directory ${docroot}>\n        Options FollowSymLinks\n        AllowOverride All\n        Require all granted\n    </Directory>`,
         );
       }

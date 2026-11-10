@@ -501,7 +501,7 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
       const others = unserved.filter((h) => !isLocalName(h));
       const hint = [
         others.length ? `${others.join(', ')} ${others.length === 1 ? 'is not a local name' : 'are not local names'}: replace ${others.length === 1 ? 'it' : 'them'} with a local one with Search and replace on the Database tab.` : '',
-        local.length && !vhost.managed ? `Add ServerAlias ${local.join(' ')} to the vhost by hand, then reissue the cert and add ${local.length === 1 ? 'it' : 'them'} to /etc/hosts.` : '',
+        local.length && !vhost.managed ? `Add ServerAlias ${local.join(' ')} to the vhost by hand, then reissue the cert and add ${local.length === 1 ? 'it' : 'them'} to /etc/hosts. Or take the site over on its Overview, and the panel adds ${local.length === 1 ? 'it' : 'them'} for you.` : '',
       ].filter(Boolean).join(' ');
       issues.push({
         id: 'network.unserved',
@@ -529,7 +529,7 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
         text: `Port 80 and 443 names differ: ${parts.join('; ')}`,
         hint: vhost.managed
           ? 'Recreate the site to rewrite its vhost with one name list.'
-          : `The panel leaves this vhost as is: list the same names in both blocks of ${vhost.file}, then reissue the cert.`,
+          : `The panel leaves this vhost as is: list the same names in both blocks of ${vhost.file}, then reissue the cert. Or take the site over on its Overview, and the panel writes one name list.`,
       });
     }
   }

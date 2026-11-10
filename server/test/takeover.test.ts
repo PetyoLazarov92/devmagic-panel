@@ -43,13 +43,15 @@ const lines = (calls: Array<{ file: string; args: string[] }>) => calls.map((c) 
 
 describe('taking over a site made by hand', () => {
   it('reads what dmp-root found, local names only', () => {
-    expect(parseTakeover(`${CHECK}EXTRA=php_value memory_limit 512M\nPROBLEM=shop.example.com is not a local name\nNAME=shop.example.com\n`)).toEqual({
+    expect(parseTakeover(`${CHECK}EXTRA=php_value memory_limit 512M\nPROBLEM=shop.example.com is not a local name\nNAME=shop.example.com\nHOSTS=127.0.0.1 local.hand.com\nHOSTS_SHARED=127.0.0.1 local.hand.com local.other.com\n`)).toEqual({
       files: ['hand.conf'],
       enabled: ['hand.conf'],
       names: ['local.hand.com', 'www.local.hand.com'],
       docroot: '/var/www/local.hand.com',
       mounts: ['/learn=local.learn.hand.com'],
       extra: ['php_value memory_limit 512M'],
+      hostsLines: ['127.0.0.1 local.hand.com'],
+      hostsShared: ['127.0.0.1 local.hand.com local.other.com'],
       problems: ['shop.example.com is not a local name'],
     });
   });
@@ -92,6 +94,13 @@ describe('taking over a site made by hand', () => {
     const r = await runAction(s.ctx, 'site.giveBack', { domain: 'local.hand.com', confirm: 'local.hand.com' });
     expect(r.ok).toBe(true);
     expect(s.store.installs().get('local.hand.com')).toEqual({ how: 'hand' });
+  });
+
+  it('refuses to give back a site nginx serves, before anything runs, and says to move it to Apache first', async () => {
+    const s = setup();
+    s.write('nginx/sites-available/local.hand.com.conf', '# Managed by devmagic-panel.\n');
+    await expect(runAction(s.ctx, 'site.giveBack', { domain: 'local.hand.com', confirm: 'local.hand.com' })).rejects.toThrow(/runs on nginx.*move it back to Apache on Server and PHP first/);
+    expect(lines(s.calls).filter((l) => l.includes('vhost-release'))).toEqual([]);
   });
 
   it('lets a site taken over go to the trash from a folder named otherwise, when dmp-root registered it', () => {

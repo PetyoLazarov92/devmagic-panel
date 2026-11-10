@@ -11,9 +11,15 @@
 #   names, folder and sites under a path, and puts everything back when the
 #   configtest fails. Lines the panel's vhost does not have are refused
 #   unless --drop-lines (they stay in the kept originals).
+#   The site's own lines in /etc/hosts outside the panel's block (naming
+#   only its names) go into the record too, each with the line before it;
+#   a line that also names another host stays and is listed.
 # vhost-release <domain>
 #   puts the kept originals back (checksums checked) instead of the panel's
-#   vhost, and drops the folder's registry entry the takeover made.
+#   vhost and the kept hosts lines where they were, drops the site's line in
+#   the panel's block then, and the folder's registry entry the takeover made.
+# hosts-adopt <domain>
+#   for a site taken over before takeovers moved hosts lines: moves them now.
 #
 # Nothing from a hand-made file is copied into the panel's vhost except the
 # names (each a local name), the document root (a real folder right in
@@ -146,6 +152,7 @@ dmp_adopt_read() {
     printf 'DOCROOT=%s\n' "$unique"
   fi
   for f in "${mounts[@]}"; do printf 'MOUNT=%s\n' "$f"; done
+  dmp_takeover_hosts_read "${!names[@]}"
   if [[ -e "$(dmp_takeover_dir "$domain")" ]]; then
     printf 'PROBLEM=%s\n' "$domain was taken over already"
   fi
@@ -212,6 +219,8 @@ dmp_vhost_adopt() {
     dmp_adopt_put_back "$domain"
     dmp_die "Apache refused the panel's vhost for $domain; the original vhost is back"
   fi
+  # The site's own hosts lines go into the record too, so the panel's line decides where the site goes.
+  dmp_takeover_hosts_move "$domain" "$domain" "${aliases[@]}"
   dmp_ok "took over $domain: the panel manages its vhost now; vhost-release $domain gives it back"
 }
 
@@ -282,10 +291,167 @@ dmp_vhost_release() {
     dmp_die "Apache refused the original vhost of $domain; the panel's stays"
   fi
   rm -f -- "$keep"
+  dmp_takeover_hosts_put_back "$domain"
   if [[ "$(dmp_trash_get "$manifest" REGISTERED)" == 1 ]]; then
     rm -f -- "$(dmp_site_registry_entry "$domain")"
   fi
   rm -rf -- "$dir"
   systemctl reload apache2 || dmp_die "apache reload failed"
   dmp_ok "gave $domain its own vhost back"
+}
+
+# Hosts lines outside the panel's block that name the site: HOSTS= for the
+# site's own (every name on it is one of the given names), HOSTS_SHARED= for
+# one that also names another host. glibc takes the first line naming a
+# host, so the site's own line, written by hand before the takeover, would
+# keep deciding where the site goes over the panel's line in its block.
+dmp_takeover_hosts_read() {
+  local line state=before name all mine
+  local -a fields
+  local -A own=()
+  for name in "$@"; do own["${name,,}"]=1; done
+  [[ -f "$HOSTS_FILE" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$DMP_HOSTS_BEGIN" ]]; then state=block; continue; fi
+    if [[ "$line" == "$DMP_HOSTS_END" ]]; then state=after; continue; fi
+    [[ "$state" == block ]] && continue
+    read -r -a fields <<< "${line%%#*}"
+    (( ${#fields[@]} > 1 )) || continue
+    all=1 mine=0
+    for name in "${fields[@]:1}"; do
+      if [[ -n "${own[${name,,}]:-}" ]]; then mine=1; else all=0; fi
+    done
+    (( mine )) || continue
+    if (( all )); then printf 'HOSTS=%s\n' "$line"; else printf 'HOSTS_SHARED=%s\n' "$line"; fi
+  done < "$HOSTS_FILE"
+}
+
+# The takeover record's checksums again, once a file in it changed; the old
+# ones are checked first, so a record changed by anyone else is never sealed.
+dmp_takeover_seal() {
+  local dir="$1"
+  (cd "$dir" && sha256sum --quiet -c SHA256SUMS) || dmp_die "the takeover record in $dir does not match its checksums; restore it with dmp-restore"
+  local -a files=()
+  mapfile -t files < <(awk '{ sub(/^\*/, "", $2); print $2 }' "$dir/SHA256SUMS" | grep -vx 'hosts-lines' || true)
+  [[ -f "$dir/hosts-lines" ]] && files+=(hosts-lines)
+  (cd "$dir" && sha256sum -- "${files[@]}" > SHA256SUMS)
+  chmod 0600 "$dir"/*
+}
+
+# Moves the site's own hosts lines (dmp_takeover_hosts_read) into its
+# takeover record, each with the line before it, so giving the site back puts
+# it where it was. The file keeps its inode, owner and mode.
+dmp_takeover_hosts_move() {
+  local domain="$1" dir line prev="" state=before
+  shift
+  dir="$(dmp_takeover_dir "$domain")"
+  local -a own=() kept=()
+  mapfile -t own < <(dmp_takeover_hosts_read "$@" | sed -n 's/^HOSTS=//p')
+  (( ${#own[@]} )) || return 0
+  local -A move=()
+  for line in "${own[@]}"; do move["$line"]=1; done
+  local record
+  record="$(mktemp)"
+  [[ -f "$dir/hosts-lines" ]] && cat -- "$dir/hosts-lines" > "$record"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == "$DMP_HOSTS_BEGIN" ]] && state=block
+    if [[ "$state" != block && -n "$line" && -n "${move[$line]:-}" ]]; then
+      printf 'AFTER %s\nLINE %s\n' "$prev" "$line" >> "$record"
+      continue
+    fi
+    [[ "$line" == "$DMP_HOSTS_END" ]] && state=after
+    kept+=("$line")
+    prev="$line"
+  done < "$HOSTS_FILE"
+  dmp_step "Moving the hosts line$( (( ${#own[@]} > 1 )) && printf s) of $domain into the panel's care"
+  install -m 0600 -- "$record" "$dir/hosts-lines"
+  rm -f -- "$record"
+  local tmp
+  tmp="$(mktemp)"
+  if (( ${#kept[@]} > 0 )); then printf '%s\n' "${kept[@]}" > "$tmp"; else : > "$tmp"; fi
+  cat "$tmp" > "$HOSTS_FILE"
+  rm -f "$tmp"
+  dmp_takeover_seal "$dir"
+  for line in "${own[@]}"; do dmp_ok "kept until the site is given back: $line"; done
+}
+
+# The hosts lines a takeover kept, back where they were: after the line that
+# came before each, else just above the panel's block. The site's line in
+# the panel's block goes, as the line made by hand decides again.
+dmp_takeover_hosts_put_back() {
+  local domain="$1" dir file entry line name i
+  dir="$(dmp_takeover_dir "$domain")"
+  file="$dir/hosts-lines"
+  [[ -f "$file" ]] || return 0
+  local -a afters=() lines=() fields=() current=() out=()
+  while IFS= read -r entry || [[ -n "$entry" ]]; do
+    case "$entry" in
+      "AFTER "*) afters+=("${entry#AFTER }") ;;
+      "LINE "*)
+        line="${entry#LINE }"
+        read -r -a fields <<< "${line%%#*}"
+        for name in "${fields[@]:1}"; do
+          dmp_is_local_name "${name,,}" || dmp_die "the takeover record of $domain has a hosts line with $name in it"
+        done
+        lines+=("$line") ;;
+      *) dmp_die "the takeover record of $domain has an odd hosts entry" ;;
+    esac
+  done < "$file"
+  (( ${#afters[@]} == ${#lines[@]} )) || dmp_die "the takeover record of $domain has an odd hosts entry"
+  local -a placed=()
+  for i in "${!lines[@]}"; do placed[i]=0; done
+  mapfile -t current < "$HOSTS_FILE"
+  # A line that was the first one goes first again.
+  for i in "${!lines[@]}"; do
+    if [[ -z "${afters[i]}" ]]; then out+=("${lines[i]}"); placed[i]=1; fi
+  done
+  local state=before
+  for line in "${current[@]}"; do
+    if [[ "$line" == "$DMP_HOSTS_BEGIN" ]]; then
+      state=block
+      for i in "${!lines[@]}"; do
+        if (( ! placed[i] )); then out+=("${lines[i]}"); placed[i]=1; fi
+      done
+    fi
+    out+=("$line")
+    [[ "$line" == "$DMP_HOSTS_END" ]] && state=after
+    [[ "$state" == block ]] && continue
+    for i in "${!lines[@]}"; do
+      if (( ! placed[i] )) && [[ "${afters[i]}" == "$line" ]]; then out+=("${lines[i]}"); placed[i]=1; fi
+    done
+  done
+  for i in "${!lines[@]}"; do
+    if (( ! placed[i] )); then out+=("${lines[i]}"); placed[i]=1; fi
+  done
+  dmp_step "Putting the hosts line$( (( ${#lines[@]} > 1 )) && printf s) of $domain back"
+  local tmp
+  tmp="$(mktemp)"
+  printf '%s\n' "${out[@]}" > "$tmp"
+  cat "$tmp" > "$HOSTS_FILE"
+  rm -f "$tmp"
+  dmp_hosts_rewrite "$domain"
+  for line in "${lines[@]}"; do dmp_ok "back in $HOSTS_FILE: $line"; done
+}
+
+# hosts-adopt <domain>: for a site taken over before takeovers did it, its
+# own hosts lines move into its takeover record like a takeover now moves
+# them. Refused when a line also names another host: that one is edited by hand.
+dmp_takeover_hosts_adopt() {
+  local domain="$1" dir file shared
+  dir="$(dmp_takeover_dir "$domain")"
+  [[ -d "$dir" && ! -L "$dir" && -f "$dir/manifest.env" ]] || dmp_die "$domain was not taken over; only a site the panel took over has its hosts lines moved"
+  file="$(dmp_vhost_file "$domain")"
+  [[ -f "$file" ]] && dmp_vhost_require_managed "$file"
+  local -a site_names=()
+  if [[ -f "$NGINX_SITES_AVAILABLE/$domain.conf" ]]; then
+    mapfile -t site_names < <(dmp_vhost_names "$NGINX_SITES_AVAILABLE/$domain.conf")
+  elif [[ -f "$file" ]]; then
+    mapfile -t site_names < <(dmp_vhost_names "$file")
+  else
+    site_names=("$domain")
+  fi
+  shared="$(dmp_takeover_hosts_read "${site_names[@]}" | sed -n 's/^HOSTS_SHARED=//p')"
+  [[ -z "$shared" ]] || dmp_die "a line in $HOSTS_FILE names $domain and other hosts, so the panel leaves it; take $domain off it by hand: $(printf '%s' "$shared" | tr '\n' ';')"
+  dmp_takeover_hosts_move "$domain" "${site_names[@]}"
+  dmp_ok "$domain has no hosts line outside the panel's block"
 }

@@ -2108,3 +2108,60 @@ CONF
   run dmp vhost-adopt '../x'
   [ "$status" -ne 0 ]
 }
+
+@test "vhost-adopt moves the site's own hosts lines into its record, leaves a line it shares, and vhost-release puts them back where they were" {
+  hand_site
+  printf '127.0.0.1 localhost\n127.0.0.1 local.hand.com\n127.0.0.1\twww.local.hand.com local.hand.com\n127.0.0.1 local.other.com local.hand.com\n127.0.0.1 local.other.com\n' > "$T/hosts"
+  run dmp vhost-adopt local.hand.com --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"HOSTS=127.0.0.1 local.hand.com"* && "$output" == *$'HOSTS=127.0.0.1\twww.local.hand.com local.hand.com'* ]]
+  [[ "$output" == *"HOSTS_SHARED=127.0.0.1 local.other.com local.hand.com"* ]]
+  before="$(cat "$T/hosts")"
+
+  run dmp vhost-adopt local.hand.com
+  [ "$status" -eq 0 ]
+  ! grep -qx '127.0.0.1 local.hand.com' "$T/hosts"
+  ! grep -qxF $'127.0.0.1\twww.local.hand.com local.hand.com' "$T/hosts"
+  grep -qx '127.0.0.1 local.other.com local.hand.com' "$T/hosts" && grep -qx '127.0.0.1 localhost' "$T/hosts"
+  (cd "$T/state/taken-over/local.hand.com" && sha256sum --quiet -c SHA256SUMS && grep -q hosts-lines SHA256SUMS)
+  # The panel's line in its block, as the takeover's job adds it.
+  dmp hosts-add local.hand.com www.local.hand.com
+
+  run dmp vhost-release local.hand.com
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/hosts")" = "$before" ]
+}
+
+@test "hosts-adopt moves the hosts lines of a site taken over earlier, and refuses a site not taken over or a line it shares" {
+  hand_site
+  printf '127.0.0.1 localhost\n' > "$T/hosts"
+  dmp vhost-adopt local.hand.com
+  dmp hosts-add local.hand.com www.local.hand.com
+  # A line written by hand after the takeover, as before takeovers moved them.
+  printf '127.0.0.1 local.hand.com\n' >> "$T/hosts"
+  run dmp hosts-adopt local.hand.com
+  [ "$status" -eq 0 ]
+  ! grep -qx '127.0.0.1 local.hand.com' "$T/hosts"
+  grep -qx '127.0.0.1 local.hand.com www.local.hand.com' "$T/hosts"
+  run dmp hosts-adopt local.hand.com
+  [ "$status" -eq 0 ]
+
+  printf '127.0.0.1 local.hand.com local.other.com\n' >> "$T/hosts"
+  run dmp hosts-adopt local.hand.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"names local.hand.com and other hosts"* ]]
+  grep -qx '127.0.0.1 local.hand.com local.other.com' "$T/hosts"
+
+  run dmp hosts-adopt local.none.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"was not taken over"* ]]
+  run dmp hosts-adopt 'example.com'
+  [ "$status" -eq 2 ]
+
+  # Giving it back brings the line moved after the takeover back too, at the end of what was there.
+  sed -i '/local.other.com/d' "$T/hosts"
+  run dmp vhost-release local.hand.com
+  [ "$status" -eq 0 ]
+  grep -qx '127.0.0.1 local.hand.com' "$T/hosts"
+  ! grep -q 'devmagic-panel' "$T/hosts"
+}

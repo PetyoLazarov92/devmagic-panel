@@ -78,5 +78,6 @@ Root work and user work are split on purpose: files a site owns (clone,
 hosts, CA trust) only through `dmp-root`.
 
 Existing setup: vhosts without the panel's marker line are read, never
-written or removed; hosts lines outside the panel's block are never changed;
+written or removed; hosts lines outside the panel's block are never changed,
+except a takeover moving the lines that name only that site into its record;
 wpcore's config and cores folder are shared with the CLI. See AGENTS.md rule 12.

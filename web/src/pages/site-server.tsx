@@ -10,6 +10,7 @@ import { Dialog, DialogList } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/field';
 import { api } from '@/lib/api';
 import { Link } from '@/lib/router';
+import { takeoverHref } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { HtaccessReview, reviewedSums, ruleCounts } from '@/pages/site-htaccess';
@@ -122,8 +123,10 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
             </p>
             {!anyOpen && nginxRefusal && (
               <p className="text-xs text-muted-foreground">
-                {nginxRefusal}
-                {/set it up on Services, nginx/.test(nginxRefusal) && <> (<Link href="/services/nginx" className="text-primary hover:underline">open nginx</Link>)</>}.
+                {/* The way out as a link where there is one: the words that name it in the reason go. */}
+                {nginxRefusal.replace(/ \(Take over\.\.\. on its Overview\)$/, '')}
+                {/set it up on Services, nginx/.test(nginxRefusal) && <> (<Link href="/services/nginx" className="text-primary hover:underline">open nginx</Link>)</>}
+                {!site.vhostManaged && !site.path ? <>: <Link href={takeoverHref(site)} className="font-medium text-primary hover:underline">Take over...</Link></> : '.'}
               </p>
             )}
           </div>

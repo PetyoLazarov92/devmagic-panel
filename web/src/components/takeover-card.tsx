@@ -10,6 +10,8 @@ import { Dialog } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/field';
 import { api } from '@/lib/api';
 import { shortDate } from '@/lib/format';
+import { Link, useQueryParam } from '@/lib/router';
+import { siteHref } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 
 /**
@@ -20,14 +22,16 @@ import { toast } from '@/lib/toast';
  */
 export function TakeoverCard({ site, onChanged }: { site: Site; onChanged: () => void }) {
   const takenOver = site.install?.takenOver;
-  const [open, setOpen] = useState<'take' | 'give' | null>(null);
+  // ?takeover=1 in the address, from a hint elsewhere, opens the dialog at once.
+  const asked = useQueryParam('takeover') === '1';
+  const [open, setOpen] = useState<'take' | 'give' | null>(asked && !takenOver && !site.vhostManaged && !site.path ? 'take' : null);
   const job = useJob();
   useEffect(() => {
     if (job.job?.status === 'done') onChanged();
   }, [job.job?.status]);
   if (site.path || (site.vhostManaged && !takenOver)) return null;
   return (
-    <Card>
+    <Card id="takeover">
       <CardHeader><CardTitle>{takenOver ? 'Taken over' : 'Made by hand'}</CardTitle><Hand className="size-4 text-muted-foreground" /></CardHeader>
       <div className="grid gap-3 p-5 text-sm">
         {takenOver ? (
@@ -36,12 +40,22 @@ export function TakeoverCard({ site, onChanged }: { site: Site; onChanged: () =>
               Made by hand, managed by the panel since {shortDate(takenOver.at)}.
               {takenOver.dropped > 0 && ` ${takenOver.dropped} line${takenOver.dropped === 1 ? '' : 's'} of its vhost were left out; the kept copy has them.`}
             </p>
-            <p className="text-xs text-muted-foreground">Give back puts its own vhost ({takenOver.files.join(', ')}) back in place of the panel's. The site, its certificate and its hosts line stay.</p>
-            <Button variant="outline" className="w-fit" onClick={() => setOpen('give')}><Undo2 />Give back</Button>
+            <p className="text-xs text-muted-foreground">Give back puts its own vhost ({takenOver.files.join(', ')}) back in place of the panel's, and its own lines in /etc/hosts where they were. The site and its certificate stay.</p>
+            {site.server !== 'apache' ? (
+              <>
+                <Button variant="outline" className="w-fit" disabled><Undo2 />Give back</Button>
+                <p className="text-xs text-muted-foreground">
+                  It runs on {site.server === 'nginx' ? 'nginx' : 'nginx in front of Apache'}, and its own vhost is for Apache alone: move it back to Apache on{' '}
+                  <Link href={`${siteHref(site)}?tab=php`} className="font-medium text-primary hover:underline">Server and PHP</Link> first, then give it back.
+                </p>
+              </>
+            ) : (
+              <Button variant="outline" className="w-fit" onClick={() => setOpen('give')}><Undo2 />Give back</Button>
+            )}
           </>
         ) : (
           <>
-            <p>Its vhost was set up outside the panel, so the panel leaves it as it is: domains, nginx and sites under a path cannot be changed from here.</p>
+            <p>Its vhost was set up outside the panel, so the panel leaves it as it is: its domains, its web server (nginx), sites under a path on it and its removal to the trash are not done from here.</p>
             <p className="text-xs text-muted-foreground">Take it over to manage it like the panel's own sites. Its vhost files are kept, to give back any time; nothing in the site's folder changes.</p>
             <Button className="w-fit" onClick={() => setOpen('take')}><ShieldCheck />Take over...</Button>
           </>
@@ -108,6 +122,20 @@ function TakeOverDialog({ site, onClose, onStart }: { site: Site; onClose: () =>
               <pre className="max-h-48 overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">{preview.extra.join('\n')}</pre>
               <p className="text-xs text-muted-foreground">PHP settings (php_value) can go into the site's own PHP settings on its PHP tab afterwards; rewrite rules into its .htaccess.</p>
               <Checkbox id="drop-lines" checked={drop} onChange={setDrop} label="Leave these lines out; they stay in the kept files" />
+            </div>
+          )}
+          {preview.hostsLines.length > 0 && (
+            <div className="grid gap-1.5 rounded-lg border px-3 py-2.5">
+              <p className="font-medium">Its line{preview.hostsLines.length === 1 ? '' : 's'} in /etc/hosts</p>
+              <pre className="overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">{preview.hostsLines.join('\n')}</pre>
+              <p className="text-xs text-muted-foreground">Written by hand outside the panel's block: {preview.hostsLines.length === 1 ? 'it moves' : 'they move'} into the takeover record, so the panel's line decides where the site goes and it can move to nginx. Give back puts {preview.hostsLines.length === 1 ? 'it' : 'them'} back where {preview.hostsLines.length === 1 ? 'it was' : 'they were'}.</p>
+            </div>
+          )}
+          {preview.hostsShared.length > 0 && (
+            <div className="grid gap-1.5 rounded-lg border border-warning/40 bg-warning/6 px-3 py-2.5">
+              <p className="font-medium">A line in /etc/hosts it shares</p>
+              <pre className="overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">{preview.hostsShared.join('\n')}</pre>
+              <p className="text-xs text-muted-foreground">It names other hosts too, so it stays as it is, and the site stays on Apache until you take {site.domain} off it by hand.</p>
             </div>
           )}
           {preview.problems.length === 0 && <ConfirmField id="takeover-confirm" expected={site.domain} value={confirm} onChange={setConfirm} />}

@@ -2170,7 +2170,7 @@ export const mockApi: Api = {
     await wait(300);
     return {
       files: [`${domain.replace(/^local\./, '')}.conf`], enabled: [`${domain.replace(/^local\./, '')}.conf`], names: [domain, `www.${domain}`], docroot: `/var/www/${domain}`, mounts: [],
-      extra: ['Header set X-Robots-Tag "noindex"', 'php_value upload_max_filesize 256M'], problems: [],
+      extra: ['Header set X-Robots-Tag "noindex"', 'php_value upload_max_filesize 256M'], hostsLines: [`127.0.0.1 ${domain}`], hostsShared: [], problems: [],
     };
   },
   rcloneRemotes: async () => {

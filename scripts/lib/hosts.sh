@@ -6,7 +6,8 @@
 #   # END devmagic-panel
 #
 # One line per site, keyed by its primary domain (the first name). Lines
-# outside the block, written by hand or by devmagic, are never changed. The
+# outside the block, written by hand or by devmagic, are never changed here;
+# only a takeover moves a site's own lines into its record (takeover.sh). The
 # address is where the site runs, read from the system: NGINX_ADDRESS when
 # nginx serves it (dmp_nginx_site_on), else APACHE_ADDRESS.
 

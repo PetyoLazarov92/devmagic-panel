@@ -118,6 +118,6 @@ export function removalRefusal(config: SystemConfig, domain: string, docroot: st
   // A site taken over keeps its folder's name, right in WEB_DIR, and dmp-root knows it from its registry.
   const takenOver = dirname(docroot) === config.WEB_DIR && isPanelFolder(config, docroot, domain);
   if (docroot !== join(config.WEB_DIR, domain) && !takenOver) return `${domain} lives in ${docroot}, not ${join(config.WEB_DIR, domain)}; remove it by hand`;
-  if (![`${domain}-ssl.conf`, `${domain}.conf`].includes(basename(vhostFile))) return `${domain}'s vhost is ${basename(vhostFile)}, not ${domain}-ssl.conf; remove it by hand`;
+  if (![`${domain}-ssl.conf`, `${domain}.conf`].includes(basename(vhostFile))) return `${domain}'s vhost is ${basename(vhostFile)}, not ${domain}-ssl.conf; remove it by hand, or take the site over first (Take over... on its Overview) and the panel moves it to the trash`;
   return null;
 }

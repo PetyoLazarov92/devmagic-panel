@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ActionInput, TakeoverPreview } from '@devmagic-panel/shared';
 import { isLocalName } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
@@ -33,6 +35,8 @@ export function parseTakeover(text: string): TakeoverPreview {
     ...(docroot ? { docroot } : {}),
     mounts: all('MOUNT'),
     extra: all('EXTRA'),
+    hostsLines: all('HOSTS'),
+    hostsShared: all('HOSTS_SHARED'),
     problems: all('PROBLEM'),
   };
 }
@@ -101,6 +105,10 @@ export function forgetTakeover(store: Pick<RunStore, 'installs' | 'setInstall'>,
 
 /** Gives the site its own vhost back, and the install record forgets the takeover. */
 export async function giveBack(ctx: TakeoverContext, input: ActionInput<'site.giveBack'>): Promise<ExecResult[]> {
+  // Its own vhost is for Apache alone: a site nginx serves goes back to Apache first, which the panel can do as it manages the site.
+  if (existsSync(join(ctx.config.NGINX_SITES_AVAILABLE, `${input.domain}.conf`))) {
+    throw new TakeoverRefused(`${input.domain} runs on nginx, and its own vhost is for Apache alone: move it back to Apache on Server and PHP first, then give it back`);
+  }
   const r = await runRoot(ctx.exec, ctx.dmpRoot, ['vhost-release', input.domain], 5 * 60_000);
   if (r.code === 0) forgetTakeover(ctx.store, input.domain);
   return [r];

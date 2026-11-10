@@ -40,7 +40,7 @@ import { FilesTab } from '@/pages/site-files';
 import { PluginsTab } from '@/pages/site-plugins';
 import { ServerCard } from '@/pages/site-server';
 import { HtaccessCard } from '@/pages/site-htaccess';
-import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
+import { siteHref, siteName, siteTarget, takeoverHref } from '@/lib/site-ref';
 import { debugLabel, debugValues, siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
 import { cn } from '@/lib/utils';
 
@@ -1256,7 +1256,8 @@ function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) 
       ) : (
         <p className="rounded-lg border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
           This vhost was set up outside the panel, so the panel leaves <code className="font-mono text-[13px]">{site.domain}-ssl.conf</code> as it is.
-          It still reissues the certificate and keeps the hosts line in its block. To change the domains, edit the vhost by hand.
+          It still reissues the certificate and keeps the hosts line in its block. To change the domains, edit the vhost by hand, or{' '}
+          <Link href={takeoverHref(site)} className="font-medium text-primary hover:underline">take it over</Link> and the panel manages them like its own sites'.
         </p>
       )}
     </div>

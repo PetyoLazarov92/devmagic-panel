@@ -12,7 +12,7 @@ import { apachePhpVersion, fpmDefaultVersion } from '../php/versions.js';
 import { findVhost } from './discover.js';
 import { htaccessFolders, readHtaccess, siteKind, staticRules } from './htaccess.js';
 import { chosenRules, readHtaccessReport, reportSums, sameSums } from './htaccess-rules.js';
-import { hostsOutsideBlock, readHosts } from './hosts-block.js';
+import { hostsLinesOutside, readHosts } from './hosts-block.js';
 import { mountArgs, ruleArgs, SiteActionRefused } from './site-actions.js';
 import { readSiteVhosts, siteServer, type VhostInfo } from './vhost.js';
 import { parseWpConfig } from './wpconfig.js';
@@ -33,6 +33,9 @@ export interface ServerSwitchContext {
   dmpRoot: string;
   settle?: { tries?: number; delayMs?: number };
 }
+
+/** A site made by hand that the panel took over: dmp-root keeps its record in STATE_DIR/taken-over/<domain>. */
+const takenOver = (config: SystemConfig, domain: string) => existsSync(join(config.STATE_DIR, 'taken-over', domain));
 
 const lastLine = (r: ExecResult) => (r.stderr || r.stdout).trim().split('\n').at(-1) ?? '';
 const root = (ctx: ServerSwitchContext, args: string[]) => ctx.exec('sudo', ['-n', ctx.dmpRoot, ...args], { timeoutMs: 180_000 });
@@ -72,12 +75,14 @@ export const apachePaths = (docroot: string, fresh = false): string[] => htacces
  */
 export function moveRefusal(config: SystemConfig, vhost: VhostInfo, domain: string, target: SiteServer = 'nginx'): string | null {
   if (!vhost.docroot || vhost.names[0] !== domain) return `${domain} is not a site's primary domain here`;
-  if (!vhost.managed) return `the vhost of ${domain} was made by hand, so it stays on Apache as it is`;
+  if (!vhost.managed) return `the vhost of ${domain} was made by hand, so it stays on Apache as it is: take the site over first (Take over... on its Overview)`;
   if (vhost.docroot !== join(config.WEB_DIR, domain)) return `${domain} lives in ${vhost.docroot}, not ${join(config.WEB_DIR, domain)}; only a site in the usual folder moves`;
   if (target === 'apache' || target === siteServer(vhost)) return null;
   if (!nginxSetUp(config)) return 'nginx is not set up next to Apache yet: set it up on Services, nginx first';
-  const outside = hostsOutsideBlock(readHosts(config), vhost.names);
-  if (outside.length) return `${outside.join(', ')} ${outside.length === 1 ? 'has' : 'have'} a line in /etc/hosts outside the panel's block, which keeps the site on Apache: remove that line first`;
+  const outside = hostsLinesOutside(readHosts(config), vhost.names);
+  if (outside.shared.length) return `/etc/hosts has ${outside.shared.map((l) => `"${l}"`).join(' and ')} outside the panel's block, naming ${domain} with other hosts, which keeps the site on Apache: take ${domain} off ${outside.shared.length === 1 ? 'that line' : 'those lines'} by hand (sudo nano /etc/hosts)`;
+  // A site taken over has its own lines moved into its takeover record by the move itself; another site's need a person.
+  if (outside.own.length && !takenOver(config, domain)) return `/etc/hosts has ${outside.own.map((l) => `"${l}"`).join(' and ')} outside the panel's block, which keeps the site on Apache: remove ${outside.own.length === 1 ? 'that line' : 'those lines'} by hand first (sudo nano /etc/hosts)`;
   // In front of Apache, the vhost serves the sites under its paths and runs every PHP as before.
   if (target === 'nginx-apache') return null;
   const elsewhere = vhost.mounts.filter((m) => dirname(m.docroot) !== config.WEB_DIR);
@@ -123,6 +128,11 @@ export function planSetServer(ctx: ServerSwitchContext, input: ActionInput<'site
   const aliases = vhost.names.slice(1).filter(isLocalName);
   const names = [domain, ...aliases];
   const docroot = vhost.docroot as string;
+  // A site taken over before takeovers moved hosts lines: the line made by hand would keep it on Apache, so it moves first.
+  const own = target !== 'apache' && target !== current ? hostsLinesOutside(readHosts(config), vhost.names).own : [];
+  const ownHosts: JobStep[] = own.length
+    ? [{ id: 'hosts-own', label: `Move the hosts line${own.length === 1 ? '' : 's'} made by hand (${own.join('; ')}) into the takeover record; Give back puts ${own.length === 1 ? 'it' : 'them'} back`, weight: 1, run: async () => failed(await root(ctx, ['hosts-adopt', domain])) }]
+    : [];
 
   if (target === 'nginx') {
     const php = nginxPhpVersion(config, domain);
@@ -145,6 +155,7 @@ export function planSetServer(ctx: ServerSwitchContext, input: ActionInput<'site
     const sums = reportSums(report);
     const write = () => root(ctx, nginxArgs(config, vhost, domain, aliases, kind, rules, sums));
     return [
+      ...ownHosts,
       {
         id: 'nginx',
         label: `Write the nginx site for ${domain}, its PHP through PHP-FPM ${php}${rules.length ? `, with ${rules.length} rule${rules.length === 1 ? '' : 's'} from its .htaccess` : ''}`,
@@ -183,7 +194,7 @@ export function planSetServer(ctx: ServerSwitchContext, input: ActionInput<'site
     if (current === 'nginx-apache') {
       return [{ id: 'nginx', label: `Write nginx in front of Apache for ${domain} again: ${what}`, weight: 2, run: async () => failed(await write()) }, check(ctx, domain)];
     }
-    const steps: JobStep[] = [];
+    const steps: JobStep[] = [...ownHosts];
     if (current === 'nginx') {
       // The vhost comes back first: nginx sends the site's requests to it.
       steps.push({

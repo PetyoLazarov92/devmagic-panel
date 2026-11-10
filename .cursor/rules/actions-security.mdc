@@ -112,4 +112,5 @@ alwaysApply: true
   `program` task. System cron is read only: never a `dmp-root` command that
   writes `/etc/cron.d` or root's crontab.
 - Never touch what the panel did not create: vhosts without the marker line,
-  hosts lines outside the block, wpcore's config.
+  hosts lines outside the block (a takeover's own lines only, into its
+  record, put back by vhost-release), wpcore's config.

@@ -23,7 +23,7 @@ import { api, type DraftInput } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { type CreateSiteInput, PRODUCTION_ONLY_PLUGINS, previewSteps } from '@/lib/plan';
 import { Link, navigate } from '@/lib/router';
-import {} from '@/lib/site-ref';
+import { takeoverHref } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { adminChoices, adminCreateOf, cleanUserOf, dumpAdmins } from '@/lib/admin-choice';
 import { type BuildPick, buildChoice, buildId, buildSteps } from '@/lib/builds';
@@ -1355,7 +1355,7 @@ function UnderPath({ state, set, sites, error, folder }: { state: WizardState; s
           </Field>
           <p className={cn('text-xs sm:col-span-2', error ? 'text-danger' : 'text-muted-foreground')}>
             {error ?? (folder && parent ? `At https://${parent.domain}${cleanPath(state.under.path)}/, in /var/www/${folder}.` : 'Pick the site and the path.')}
-            {!error && parent && !parent.vhostManaged && ' Its vhost was made by hand, so the install shows the lines to add to it.'}
+            {!error && parent && !parent.vhostManaged && <> Its vhost was made by hand, so the install shows the lines to add to it, unless you <Link href={takeoverHref(parent)} className="font-medium text-primary hover:underline">take it over</Link> first.</>}
           </p>
           {dumpPath !== null && cleanPath(state.under.path) && dumpPath !== cleanPath(state.under.path) && (
             <p role="status" className="rounded-md border border-warning/40 bg-warning/8 px-3 py-2 text-xs sm:col-span-2">

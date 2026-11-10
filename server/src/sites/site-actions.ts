@@ -260,7 +260,7 @@ async function redirectUploads(ctx: SiteActionContext, site: SiteRef, host: stri
 export async function addAliases(ctx: SiteActionContext, { domain, aliases }: ActionInput<'site.addAliases'>): Promise<HandlerOutcome> {
   const vhost = findVhost(ctx.config, domain);
   if (!vhost || vhost.names[0] !== domain) throw new SiteActionRefused(`${domain} is not a site's primary domain here`);
-  if (!vhost.managed) throw new SiteActionRefused(`the vhost of ${domain} was made by hand, so the panel leaves it as it is: add ServerAlias ${aliases.join(' ')} to it yourself`);
+  if (!vhost.managed) throw new SiteActionRefused(`the vhost of ${domain} was made by hand, so the panel leaves it as it is: add ServerAlias ${aliases.join(' ')} to it yourself, or take the site over first (Take over... on its Overview)`);
   const current = vhost.names.slice(1).filter(isLocalName);
   const added = [...new Set(aliases)].filter((a) => a !== domain && !current.includes(a));
   if (added.length === 0) return { results: [ok(`${domain} serves ${aliases.join(', ')} already`)] };

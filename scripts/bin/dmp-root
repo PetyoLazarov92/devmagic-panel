@@ -61,6 +61,7 @@ Usage: dmp-root <command> [args]
   vhost-adopt <domain> [--check|--drop-lines]
                                       take over a site made by hand: the panel's vhost in place of its own
   vhost-release <domain>              give a site taken over its own vhost back
+  hosts-adopt <domain>                move a site taken over's own hosts lines into its takeover record
   trash-purge <days>                  delete trash entries older than that
   cert-remove <domain>                remove a cert no vhost uses any more
   apache-module-enable <module>       enable an allowed Apache module
@@ -266,6 +267,7 @@ main() {
     trash-dump) (( $# == 1 )) || dmp_usage_error "trash-dump takes an id"; dmp_trash_dump "$1" ;;
     vhost-adopt) (( $# == 1 || $# == 2 )) || dmp_usage_error "vhost-adopt takes a domain and --check or --drop-lines"; dmp_require_local_name "$1"; dmp_vhost_adopt "$@" ;;
     vhost-release) (( $# == 1 )) || dmp_usage_error "vhost-release takes one domain"; dmp_require_local_name "$1"; dmp_vhost_release "$1" ;;
+    hosts-adopt) (( $# == 1 )) || dmp_usage_error "hosts-adopt takes one domain"; dmp_require_local_name "$1"; dmp_takeover_hosts_adopt "$1" ;;
     trash-purge) (( $# == 1 )) || dmp_usage_error "trash-purge takes a number of days"; dmp_trash_purge "$1" ;;
     cert-remove) (( $# == 1 )) || dmp_usage_error "cert-remove takes one domain"; with_names dmp_cert_remove "$@" ;;
     apache-module-enable) (( $# == 1 )) || dmp_usage_error "apache-module-enable takes one module"; dmp_apache_module_enable "$1" ;;

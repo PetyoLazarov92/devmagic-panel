@@ -451,6 +451,10 @@ export interface TakeoverPreview {
   mounts: string[];
   /** Lines the panel's vhost does not have: left out with dropLines, kept in the originals. */
   extra: string[];
+  /** Its own lines in /etc/hosts outside the panel's block: they move into the takeover record, and Give back puts them back. */
+  hostsLines: string[];
+  /** Lines there that name it with other hosts: they stay, and keep it off nginx until edited by hand. */
+  hostsShared: string[];
   /** Why it cannot be taken over now. */
   problems: string[];
 }

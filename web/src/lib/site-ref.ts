@@ -16,6 +16,12 @@ export const siteName = (site: SiteId) => `${site.domain}${site.path ?? ''}`;
 export const siteHref = (site: SiteId) =>
   `/sites/${encodeURIComponent(site.domain)}${site.path ? `/${encodeURIComponent(site.path.slice(1))}` : ''}`;
 
+/** A site made by hand: its Overview with the takeover dialog open, so the panel can manage its vhost. */
+export const takeoverHref = (site: SiteId) => `${siteHref({ domain: site.domain })}?tab=overview&takeover=1`;
+
+/** What to say where a vhost made by hand stops something. */
+export const TAKEOVER_HINT = 'Take it over to let the panel manage its vhost';
+
 /** The site a name like local.spellbook.example/learn stands for. */
 export function siteFromName(name: string): SiteId {
   const slash = name.indexOf('/');

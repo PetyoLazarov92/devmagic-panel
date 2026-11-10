@@ -1,5 +1,13 @@
 # Changelog
 
+### v1.37.0 (2026-11-10)
+* **Sites:** taking over a site made by hand also takes its line in `/etc/hosts` that you wrote outside the panel's block. That line kept deciding where the site goes, so a site taken over could not move to nginx. It moves into the takeover record with its place in the file, the dialog shows it first, and Give back puts it back where it was. A line that also names another host stays, and the dialog says so
+* **nginx:** a site taken over earlier, whose hand-made hosts line is still there, moves to nginx: the move takes that line into the takeover record first, as its own step, instead of refusing. A line the move cannot take is named in the refusal, with what to do
+* **Sites:** where a vhost made by hand stops something (moving to nginx, the Domains tab, adding a domain from Aura, removal to the trash, a site under one of its paths), the panel says so with a **Take over...** link that opens the takeover dialog on the site's Overview. The Made by hand card lists what the panel does not do on such a site
+* **Sites:** a site taken over that runs on nginx says that Give back waits until it is back on Apache, with the way to Server and PHP; Give back refuses before anything runs instead of failing in dmp-root
+* **Web:** a network's card on the Sites page lines up its Multisite badge and the nginx badge, with room between them
+* This release changes the root scripts, so the Updates page asks for your sudo password to install it, as for any release that does
+
 ### v1.36.1 (2026-11-10)
 * **nginx:** moving a site to nginx no longer fails at Check that the site answers with `tlsv1 unrecognized name` while a Retry passes. A reload returns before nginx's workers have the new site, and until then nginx refuses its name; the check now asks again for a few seconds while the web server takes in a reload, as it already did while PHP-FPM starts
 * **nginx:** a network whose sites live under paths more than one folder deep, like `/learn/potions/`, works on nginx. nginx answered 404 for such a site's `wp-includes` and `wp-content` files, so jQuery and the theme's scripts never loaded, because WordPress's own rule strips one folder only. The nginx file now takes the site's folders off at any depth. A network already on nginx gets the new rules when you move it to nginx again (Write the nginx site again)

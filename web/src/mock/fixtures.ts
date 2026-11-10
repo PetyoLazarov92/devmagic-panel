@@ -247,6 +247,12 @@ const installs: Record<string, Site['install']> = {
   'local.newsnow.example': { how: 'restore', at: '2026-10-21T08:30:00Z', archivedAt: '2026-10-19T16:05:00Z' },
 };
 for (const site of sites) site.install = (!site.path && installs[site.domain]) || { how: site.panelMade ? 'panel' : 'hand' };
+// A vhost made by hand keeps its site on Apache, as the panel says, until it is taken over.
+for (const site of sites) {
+  if (site.vhostManaged || site.path || site.move) continue;
+  const why = `the vhost of ${site.domain} was made by hand, so it stays on Apache as it is: take the site over first (Take over... on its Overview)`;
+  site.move = { refusals: { nginx: why, 'nginx-apache': why }, ignored: [], front: { apachePaths: [], staticRules: [] } };
+}
 
 export const debugLog: LogLine[] = [
   { time: ago(2), level: 'fatal', message: "Uncaught Error: Call to undefined function arcade_bonus_locale() in /var/www/local.arcade.example/wp-content/themes/arcade/inc/bonus.php:88", source: 'themes/arcade/inc/bonus.php:88' },

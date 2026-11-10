@@ -240,10 +240,15 @@ function SiteCard({ site }: { site: Site }) {
             </Link>
           </h2>
           {siteSubtitle(site) && <p className="truncate text-sm text-muted-foreground">{siteSubtitle(site)}</p>}
-          {site.network && <NetworkBadge site={site} className="mt-1.5" />}
-          {site.server !== 'apache' && <Badge tone="primary" className="mt-1.5" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>}
-          {site.install?.takenOver && <Badge className="mt-1.5" title={`Made by hand, managed by the panel since ${shortDate(site.install.takenOver.at)}`}>Taken over</Badge>}
-          {site.installing && <Badge tone="warning" className="mt-1.5"><LoaderCircle className="size-3 animate-spin" />Installing: see progress</Badge>}
+          {/* One row of badges with room between them, wrapping on a narrow card: a network on nginx shows both side by side, lined up. */}
+          {(site.network || site.server !== 'apache' || site.install?.takenOver || site.installing) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {site.network && <NetworkBadge site={site} />}
+              {site.server !== 'apache' && <Badge tone="primary" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>}
+              {site.install?.takenOver && <Badge title={`Made by hand, managed by the panel since ${shortDate(site.install.takenOver.at)}`}>Taken over</Badge>}
+              {site.installing && <Badge tone="warning"><LoaderCircle className="size-3 animate-spin" />Installing: see progress</Badge>}
+            </div>
+          )}
           {site.busy && (
             <Link href={site.busy.jobId ? `/jobs/${encodeURIComponent(site.busy.jobId)}` : href} className="relative z-10 mt-1.5 block w-fit">
               <Badge tone="warning"><LoaderCircle className="size-3 animate-spin" />Busy: {site.busy.title}</Badge>

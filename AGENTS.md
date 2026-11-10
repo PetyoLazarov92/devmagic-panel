@@ -135,7 +135,11 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       takeover record both name it (`dmp_site_folder`).
     - **Hosts entries live in one marked block** (`# BEGIN devmagic-panel` ...
       `# END devmagic-panel`), one line per site keyed by its primary domain.
-      Lines outside the block are never changed.
+      Lines outside the block are never changed, but for one case: taking
+      over a site (`vhost-adopt`, or `hosts-adopt` for a site taken over
+      earlier, as a step of its move to nginx) moves the lines that name only
+      that site into its takeover record, and `vhost-release` puts them back
+      where they were.
     - **A PHP of its own goes through PHP-FPM**: a site with a version or
       settings of its own gets the pool `dmp-<folder>` in
       `/etc/php/<version>/fpm/pool.d` (written by `dmp-root php-pool-write`,

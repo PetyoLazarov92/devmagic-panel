@@ -40,3 +40,12 @@ describe('themeFolderHref and pluginFolderHref', () => {
     expect(pluginFolderHref(site, { path: 'wp-content/plugins/hello-wands.php', oneFile: true })).toBe('/sites/local.spellbook.example?tab=files&file=wp-content%2Fplugins%2Fhello-wands.php');
   });
 });
+
+describe('takeoverHref', () => {
+  it("opens the site's Overview with the takeover dialog, from the site or one under its path", async () => {
+    const { takeoverHref } = await import('../src/lib/site-ref.js');
+    expect(takeoverHref({ domain: 'local.spellbook.example' })).toBe('/sites/local.spellbook.example?tab=overview&takeover=1');
+    // A site under a path shares its domain's vhost: the takeover is the domain's.
+    expect(takeoverHref({ domain: 'local.spellbook.example', path: '/learn' })).toBe('/sites/local.spellbook.example?tab=overview&takeover=1');
+  });
+});
