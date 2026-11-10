@@ -15,7 +15,14 @@ export interface MenuItem {
  * against the window, not its parent, so a table or card that clips its
  * content never cuts it, and it opens upwards when there is no room below.
  */
-export function Menu({ items, label = 'More actions', align = 'end' }: { items: MenuItem[]; label?: string; align?: 'start' | 'end' }) {
+export function Menu({ items, label = 'More actions', align = 'end', trigger, triggerClassName }: {
+  items: MenuItem[];
+  label?: string;
+  align?: 'start' | 'end';
+  /** What the button shows in place of the three dots, like More and a count; label still names it. */
+  trigger?: ReactNode;
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -75,10 +82,15 @@ export function Menu({ items, label = 'More actions', align = 'end' }: { items: 
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        aria-label={trigger ? label : undefined}
+        className={cn(trigger ? 'inline-flex items-center gap-1.5' : 'inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground', triggerClassName)}
       >
-        <MoreHorizontal className="size-4" />
-        <span className="sr-only">{label}</span>
+        {trigger ?? (
+          <>
+            <MoreHorizontal className="size-4" />
+            <span className="sr-only">{label}</span>
+          </>
+        )}
       </button>
       {open && (
         <div

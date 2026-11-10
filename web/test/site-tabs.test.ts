@@ -1,6 +1,7 @@
 import type { Site, WpDebugConstant } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { debugLabel, siteTabItems, uncoveredNames } from '../src/lib/site-tabs.js';
+import { fittingTabs } from '../src/lib/tabs-fit.js';
 
 const OFF: Record<WpDebugConstant, boolean | null> = { WP_DEBUG: false, WP_DEBUG_LOG: null, WP_DEBUG_DISPLAY: null, SCRIPT_DEBUG: null, SAVEQUERIES: null };
 
@@ -84,5 +85,16 @@ describe('debugLabel', () => {
     expect(debugLabel(debug({ WP_DEBUG_LOG: true }))).toBe('Log and page');
     expect(debugLabel(debug({}))).toBe('On the page');
     expect(debugLabel(debug({ WP_DEBUG_DISPLAY: false }))).toBe('On, not shown');
+  });
+});
+
+describe('fittingTabs', () => {
+  it('shows every tab when they fit, else as many as fit beside More, and always the open one', () => {
+    expect(fittingTabs([100, 100, 100], 300, 0)).toEqual([0, 1, 2]);
+    // 96 for More: two of 100 fit in 300.
+    expect(fittingTabs([100, 100, 100, 100], 300, 0)).toEqual([0, 1]);
+    // The open fourth tab takes the second one's place.
+    expect(fittingTabs([100, 100, 100, 100], 300, 3)).toEqual([0, 3]);
+    expect(fittingTabs([100, 100, 100, 100], 120, 3)).toEqual([3]);
   });
 });
