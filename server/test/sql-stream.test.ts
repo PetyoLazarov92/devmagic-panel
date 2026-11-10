@@ -6,7 +6,7 @@ import { PassThrough, Readable } from 'node:stream';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { runCommand } from '../src/exec.js';
-import { DropServerLines, dumpStream, importWrap, sqlModeStatement } from '../src/sites/sql-stream.js';
+import { DropServerLines, dumpStream, importWrap, sqlModeStatement, TranslateCollations } from '../src/sites/sql-stream.js';
 
 async function through(text: string, chunkSize = text.length || 1): Promise<string> {
   const chunks: Buffer[] = [];
@@ -116,5 +116,54 @@ describe('a program fed a stream', () => {
     const r = await runCommand('cat', [], { inputStream: input, inputStallMs: 60_000 / 600 });
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^stopped: nothing was read for/);
+  });
+});
+
+describe('collations only a newer MariaDB has', () => {
+  const through = async (chunks: Buffer[]) => {
+    const out: Buffer[] = [];
+    for await (const chunk of Readable.from(chunks).pipe(new TranslateCollations())) out.push(chunk as Buffer);
+    return Buffer.concat(out).toString('latin1');
+  };
+  const DUMP = [
+    '/*M!100616 SET NAMES utf8mb4 COLLATE utf8mb4_uca1400_ai_ci */;',
+    'CREATE TABLE `wp_posts` (',
+    '  `post_title` text COLLATE utf8mb4_uca1400_ai_ci NOT NULL,',
+    '  `guid` varchar(255) CHARACTER SET utf8mb3 COLLATE utf8mb3_uca1400_ai_ci NOT NULL',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_as_cs;',
+    "INSERT INTO `wp_posts` VALUES (1,'A post about utf8mb4_uca1400_ai_ci','https://www.spellbook.example/?p=1');",
+    '  insert into `wp_posts` values (2,\'utf8mb3_uca1400_ai_ci\',\'x\');',
+    "/*!50001 SET collation_connection      = utf8mb4_uca1400_ai_ci */;",
+    '',
+  ].join('\n');
+  const WANT = DUMP
+    .replace('COLLATE utf8mb4_uca1400_ai_ci */', 'COLLATE utf8mb4_unicode_520_ci */')
+    .replace('text COLLATE utf8mb4_uca1400_ai_ci', 'text COLLATE utf8mb4_unicode_520_ci')
+    .replace('COLLATE utf8mb3_uca1400_ai_ci NOT', 'COLLATE utf8mb3_unicode_520_ci NOT')
+    .replace('COLLATE=utf8mb4_uca1400_as_cs', 'COLLATE=utf8mb4_unicode_520_ci')
+    .replace('= utf8mb4_uca1400_ai_ci */', '= utf8mb4_unicode_520_ci */');
+
+  it('become the 5.2.0 collation of their character set in the structure, and rows stay as they were written', async () => {
+    expect(await through([Buffer.from(DUMP, 'latin1')])).toBe(WANT);
+    expect(WANT).toContain("'A post about utf8mb4_uca1400_ai_ci'");
+    expect(WANT).toContain("(2,'utf8mb3_uca1400_ai_ci'");
+  });
+
+  it('give the same answer however the dump is cut into chunks, a byte at a time included', async () => {
+    const bytes = Buffer.from(DUMP, 'latin1');
+    for (const size of [1, 2, 7, 16, 17, 64]) {
+      const chunks: Buffer[] = [];
+      for (let i = 0; i < bytes.length; i += size) chunks.push(bytes.subarray(i, i + size));
+      expect(await through(chunks)).toBe(WANT);
+    }
+  });
+
+  it('pass a dump without them, bytes that are not text and a last line without a newline as they are', async () => {
+    const plain = Buffer.concat([Buffer.from('CREATE TABLE `t` (x int) COLLATE=utf8mb4_unicode_520_ci;\nINSERT INTO `t` VALUES (', 'latin1'), Buffer.from([0, 255, 10, 13, 128]), Buffer.from(');\n-- end', 'latin1')]);
+    expect(Buffer.from(await through([plain]), 'latin1').equals(plain)).toBe(true);
+    expect(await through([Buffer.from('SET collation_connection = utf8mb4_uca1400_ai_ci', 'latin1')])).toBe('SET collation_connection = utf8mb4_unicode_520_ci');
+    // A very long line is rows whatever it starts with: it is not held in memory to look into.
+    const long = Buffer.from(`-- ${'x'.repeat(70 * 1024)} utf8mb4_uca1400_ai_ci\n`, 'latin1');
+    expect(await through([long])).toBe(long.toString('latin1'));
   });
 });

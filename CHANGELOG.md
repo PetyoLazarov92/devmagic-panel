@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.32.2 (2026-11-10)
+* **Fix:** a dump from MariaDB 10.10 or later imports into MySQL: it no longer stops with `Unknown collation: 'utf8mb3_uca1400_ai_ci'`. Those collations (`utf8mb4_uca1400_ai_ci` and the like) are translated to the `unicode_520_ci` collation of the same character set as the dump streams in, in table definitions and settings only, never in rows. It applies to every import: a new site, Import a database, a snapshot restore and Services, MySQL. A case-sensitive or accent-sensitive one becomes the plain `unicode_520_ci` too
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.32.1 (2026-11-10)
 * **Sites:** a server over SSH can be on another port: type it after the host, like `alex@www.spellbook.example:2222`, in the new site wizard, a site's Import a database and Refresh from production. An alias from `~/.ssh/config` keeps the port it names there
 * **Sites:** a server that names WP-CLI another way can be exported from: **WP-CLI has another name on the server?**, folded under the folder, takes its command, like `wp-cli` or `~/bin/wp`. Only a program name or path, never spaces or options. It is used for the export and for reading the tables, and saved with Refresh from production

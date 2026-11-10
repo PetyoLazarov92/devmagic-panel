@@ -4,8 +4,9 @@ import { createGunzip } from 'node:zlib';
 
 /**
  * A dump on its way into MySQL: read from disk, unpacked when it is a .gz,
- * without the lines only a managed host's server takes, and wrapped in the
- * session settings of the import. Nothing is written to disk on the way.
+ * without the lines only a managed host's server takes, with collations only
+ * a newer MariaDB has translated, and wrapped in the session settings of the
+ * import. Nothing is written to disk on the way.
  */
 
 /**
@@ -82,6 +83,72 @@ export class DropServerLines extends Transform {
   }
 }
 
+/**
+ * MariaDB 10.10 and later name their default collations after UCA 14.0.0
+ * (utf8mb4_uca1400_ai_ci, utf8mb3_uca1400_ai_ci), which MySQL and older
+ * MariaDB do not have: an import stops with "Unknown collation". They become
+ * the 5.2.0 collation of the same character set (utf8mb4_unicode_520_ci),
+ * the one WordPress itself asks for and every server has.
+ */
+const UCA1400 = /\b([a-z0-9]+)_uca1400_[a-z0-9_]+/gi;
+const UCA1400_BYTES = Buffer.from('_uca1400_');
+/** A line longer than this is rows, whatever it starts with. */
+const MAX_STRUCTURE_LINE = 64 * 1024;
+/** How much of a line's start tells rows from structure. */
+const ROWS_HEAD = 16;
+const ROWS = /^\s*(?:INSERT|REPLACE)\b/i;
+
+/** The collations of one line of structure, translated; its bytes otherwise as they are. */
+export const translateCollations = (line: Buffer): Buffer =>
+  line.includes(UCA1400_BYTES) ? Buffer.from(line.toString('latin1').replace(UCA1400, '$1_unicode_520_ci'), 'latin1') : line;
+
+/**
+ * Translates those collations in the structure of a dump (CREATE TABLE and
+ * SET lines), line by line. Rows are never looked into: a line that starts
+ * with INSERT or REPLACE, or is too long to be structure, passes as it is,
+ * so text in a post that names a collation stays as it was written.
+ */
+export class TranslateCollations extends Transform {
+  private mode: 'line' | 'rows' = 'line';
+  private line: Buffer = Buffer.alloc(0);
+
+  override _transform(chunk: Buffer, _encoding: BufferEncoding, done: TransformCallback): void {
+    let i = 0;
+    while (i < chunk.length) {
+      const nl = chunk.indexOf(NEWLINE, i);
+      if (this.mode === 'rows') {
+        if (nl === -1) {
+          this.push(chunk.subarray(i));
+          break;
+        }
+        this.push(chunk.subarray(i, nl + 1));
+        i = nl + 1;
+        this.mode = 'line';
+        continue;
+      }
+      const end = nl === -1 ? chunk.length : nl + 1;
+      this.line = this.line.length ? Buffer.concat([this.line, chunk.subarray(i, end)]) : chunk.subarray(i, end);
+      i = end;
+      if (nl !== -1) {
+        // A whole line: rows when it starts like them, structure otherwise.
+        this.push(this.line.length > MAX_STRUCTURE_LINE || ROWS.test(this.line.subarray(0, ROWS_HEAD).toString('latin1')) ? this.line : translateCollations(this.line));
+        this.line = Buffer.alloc(0);
+      } else if (this.line.length >= ROWS_HEAD && (ROWS.test(this.line.subarray(0, ROWS_HEAD).toString('latin1')) || this.line.length > MAX_STRUCTURE_LINE)) {
+        // Rows that go on past this chunk: passed on as they come, up to their newline.
+        this.push(this.line);
+        this.line = Buffer.alloc(0);
+        this.mode = 'rows';
+      }
+    }
+    done();
+  }
+
+  override _flush(done: TransformCallback): void {
+    if (this.line.length) this.push(translateCollations(this.line));
+    done();
+  }
+}
+
 /** Sends before ahead of the stream and after at its end. */
 export function wrapped(before: string, after: string): Transform {
   let started = false;
@@ -141,7 +208,7 @@ export function dumpStream(file: string, wrap: { before: string; after: string }
     onRead?.(read, total);
   });
   const out = new PassThrough();
-  const stages = [source, ...(file.endsWith('.gz') ? [createGunzip()] : []), new DropServerLines(), wrapped(wrap.before, wrap.after), out];
+  const stages = [source, ...(file.endsWith('.gz') ? [createGunzip()] : []), new DropServerLines(), new TranslateCollations(), wrapped(wrap.before, wrap.after), out];
   pipeline(stages, (error) => {
     if (error) out.destroy(error);
   });

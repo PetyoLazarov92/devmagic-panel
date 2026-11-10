@@ -195,6 +195,9 @@ The runner never touches another database, accounts, rights, routines or files.
   MySQL's limits raised while it runs, production domains replaced with the
   site's (URLs only, or every mention when you tick it), and the tables from
   before kept for 7 days under Kept databases.
+  A dump from MariaDB 10.10 or later has its `uca1400` collations, which
+  MySQL does not know, translated to `unicode_520_ci` on the way in, in the
+  structure only.
   - **From production**: set up once per site with the SSH host, the
     WordPress folder there, the tables whose rows stay there and whether the
     copy is cleaned; then **Refresh now** exports production's database over
