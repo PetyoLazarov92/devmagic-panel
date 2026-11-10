@@ -495,6 +495,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     'site.refreshFromProduction': [
       { id: 'export', label: `Export the database on ${mockProduction[String(input.domain)]?.host ?? 'production'} with WP-CLI and read it` },
       { id: 'copy', label: mockProduction[String(input.domain)]?.clean ? 'Clean it in a side database and swap it in' : 'Import it and swap it in' },
+      { id: 'missing', label: 'Look for plugins and themes the new database names that the files lack' },
     ],
     'db.cleanCurrent': [
       { id: 'copy', label: 'Copy the database beside the site' },

@@ -5,6 +5,7 @@ import type { JobStep } from '../jobs.js';
 import type { RunStore } from '../store.js';
 import { type CleanContext, planCleanCopy } from './clean.js';
 import { DbRefused, planImport, wordpressSite } from './db.js';
+import { missingOnSite, missingThemesOnSite, slugOf } from './install-plugins.js';
 import { type MoreDumpsContext, planServerDump } from './more-dumps.js';
 import type { SiteRef } from './site-actions.js';
 import { readUpload } from './uploads.js';
@@ -49,6 +50,7 @@ export function replaceFor(hosts: readonly string[], site: Pick<SiteRef, 'domain
 }
 
 const fail = (stderr: string): ExecResult => ({ code: 1, stdout: '', stderr });
+const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 
 export function planRefresh(ctx: RefreshContext, input: ActionInput<'site.refreshFromProduction'>, onUpload: (id: string) => void): JobStep[] {
   const settings = readProduction(ctx.store, input.domain, input.path);
@@ -97,5 +99,19 @@ export function planRefresh(ctx: RefreshContext, input: ActionInput<'site.refres
       return results;
     },
   };
-  return [...exporting, copy];
+  // The new database may name plugins and themes these files never had: said here, offered on the Plugins tab, never fetched on its own.
+  const missing: JobStep = {
+    id: 'missing',
+    label: 'Look for plugins and themes the new database names that the files lack',
+    skippable: 'The check for missing plugins and themes did not run: the Plugins tab shows them.',
+    run: async () => {
+      const plugins = await missingOnSite(ctx.exec, site.docroot, site.host);
+      const themes = await missingThemesOnSite(ctx.exec, site.docroot, site.host);
+      if (plugins.length + themes.length === 0) return ok('the files have every plugin and theme the new database names');
+      const names = [...themes.map((t) => `${t.name} (theme)`), ...plugins.filter((p) => p.active).map((p) => slugOf(p))];
+      const parts = [plugins.length ? `${plugins.length} plugin${plugins.length === 1 ? '' : 's'}` : '', themes.length ? `${themes.length} theme${themes.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+      return ok(`warn: the new database names ${parts} the files lack${names.length ? ` (${names.slice(0, 10).join(', ')}${names.length > 10 ? ', ...' : ''})` : ''}: install or copy them on the Plugins tab, under the missing row. Nothing was installed or copied`);
+    },
+  };
+  return [...exporting, copy, missing];
 }

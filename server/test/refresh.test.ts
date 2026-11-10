@@ -62,7 +62,7 @@ describe('Refresh from production', () => {
     saveProduction(store, 'local.shop.com', undefined, productionSettings.parse({ host: 'shop-prod', folder: '/var/www/shop', excludeRows: ['other_actionscheduler_logs'] }));
     let upload = '';
     const steps = planRefresh(ctx, input, (id) => (upload = id));
-    expect(steps.map((s) => s.id)).toEqual(['export', 'copy']);
+    expect(steps.map((s) => s.id)).toEqual(['export', 'copy', 'missing']);
     const exported = await (steps[0] as JobStep).run(job());
     expect([exported].flat().every((r) => r.code === 0)).toBe(true);
     expect(upload).toMatch(/^[0-9a-f-]{36}$/);
@@ -74,5 +74,26 @@ describe('Refresh from production', () => {
     expect(remote[1]).toContain('--tables=other_actionscheduler_logs --no-data=true');
     const copied = [await (steps[1] as JobStep).run(job())].flat();
     expect(copied.at(-1)).toMatchObject({ code: 1, stderr: expect.stringContaining('table prefix other_') });
+  });
+
+  it('says which plugins and themes the new database names that the files lack, and fetches none', async () => {
+    const t = wpSiteTree();
+    const store = new RunStore(join(t.root, 'runs.db'));
+    saveProduction(store, 'local.shop.com', undefined, productionSettings.parse({ host: 'shop-prod', folder: '/var/www/shop' }));
+    const wp = `wp --path=${t.docroot} --url=https://local.shop.com/`;
+    const fake = fakeExec({
+      [`${wp} site list`]: { code: 1, stderr: 'Error: This is not a multisite installation.' },
+      [`${wp} option get active_plugins`]: { stdout: JSON.stringify(['wandworks-pro-forms/loader.php']) },
+      [`${wp} option get stylesheet`]: { stdout: 'wandworks' },
+      [`${wp} option get template`]: { stdout: 'wandworks' },
+      [wp]: { code: 1 },
+    });
+    const ctx = { config: t.config, exec: fake.exec, uploadsDir: join(t.root, 'uploads'), dmpRoot: '/x', store, secrets: null };
+    const steps = planRefresh(ctx, actions['site.refreshFromProduction'].input.parse({ domain: 'local.shop.com', confirm: 'local.shop.com' }), () => undefined);
+    const out = [await (steps[2] as JobStep).run(job())].flat();
+    expect(out).toEqual([{ code: 0, stderr: '', stdout: 'warn: the new database names 1 plugin and 1 theme the files lack (wandworks (theme), wandworks-pro-forms): install or copy them on the Plugins tab, under the missing row. Nothing was installed or copied' }]);
+    // Only reads on this machine, and nothing on the server.
+    expect(fake.calls.every((c) => c.file === 'wp')).toBe(true);
+    expect(fake.calls.some((c) => c.args.includes('install'))).toBe(false);
   });
 });

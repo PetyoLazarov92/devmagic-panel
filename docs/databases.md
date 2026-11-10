@@ -207,7 +207,9 @@ The runner never touches another database, accounts, rights, routines or files.
     user is a super admin and an administrator of every site.
     Nothing is written on production, and the settings hold no secret: a
     server that asks for a password gets it for that one refresh, typed
-    each time and never saved.
+    each time and never saved. Its last step names the plugins and themes
+    the new database uses that the site's files lack. Nothing is fetched on
+    its own: the Plugins tab's missing row installs or copies them.
   - **From a dump**: a `.sql`, `.sql.gz` or `.zip` from any source the new
     site wizard has: an upload, the Downloads folder, a cloud drive or Drive
     link, a public URL, a server over SSH (with tables to leave the rows of)
