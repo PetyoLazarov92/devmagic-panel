@@ -60,20 +60,30 @@ export interface SitePhpContext {
 
 const lastLine = (r: ExecResult) => (r.stderr || r.stdout).trim().split('\n').at(-1) ?? '';
 
+/**
+ * curl's errors while a web server takes in a reload: `systemctl reload`
+ * returns once it has signalled nginx or Apache, before the new workers have
+ * the new config. Until then nginx's server for unknown names refuses the
+ * site's name at the TLS handshake (35, "unrecognized name"), or a port is
+ * not open yet (7), or a worker closes the connection (52, 56).
+ */
+const NOT_READY_CURL = new Set([7, 35, 52, 56]);
+
 /** The site answers through PHP: a status under 500 and no PHP source in the page. */
 export async function checkSite(ctx: SitePhpContext, site: Pick<SiteRef, 'host' | 'domain'>): Promise<ExecResult> {
   const url = `https://${site.host}/wp-login.php`;
   const { tries = 8, delayMs = 750 } = ctx.settle ?? {};
   let r: ExecResult;
   let status: number;
-  // Right after a reload PHP-FPM may not answer yet (502 to 504): asked again a few times.
+  // Right after a reload the web server may not have the site yet, or PHP-FPM may not answer (502 to 504): asked again a few times.
   for (let attempt = 1; ; attempt++) {
     r = await ctx.exec('curl', [
       '-sS', '--max-time', '30', '--noproxy', '*', '--cacert', join(ctx.config.CA_DIR, 'ca.pem'),
       '--resolve', `${site.domain}:443:${siteAddress(ctx.config, findVhost(ctx.config, site.domain))}`, '-o', '-', '-w', '\n%{http_code}', url,
     ], { timeoutMs: 40_000 });
     status = Number(r.stdout.trim().split('\n').at(-1));
-    if (r.code !== 0 || status < 502 || status > 504 || attempt >= tries) break;
+    const settling = r.code === 0 ? status >= 502 && status <= 504 : NOT_READY_CURL.has(r.code);
+    if (!settling || attempt >= tries) break;
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   if (r.code !== 0) return { code: 1, stdout: '', stderr: `${url} did not answer: ${lastLine(r)}\n` };

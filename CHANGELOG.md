@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.36.1 (2026-11-10)
+* **nginx:** moving a site to nginx no longer fails at Check that the site answers with `tlsv1 unrecognized name` while a Retry passes. A reload returns before nginx's workers have the new site, and until then nginx refuses its name; the check now asks again for a few seconds while the web server takes in a reload, as it already did while PHP-FPM starts
+* **nginx:** a network whose sites live under paths more than one folder deep, like `/learn/potions/`, works on nginx. nginx answered 404 for such a site's `wp-includes` and `wp-content` files, so jQuery and the theme's scripts never loaded, because WordPress's own rule strips one folder only. The nginx file now takes the site's folders off at any depth. A network already on nginx gets the new rules when you move it to nginx again (Write the nginx site again)
+* This release changes the root scripts, so the Updates page asks for your sudo password to install it, as for any release that does
+
 ### v1.36.0 (2026-11-10)
 * **Web:** the menu folds to a rail of icons for a wider page, with the button at its bottom or Ctrl+B. Each icon names its page when you point at it, a dot marks news, and the panel remembers your choice
 * **Web:** on a phone the menu is a drawer behind a button at the top left, with the theme switch, and the bar on top fits the screen. Nothing scrolls sideways any more

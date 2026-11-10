@@ -613,11 +613,14 @@ dmp_nginx_site_render() {
     listen443="listen $NGINX_ADDRESS:443 ssl http2;"
   fi
   if [[ "$kind" == subdirectory ]]; then
-    # WordPress's rules for a network whose sites live under paths.
-    rewrites=$'\n'"    # A network whose sites live under paths: /site/wp-admin and the rest go to WordPress's own files."
+    # WordPress's rules for a network whose sites live under paths, any
+    # number of folders deep (/learn/potions/): WordPress's own rule strips
+    # one folder only, so a site two deep would get 404 for its core files.
+    rewrites=$'\n'"    # A network whose sites live under paths, one folder deep or more: /site/wp-admin, /a/site/wp-includes and the rest go to WordPress's own files."
     rewrites+=$'\n'"    if (!-e \$request_filename) {"
     rewrites+=$'\n'"        rewrite /wp-admin\$ \$scheme://\$host\$uri/ permanent;"
-    rewrites+=$'\n'"        rewrite ^(/[^/]+)?(/wp-.*) \$2 last;"
+    rewrites+=$'\n'"        rewrite ^/(?:[^/]+/)+?(wp-(?:admin|includes|content)/.*|wp-[a-z-]+\\.php)\$ /\$1 last;"
+    rewrites+=$'\n'"        rewrite ^/(?:[^/]+/)+?(xmlrpc\\.php)\$ /\$1 last;"
     rewrites+=$'\n'"        rewrite ^(/[^/]+)?(/.*\\.php) \$2 last;"
     rewrites+=$'\n'"    }"$'\n'
   fi

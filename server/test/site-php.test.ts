@@ -5,7 +5,7 @@ import type { ExecResult } from '../src/exec.js';
 import type { JobRuntime } from '../src/jobs.js';
 import { poolFolder, readPools, sitesByVersion, wpCommand } from '../src/php/pools.js';
 import { constraintMinimum, readPhpRequirements } from '../src/php/requirements.js';
-import { planMatchFpm, planSitePhp, readSitePhp } from '../src/php/site-php.js';
+import { checkSite, planMatchFpm, planSitePhp, readSitePhp } from '../src/php/site-php.js';
 import { planSwitchToFpm, planSwitchToModPhp } from '../src/php/switch.js';
 import { discoverSites } from '../src/sites/discover.js';
 import { fromFpm, parseApacheErrorLog } from '../src/sites/logs.js';
@@ -152,6 +152,24 @@ describe('a site\'s PHP', () => {
     // A pool that never answers fails with what Apache said, not with a hint to reinstall.
     const down = ctx(t, { 'curl -sS --fail-with-body': { code: 22, stderr: 'curl: (22) The requested URL returned error: 503' } });
     expect(await planSitePhp({ ...down.c, settle: { tries: 2, delayMs: 0 } }, site, { version: '8.1', values: {} })[1]?.run(runtime().job)).toMatchObject({ code: 1, stderr: expect.stringContaining('PHP-FPM did not answer (503)') });
+  });
+
+  it('asks the site again while the web server takes in a reload, and stops on an error a wait does not mend', async () => {
+    const t = wpSiteTree();
+    const site = siteFor(t.config, 'local.shop.com');
+    // nginx's server for unknown names refuses the site until the reload reaches its workers.
+    let page = 0;
+    const reloading = ctx(t, { curl: () => (++page < 3 ? { code: 35, stderr: 'curl: (35) OpenSSL/3.0.13: error:0A000458:SSL routines::tlsv1 unrecognized name' } : { stdout: '<!DOCTYPE html>\n200' }) });
+    expect(await checkSite({ ...reloading.c, settle: { delayMs: 0 } }, site)).toMatchObject({ code: 0 });
+    expect(reloading.fake.calls.filter((x) => x.file === 'curl')).toHaveLength(3);
+    // A certificate the CA does not sign (60) is not a reload: one try, and it says why.
+    const untrusted = ctx(t, { curl: { code: 60, stderr: 'curl: (60) SSL certificate problem: unable to get local issuer certificate' } });
+    expect(await checkSite({ ...untrusted.c, settle: { delayMs: 0 } }, site)).toMatchObject({ code: 1, stderr: expect.stringContaining('(60)') });
+    expect(untrusted.fake.calls.filter((x) => x.file === 'curl')).toHaveLength(1);
+    // Still refused after every try: it fails with curl's words.
+    const never = ctx(t, { curl: { code: 35, stderr: 'curl: (35) tlsv1 unrecognized name' } });
+    expect(await checkSite({ ...never.c, settle: { tries: 3, delayMs: 0 } }, site)).toMatchObject({ code: 1, stderr: expect.stringContaining('unrecognized name') });
+    expect(never.fake.calls.filter((x) => x.file === 'curl')).toHaveLength(3);
   });
 
   it('fails the check when the site sends PHP source or a 500, or the pool runs another version', async () => {

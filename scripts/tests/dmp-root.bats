@@ -1596,13 +1596,17 @@ nginx_site_tree() {
   grep -qx '127.0.0.2 local.wandworks.example local.wandworks.de' "$T/hosts"
 }
 
-@test "nginx-site-write takes WordPress's rules for a network under paths, and the uploads redirect" {
+@test "nginx-site-write takes WordPress's rules for a network under paths, any number of folders deep, and the uploads redirect" {
   nginx_site_tree
   run dmp nginx-site-write local.wandworks.example --kind subdirectory --uploads-proxy www.wandworks.example
   [ "$status" -eq 0 ]
   site="$T/nginx/sites-available/local.wandworks.example.conf"
   grep -qx '# kind: subdirectory' "$site"
-  grep -qF 'rewrite ^(/[^/]+)?(/wp-.*) $2 last;' "$site"
+  # Core files and wp-*.php under a site two folders deep (/learn/potions/) as well as one.
+  grep -qF 'rewrite ^/(?:[^/]+/)+?(wp-(?:admin|includes|content)/.*|wp-[a-z-]+\.php)$ /$1 last;' "$site"
+  grep -qF 'rewrite ^/(?:[^/]+/)+?(xmlrpc\.php)$ /$1 last;' "$site"
+  grep -qF 'rewrite ^(/[^/]+)?(/.*\.php) $2 last;' "$site"
+  ! grep -qF 'rewrite ^(/[^/]+)?(/wp-.*) $2 last;' "$site"
   grep -qF 'return 302 https://www.wandworks.example$request_uri;' "$site"
   grep -qx 'server_name local.wandworks.example;' <(sed 's/^ *//' "$site")
 }

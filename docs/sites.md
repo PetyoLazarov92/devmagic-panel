@@ -158,7 +158,9 @@ WordPress). The Overview's Server and PHP tile shows both, like
     translated (redirects, rewrites, denied files and folders, security
     headers, error pages), not needed here (page caches, compression,
     production host names), PHP settings for the PHP tab, or not translated
-    (conditions, handlers, environment variables). The translated ones go
+    (conditions, handlers, environment variables). A network whose sites
+    live under paths gets WordPress's rules for any depth, so a site at
+    `/learn/potions/` reaches its core files as one at `/learn/` does. The translated ones go
     into the site's nginx file; untick one to leave it out. A rule that is
     not translated needs a tick, or pick nginx + Apache to keep it working.
     The full screen button next to the title gives the list the whole
@@ -169,7 +171,8 @@ WordPress). The Overview's Server and PHP tile shows both, like
     dialog says which, and where the read stopped.
 
   A job writes the new server's config and the hosts line, checks the site
-  answers, then the old config goes; Undo moves it back. The dialog says why
+  answers (asking again for a few seconds while the web server takes in the
+  reload), then the old config goes; Undo moves it back. The dialog says why
   a site cannot run on a server when it cannot. A site under a path runs on
   its domain's server and links to it. The command palette (Ctrl+K) has Move
   to nginx, Put nginx in front of Apache and Move to Apache for every site
