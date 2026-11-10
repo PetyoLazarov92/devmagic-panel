@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.35.0 (2026-11-10)
+* **Files:** every site has a Files tab. It lists the site's folder one level at a time with name, size, date and permissions, folders first, sortable, with a filter for the folder and one-click places: wp-content, themes, plugins, uploads, each repo, wp-config.php and debug.log. `.git` and `node_modules` stay out until you switch on Show hidden. The folder is in the address, so Back and a reload land where you were
+* **Files:** a file opens in place of the list: text with line numbers up to 2 MB, png, jpg, gif and webp as pictures, anything else with its facts and Download. A download is always saved as a file, never opened as a page
+* **Files:** everything is read as you and stays in the site's folder. A link that leaves it is shown and not followed, except into a shared core's wp-admin and wp-includes, which are read only. The panel's two mu-plugins and files another account owns are marked
+* **Logs:** a line that names a file of the site, like `functions.php on line 28`, links to that file at that line on the Files tab
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.34.1 (2026-11-10)
 * **Web:** the Database tab has nothing about uploads any more. The Uploads setting and **Copy uploads now** under From production are gone, and a refresh from production no longer brings uploads: it copies the database only. Uploads are copied from the new site wizard's **Also copy the uploads**, and the `site.copyUploads` action stays for the Files tab that is planned
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

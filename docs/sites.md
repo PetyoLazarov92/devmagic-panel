@@ -25,7 +25,7 @@ Each tab has its own address (`?tab=database`, `?tab=logs&log=apache`), so a
 reload or a link opens the same one. The tabs come in a fixed order, in three
 groups:
 
-1. **Overview** and **Logs**
+1. **Overview**, **Logs** and **Files**
 2. WordPress, its data and its speed: **Network** (on a multisite),
    **Plugins and themes**, **Database**, **Performance**, **Cron**, **Config**
 3. The server: **Server and PHP** (just **Server** without WordPress), **Domains and SSL**
@@ -51,6 +51,10 @@ to set, names the certificate or hosts file leaves out.
   `WP_DEBUG_LOG`, `WP_DEBUG_DISPLAY`, `SCRIPT_DEBUG`, `SAVEQUERIES`.
 - `debug.log`, with Clear, and the web server's error log (Apache, or nginx
   for a site on nginx).
+
+### Files
+
+The site's folder and its files, read as you. See [Files](files.md).
 
 ### Network
 

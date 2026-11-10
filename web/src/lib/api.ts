@@ -1,7 +1,8 @@
-import type { HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { FileListing, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
+import { mockFileUrl } from '@/mock/files';
 
 /** ?path=/learn (or &path=) for a site under a path; nothing for a site at its domain's root. */
 const atPath = (path: string | undefined, sep: '?' | '&') => (path ? `${sep}path=${encodeURIComponent(path)}` : '');
@@ -141,6 +142,10 @@ export interface Api {
   /** Every plugin of a site, read with WP-CLI. */
   plugins: (domain: string, path?: string) => Promise<SitePlugins>;
   themes: (domain: string, path?: string) => Promise<SiteThemes>;
+  /** One folder of a site's files; dir is relative to the site's folder. */
+  files: (domain: string, dir: string, path?: string) => Promise<FileListing>;
+  /** One file to look at: its text, or what it is. */
+  fileView: (domain: string, file: string, path?: string) => Promise<FileView>;
   /** Your crontab: the panel's tasks with their last run, your own lines, and system cron read only. */
   cron: () => Promise<CronReport>;
   /** A task's runs, newest first, without output. */
@@ -373,6 +378,8 @@ const realApi: Api = {
   cleanPreview: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/clean-preview${atPath(path, '?')}`),
   plugins: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/plugins${atPath(path, '?')}`),
   themes: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/themes${atPath(path, '?')}`),
+  files: (domain, dir, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files?dir=${encodeURIComponent(dir)}${atPath(path, '&')}`),
+  fileView: (domain, file, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/view?file=${encodeURIComponent(file)}${atPath(path, '&')}`),
   cron: () => request('GET', '/api/cron'),
   cronRuns: (id) => request('GET', `/api/cron/tasks/${encodeURIComponent(id)}/runs`),
   cronRun: (run) => request('GET', `/api/cron/runs/${run}`),
@@ -459,6 +466,10 @@ const realApi: Api = {
   skipJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/skip`, {}),
   undoJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/undo`, {}),
 };
+
+/** A site's file as it is: a download, or with show the image itself (the server shows only png, jpg, gif and webp). */
+export const fileUrl = (domain: string, file: string, path?: string, show = false) =>
+  isMockup ? mockFileUrl(file, show) : `/api/sites/${encodeURIComponent(domain)}/files/raw?file=${encodeURIComponent(file)}${show ? '&show=1' : ''}${atPath(path, '&')}`;
 
 /** Where the browser downloads a clean copy from. */
 export const cleanCopyUrl = (domain: string, name: string, path?: string) =>

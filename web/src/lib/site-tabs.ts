@@ -2,7 +2,7 @@ import type { Site, WpDebugConstant } from '@devmagic-panel/shared';
 import { WP_DEBUG_CONSTANTS, WP_DEBUG_DEFAULTS } from '@devmagic-panel/shared';
 import type { TabItem } from '../components/ui/tabs.js';
 
-export type Tab = 'overview' | 'logs' | 'network' | 'plugins' | 'database' | 'performance' | 'cron' | 'config' | 'php' | 'domains';
+export type Tab = 'overview' | 'logs' | 'files' | 'network' | 'plugins' | 'database' | 'performance' | 'cron' | 'config' | 'php' | 'domains';
 
 /** What a tab's badge counts: only what needs a look, never how many things a tab lists. */
 export interface TabCounts {
@@ -15,7 +15,7 @@ export interface TabCounts {
 const NO_COUNTS: TabCounts = { logs: 0, cron: 0, config: 0, domains: 0 };
 
 /**
- * The tabs a site has, always in this order, in three groups: Overview and Logs; WordPress, its data and its speed; the
+ * The tabs a site has, always in this order, in three groups: Overview, Logs and Files; WordPress, its data and its speed; the
  * server, set once. Plugins, Cron and PHP need WordPress, Network a multisite, Database a database, Config
  * wp-config.php; a site under a path shares its parent's domains. A tab a site lacks leaves the rest in place.
  */
@@ -23,7 +23,7 @@ export function siteTabItems(site: Site, counts: TabCounts = NO_COUNTS): TabItem
   const wordpress = site.core.kind !== 'none';
   const badge = (count: number, tone: 'warning' | 'danger') => (count > 0 ? { count, tone } : {});
   const groups: Array<Array<TabItem<Tab> | false>> = [
-    [{ value: 'overview', label: 'Overview' }, { value: 'logs', label: 'Logs', ...badge(counts.logs, 'danger') }],
+    [{ value: 'overview', label: 'Overview' }, { value: 'logs', label: 'Logs', ...badge(counts.logs, 'danger') }, { value: 'files', label: 'Files' }],
     [
       site.network ? { value: 'network', label: 'Network' } : false,
       wordpress && { value: 'plugins', label: 'Plugins and themes' },

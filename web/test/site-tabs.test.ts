@@ -25,8 +25,8 @@ const site = (extra: { [K in keyof Site]?: Site[K] | undefined } = {}): Site => 
 const values = (s: Site) => siteTabItems(s).map((t) => t.value);
 
 describe('siteTabItems', () => {
-  it('puts Logs after Overview, then WordPress, its data and its speed, then the server', () => {
-    expect(values(site())).toEqual(['overview', 'logs', 'plugins', 'database', 'performance', 'cron', 'config', 'php', 'domains']);
+  it('puts Logs and Files after Overview, then WordPress, its data and its speed, then the server', () => {
+    expect(values(site())).toEqual(['overview', 'logs', 'files', 'plugins', 'database', 'performance', 'cron', 'config', 'php', 'domains']);
   });
 
   it('gives Performance to a site with WordPress or a database, and not to an empty one', () => {
@@ -41,14 +41,14 @@ describe('siteTabItems', () => {
 
   it('adds Network first in the WordPress group, only on a multisite', () => {
     const network = site({ network: { type: 'subdirectory', mode: 'path', sites: [] } as unknown as NonNullable<Site['network']> });
-    expect(values(network).slice(0, 4)).toEqual(['overview', 'logs', 'network', 'plugins']);
+    expect(values(network).slice(0, 5)).toEqual(['overview', 'logs', 'files', 'network', 'plugins']);
     expect(siteTabItems(network).find((t) => t.value === 'network')?.startsGroup).toBe(true);
   });
 
   it('keeps the order of the rest when a site lacks tabs', () => {
     const empty = site({ core: { kind: 'none' }, db: undefined, constants: undefined });
     // Without WordPress the web server still has its tab, named Server: PHP is shown only for WordPress.
-    expect(values(empty)).toEqual(['overview', 'logs', 'php', 'domains']);
+    expect(values(empty)).toEqual(['overview', 'logs', 'files', 'php', 'domains']);
     expect(siteTabItems(empty).find((t) => t.value === 'php')).toMatchObject({ label: 'Server', startsGroup: true });
     expect(siteTabItems(site()).find((t) => t.value === 'php')?.label).toBe('Server and PHP');
     expect(values(site({ path: '/learn' }))).not.toContain('domains');

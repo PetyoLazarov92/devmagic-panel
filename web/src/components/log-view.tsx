@@ -1,9 +1,11 @@
 import type { LogLine } from '@devmagic-panel/shared';
 import { Pause, Play, Search, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { fileMentions, filesHref } from '@/lib/file-links';
 import { timeAgo } from '@/lib/format';
+import { Link } from '@/lib/router';
 import { cn } from '@/lib/utils';
 
 const LEVELS: Array<LogLine['level']> = ['fatal', 'error', 'warning', 'notice', 'deprecated', 'info'];
@@ -17,8 +19,34 @@ const levelTone: Record<LogLine['level'], string> = {
   info: 'bg-muted text-muted-foreground',
 };
 
+/** Where the files a log names open: the site and its folder on disk. */
+export interface LogFiles {
+  domain: string;
+  path?: string;
+  docroot: string;
+}
+
+/** A log message with the site's own files as links to the Files tab, at the line named. */
+function Message({ text, files }: { text: string; files: LogFiles | undefined }) {
+  const mentions = files ? fileMentions(text, files.docroot) : [];
+  if (!files || mentions.length === 0) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  let at = 0;
+  mentions.forEach((m, i) => {
+    parts.push(text.slice(at, m.start));
+    parts.push(
+      <Link key={i} href={filesHref(files, m)} className="underline decoration-dotted underline-offset-2 hover:text-primary hover:decoration-solid" title="Open in Files">
+        {text.slice(m.start, m.end)}
+      </Link>,
+    );
+    at = m.end;
+  });
+  parts.push(text.slice(at));
+  return <>{parts}</>;
+}
+
 /** A debug.log or Apache log viewer: level filter, search, follow. */
-export function LogView({ lines, onClear }: { lines: LogLine[]; onClear?: () => void }) {
+export function LogView({ lines, onClear, files }: { lines: LogLine[]; onClear?: () => void; files?: LogFiles }) {
   const [levels, setLevels] = useState<Set<LogLine['level']>>(new Set());
   const [query, setQuery] = useState('');
   const [follow, setFollow] = useState(true);
@@ -83,7 +111,7 @@ export function LogView({ lines, onClear }: { lines: LogLine[]; onClear?: () => 
               {timeAgo(line.time)}
             </time>
             <span className={cn('h-fit w-fit rounded px-1.5 py-px text-[11px] font-semibold uppercase', levelTone[line.level])}>{line.level}</span>
-            <p className="col-span-2 min-w-0 whitespace-pre-wrap text-foreground/90 [overflow-wrap:anywhere] sm:col-span-1">{line.message}</p>
+            <p className="col-span-2 min-w-0 whitespace-pre-wrap text-foreground/90 [overflow-wrap:anywhere] sm:col-span-1"><Message text={line.message} files={files} /></p>
           </li>
         ))}
         {shown.length === 0 && <li className="px-4 py-8 text-center font-sans text-sm text-muted-foreground">Nothing logged{levels.size || query ? ' for this filter' : ''}.</li>}

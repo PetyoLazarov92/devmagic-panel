@@ -4,6 +4,7 @@ import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
+import { mockFileView, mockFiles } from './files';
 import { mockProfile, mockProfileFiles, mockProfiles } from './profiles';
 import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
@@ -1752,6 +1753,14 @@ export const mockApi: Api = {
       }
     }
     return mockDbJob(id, input);
+  },
+  files: async (domain, dir) => {
+    await wait(150);
+    return mockFiles(domain, dir);
+  },
+  fileView: async (domain, file) => {
+    await wait(150);
+    return mockFileView(domain, file);
   },
   logs: async (domain, source) => {
     await wait(150);

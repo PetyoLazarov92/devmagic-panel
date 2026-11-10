@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.34.1-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.35.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -53,6 +53,7 @@ listens on localhost.
 - ✅ **Shared WordPress cores** through `wpcore`: add a release, switch sites to it, remove unused ones. [More](docs/pages.md#wp-cores)
 - ✅ **Local mode**: mail goes to Mailpit, search engines are told not to index, logins work from this computer only. [More](docs/existing-setup.md#the-two-files-the-panel-adds-to-a-site)
 - ✅ **One click**: wp-admin login, caches, rewrite rules, debug constants, `debug.log`, VS Code, branches and pull. [More](docs/sites.md#quick-actions)
+- ✅ **Files**: browse a site's folder and open its files, with links from the log lines that name them. [More](docs/files.md)
 - ✅ **Databases**: browse and edit rows, run SQL, clean up WordPress, snapshot, import and export, each change saved first for Undo. [More](docs/databases.md)
 - ✅ **Import a database**: from production over SSH in one click, or any dump, as it is or cleaned of private data, with your old tables kept. [More](docs/databases.md#backups-and-tools)
 - ✅ **Performance**: a tab per site with Xdebug profiles by plugin and function, and the top queries of its database. [More](docs/sites.md#performance)
@@ -275,7 +276,7 @@ When the installer put Node.js in place for the panel, use
 | [Services](docs/services.md) | PHP, MySQL, Apache, nginx, Mailpit and cron, each on a tab of its own |
 | [Mail](docs/pages.md#mail) | The mail your local sites sent, caught by Mailpit |
 | [Settings](docs/pages.md#settings) | The panel password, the AI assistant, Claude Code's defaults and the constants new sites get |
-| [Sites](docs/sites.md) | Your local sites, and a page per site with tabs for logs, plugins, the database, cron, PHP and domains |
+| [Sites](docs/sites.md) | Your local sites, and a page per site with tabs for logs, files, plugins, the database, cron, PHP and domains |
 | [New site](docs/new-site.md) | A wizard for a site from a repo and a dump, a fresh WordPress, an empty site or your organization |
 | [Activity](docs/pages.md#activity) | The jobs since the panel started, and every action it ran with its result, kept 90 days |
 | [Removed sites](docs/pages.md#removed-sites) | A filter of Sites: copies of removed or replaced sites from the last 14 days, to restore or delete |

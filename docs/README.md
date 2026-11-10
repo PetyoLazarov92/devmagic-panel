@@ -17,6 +17,8 @@ The [README](../README.md) is the short tour. These pages hold the detail.
   and sites under a path.
 - [New site](new-site.md): a project's repos and where each goes, Claude Code
   as an option, where the dump comes from, and install drafts.
+- [Files](files.md): a site's folder and files, what opens here and what stays
+  out of reach
 - [Databases](databases.md): tables and rows, WordPress clean-ups, the SQL
   runner, exports and imports, and what each change saves first.
 - [Services](services.md): PHP, MySQL, Apache, nginx and cron.

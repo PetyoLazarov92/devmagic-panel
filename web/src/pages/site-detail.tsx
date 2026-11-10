@@ -36,6 +36,7 @@ import { CronTab } from '@/pages/site-cron';
 import { DatabaseTab } from '@/pages/site-database';
 import { PerformanceTab } from '@/pages/site-performance';
 import { PhpTab } from '@/pages/site-php';
+import { FilesTab } from '@/pages/site-files';
 import { PluginsTab } from '@/pages/site-plugins';
 import { ServerCard } from '@/pages/site-server';
 import { HtaccessCard } from '@/pages/site-htaccess';
@@ -193,6 +194,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
       <div className="mt-5">
         {tab === 'overview' && <Overview site={site} onChanged={reload} onOpen={setTab} cron={wpCron} logErrors={logs.loading && !logs.data ? undefined : problems} />}
         {tab === 'logs' && <LogsTab site={site} onChanged={reload} />}
+        {tab === 'files' && <FilesTab site={site} />}
         {tab === 'network' && <NetworkCard site={site} />}
         {tab === 'plugins' && <PluginsTab site={site} />}
         {tab === 'php' && <ServerAndPhpTab site={site} onChanged={reload} />}
@@ -1148,6 +1150,7 @@ function LogsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
       ) : (
         <LogView
           lines={log.data?.lines ?? []}
+          files={{ domain: site.domain, ...(site.path ? { path: site.path } : {}), docroot: site.docroot }}
           {...(source === 'debug' && log.data?.exists
             ? { onClear: () => void runWithToast('site.clearDebugLog', siteTarget(site), 'debug.log cleared').then(() => log.reload()) }
             : {})}
