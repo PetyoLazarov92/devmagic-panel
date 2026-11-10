@@ -148,6 +148,8 @@ export interface Api {
   fileView: (domain: string, file: string, path?: string) => Promise<FileView>;
   /** What the Files tab deleted on a site and can still put back, newest first. */
   fileTrash: (domain: string, path?: string) => Promise<FileTrashEntry[]>;
+  /** Sends one file to the panel, where file.upload picks it up by its id and puts it in a folder. */
+  stageFile: (file: File, onProgress: (fraction: number) => void) => Promise<{ id: string; sizeBytes: number }>;
   /** Your crontab: the panel's tasks with their last run, your own lines, and system cron read only. */
   cron: () => Promise<CronReport>;
   /** A task's runs, newest first, without output. */
@@ -259,9 +261,8 @@ export interface Api {
   undoJob: (id: string) => Promise<JobView>;
 }
 
-/** fetch() cannot report upload progress, so dumps go up with XHR. */
-function uploadWithProgress(file: File, onProgress: (fraction: number) => void): Promise<UploadResult> {
-  const url = `/api/uploads?name=${encodeURIComponent(file.name)}`;
+/** fetch() cannot report upload progress, so files go up with XHR. */
+function xhrUpload<T>(url: string, file: File, onProgress: (fraction: number) => void): Promise<T> {
   if (refused(url)) return Promise.reject(loggedOut());
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -272,9 +273,9 @@ function uploadWithProgress(file: File, onProgress: (fraction: number) => void):
       noteStatus(url, xhr.status);
       const data = (() => {
         try {
-          return JSON.parse(xhr.responseText) as UploadResult & { error?: string };
+          return JSON.parse(xhr.responseText) as T & { error?: string };
         } catch {
-          return { error: `Upload failed (${xhr.status})` } as UploadResult & { error?: string };
+          return { error: `Upload failed (${xhr.status})` } as T & { error?: string };
         }
       })();
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
@@ -284,6 +285,7 @@ function uploadWithProgress(file: File, onProgress: (fraction: number) => void):
     xhr.send(file);
   });
 }
+const uploadWithProgress = (file: File, onProgress: (fraction: number) => void) => xhrUpload<UploadResult>(`/api/uploads?name=${encodeURIComponent(file.name)}`, file, onProgress);
 
 const notWired = () => Promise.reject(new ApiError(501, 'Not wired to the server yet (Phase 1 mockup)'));
 
@@ -383,6 +385,7 @@ const realApi: Api = {
   files: (domain, dir, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files?dir=${encodeURIComponent(dir)}${atPath(path, '&')}`),
   fileView: (domain, file, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/view?file=${encodeURIComponent(file)}${atPath(path, '&')}`),
   fileTrash: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/trash${atPath(path, '?')}`),
+  stageFile: (file, onProgress) => xhrUpload('/api/files/uploads', file, onProgress),
   cron: () => request('GET', '/api/cron'),
   cronRuns: (id) => request('GET', `/api/cron/tasks/${encodeURIComponent(id)}/runs`),
   cronRun: (run) => request('GET', `/api/cron/runs/${run}`),
@@ -473,6 +476,10 @@ const realApi: Api = {
 /** A site's file as it is: a download, or with show the image itself (the server shows only png, jpg, gif and webp). */
 export const fileUrl = (domain: string, file: string, path?: string, show = false) =>
   isMockup ? mockFileUrl(file, show) : `/api/sites/${encodeURIComponent(domain)}/files/raw?file=${encodeURIComponent(file)}${show ? '&show=1' : ''}${atPath(path, '&')}`;
+
+/** Files and folders of one folder of a site as one zip, made for this download. */
+export const zipUrl = (domain: string, files: readonly string[], path?: string) =>
+  `/api/sites/${encodeURIComponent(domain)}/files/zip?${files.map((f) => `file=${encodeURIComponent(f)}`).join('&')}${atPath(path, '&')}`;
 
 /** Where the browser downloads a clean copy from. */
 export const cleanCopyUrl = (domain: string, name: string, path?: string) =>

@@ -1,6 +1,6 @@
-import { type ActionId, type FileEntry, type FileListing, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowUp, ChevronRight, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
-import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { type ActionId, type FileEntry, type FileListing, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
+import { ArrowDown, ArrowUp, ChevronRight, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
+import { type DragEvent, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorBoundary } from '@/components/editor-boundary';
 import { DeleteDialog, FileTrashCard, FolderPicker, NameDialog } from '@/components/file-dialogs';
 import { EmptyState, Notice, ViewBar } from '@/components/page';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Menu, type MenuItem } from '@/components/ui/menu';
 import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { Switch } from '@/components/ui/switch';
-import { api, fileUrl, isMockup } from '@/lib/api';
+import { api, fileUrl, isMockup, zipUrl } from '@/lib/api';
 import { loadFileEditor } from '@/lib/file-editor-load';
 import { filesHref } from '@/lib/file-links';
 import { bytes, dateTime, timeAgo } from '@/lib/format';
@@ -58,6 +58,18 @@ function download(site: SiteId, file: string) {
   const a = document.createElement('a');
   a.href = fileUrl(site.domain, file, site.path);
   a.download = nameOf(file);
+  a.click();
+}
+
+/** The archives the tab unpacks, by their ending. */
+const ARCHIVE = /.\.(zip|tar|tar\.gz|tgz|tar\.bz2|tar\.xz)$/i;
+
+/** Files and folders of one folder as one zip, made by the server for this download. */
+function downloadZip(site: SiteId, files: readonly string[]) {
+  if (isMockup) return toast({ tone: 'info', title: 'Mockup: this downloads them as one zip' });
+  const a = document.createElement('a');
+  a.href = zipUrl(site.domain, files, site.path);
+  a.download = '';
   a.click();
 }
 
@@ -239,6 +251,57 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
     if (why) setAsking({ kind: 'delete', paths, why });
     else void remove(paths);
   };
+  const compress = (picks: string[]) =>
+    void change('file.compress', { files: picks.map(pathOf) }, picks.length === 1 ? `Packed ${picks[0]} into a zip` : `Packed ${picks.length} entries into a zip`).then((made) => made && setPicked(new Set()));
+
+  // Uploads go to the panel one at a time, then one action puts them all in this folder.
+  const [sending, setSending] = useState<{ name: string; at: number; of: number; part: number } | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const drags = useRef(0);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const upload = async (list: File[]) => {
+    if (!canChange || sending || list.length === 0) return;
+    const fits = list.filter((f) => isFileName(f.name) && f.size <= FILE_TRASH_MAX);
+    const skipped = list.filter((f) => !fits.includes(f)).map((f) => f.name);
+    if (fits.length > 200) return void toast({ tone: 'danger', title: 'That is more than 200 files', detail: 'Pack them into a zip, upload it and choose Extract.' });
+    if (fits.length === 0) return void toast({ tone: 'danger', title: 'Nothing was uploaded', detail: `Larger than 1 GB, or a name the tab does not take: ${skipped.join(', ')}` });
+    const here = new Set(names);
+    const staged: { id: string; name: string }[] = [];
+    try {
+      for (const [i, file] of fits.entries()) {
+        const step = { name: file.name, at: i + 1, of: fits.length };
+        setSending({ ...step, part: 0 });
+        const { id } = await api.stageFile(file, (part) => setSending({ ...step, part }));
+        staged.push({ id, name: file.name });
+      }
+    } catch (e) {
+      setSending(null);
+      return void toast({ tone: 'danger', title: 'The upload stopped', detail: `${(e as Error).message}. Nothing was put in the folder.` });
+    }
+    const result = await fileAction(site, 'file.upload', { dir, uploads: staged });
+    setSending(null);
+    const taken = staged.filter((u) => here.has(u.name)).map((u) => u.name);
+    const placed = staged.length - taken.length;
+    const notes = [
+      ...(taken.length ? [`Already here and left as ${taken.length === 1 ? 'it is' : 'they are'}: ${taken.join(', ')}.`] : []),
+      ...(skipped.length ? [`Left out (over 1 GB, or a name the tab does not take): ${skipped.join(', ')}.`] : []),
+    ];
+    if (result.ok) toast({ tone: taken.length || skipped.length ? 'info' : 'success', title: placed === 1 ? `Uploaded ${staged.find((u) => !here.has(u.name))?.name ?? '1 file'}` : `Uploaded ${placed} files`, ...(notes.length ? { detail: notes.join(' ') } : {}) });
+    else toast({ tone: 'danger', title: 'Nothing was uploaded', detail: result.error });
+    refresh();
+  };
+  const hasFiles = (e: DragEvent) => canChange && Array.from(e.dataTransfer.types).includes('Files');
+  const drop = (e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    drags.current = 0;
+    setDropping(false);
+    // A dropped folder has no bytes a browser can send as one file.
+    const folders = Array.from(e.dataTransfer.items).filter((item) => item.webkitGetAsEntry?.()?.isDirectory).length;
+    if (folders > 0) return void toast({ tone: 'info', title: 'Folders are not uploaded as they are', detail: 'Pack the folder into a zip, upload it and choose Extract.' });
+    void upload(Array.from(e.dataTransfer.files));
+  };
+
   const duplicate = (name: string) => void change('file.copy', { files: [pathOf(name)], to: dir }, `Copied ${name}`);
 
   const names = useMemo(() => (listing?.entries ?? []).map((e) => e.name), [listing]);
@@ -274,6 +337,8 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
       ...(href ? [{ label: 'Open', icon: isFolder(e) ? <FolderOpen /> : <FileText />, onSelect: () => navigate(href, { scroll: false }) }] : []),
       ...(e.kind === 'file' && e.writable && can ? [{ label: 'Edit', icon: <Pencil />, onSelect: () => navigate(filesHref(site, { file: path, edit: true }), { scroll: false }) }] : []),
       ...(e.kind === 'file' ? [{ label: 'Download', icon: <Download />, onSelect: () => download(site, path) }] : []),
+      ...(e.kind === 'dir' ? [{ label: 'Download as zip', icon: <Download />, onSelect: () => downloadZip(site, [path]) }] : []),
+      ...(e.kind === 'file' && ARCHIVE.test(e.name) && canChange ? [{ label: 'Extract', icon: <PackageOpen />, onSelect: () => void change('file.extract', { file: path }, `Unpacked ${e.name} into a new folder`) }] : []),
       { label: 'Copy path', icon: <Copy />, onSelect: () => copyPath(`${listing?.root ?? site.docroot}/${path}`) },
       ...(can
         ? [
@@ -281,6 +346,7 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
             { label: 'Duplicate', icon: <CopyPlus />, onSelect: () => duplicate(e.name) },
             { label: 'Move to', icon: <FolderInput />, onSelect: () => setAsking({ kind: 'move', paths: [path] }) },
             { label: 'Copy to', icon: <Copy />, onSelect: () => setAsking({ kind: 'copy', paths: [path] }) },
+            ...(ARCHIVE.test(e.name) ? [] : [{ label: 'Compress', icon: <FileArchive />, onSelect: () => compress([e.name]) }]),
             { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => askDelete([e.name]) },
           ]
         : []),
@@ -296,7 +362,21 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
   );
 
   return (
-    <div className="grid gap-4">
+    <div
+      className={cn('relative grid gap-4 rounded-xl', dropping && 'outline-2 outline-offset-4 outline-primary outline-dashed')}
+      onDragEnter={(e) => {
+        if (!hasFiles(e)) return;
+        drags.current += 1;
+        setDropping(true);
+      }}
+      onDragOver={(e) => hasFiles(e) && e.preventDefault()}
+      onDragLeave={(e) => {
+        if (!hasFiles(e)) return;
+        drags.current = Math.max(0, drags.current - 1);
+        if (drags.current === 0) setDropping(false);
+      }}
+      onDrop={drop}
+    >
       <ViewBar
         onCheck={reload}
         loading={loading}
@@ -336,7 +416,20 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
             })}
           </ul>
           {canChange && (
-            <div className="ml-auto flex gap-2">
+            <div className="ml-auto flex flex-wrap gap-2">
+              <input
+                ref={fileInput}
+                type="file"
+                multiple
+                hidden
+                aria-label={`Files to upload into ${dir || 'the site folder'}`}
+                onChange={(e) => {
+                  const list = Array.from(e.target.files ?? []);
+                  e.target.value = '';
+                  void upload(list);
+                }}
+              />
+              <Button size="sm" variant="outline" disabled={sending !== null} title="Or drop files on the list" onClick={() => fileInput.current?.click()}><Upload />Upload</Button>
               <Button size="sm" variant="outline" onClick={() => setAsking({ kind: 'new', what: 'file' })}><FilePlus />New file</Button>
               <Button size="sm" variant="outline" onClick={() => setAsking({ kind: 'new', what: 'dir' })}><FolderPlus />New folder</Button>
             </div>
@@ -348,6 +441,13 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
       {listing?.readOnly && <Notice tone="info">{listing.readOnly}</Notice>}
       {listing && listing.more > 0 && <Notice tone="info">This folder is very long: the first {listing.entries.length.toLocaleString('en-US')} entries are listed, {listing.more.toLocaleString('en-US')} more are not.</Notice>}
 
+      {dropping && <p role="status" className="rounded-lg border border-dashed border-primary bg-primary/5 px-4 py-3 text-center text-sm font-medium">Drop to upload into {dir || 'the site folder'}. A name that is already here is left as it is.</p>}
+      {sending && (
+        <div role="status" className="grid gap-1.5 rounded-lg border bg-card px-4 py-3 text-sm">
+          <p className="flex flex-wrap justify-between gap-x-4"><span className="min-w-0 [overflow-wrap:anywhere]">Uploading <span className="font-medium">{sending.name}</span></span><span className="text-xs text-muted-foreground tabular-nums">{sending.of > 1 ? `${sending.at} of ${sending.of}, ` : ''}{Math.round(sending.part * 100)}%</span></p>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${Math.round(((sending.at - 1 + sending.part) / sending.of) * 100)}%` }} /></div>
+        </div>
+      )}
       {!listing && loading && <TableSkeleton columns={4} rows={8} />}
       {listing && rows.length === 0 && (
         <EmptyState icon={query ? Search : Folder} title={query ? 'Nothing here by that name' : listing.entries.length > 0 ? 'Only hidden folders here' : 'This folder is empty'}>
@@ -359,6 +459,8 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
           <p className="mr-auto font-medium">{pickedRows.length} selected</p>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'move', paths: pickedRows.map(pathOf) })}><FolderInput />Move to</Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'copy', paths: pickedRows.map(pathOf) })}><Copy />Copy to</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => downloadZip(site, pickedRows.map(pathOf))}><Download />Download</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => compress(pickedRows)}><FileArchive />Compress</Button>
           <Button size="sm" variant="outline" disabled={busy} className="text-danger" onClick={() => askDelete(pickedRows)}><Trash2 />Delete</Button>
           <Button size="icon" variant="ghost" className="size-8" aria-label="Clear the selection" onClick={() => setPicked(new Set())}><X /></Button>
         </div>
@@ -538,6 +640,8 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
     if (result.ok) {
       setBase({ text: content, hash: result.data?.hash });
       toast({ tone: 'success', title: `Saved ${nameOf(file)}`, key: 'file-save' });
+      // The file is read again, so its size and date follow, and the view outside the editor shows what was saved.
+      reload();
     } else {
       setProblem({ changed: result.error.includes(FILE_CHANGED), text: result.error });
     }
@@ -607,7 +711,7 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
       )}
 
       {!view && loading && <LogSkeleton lines={14} />}
-      {view?.kind === 'text' && !editing && <TextView text={view.text ?? ''} line={line} name={nameOf(file)} />}
+      {view?.kind === 'text' && !editing && <TextView text={base?.text ?? view.text ?? ''} line={line} name={nameOf(file)} />}
       {view?.kind === 'text' && editing && base && (
         <div className="overflow-hidden rounded-xl border bg-card shadow-xs focus-within:border-primary/60">
           <EditorBoundary fallback={plain}>

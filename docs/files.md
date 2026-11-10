@@ -8,6 +8,7 @@ never as root, and never leaves the site's folder.
 - [Opening a file](#opening-a-file)
 - [Editing a file](#editing-a-file)
 - [New, rename, move, copy](#new-rename-move-copy)
+- [Upload, zip and extract](#upload-zip-and-extract)
 - [Delete and Undo](#delete-and-undo)
 - [What stays out of reach](#what-stays-out-of-reach)
 
@@ -82,6 +83,26 @@ never as root, and never leaves the site's folder.
   to, Copy to and Delete for the selection. A row that cannot change keeps a
   greyed box.
 - A copy of more than 1 GB is refused: do that one in a terminal.
+
+## Upload, zip and extract
+
+- **Upload**, or files dropped on the list, puts files in the folder you are
+  in: up to 200 at a time and 1 GB each, with a line that says how far it is.
+  A name that is already there is left as it is, and the message names it.
+  Nothing is written over.
+- A folder is not uploaded as it is: pack it into a zip, upload that and
+  choose **Extract**.
+- **Download as zip** on a folder, or **Download** for the rows you tick,
+  sends them as one zip made for that download. Links in it stay links.
+- **Compress** makes `name.zip` next to the entry, or one zip of the rows you
+  tick, under a name that is free.
+- **Extract** on a zip, tar, tar.gz, tgz, tar.bz2 or tar.xz unpacks it into a
+  new folder next to it, named after the archive. The archive is read first
+  and refused when an entry would leave that folder, sits under a link, or
+  it all unpacks to more than 1 GB. Links in it are left out, and the message
+  says how many.
+- Zips need `zip` and `unzip`. Where one is missing, the panel says so with
+  the line to install it.
 
 ## Delete and Undo
 

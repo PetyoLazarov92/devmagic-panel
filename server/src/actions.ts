@@ -13,6 +13,7 @@ import {
 import { findVhost } from './sites/discover.js';
 import { readWpcoreConfig } from './wpcore.js';
 import { FileRefused, type FilesContext, siteFolder } from './sites/files.js';
+import { compressEntries, extractArchive, placeUploads, stagedDir } from './sites/file-transfer.js';
 import { copyEntries, createEntry, deleteEntries, fileTrashDir, moveEntries, renameEntry, restoreEntries, writeFile } from './sites/file-changes.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
 import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
@@ -813,6 +814,18 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   },
   'file.restore': async (ctx, { domain, path, id }) =>
     [{ code: 0, stdout: `put back ${(await restoreEntries(filesOf(ctx, domain, path), fileTrashDir(dirname(ctx.uploadsDir)), siteKey(domain, path), id)).join(', ')}`, stderr: '' }],
+  'file.upload': async (ctx, { domain, path, dir, uploads }) => {
+    const { placed, taken } = await placeUploads(filesOf(ctx, domain, path), stagedDir(dirname(ctx.uploadsDir)), dir, uploads);
+    const said = [placed.length ? `uploaded ${placed.join(', ')}` : '', taken.length ? `already there, left as it is: ${taken.join(', ')}` : ''].filter(Boolean).join('\n');
+    // Nothing placed at all is a refusal, so the tab says so in red.
+    if (placed.length === 0) throw new FileRefused(taken.length === 1 ? `${taken[0]} is already in this folder: nothing is written over` : `All ${taken.length} are already in this folder: nothing is written over`);
+    return [{ code: 0, stdout: said, stderr: '' }];
+  },
+  'file.compress': async (ctx, { domain, path, files }) => [{ code: 0, stdout: `made ${await compressEntries(ctx.exec, filesOf(ctx, domain, path), files)}`, stderr: '' }],
+  'file.extract': async (ctx, { domain, path, file }) => {
+    const { folder, dropped } = await extractArchive(ctx.exec, filesOf(ctx, domain, path), file);
+    return [{ code: 0, stdout: `unpacked into ${folder}${dropped ? `; ${dropped} link${dropped === 1 ? '' : 's'} in it left out` : ''}`, stderr: '' }];
+  },
   'site.copyFromServer': async (ctx, input) => {
     const site = siteFor(ctx.config, input.domain, input.path);
     const n = input.plugins.length + input.themes.length;

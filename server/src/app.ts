@@ -3,7 +3,7 @@ import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { gitUrl, isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
+import { FILE_TEXT_MAX, gitUrl, isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -47,6 +47,7 @@ import { registerCreateRoutes } from './sites/create-routes.js';
 import { purgeKept } from './sites/kept.js';
 import { registerSiteRoutes } from './sites/routes.js';
 import { fileTrashDir, pruneFileTrash } from './sites/file-changes.js';
+import { pruneStaged, stagedDir } from './sites/file-transfer.js';
 import { sitesByVersion } from './php/pools.js';
 import { registerPhpRoutes } from './php/routes.js';
 import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
@@ -105,6 +106,8 @@ export interface AppDeps {
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /** The meta row that holds the preferences. */
 const PREFERENCES_KEY = 'preferences';
+/** Room for one action's input: a text file of the Files tab at its largest, as JSON. */
+const ACTION_BODY_MAX = 4 * FILE_TEXT_MAX;
 
 /** Hosts the panel answers to; anything else is refused (DNS rebinding). */
 export function allowedHosts(config: SystemConfig, production: boolean): Set<string> {
@@ -202,6 +205,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         if (saved.length) app.log.info(`housekeeping: removed ${saved.length} MySQL backups older than 14 days`);
         const files = pruneFileTrash(fileTrashDir(dirname(deps.uploadsDir)));
         if (files.length) app.log.info(`housekeeping: removed ${files.length} deletes of the Files tab older than 14 days`);
+        pruneStaged(stagedDir(dirname(deps.uploadsDir)));
       } catch (error) {
         app.log.warn(`housekeeping: ${(error as Error).message}`);
       }
@@ -358,7 +362,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       }),
     );
 
-    api.post<{ Params: { id: string }; Body: unknown }>('/api/actions/:id', async (request, reply): Promise<ActionRunResult | undefined> => {
+    // A file the Files tab saves is up to 2 MB of text, and JSON makes it larger: more room than the other routes get.
+    api.post<{ Params: { id: string }; Body: unknown }>('/api/actions/:id', { bodyLimit: ACTION_BODY_MAX }, async (request, reply): Promise<ActionRunResult | undefined> => {
       const { id } = request.params;
       if (!isActionId(id)) return reply.code(404).send({ error: `unknown action: ${id}` });
       try {

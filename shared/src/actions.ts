@@ -1654,6 +1654,28 @@ export const actions = {
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath, id: z.string().refine(isFileTrashId, 'A delete from the Files tab') }),
   },
+  'file.upload': {
+    title: 'Upload files',
+    description: "Puts files the Files tab uploaded into a folder of the site, each under its own name, up to 1 GB each. A name that is already there is left as it is and the upload dropped: nothing is written over.",
+    changesSystem: true,
+    input: z.object({
+      domain: localName, path: sitePath, dir: fileDir,
+      /** Uploads from POST /api/files/uploads, each with the name to give it. */
+      uploads: z.array(z.object({ id: z.string().regex(/^[0-9a-f-]{36}$/), name: fileName })).min(1).max(200),
+    }),
+  },
+  'file.compress': {
+    title: 'Pack files into a zip',
+    description: "Packs files and folders of one folder of the site into a zip next to them, up to 1 GB, with zip. Links are stored as links, never followed. The zip gets a free name: nothing is written over.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, files: filePaths }),
+  },
+  'file.extract': {
+    title: 'Unpack an archive',
+    description: "Unpacks a zip, tar, tar.gz, tgz, tar.bz2 or tar.xz of the site into a new folder next to it, named after it. Its listing is checked first: a name that leaves the folder, a hard link or more than 1 GB unpacked is refused. Links in it are dropped, and nothing is written over.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, file: filePath }),
+  },
   'site.copyFromServer': {
     title: 'Copy missing plugins and themes from the server',
     description:

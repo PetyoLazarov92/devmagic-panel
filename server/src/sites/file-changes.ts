@@ -14,7 +14,7 @@ import { FileRefused, type FilesContext, hashOf, isText, locate } from './files.
  */
 
 const within = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
-const why = (error: unknown, what: string): string => {
+export const why = (error: unknown, what: string): string => {
   const code = (error as NodeJS.ErrnoException).code;
   if (code === 'EACCES' || code === 'EPERM') return `you may not change ${what}: it belongs to another account (often the web server's)`;
   if (code === 'ENOENT') return `${what} is not there any more`;
@@ -32,7 +32,7 @@ interface Entry {
 }
 
 /** An entry of the site's own folder, by the folder it is in: the entry itself is never followed. */
-function entryAt(ctx: FilesContext, rel: string): Entry {
+export function entryAt(ctx: FilesContext, rel: string): Entry {
   if (!isSitePath(rel) || rel === '') throw new FileRefused('Give a file or folder inside the site');
   const dir = locate(ctx, parentOf(rel));
   if (!dir.inside) throw new FileRefused(`${rel} is part of a shared WordPress core, outside the site: it is read only here`);
@@ -40,7 +40,7 @@ function entryAt(ctx: FilesContext, rel: string): Entry {
   return { dir: dir.real, full: join(dir.real, name), name };
 }
 
-const exists = (path: string): boolean => {
+export const exists = (path: string): boolean => {
   try {
     lstatSync(path);
     return true;
@@ -50,14 +50,14 @@ const exists = (path: string): boolean => {
 };
 
 /** An entry that is there. */
-function present(ctx: FilesContext, rel: string): Entry {
+export function present(ctx: FilesContext, rel: string): Entry {
   const entry = entryAt(ctx, rel);
   if (!exists(entry.full)) throw new FileRefused(`${rel} is not there any more`);
   return entry;
 }
 
 /** A folder of the site's own to put things in. */
-function folderAt(ctx: FilesContext, rel: string): string {
+export function folderAt(ctx: FilesContext, rel: string): string {
   const dir = locate(ctx, rel);
   if (!dir.inside) throw new FileRefused(`${rel || 'That folder'} is part of a shared WordPress core, outside the site: it is read only here`);
   if (!statSync(dir.real).isDirectory()) throw new FileRefused(`${rel} is not a folder`);
@@ -232,7 +232,7 @@ function readRecord(dir: string): TrashRecord | null {
 }
 
 /** Moves an entry out of the site, copying when the trash is on another disk. */
-async function carry(from: string, to: string): Promise<void> {
+export async function carry(from: string, to: string): Promise<void> {
   try {
     renameSync(from, to);
   } catch (error) {

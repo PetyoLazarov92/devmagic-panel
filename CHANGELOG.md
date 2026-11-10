@@ -6,6 +6,9 @@
 * **Files:** everything is read as you and stays in the site's folder. A link that leaves it is shown and not followed, except into a shared core's wp-admin and wp-includes, which are read only. The panel's two mu-plugins and files another account owns are marked
 * **Files:** Edit opens a text file in an editor with line numbers, colours for PHP, JS, CSS, HTML, JSON and SQL, Ctrl+F and Ctrl+S. Nothing is written until you press Save, and Cancel leaves the file as it is. A save keeps the file's permissions and line endings, and stops when the file changed on disk since you opened it, with Reload from disk and Save anyway
 * **Files:** New file, New folder, Rename, Duplicate, Move to and Copy to, from each row's menu or for the rows you tick. Nothing is ever written over, and a link that leaves the site is never changed
+* **Files:** Upload, or files dropped on the list, puts up to 200 files of up to 1 GB each in the folder you are in, with progress. A name that is already there is left as it is
+* **Files:** Download as zip for a folder or the rows you tick, Compress into a zip next to them, and Extract for zip, tar, tar.gz, tgz, tar.bz2 and tar.xz into a new folder. An archive is checked before it is unpacked: nothing leaves its folder, links are left out, and more than 1 GB is refused
+* **Files:** a save of a file between 1 and 2 MB goes through, and after Save and Close the file shows what was saved
 * **Files:** Delete moves the entry to the panel's file trash with Undo, and Changes you can undo lists the deletes of the last 14 days with Put back. A delete that would break the site asks first and says why
 * **Web:** a row's menu opens next to its button near the bottom of a list too, instead of being cut off
 * **Logs:** a line that names a file of the site, like `functions.php on line 28`, links to that file at that line on the Files tab

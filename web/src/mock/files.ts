@@ -227,6 +227,14 @@ function copyName(dir: string, name: string): string {
 }
 
 /** The Files tab's actions on the mockup's tree; undefined for any other action. */
+/** Files the mockup "uploaded": only their sizes, until file.upload names them. */
+const stagedFiles = new Map<string, number>();
+export function mockStageFile(file: File): { id: string; sizeBytes: number } {
+  const id = crypto.randomUUID();
+  stagedFiles.set(id, file.size);
+  return { id, sizeBytes: file.size };
+}
+
 export function mockFileAction(id: ActionId, input: Record<string, unknown>): ActionRunResult | undefined {
   if (!id.startsWith('file.')) return undefined;
   const files = (input.files as string[] | undefined) ?? [];
@@ -300,6 +308,44 @@ export function mockFileAction(id: ActionId, input: Record<string, unknown>): Ac
       Object.assign(TREE, entry.files);
       trash.splice(at, 1);
       return ok(`put back ${entry.items.join(', ')}`);
+    }
+    case 'file.upload': {
+      const dir = String(input.dir);
+      guard(joinPath(dir, 'x'));
+      const placed: string[] = [];
+      const taken: string[] = [];
+      for (const { id: staged, name } of input.uploads as { id: string; name: string }[]) {
+        const path = joinPath(dir, name);
+        const size = stagedFiles.get(staged) ?? 0;
+        stagedFiles.delete(staged);
+        if (exists(path)) taken.push(name);
+        else {
+          TREE[path] = { size, ago: 0 };
+          placed.push(path);
+        }
+      }
+      if (placed.length === 0) return refuse(taken.length === 1 ? `${taken[0]} is already in this folder: nothing is written over` : `All ${taken.length} are already in this folder: nothing is written over`);
+      return ok([`uploaded ${placed.join(', ')}`, ...(taken.length ? [`already there, left as it is: ${taken.join(', ')}`] : [])].join('\n'));
+    }
+    case 'file.compress': {
+      const dir = parentOf(files[0] ?? '');
+      guard(joinPath(dir, 'x'));
+      const stem = files.length === 1 ? nameOf(files[0] ?? '') : nameOf(dir) || 'files';
+      let name = `${stem}.zip`;
+      for (let n = 2; exists(joinPath(dir, name)); n += 1) name = `${stem} ${n}.zip`;
+      TREE[joinPath(dir, name)] = { size: Math.max(1024, Math.round(files.reduce((sum, f) => sum + under(f).reduce((s, p) => s + sizeOf(TREE[p] ?? { dir: true, ago: 0 }), 0), 0) * 0.4)), ago: 0 };
+      return ok(`made ${joinPath(dir, name)}`);
+    }
+    case 'file.extract': {
+      const from = String(input.file);
+      const dir = parentOf(from);
+      guard(from);
+      const stem = nameOf(from).replace(/\.(zip|tar|tar\.gz|tgz|tar\.bz2|tar\.xz)$/i, '');
+      let name = stem;
+      for (let n = 2; exists(joinPath(dir, name)); n += 1) name = `${stem} ${n}`;
+      TREE[joinPath(dir, name)] = { dir: true, ago: 0 };
+      TREE[joinPath(dir, `${name}/readme.txt`)] = { text: `Unpacked from ${nameOf(from)} (mockup).\n`, ago: 0 };
+      return ok(`unpacked into ${joinPath(dir, name)}`);
     }
     default:
       return undefined;

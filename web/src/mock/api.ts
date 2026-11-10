@@ -4,7 +4,7 @@ import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { mockFileAction, mockFileTrash, mockFileView, mockFiles } from './files';
+import { mockFileAction, mockFileTrash, mockFileView, mockFiles, mockStageFile } from './files';
 import { mockProfile, mockProfileFiles, mockProfiles } from './profiles';
 import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
@@ -1901,6 +1901,13 @@ export const mockApi: Api = {
         ? 'ok: done (mockup)'
         : 'Error: /etc/hosts has no devmagic-panel block yet (mockup)';
     return { ...run, input: { domain: run.target }, output, ...(job ? { jobId: job.id } : {}) };
+  },
+  stageFile: async (file, onProgress) => {
+    for (const part of [0.3, 0.7, 1]) {
+      await wait(120);
+      onProgress(part);
+    }
+    return mockStageFile(file);
   },
   upload: async (file, onProgress) => {
     const result = await mockUpload(file, onProgress);

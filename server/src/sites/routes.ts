@@ -1,7 +1,7 @@
-import { createReadStream, existsSync, readFileSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
-import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
+import { actions, branchName, cleanCopyName, gitUrl, isActionId, isSitePath, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
@@ -33,6 +33,7 @@ import { listTrash, TRASH_DAYS, trashFreeBytes } from './trash.js';
 import { productionOnlyFor, readPlugins, readThemes } from './plugins.js';
 import { readNetworkAdmins } from './network-admin.js';
 import { fileTrashDir, listFileTrash } from './file-changes.js';
+import { stagedDir, stageUpload, zipForDownload } from './file-transfer.js';
 import { SiteActionRefused, siteFor, SiteNotFoundError, siteKey } from './site-actions.js';
 import { parseWpConfig } from './wpconfig.js';
 import { FileRefused, type FilesContext, listFolder, rawFile, readFile, siteFolder } from './files.js';
@@ -222,6 +223,41 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
       .header('cache-control', 'no-store')
       .header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(raw.name)}`)
       .send(createReadStream(raw.file));
+  });
+
+  // A file on its way into a site: streamed to the panel's own folder, where file.upload picks it up by its id.
+  api.post('/api/files/uploads', async (request, reply): Promise<{ id: string; sizeBytes: number } | FastifyReply> => {
+    if (request.headers['content-type'] !== 'application/octet-stream') return reply.code(415).send({ error: 'Send the file as application/octet-stream' });
+    try {
+      return await stageUpload(stagedDir(dirname(deps.workDir)), request.body as NodeJS.ReadableStream);
+    } catch (error) {
+      if (error instanceof FileRefused) return reply.code(400).send({ error: error.message });
+      throw error;
+    }
+  });
+  // Files and folders of one folder as a zip: made in the panel's own folder, sent as a download and removed.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; file?: string | string[] } }>('/api/sites/:domain/files/zip', async (request, reply) => {
+    const { path, file } = request.query;
+    if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
+    const files = file === undefined ? [] : Array.isArray(file) ? file : [file];
+    if (files.length === 0 || files.length > 500 || !files.every((f) => f !== '' && isSitePath(f))) return reply.code(400).send({ error: 'Name the files of the site to pack' });
+    let zip: { file: string; name: string };
+    try {
+      zip = await zipForDownload(deps.exec, filesOf(request.params.domain, path), join(dirname(deps.workDir), 'file-zips'), files);
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      if (error instanceof FileRefused) return reply.code(400).send({ error: error.message });
+      throw error;
+    }
+    const stream = createReadStream(zip.file);
+    // The file is unlinked once it is open: the download reads on, and nothing is left behind.
+    stream.once('open', () => rmSync(zip.file, { force: true }));
+    return reply
+      .header('content-type', 'application/zip')
+      .header('x-content-type-options', 'nosniff')
+      .header('cache-control', 'no-store')
+      .header('content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(zip.name)}`)
+      .send(stream);
   });
 
   // Every theme of a site, with where its folder is. Read only.
