@@ -58,8 +58,8 @@ export async function feedFifo(fifo: string, text: string, stopped: () => boolea
 }
 
 /**
- * Runs work with an executor whose ssh and sftp calls sign in with the
- * password when the server asks for one. Every other program runs as it is.
+ * Runs work with an executor whose ssh and sftp calls, and the ssh rsync
+ * starts, sign in with the password when the server asks for one. Every other program runs as it is.
  * The FIFO and the helper are gone when the work ends, however it ends.
  */
 export async function withSshPassword<T>(ctx: SshPasswordContext, password: string, work: (exec: Executor) => Promise<T>): Promise<T> {
@@ -74,11 +74,14 @@ export async function withSshPassword<T>(ctx: SshPasswordContext, password: stri
     writeFileSync(helper, helperSource(), { mode: 0o700 });
     chmodSync(helper, 0o700);
     feeding = (ctx.feed ?? feedFifo)(fifo, `${password}\n`, () => done);
-    const exec: Executor = (file, args, options) =>
-      file === 'ssh' || file === 'sftp'
-        ? // SSH_ASKPASS_REQUIRE=force (OpenSSH 8.4 and later): ssh asks the helper, never a terminal.
-          ctx.exec(file, [...PASSWORD_OPTIONS, ...args], { ...options, env: { ...options?.env, SSH_ASKPASS: helper, SSH_ASKPASS_REQUIRE: 'force', DMP_ASKPASS_FIFO: fifo } })
-        : ctx.exec(file, args, options);
+    // SSH_ASKPASS_REQUIRE=force (OpenSSH 8.4 and later): ssh asks the helper, never a terminal.
+    const env = (options: Parameters<Executor>[2]) => ({ ...options, env: { ...options?.env, SSH_ASKPASS: helper, SSH_ASKPASS_REQUIRE: 'force', DMP_ASKPASS_FIFO: fifo } });
+    const exec: Executor = (file, args, options) => {
+      if (file === 'ssh' || file === 'sftp') return ctx.exec(file, [...PASSWORD_OPTIONS, ...args], env(options));
+      // rsync starts ssh itself, from the words after -e: the same options go first there, and the helper reaches it through rsync's environment.
+      if (file === 'rsync') return ctx.exec(file, args.map((a, i) => (args[i - 1] === '-e' && a.startsWith('ssh ') ? `ssh ${PASSWORD_OPTIONS.join(' ')} ${a.slice(4)}` : a)), env(options));
+      return ctx.exec(file, args, options);
+    };
     return await work(exec);
   } finally {
     done = true;

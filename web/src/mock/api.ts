@@ -591,6 +591,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'space', label: 'Check free disk space' },
       { id: 'download', label: `Download ${String(input.path).split('/').pop()} from ${String(input.remote)} and read it` },
     ],
+    'site.copyUploads': [{ id: 'uploads', label: `Copy ${input.months ? `the last ${String(input.months)} months of uploads` : 'the uploads'} from ${String(input.host)}` }],
     'site.copyFromServer': [{ id: 'copy', label: `Copy ${((input.plugins as unknown[] | undefined)?.length ?? 0) + ((input.themes as unknown[] | undefined)?.length ?? 0)} plugins and themes from ${String(input.host)}` }],
     'site.installPlugins': [{ id: 'plugins', label: `Install ${(input.plugins as unknown[] | undefined)?.length ?? 0} plugins from WordPress.org` }],
     'site.takeOver': [

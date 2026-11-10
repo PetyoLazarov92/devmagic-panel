@@ -6,7 +6,8 @@ import type { RunStore } from '../store.js';
 import { type CleanContext, planCleanCopy } from './clean.js';
 import { DbRefused, planImport, wordpressSite } from './db.js';
 import { missingOnSite, missingThemesOnSite, slugOf } from './install-plugins.js';
-import { type MoreDumpsContext, planServerDump } from './more-dumps.js';
+import { type MoreDumpsContext, planServerDump, signedInWith } from './more-dumps.js';
+import { copyUploads } from './server-uploads.js';
 import type { SiteRef } from './site-actions.js';
 import { readUpload } from './uploads.js';
 
@@ -113,5 +114,14 @@ export function planRefresh(ctx: RefreshContext, input: ActionInput<'site.refres
       return ok(`warn: the new database names ${parts} the files lack${names.length ? ` (${names.slice(0, 10).join(', ')}${names.length > 10 ? ', ...' : ''})` : ''}: install or copy them on the Plugins tab, under the missing row. Nothing was installed or copied`);
     },
   };
-  return [...exporting, copy, missing];
+  // The uploads that are new on the server, when the site's settings ask for them.
+  const signedIn = signedInWith(ctx, settings.host, input.password);
+  const uploads: JobStep = {
+    id: 'uploads',
+    label: `Copy ${settings.uploadsMonths ? `the last ${settings.uploadsMonths} month${settings.uploadsMonths === 1 ? '' : 's'} of uploads` : 'the uploads'} that are new on ${settings.host}`,
+    weight: 6,
+    skippable: `The uploads were not copied from ${settings.host}: Copy uploads now, under From production, brings them.`,
+    run: () => signedIn((exec) => copyUploads(exec, site.docroot, { host: settings.host, folder: settings.folder, wpCli: settings.wpCli }, settings.uploadsMonths)),
+  };
+  return [...exporting, copy, missing, ...(settings.uploads ? [uploads] : [])];
 }

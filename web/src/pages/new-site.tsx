@@ -126,6 +126,10 @@ export interface WizardState {
   wporgThemes?: Record<string, WporgPlugin | null>;
   /** The server the dump was exported from and its WordPress folder: what the dump names and nothing else has can be copied from there. No secret. */
   serverFrom?: { host: string; folder: string; wpCli?: string } | null;
+  /** Also copy the uploads from that server after the import. Off unless you tick it. */
+  copyUploads?: boolean;
+  /** With that on: only the last months; all of them when unset. */
+  uploadsMonths?: number | null;
   /** That server's password, when it asks for one: held for this visit only, sent with the install, never in a draft. */
   serverSecret?: string | null;
   /** The plugins and themes that server has, once read. */
@@ -374,6 +378,9 @@ export function toInput(state: WizardState): CreateSiteInput {
     deactivate: isRepo && state.upload && !state.noDump ? [...new Set([...state.deactivate, ...missing.off])].filter((slug) => !(via === 'plugin' && uploadsOk && slug === MEDIA_PLUGIN)) : [],
     installPlugins: isRepo && state.upload && !state.noDump ? missing.install : [],
     installThemes: isRepo && state.upload && !state.noDump ? themes.install : [],
+    ...(isRepo && state.upload && !state.noDump && state.serverFrom && state.copyUploads
+      ? { copyUploads: { ...state.serverFrom, ...(state.uploadsMonths ? { months: state.uploadsMonths } : {}), ...(state.serverSecret ? { password: state.serverSecret } : {}) } }
+      : {}),
     ...(isRepo && state.upload && !state.noDump && state.serverFrom && missing.copy.length + themes.copy.length
       ? { copyFromServer: { ...state.serverFrom, plugins: missing.copy, themes: themes.copy, ...(state.serverSecret ? { password: state.serverSecret } : {}) } }
       : {}),
@@ -1582,6 +1589,32 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
                 </button>
               )}
             </Field>
+            {/* The files themselves, only when asked: the server the dump was exported from has them. */}
+            {state.serverFrom && state.upload && !state.noDump && (
+              <div className="grid gap-2 rounded-lg border px-3 py-2.5 text-sm">
+                <label htmlFor="copy-uploads" className="flex cursor-pointer items-start gap-2.5">
+                  <input id="copy-uploads" type="checkbox" checked={Boolean(state.copyUploads)} onChange={(e) => set('copyUploads', e.target.checked)} className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-input accent-[var(--primary)]" />
+                  <span>
+                    <span className="font-medium">Also copy the uploads from {state.serverFrom.host}</span>
+                    <span className="block text-xs text-muted-foreground">Off by default: missing images already load from production. Tick it to have the files on this disk, for work offline or on the images themselves. It reads only on the server, with rsync, and can take a while.</span>
+                  </span>
+                </label>
+                {state.copyUploads && (
+                  <>
+                    <Segmented
+                      label="How much of the uploads"
+                      value={String(state.uploadsMonths ?? 0)}
+                      onChange={(v) => set('uploadsMonths', Number(v) || null)}
+                      options={[['3', 'Last 3 months'], ['12', 'Last 12 months'], ['0', 'All of them']]}
+                      className="justify-self-start"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The install checks the size against this disk first and stops the copy when all of them would not fit. PHP files, links and the cache, log and backup folders of plugins stay on the server. The copy can be run again later from the site&apos;s Database tab, and then brings only what is new.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
 
             <BuildSection state={state} set={set} />
           </>

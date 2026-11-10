@@ -873,7 +873,11 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
   const save = async (input: { host: string; path: string; excludeRows: string[]; wpCli?: string }) => {
     setError(null);
     try {
-      await api.saveProductionSettings(site.domain, site.path, { host: input.host, folder: input.path, excludeRows: input.excludeRows, ...(input.wpCli ? { wpCli: input.wpCli } : {}), clean, ...(clean && keep.trim() ? { keep: keep.trim() } : {}) });
+      await api.saveProductionSettings(site.domain, site.path, {
+        host: input.host, folder: input.path, excludeRows: input.excludeRows, ...(input.wpCli ? { wpCli: input.wpCli } : {}), clean, ...(clean && keep.trim() ? { keep: keep.trim() } : {}),
+        // Whether uploads come along stays as it was set.
+        ...(settings?.uploads ? { uploads: true, ...(settings.uploadsMonths ? { uploadsMonths: settings.uploadsMonths } : {}) } : {}),
+      });
       saved.reload();
       setEditing(false);
     } catch (err) {
@@ -882,6 +886,26 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
   };
   const keepProblem = keep.trim() && !WP_LOGIN.test(keep.trim()) ? 'A login of letters, digits, spaces and _ . @ + -' : null;
   const db = site.db?.name ?? 'the database';
+  // The uploads: whether each refresh brings the new ones, and a copy of its own, now.
+  const uploadsJob = useJob();
+  const uploadsMode = !settings?.uploads ? 'none' : settings.uploadsMonths ? String(settings.uploadsMonths) : 'all';
+  const setUploads = async (mode: string) => {
+    if (!settings) return;
+    const { uploads: _on, uploadsMonths: _months, ...rest } = settings;
+    try {
+      await api.saveProductionSettings(site.domain, site.path, { ...rest, ...(mode === 'none' ? {} : { uploads: true, ...(mode === 'all' ? {} : { uploadsMonths: Number(mode) }) }) });
+      saved.reload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  const copyUploadsNow = () => {
+    if (!settings) return;
+    void uploadsJob.follow(api.startJob('site.copyUploads', {
+      ...siteTarget(site), host: settings.host, folder: settings.folder, ...(settings.wpCli ? { wpCli: settings.wpCli } : {}),
+      ...(settings.uploadsMonths ? { months: settings.uploadsMonths } : {}), ...(serverSecret ? { password: serverSecret } : {}),
+    }));
+  };
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3 text-sm">
@@ -928,6 +952,21 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
             <dt className="text-muted-foreground">The copy</dt>
             <dd>{settings.clean ? 'cleaned' : 'as it is'}</dd>
           </dl>
+          <div className="grid gap-1.5 rounded-lg border px-3 py-2.5">
+            <span className="font-medium">Uploads</span>
+            <Segmented label="Uploads with a refresh" value={uploadsMode} onChange={(v) => void setUploads(v)} options={[['none', 'Not copied'], ['3', 'Last 3 months'], ['12', 'Last 12 months'], ['all', 'All of them']]} className="justify-self-start" />
+            <p className="text-xs text-muted-foreground">
+              {settings.uploads
+                ? `Each refresh also brings the uploads that are new on ${settings.host}, with rsync: it only adds here, and reads only there.`
+                : 'Not copied: missing images load from production as it is. Turn it on to have the files on this disk with each refresh.'}{' '}
+              PHP files, links and the cache, log and backup folders of plugins stay on the server.
+            </p>
+            <Button size="sm" variant="outline" className="justify-self-start" disabled={busy || uploadsJob.job?.status === 'running'} onClick={copyUploadsNow}>
+              {uploadsJob.job?.status === 'running' ? <LoaderCircle className="animate-spin" /> : <Download />}
+              Copy {settings.uploadsMonths ? `the last ${settings.uploadsMonths} months of uploads` : 'all uploads'} now
+            </Button>
+            <JobFooter job={uploadsJob.job} error={uploadsJob.error} onRetry={() => void uploadsJob.retry()} />
+          </div>
           {/* The one user a cleaned copy keeps and its password, together, where the refresh starts. */}
           {settings.clean && (
             <div className="grid gap-3 sm:grid-cols-2">

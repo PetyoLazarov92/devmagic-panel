@@ -234,6 +234,10 @@ production-only plugins go off as on every install from a dump.
   server the dump was exported from, the same way as a plugin. Nothing is
   activated: the database already says which theme is on.
 - **Uploads**: missing images load from the production domain you give.
+  When the dump was exported from a server over SSH, **Also copy the uploads**
+  brings the files themselves from that server after the import: off unless
+  you tick it, for the last 3 or 12 months or all of them (see
+  [Databases](databases.md)).
 - **Build**: a checklist per repo lists every `composer.json` and
   `package.json` and ticks only the ones whose output the repo does not hold
   (`vendor/` or a build folder git ignores; never a wordpress.org plugin), with

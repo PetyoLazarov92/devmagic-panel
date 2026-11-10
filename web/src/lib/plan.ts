@@ -47,6 +47,7 @@ export function previewSteps(input: CreateSiteInput, dbName: string, dumpName?: 
     ['install', 'Install WordPress', input.source === 'wordpress' || (input.source === 'repo' && !input.uploadId)],
     ['plugins', `Deactivate ${input.deactivate.length} production-only plugin${input.deactivate.length === 1 ? '' : 's'} when active`, Boolean(input.uploadId) && input.deactivate.length > 0],
     ['install-plugins', `Install ${input.installPlugins.length} missing plugin${input.installPlugins.length === 1 ? '' : 's'} from WordPress.org`, isWp && input.installPlugins.length > 0],
+    ['copy-uploads', `Copy ${input.copyUploads?.months ? `the last ${input.copyUploads.months} months of uploads` : 'the uploads'} from ${input.copyUploads?.host ?? 'the server'}`, isWp && Boolean(input.copyUploads)],
     ['install-themes', `Install ${input.installThemes.length} missing theme${input.installThemes.length === 1 ? '' : 's'} from WordPress.org`, isWp && input.installThemes.length > 0],
     ['copy-from-server', `Copy ${fromServer} missing plugin${fromServer === 1 ? '' : 's'} and themes from ${input.copyFromServer?.host ?? 'the server'}`, isWp && fromServer > 0],
     [

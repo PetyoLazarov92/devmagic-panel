@@ -242,7 +242,11 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       or the plain program name or path you give (`wpCliCommand`). Copying
       plugins and themes from the server only reads there too: `wp plugin
       path`, `wp theme path` and their lists, and `tar` of one folder with a
-      plain name to stdout. A server that asks for a
+      plain name to stdout. Uploads come only when you ask
+      (`site.copyUploads`, `sites/server-uploads.ts`, off by default):
+      `du` reads their size and `rsync` brings them, only adding here
+      (`--ignore-existing`, never a delete), without PHP files, links or
+      plugins' cache and backup folders. A server that asks for a
       password gets the one you give for that run (`sites/ssh-password.ts`):
       it reaches ssh through its askpass helper and a FIFO only you can
       open, never argv, the environment, a file or a log, is handed out once

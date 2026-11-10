@@ -321,6 +321,15 @@ export const serverCopy = z.object({
   /** The server's password, when it asks for one: for this run only. */
   password: z.string().max(1024).optional(),
 });
+/** Uploads to copy from a site's own server over SSH: all of them, or the last months. Off unless asked for. */
+export const uploadsCopy = z.object({
+  host: sshHost,
+  folder: serverPath,
+  wpCli: wpCliCommand.optional(),
+  /** Only the year and month folders of the last months; all of them when unset. */
+  months: z.number().int().min(1).max(240).optional(),
+  password: z.string().max(1024).optional(),
+});
 /** What a site keeps for Refresh from production: where WordPress is on the server and how to copy it. No secret. */
 export const productionSettings = z.object({
   host: sshHost,
@@ -331,6 +340,10 @@ export const productionSettings = z.object({
   keep: wpLogin.optional(),
   /** WP-CLI's command on the server, when it is not wp. */
   wpCli: wpCliCommand.optional(),
+  /** Also bring the uploads that are new on the server with each refresh. Off unless you turn it on. */
+  uploads: z.boolean().default(false),
+  /** With uploads on: only the last months; all of them when unset. */
+  uploadsMonths: z.number().int().min(1).max(240).optional(),
 });
 /**
  * The one user a clean-up keeps: an administrator already in the database
@@ -1580,6 +1593,13 @@ export const actions = {
       .object({ domain: localName, path: sitePath, plugins: z.array(pluginInstall).max(100).default([]), themes: z.array(pluginInstall).max(20).default([]) })
       .refine((v) => v.plugins.length + v.themes.length > 0, { path: ['plugins'], message: 'Name a plugin or a theme to install' }),
   },
+  'site.copyUploads': {
+    title: 'Copy uploads from the server',
+    description:
+      "Copies the site's uploads from its own server over SSH into wp-content/uploads, only when you ask: all of them, or the last months (the year and month folders). Only reads there: wp plugin path says where wp-content is, du how much the uploads hold, and rsync brings the files (your ssh config and key, or password for a server that asks for one: for this run only, never kept; nothing is written or deleted on the server). Here it only adds: a file that exists is never written over and nothing is deleted, so a second run brings what is new, and a run that stopped goes on from where it was. PHP files, .htaccess, SQL dumps, links and the cache, log and backup folders of plugins are left out. Refuses when the files would not fit on this disk. Starts a job.",
+    changesSystem: true,
+    input: uploadsCopy.extend({ domain: localName, path: sitePath }),
+  },
   'site.copyFromServer': {
     title: 'Copy missing plugins and themes from the server',
     description:
@@ -1655,6 +1675,8 @@ export const actions = {
         installThemes: z.array(pluginInstall).max(20).default([]),
         /** Plugins and themes the dump has that no repo and not WordPress.org brings, copied from the site's server over SSH after the import. */
         copyFromServer: serverCopy.optional(),
+        /** The uploads, copied from the site's server over SSH after the import. Off unless you ask for it. */
+        copyUploads: uploadsCopy.optional(),
         /** Production host that serves uploads missing locally. */
         uploadsFrom: hostname.optional(),
         /** redirect: the panel's vhost (Local mode under a path); plugin: BE Media from Production, which the repo must have. */

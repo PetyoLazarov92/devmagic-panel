@@ -35,6 +35,7 @@ import { excludeLocally } from './mu-plugins.js';
 import { installPlugins, installThemes, removeInstalled } from './install-plugins.js';
 import { signedInWith } from './more-dumps.js';
 import { copyFromServer, removeCopied } from './server-files.js';
+import { copyUploads } from './server-uploads.js';
 import { cleanStep, newCleanState, pluginsOffStep, userStep } from './clean.js';
 import { NO_PROMPTS } from './git.js';
 
@@ -616,6 +617,15 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
       if (out.made.length) job.onUndo(`Remove the ${out.made.length} copied from ${fromServer.host}`, async () => removeCopied(out.made));
       return out.results;
     }), 3, `Nothing was copied from ${fromServer.host}: copy them on the site's Plugins tab, under Missing plugins.`);
+  }
+
+  // The uploads themselves, only when you asked: missing ones load from production as it is.
+  const uploads = input.copyUploads;
+  if (isWp && uploads) {
+    const signedIn = signedInWith(ctx, uploads.host, uploads.password);
+    add('copy-uploads', `Copy ${uploads.months ? `the last ${uploads.months} month${uploads.months === 1 ? '' : 's'} of uploads` : 'the uploads'} from ${uploads.host}`,
+      () => signedIn((signed) => copyUploads(signed, docroot, { host: uploads.host, folder: uploads.folder, wpCli: uploads.wpCli }, uploads.months)),
+      6, `The uploads were not copied from ${uploads.host}: copy them from the Database tab, under From production.`);
   }
 
   // Cleaning keeps one user itself, the admin; the admin step is for a copy kept as it is.

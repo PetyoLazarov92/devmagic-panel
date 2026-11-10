@@ -41,6 +41,7 @@ import { planRefresh } from './sites/refresh.js';
 import { giveBack, planTakeOver, TakeoverRefused } from './sites/takeover.js';
 import { installPlugins, installThemes, removeInstalled } from './sites/install-plugins.js';
 import { copyFromServer, removeCopied } from './sites/server-files.js';
+import { copyUploads } from './sites/server-uploads.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
 import { planRemove, RemoveRefused, stampDate } from './sites/remove.js';
@@ -781,6 +782,16 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       });
     }
     return startJob(ctx, steps, `Install missing plugins and themes on ${site.host}`, site.host);
+  },
+  'site.copyUploads': async (ctx, input) => {
+    const site = siteFor(ctx.config, input.domain, input.path);
+    const signedIn = signedInWith(ctx, input.host, input.password);
+    const step: JobStep = {
+      id: 'uploads',
+      label: `Copy ${input.months ? `the last ${input.months} month${input.months === 1 ? '' : 's'} of uploads` : 'the uploads'} from ${input.host}`,
+      run: () => signedIn((exec) => copyUploads(exec, site.docroot, { host: input.host, folder: input.folder, wpCli: input.wpCli }, input.months)),
+    };
+    return startJob(ctx, [step], `Copy uploads to ${site.host}`, site.host);
   },
   'site.copyFromServer': async (ctx, input) => {
     const site = siteFor(ctx.config, input.domain, input.path);
