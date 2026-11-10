@@ -684,14 +684,14 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
     const timer = window.setTimeout(() => {
       setState((s) => ({ ...s, helpers: { key: helpersKey } }));
       api.repoHelpers(repoUrl, state.branch).then(
-        ({ helpers: list, mediaPlugin, builds, kind, themeIn, core, uploads, plugins }) =>
+        ({ helpers: list, mediaPlugin, builds, nodes, kind, themeIn, core, uploads, plugins }) =>
           // Nothing is ticked for you: you pick the helpers to turn on. A repo with core of its own uses it, unless you chose.
           setState((s) =>
             s.helpers?.key !== helpersKey
               ? s
               : {
                   ...s,
-                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(themeIn ? { themeIn } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) },
+                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(nodes ? { nodes } : {}), ...(kind ? { kind } : {}), ...(themeIn ? { themeIn } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) },
                   activate: s.activate.filter((slug) => list.includes(slug)),
                   coreMode: core && !s.passed.wordpress ? 'repo' : !core && s.coreMode === 'repo' ? 'wpcore' : s.coreMode,
                 },
@@ -1914,7 +1914,7 @@ function BuildSection({ state, set }: { state: WizardState; set: Setter }) {
         <>
           <p className="-mt-2 text-xs text-muted-foreground">Ticked where a repo does not hold what the build makes. Each runs in its folder, as you, after the clones.</p>
           {builds.length > 0 && (
-            <BuildRows prefix="main" title={others.length ? `${state.org?.repo?.fullName ?? 'The main repo'}, at ${repoTarget(placementOf(state)) || 'the site root'}` : null} builds={builds} picks={state.buildPicks} commands={commands} docsFile={docsFile} onPick={(picks) => set('buildPicks', picks)} />
+            <BuildRows prefix="main" title={others.length ? `${state.org?.repo?.fullName ?? 'The main repo'}, at ${repoTarget(placementOf(state)) || 'the site root'}` : null} builds={builds} picks={state.buildPicks} commands={commands} docsFile={docsFile} nodes={state.helpers?.nodes ?? []} onPick={(picks) => set('buildPicks', picks)} />
           )}
           {others.map((r) => (
             <BuildRows
@@ -1925,6 +1925,7 @@ function BuildSection({ state, set }: { state: WizardState; set: Setter }) {
               picks={r.buildPicks}
               commands={[]}
               docsFile=""
+              nodes={r.helpers?.nodes ?? []}
               onPick={(picks) => set('extra', state.extra.map((x) => (x.url === r.url ? { ...x, buildPicks: picks } : x)))}
             />
           ))}
@@ -1935,8 +1936,10 @@ function BuildSection({ state, set }: { state: WizardState; set: Setter }) {
 }
 
 /** One repo's builds: the ones it needs ticked, the ones it ships built folded away. */
-function BuildRows({ prefix, title, builds, picks, commands, docsFile, onPick }: {
+function BuildRows({ prefix, title, builds, picks, commands, docsFile, nodes, onPick }: {
   prefix: string;
+  /** The Nodes nvm has: a build can be put on one of them. */
+  nodes: string[];
   title: string | null;
   builds: RepoBuild[];
   picks: Record<string, BuildPick>;
@@ -1945,6 +1948,11 @@ function BuildRows({ prefix, title, builds, picks, commands, docsFile, onPick }:
   onPick: (picks: Record<string, BuildPick>) => void;
 }) {
   const pick = (build: RepoBuild, patch: BuildPick) => onPick({ ...picks, [buildId(build)]: { ...buildChoice(build, picks, commands), ...patch } });
+  /** Puts a build on one Node, or back on the one the panel picks. */
+  const pickNode = (build: RepoBuild, node: string) => {
+    const { node: _was, fromDocs: _docs, ...rest } = buildChoice(build, picks, commands);
+    onPick({ ...picks, [buildId(build)]: { ...rest, ...(node ? { node } : {}) } });
+  };
   const row = (build: RepoBuild) => {
     const choice = buildChoice(build, picks, commands);
     const id = `b-${`${prefix}-${buildId(build)}`.replace(/[^\w-]/g, '-')}`;
@@ -1962,6 +1970,12 @@ function BuildRows({ prefix, title, builds, picks, commands, docsFile, onPick }:
             <Select aria-label={`Script to run in ${build.dir || 'the repo root'}`} value={choice.script ?? ''} onChange={(e) => pick(build, { on: true, script: e.target.value })} className="h-8 font-mono text-[13px]" wrapClassName="max-w-64">
               {!choice.script && <option value="">Pick a script</option>}
               {build.scripts.map((name) => <option key={name} value={name}>{`${build.tool} run ${name}`}</option>)}
+            </Select>
+          )}
+          {build.tool !== 'composer' && nodes.length > 0 && (
+            <Select aria-label={`Node to build ${build.dir || 'the repo root'} with`} value={choice.node ?? ''} onChange={(e) => pickNode(build, e.target.value)} className="h-8 text-[13px]" wrapClassName="max-w-md">
+              <option value="">{build.node ?? 'The Node the panel picks'}</option>
+              {nodes.map((v) => <option key={v} value={v}>{`Node ${v}`}</option>)}
             </Select>
           )}
           <span className="text-xs text-muted-foreground">

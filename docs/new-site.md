@@ -226,9 +226,16 @@ production-only plugins go off as on every install from a dump.
   `package.json` and ticks only the ones whose output the repo does not hold
   (`vendor/` or a build folder git ignores; never a wordpress.org plugin), with
   their build, prod or production script. Watchers are never offered. Builds
-  run in their repo's folder with the Node the repo's `.nvmrc` or
-  `.node-version` asks for, from nvm, else nvm's default or the Node the panel
-  runs on.
+  run in their repo's folder with a Node from nvm, picked in this order: the
+  one you choose on the build's row, the repo's `.nvmrc` or `.node-version`,
+  what its `package.json` says (volta, `engines`, or a package that stops on
+  newer Nodes: node-sass 7 runs on Node 16 at most), then nvm's default or the
+  Node the panel runs on. The row shows the Node and why. A build that fails
+  because of its Node, when nothing named that Node, runs once more on the one
+  nvm has that fits (an older one for a package that could not compile, a
+  newer one for a package that asks for it), and the output says so. A Node
+  nvm lacks is yours to add: the output gives the `nvm install` command. The
+  Node you choose is remembered with the repo's other answers.
 - **Core**: the newest core you have is picked unless you choose another, or
   the repo's own when it holds core.
 - **Web server**: once nginx runs next to Apache, Apache, nginx in front of

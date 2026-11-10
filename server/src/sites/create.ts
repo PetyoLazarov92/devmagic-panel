@@ -26,7 +26,7 @@ import { findVhost } from './discover.js';
 import { siteHost, siteWriteArgs } from './site-actions.js';
 import { nginxSetUp } from '../nginx.js';
 import { frontArgs, nginxPhpVersion } from './server-switch.js';
-import { engineHint, nodeEnv, nodeFor, type NodeOptions } from './node.js';
+import { clearModules, engineHint, nodeEnv, nodeFor, secondNode, type NodeChoice, type NodeOptions } from './node.js';
 import { readSiteVhosts } from './vhost.js';
 import { mysqlPassword } from './mysql-password.js';
 import { setConstant, setTablePrefix } from './wpconfig-edit.js';
@@ -724,12 +724,9 @@ export async function runBuild(exec: Executor, clone: string, build: BuildRun, n
   const inside = existsSync(folder) && relative(realpathSync(clone), realpathSync(folder)).split(sep)[0] !== '..';
   if (!inside || !existsSync(join(folder, MANIFEST[build.tool]))) return [ok(`${where}: no ${MANIFEST[build.tool]}, skipped`)];
   if (build.tool === 'composer') return [await exec('composer', ['install', '--no-interaction', '--no-progress'], { cwd: folder, timeoutMs: 20 * 60_000 })];
-  // The Node the repo asks for, or nvm's; the service's own PATH often has no npm at all.
-  const choice = nodeFor(folder, clone, node);
+  // The Node picked for the build, the one the repo asks for, or nvm's; the service's own PATH often has no npm at all.
+  const choice = nodeFor(folder, clone, { ...node, ...(build.node ? { pick: build.node } : {}) });
   if ('error' in choice) return [{ code: 1, stdout: '', stderr: `${where}: ${choice.error}` }];
-  const env = nodeEnv(choice);
-  const run = (file: string, args: string[]) => exec(file, args, { cwd: folder, timeoutMs: 20 * 60_000, env });
-  const using = ok(`${where}: ${choice.note}`);
   // A script the package.json does not have (it changed since the lookup) is not run, nor is the install for it.
   let scripts: Record<string, unknown> = {};
   try {
@@ -738,11 +735,25 @@ export async function runBuild(exec: Executor, clone: string, build: BuildRun, n
     // Not JSON: no script runs.
   }
   if (build.script && !(build.script in scripts)) return [ok(`${where}: package.json has no ${build.script} script, skipped`)];
-  const install =
-    build.tool === 'npm'
-      ? await run('npm', existsSync(join(folder, 'package-lock.json')) ? ['ci', '--no-audit', '--no-fund'] : ['install', '--no-audit', '--no-fund'])
-      : await run(build.tool, ['install', '--frozen-lockfile']);
-  const results = install.code !== 0 || !build.script ? [using, install] : [using, install, quiet(await run(build.tool, ['run', build.script]))];
+  const attempt = async (on: NodeChoice): Promise<{ ran: ExecResult[]; install: ExecResult }> => {
+    const env = nodeEnv(on);
+    const run = (file: string, args: string[]) => exec(file, args, { cwd: folder, timeoutMs: 20 * 60_000, env });
+    const install =
+      build.tool === 'npm'
+        ? await run('npm', existsSync(join(folder, 'package-lock.json')) ? ['ci', '--no-audit', '--no-fund'] : ['install', '--no-audit', '--no-fund'])
+        : await run(build.tool, ['install', '--frozen-lockfile']);
+    return { install, ran: install.code !== 0 || !build.script ? [install] : [install, quiet(await run(build.tool, ['run', build.script]))] };
+  };
+  let { ran, install } = await attempt(choice);
+  const results = [ok(`${where}: ${choice.note}`)];
+  // Nothing named this Node and the failure points at it: once more on the one nvm has that fits.
+  const other = (ran.at(-1) as ExecResult).code !== 0 ? secondNode(`${install.stdout}\n${install.stderr}`, choice, folder, node) : undefined;
+  if (other) {
+    results.push(ok(`warn: ${where}: the build failed on Node ${(choice.version ?? '').slice(1)}: ${other.cause}. Trying once more on ${other.note}`));
+    clearModules(folder);
+    ({ ran, install } = await attempt(other));
+  }
+  results.push(...ran);
   // A failure after npm warned the Node is too old says how to get a newer one.
   const last = results.at(-1) as ExecResult;
   const hint = last.code !== 0 ? engineHint(`${install.stdout}\n${install.stderr}`) : undefined;

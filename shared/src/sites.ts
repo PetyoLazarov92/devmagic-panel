@@ -923,6 +923,8 @@ export interface RepoBuild {
   builtInRepo?: boolean;
   /** Scripts that run their builds with concurrently --kill-others, so the first to finish stops the rest. */
   stopsOthers?: string[];
+  /** The Node it would run on and why, like "Node 16.20.2 from nvm (node-sass 7 runs on Node 16 at most)", or why none can be picked. */
+  node?: string;
 }
 
 /** What the repo's branch holds for the WordPress step: the local helpers, BE Media from Production, and its builds. */
@@ -930,6 +932,8 @@ export interface RepoLookup {
   helpers: LocalHelperPlugin[];
   mediaPlugin: boolean;
   builds: RepoBuild[];
+  /** The Nodes nvm has, newest first: what a build can be put on. */
+  nodes?: string[];
   /** What the repo holds by its top level: a whole site, wp-content, a theme or a plugin. */
   kind?: 'site' | 'wp-content' | 'theme' | 'plugin' | 'other';
   /** The theme is this folder of the repo, not the repo itself: it goes to wp-content/repos, which Local mode makes a themes folder. */

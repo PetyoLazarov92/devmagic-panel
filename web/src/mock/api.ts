@@ -1708,15 +1708,15 @@ export const mockApi: Api = {
     // Every repo in the mockup has BE Media from Production, as the client repos here do.
     // Like the repos here: one theme to build, a custom plugin with Composer, and plugins that ship their built files.
     const builds: RepoBuild[] = [
-      { dir: 'wp-content/themes/wandworks', tool: 'npm', scripts: ['build', 'build-all', 'prod', 'dev'], script: 'build', needed: true, why: 'dist/ is ignored by git', stopsOthers: ['build-all'] },
+      { dir: 'wp-content/themes/wandworks', tool: 'npm', scripts: ['build', 'build-all', 'prod', 'dev'], script: 'build', needed: true, why: 'dist/ is ignored by git', stopsOthers: ['build-all'], node: 'Node 16.20.2 from nvm (node-sass 7 runs on Node 16 at most)' },
       { dir: 'wp-content/plugins/wandworks-api', tool: 'composer', scripts: [], needed: true, why: 'vendor/ is ignored by git' },
-      { dir: 'wp-content/plugins/wandworks-slider', tool: 'npm', scripts: ['prod', 'prod-bundle', 'dev'], script: 'prod', needed: false, why: 'its built files are in the repo', builtInRepo: true },
+      { dir: 'wp-content/plugins/wandworks-slider', tool: 'npm', scripts: ['prod', 'prod-bundle', 'dev'], script: 'prod', needed: false, why: 'its built files are in the repo', builtInRepo: true, node: 'Node 22.23.4 from nvm (its default, 22)' },
       { dir: 'wp-content/plugins/wandworks-forms', tool: 'npm', scripts: ['build'], script: 'build', needed: false, why: 'a wordpress.org plugin, built already', builtInRepo: true },
       { dir: 'wp-content/plugins/wandworks-maps', tool: 'composer', scripts: [], needed: false, why: 'its vendor/ is in the repo', builtInRepo: true },
     ];
     // A repo with tooling on top and its theme in a folder of its own.
-    if (/theme-kit/i.test(url)) return { helpers: [], mediaPlugin: false, builds: [{ dir: '', tool: 'npm', scripts: ['build'], script: 'build', needed: true, why: 'wandworks/style.css is ignored by git' }], kind: 'theme', themeIn: 'wandworks' };
-    return { helpers: /spellbook/i.test(url) && branch === 'develop' ? ['query-monitor', 'user-switching'] : ['query-monitor'], mediaPlugin: true, builds };
+    if (/theme-kit/i.test(url)) return { helpers: [], mediaPlugin: false, builds: [{ dir: '', tool: 'npm', scripts: ['build'], script: 'build', needed: true, why: 'wandworks/style.css is ignored by git', node: 'Node 22.23.4 from nvm (its default, 22)' }], nodes: ['24.22.2', '22.23.4', '16.20.2'], kind: 'theme', themeIn: 'wandworks' };
+    return { helpers: /spellbook/i.test(url) && branch === 'develop' ? ['query-monitor', 'user-switching'] : ['query-monitor'], mediaPlugin: true, builds, nodes: ['24.22.2', '22.23.4', '16.20.2'] };
   },
   startJob: async (id, input) => {
     await wait(300);

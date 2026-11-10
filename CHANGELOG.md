@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.34.0 (2026-11-10)
+* **Sites:** a build picks its Node from the project, not only from `.nvmrc`: after the repo's `.nvmrc` or `.node-version` come `package.json`'s volta and `engines`, and packages known to stop on newer Nodes (node-sass 7 runs on Node 16 at most). A theme with node-sass and no `.nvmrc` now builds on the Node 16 nvm has, no longer on nvm's default
+* **Sites:** a build that fails because of its Node, when nothing named that Node, runs once more on the one nvm has that fits: an older one for a package that could not compile itself, a newer one for a package that asks for it. `node_modules` is cleared first and the output says what happened
+* **Sites:** the wizard's build rows show the Node each build runs on and why, and let you put it on another one nvm has. Your choice is remembered with the repo's other answers. A Node nvm lacks is still yours to add: the output gives the `nvm install` command
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.33.0 (2026-11-10)
 * **Fix:** missing plugins install on a site whose `wp-content/upgrade` folder the web server made (WordPress's own updates do that minutes after an install). You cannot write in that folder, so every plugin ended in "No plugins installed". It is now moved aside for the run, in the same folder, and put back after as it was
 * **Sites:** a plugin that was not installed says why (WordPress's own warning, like "Plugin not found." or "Could not create directory."), no longer only "No plugins installed."

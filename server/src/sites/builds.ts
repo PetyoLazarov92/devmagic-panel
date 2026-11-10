@@ -10,7 +10,7 @@ import type { BuildTool, RepoBuild } from '@devmagic-panel/shared';
  */
 
 /** The files the lookup reads besides the tree: build manifests, ignore rules and plugin readmes. */
-export const BUILD_FILES = /(^|\/)(composer\.json|package\.json|\.gitignore|readme\.txt)$/;
+export const BUILD_FILES = /(^|\/)(composer\.json|package\.json|\.gitignore|readme\.txt|\.nvmrc|\.node-version)$/;
 /** Folders whose files are someone else's: never a build of the site. */
 export const SKIPPED_DIRS = /(^|\/)(vendor|node_modules|bower_components)\//;
 
@@ -122,7 +122,7 @@ function composerBuild(dir: string, files: BuildFiles, installed: Set<BuildTool>
 }
 
 /** The package.json build of a folder, or none when it has no script that builds. */
-function packageBuild(dir: string, files: BuildFiles, installed: Set<BuildTool>): RepoBuild | null {
+function packageBuild(dir: string, files: BuildFiles, installed: Set<BuildTool>, node?: (dir: string) => string | undefined): RepoBuild | null {
   const manifest = json(files.text.get(inDir(dir, 'package.json')));
   const scripts = (manifest?.scripts ?? {}) as Record<string, unknown>;
   const offered = Object.entries(scripts)
@@ -152,15 +152,16 @@ function packageBuild(dir: string, files: BuildFiles, installed: Set<BuildTool>)
     why,
     ...(!output || wporg ? { builtInRepo: true } : {}),
     ...(stopsOthers.length ? { stopsOthers } : {}),
+    ...(node?.(dir) ? { node: node(dir) as string } : {}),
   };
 }
 
 /** Every build in the repo, the ones it needs first, then by folder; Composer before npm in the same folder. */
-export function planBuilds(files: BuildFiles, installed: Set<BuildTool>): RepoBuild[] {
+export function planBuilds(files: BuildFiles, installed: Set<BuildTool>, node?: (dir: string) => string | undefined): RepoBuild[] {
   const dirs = (name: string) => [...files.text.keys()].filter((p) => posix.basename(p) === name && !SKIPPED_DIRS.test(p)).map((p) => (p.includes('/') ? dirname(p) : ''));
   const builds = [
     ...dirs('composer.json').flatMap((dir) => composerBuild(dir, files, installed) ?? []),
-    ...dirs('package.json').flatMap((dir) => packageBuild(dir, files, installed) ?? []),
+    ...dirs('package.json').flatMap((dir) => packageBuild(dir, files, installed, node) ?? []),
   ];
   const depth = (dir: string) => (dir ? dir.split('/').length : 0);
   return builds

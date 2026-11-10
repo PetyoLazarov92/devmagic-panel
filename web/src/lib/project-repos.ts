@@ -9,6 +9,8 @@ export interface RepoHelpers {
   list?: LocalHelperPlugin[];
   media?: boolean;
   builds?: RepoBuild[];
+  /** The Nodes nvm has, for a build's Node. */
+  nodes?: string[];
   kind?: RepoLookup['kind'];
   /** The theme is this folder of the repo. */
   themeIn?: string;

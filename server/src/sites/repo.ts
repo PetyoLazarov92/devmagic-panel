@@ -6,7 +6,7 @@ import { classifyRepo, holdsCore, LOCAL_HELPER_PLUGINS, MEDIA_PLUGIN, themeFolde
 import type { Executor } from '../exec.js';
 import { BUILD_FILES, composerPlugins, planBuilds, SKIPPED_DIRS } from './builds.js';
 import { NO_PROMPTS } from './git.js';
-import { nodeEnv, nodeFor } from './node.js';
+import { installedNodes, nodeEnv, nodeFor, nodeForFiles } from './node.js';
 
 /** The most a repo's file list may take: about 1.8 million files. */
 const LIST_BYTES = 256 * 1024 * 1024;
@@ -126,13 +126,20 @@ export async function repoLookup(exec: Executor, workDir: string, url: string, b
     const env = 'error' in choice ? {} : nodeEnv(choice);
     const tools = await Promise.all((['composer', 'npm', 'yarn', 'pnpm'] as const).map(async (tool) => ((await exec(tool, ['--version'], { timeoutMs: 15_000, env })).code === 0 ? [tool] : [])));
     const version = /\$wp_version\s*=\s*'([^']+)'/.exec(text.get('wp-includes/version.php') ?? '')?.[1];
+    const nodes = installedNodes({ home });
     const topKind = classifyRepo(top);
     // Tooling on top and the theme in a folder of the repo.
     const themeIn = topKind === 'other' ? themeFolderIn(paths) : undefined;
     return {
       helpers: (Object.keys(LOCAL_HELPER_PLUGINS) as LocalHelperPlugin[]).filter(has),
       mediaPlugin: has(MEDIA_PLUGIN),
-      builds: planBuilds(files, new Set(tools.flat())),
+      // The Node each build would run on, when nvm is there to choose from.
+      builds: planBuilds(files, new Set(tools.flat()), (dir) => {
+        if (nodes.length === 0) return undefined;
+        const on = nodeForFiles(dir, text, { home });
+        return 'error' in on ? on.error : on.note;
+      }),
+      ...(nodes.length ? { nodes } : {}),
       kind: themeIn ? 'theme' : topKind,
       ...(themeIn ? { themeIn } : {}),
       ...(withCore ? { core: version ? { version } : {} } : {}),

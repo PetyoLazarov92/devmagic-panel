@@ -87,6 +87,8 @@ export const buildStep = z.object({
     .refine((dir) => !dir.split('/').some((part) => part === '..' || part === '.'), 'A folder in the repo'),
   tool: z.enum(['composer', 'npm', 'yarn', 'pnpm']),
   script: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9:._-]{0,59}$/, 'A script name from package.json').optional(),
+  /** The Node from nvm to run it on, when you picked one; otherwise the repo's own, or the one its packages need. */
+  node: z.string().regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}$/, 'A Node version like 16.20.2').optional(),
 });
 
 /** A repo by its path on its host: wandworks/shop, or wandworks/web/shop in a GitLab subgroup. */

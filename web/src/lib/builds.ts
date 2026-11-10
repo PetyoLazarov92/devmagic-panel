@@ -7,6 +7,8 @@ export const buildId = (build: { tool: BuildTool; dir: string }) => `${build.too
 export interface BuildPick {
   on: boolean;
   script?: string;
+  /** The Node from nvm you put it on; unset, the panel picks. */
+  node?: string;
 }
 
 /** A command from the docs, like "npm run prod" in wp-content/themes/wandworks. */
@@ -38,14 +40,14 @@ export function buildChoice(build: RepoBuild, picks: Record<string, BuildPick>, 
   const docs = docsScript(build, commands);
   const script = pick?.script ?? (typeof docs === 'string' ? docs : build.script);
   const on = pick?.on ?? (docs !== undefined && !build.builtInRepo ? true : build.needed);
-  return { on, ...(script ? { script } : {}), fromDocs: docs !== undefined && !pick };
+  return { on, ...(script ? { script } : {}), ...(pick?.node ? { node: pick.node } : {}), fromDocs: docs !== undefined && !pick };
 }
 
 /** The builds the install runs, in the lookup's order; an npm-like one without a script only installs. repo: which repo of the install they are in. */
-export function buildSteps(builds: RepoBuild[], picks: Record<string, BuildPick>, commands: DocsCommand[], repo = 0): Array<{ repo: number; dir: string; tool: BuildTool; script?: string }> {
+export function buildSteps(builds: RepoBuild[], picks: Record<string, BuildPick>, commands: DocsCommand[], repo = 0): Array<{ repo: number; dir: string; tool: BuildTool; script?: string; node?: string }> {
   return builds.flatMap((build) => {
     const choice = buildChoice(build, picks, commands);
     if (!choice.on) return [];
-    return [{ repo, dir: build.dir, tool: build.tool, ...(build.tool !== 'composer' && choice.script ? { script: choice.script } : {}) }];
+    return [{ repo, dir: build.dir, tool: build.tool, ...(build.tool !== 'composer' && choice.script ? { script: choice.script } : {}), ...(build.tool !== 'composer' && choice.node ? { node: choice.node } : {}) }];
   });
 }
