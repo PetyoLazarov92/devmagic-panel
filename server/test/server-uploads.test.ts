@@ -87,8 +87,9 @@ describe('uploads from the server', () => {
     expect(JSON.stringify(call)).not.toContain('correct horse battery');
   });
 
-  it('is off unless asked for, in the action and in the saved settings', () => {
-    expect(productionSettings.parse({ host: 'spellbook-prod', folder: '/srv/www/spellbook' }).uploads).toBe(false);
+  it('is off unless asked for, and no part of a refresh from production', () => {
+    // The saved settings hold nothing about uploads: one saved before is read without it.
+    expect(productionSettings.parse({ host: 'spellbook-prod', folder: '/srv/www/spellbook', uploads: true, uploadsMonths: 3 })).not.toHaveProperty('uploads');
     const input = actions['site.copyUploads'].input;
     expect(input.safeParse({ domain: 'local.spellbook.test', host: 'spellbook-prod', folder: '/srv/www/spellbook', months: 6 }).success).toBe(true);
     expect(input.safeParse({ domain: 'local.spellbook.test', host: 'spellbook-prod', folder: '/srv/www/$(id)' }).success).toBe(false);

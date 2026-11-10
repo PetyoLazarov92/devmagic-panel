@@ -1,8 +1,8 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
 import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
 import { readAura, wpCronSites } from '../aura.js';
@@ -34,6 +34,7 @@ import { productionOnlyFor, readPlugins, readThemes } from './plugins.js';
 import { readNetworkAdmins } from './network-admin.js';
 import { SiteActionRefused, siteFor, SiteNotFoundError, siteKey } from './site-actions.js';
 import { parseWpConfig } from './wpconfig.js';
+import { FileRefused, type FilesContext, listFolder, rawFile, readFile, siteFolder } from './files.js';
 import type { WpCronReport } from '@devmagic-panel/shared';
 import { readProduction, saveProduction } from './refresh.js';
 import { type CronContext, CronRefused } from '../cron.js';
@@ -181,6 +182,42 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
     const log = readSiteLog(deps.config, request.params.domain, request.query.source === 'apache' ? 'apache' : 'debug', path);
     return log ?? reply.code(404).send({ error: `no site called ${request.params.domain}` });
+  });
+
+  // The Files tab: a folder's entries, one file to look at, and a file as it is. Read only, in the site's folder.
+  const filesOf = (domain: string, path: string | undefined): FilesContext => ({ root: siteFolder(deps.config, domain, path), readRoots: [readWpcoreConfig(deps.wpcoreConf)?.coresDir ?? ''].filter(Boolean) });
+  const filesAnswer = <T>(request: { params: { domain: string }; query: { path?: string } }, reply: FastifyReply, read: (ctx: FilesContext) => T): T | undefined => {
+    const refuse = (code: number, error: string): undefined => {
+      void reply.code(code).send({ error });
+      return undefined;
+    };
+    const { path } = request.query;
+    if (path !== undefined && !mountPath.safeParse(path).success) return refuse(400, 'path must be like /learn');
+    try {
+      return read(filesOf(request.params.domain, path));
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return refuse(404, error.message);
+      if (error instanceof FileRefused) return refuse(400, error.message);
+      throw error;
+    }
+  };
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; dir?: string } }>('/api/sites/:domain/files', async (request, reply): Promise<FileListing | FastifyReply> =>
+    filesAnswer(request, reply, (ctx) => listFolder(ctx, request.query.dir ?? '')) ?? reply);
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; file?: string } }>('/api/sites/:domain/files/view', async (request, reply): Promise<FileView | FastifyReply> =>
+    filesAnswer(request, reply, (ctx) => readFile(ctx, request.query.file ?? '')) ?? reply);
+  // Always a download, except the four image types the tab shows: a site's HTML or SVG never runs in the panel's origin.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; file?: string; show?: string } }>('/api/sites/:domain/files/raw', async (request, reply) => {
+    const raw = filesAnswer(request, reply, (ctx) => rawFile(ctx, request.query.file ?? ''));
+    if (!raw) return reply;
+    const inline = request.query.show === '1' && raw.image !== undefined;
+    return reply
+      .header('content-type', inline ? raw.image : 'application/octet-stream')
+      .header('content-length', raw.sizeBytes)
+      .header('x-content-type-options', 'nosniff')
+      .header('content-security-policy', "default-src 'none'; sandbox")
+      .header('cache-control', 'no-store')
+      .header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(raw.name)}`)
+      .send(createReadStream(raw.file));
   });
 
   // Every theme of a site, with where its folder is. Read only.

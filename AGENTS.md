@@ -243,7 +243,8 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       plugins and themes from the server only reads there too: `wp plugin
       path`, `wp theme path` and their lists, and `tar` of one folder with a
       plain name to stdout. Uploads come only when you ask
-      (`site.copyUploads`, `sites/server-uploads.ts`, off by default):
+      (`site.copyUploads`, `sites/server-uploads.ts`, off by default, never as
+      part of a database refresh):
       `du` reads their size and `rsync` brings them, only adding here
       (`--ignore-existing`, never a delete), without PHP files, links or
       plugins' cache and backup folders. A server that asks for a

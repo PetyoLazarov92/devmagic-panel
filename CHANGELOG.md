@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.34.1 (2026-11-10)
+* **Web:** the Database tab has nothing about uploads any more. The Uploads setting and **Copy uploads now** under From production are gone, and a refresh from production no longer brings uploads: it copies the database only. Uploads are copied from the new site wizard's **Also copy the uploads**, and the `site.copyUploads` action stays for the Files tab that is planned
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.34.0 (2026-11-10)
 * **Sites:** a build picks its Node from the project, not only from `.nvmrc`: after the repo's `.nvmrc` or `.node-version` come `package.json`'s volta and `engines`, and packages known to stop on newer Nodes (node-sass 7 runs on Node 16 at most). A theme with node-sass and no `.nvmrc` now builds on the Node 16 nvm has, no longer on nvm's default
 * **Sites:** a build that fails because of its Node, when nothing named that Node, runs once more on the one nvm has that fits: an older one for a package that could not compile itself, a newer one for a package that asks for it. `node_modules` is cleared first and the output says what happened

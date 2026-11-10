@@ -207,16 +207,7 @@ The runner never touches another database, accounts, rights, routines or files.
     user is a super admin and an administrator of every site.
     Nothing is written on production, and the settings hold no secret: a
     server that asks for a password gets it for that one refresh, typed
-    each time and never saved. **Uploads** are not copied unless you turn
-    them on there (the last 3 or 12 months, or all of them): then each
-    refresh also brings the uploads that are new on the server, and **Copy
-    uploads now** does only that. It reads only on the server (WP-CLI for
-    the folder, `du` for the size, `rsync` for the files), only adds here
-    (a file that exists is never written over, nothing is deleted), stops
-    when all of them would not fit on this disk, and goes on from where it
-    was after a dropped connection. PHP files, `.htaccess`, SQL dumps,
-    links and the cache, log and backup folders of plugins stay on the
-    server. It needs `rsync` on both sides. A step of the refresh names the plugins and themes
+    each time and never saved. Its last step names the plugins and themes
     the new database uses that the site's files lack. Nothing is fetched on
     its own: the Plugins tab's missing row installs or copies them.
   - **From a dump**: a `.sql`, `.sql.gz` or `.zip` from any source the new

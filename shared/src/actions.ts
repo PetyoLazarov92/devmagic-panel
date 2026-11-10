@@ -340,10 +340,6 @@ export const productionSettings = z.object({
   keep: wpLogin.optional(),
   /** WP-CLI's command on the server, when it is not wp. */
   wpCli: wpCliCommand.optional(),
-  /** Also bring the uploads that are new on the server with each refresh. Off unless you turn it on. */
-  uploads: z.boolean().default(false),
-  /** With uploads on: only the last months; all of them when unset. */
-  uploadsMonths: z.number().int().min(1).max(240).optional(),
 });
 /**
  * The one user a clean-up keeps: an administrator already in the database

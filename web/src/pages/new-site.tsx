@@ -1609,7 +1609,7 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
                       className="justify-self-start"
                     />
                     <p className="text-xs text-muted-foreground">
-                      The install checks the size against this disk first and stops the copy when all of them would not fit. PHP files, links and the cache, log and backup folders of plugins stay on the server. The copy can be run again later from the site&apos;s Database tab, and then brings only what is new.
+                      The install checks the size against this disk first and stops the copy when all of them would not fit. PHP files, links and the cache, log and backup folders of plugins stay on the server.
                     </p>
                   </>
                 )}

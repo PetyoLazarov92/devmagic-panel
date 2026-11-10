@@ -83,7 +83,7 @@ describe('site routes', () => {
     expect((await get('/api/sites/local.shop.com/production')).json()).toBeNull();
     const saved = await put('/api/sites/local.shop.com/production?path=%2Flearn', { host: 'shop-prod', folder: '/var/www/shop/learn', excludeRows: ['wp_2_actionscheduler_logs'], clean: true });
     expect(saved.statusCode).toBe(200);
-    expect((await get('/api/sites/local.shop.com/production?path=%2Flearn')).json()).toEqual({ host: 'shop-prod', folder: '/var/www/shop/learn', excludeRows: ['wp_2_actionscheduler_logs'], clean: true, uploads: false });
+    expect((await get('/api/sites/local.shop.com/production?path=%2Flearn')).json()).toEqual({ host: 'shop-prod', folder: '/var/www/shop/learn', excludeRows: ['wp_2_actionscheduler_logs'], clean: true });
     expect((await get('/api/sites/local.shop.com/production')).json()).toBeNull();
     expect((await put('/api/sites/local.shop.com/production', { host: 'shop-prod', folder: '/var/www/shop', excludeRows: ['wp_x; DROP'] })).statusCode).toBe(400);
     expect((await put('/api/sites/local.other.com/production', { host: 'shop-prod', folder: '/var/www/shop' })).statusCode).toBe(404);

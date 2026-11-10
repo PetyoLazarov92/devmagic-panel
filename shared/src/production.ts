@@ -83,10 +83,6 @@ export interface ProductionSettings {
   keep?: string | undefined;
   /** WP-CLI's command on the server, when it is not wp. */
   wpCli?: string | undefined;
-  /** Also bring the uploads that are new on the server with each refresh; off unless you turn it on. */
-  uploads?: boolean | undefined;
-  /** With uploads on: only the last months; all of them when unset. */
-  uploadsMonths?: number | undefined;
 }
 
 /** The tables ticked at first: the ones left out last time, else the known logs, and the personal ones when the copy is cleaned. */

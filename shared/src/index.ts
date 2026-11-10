@@ -37,3 +37,4 @@ export * from './htaccess.js';
 export * from './site-repos.js';
 export * from './php-serialized.js';
 export * from './production.js';
+export * from './files.js';

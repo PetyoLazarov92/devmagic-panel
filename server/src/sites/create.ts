@@ -625,7 +625,7 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
     const signedIn = signedInWith(ctx, uploads.host, uploads.password);
     add('copy-uploads', `Copy ${uploads.months ? `the last ${uploads.months} month${uploads.months === 1 ? '' : 's'} of uploads` : 'the uploads'} from ${uploads.host}`,
       () => signedIn((signed) => copyUploads(signed, docroot, { host: uploads.host, folder: uploads.folder, wpCli: uploads.wpCli }, uploads.months)),
-      6, `The uploads were not copied from ${uploads.host}: copy them from the Database tab, under From production.`);
+      6, `The uploads were not copied from ${uploads.host}: missing images still load from production.`);
   }
 
   // Cleaning keeps one user itself, the admin; the admin step is for a copy kept as it is.

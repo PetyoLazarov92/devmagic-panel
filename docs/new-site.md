@@ -236,8 +236,11 @@ production-only plugins go off as on every install from a dump.
 - **Uploads**: missing images load from the production domain you give.
   When the dump was exported from a server over SSH, **Also copy the uploads**
   brings the files themselves from that server after the import: off unless
-  you tick it, for the last 3 or 12 months or all of them (see
-  [Databases](databases.md)).
+  you tick it, for the last 3 or 12 months or all of them. It reads only on
+  the server (`du` for the size, `rsync` for the files, needed on both
+  sides), only adds here, stops when all of them would not fit on this disk,
+  and leaves PHP files, `.htaccess`, SQL dumps, links and the cache, log and
+  backup folders of plugins on the server.
 - **Build**: a checklist per repo lists every `composer.json` and
   `package.json` and ticks only the ones whose output the repo does not hold
   (`vendor/` or a build folder git ignores; never a wordpress.org plugin), with
