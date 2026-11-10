@@ -144,6 +144,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
               <UpdateIndicator status={update} />
             </div>
             <JobsIndicator />
+            <QueuedProposals />
             <ThemeToggle className="hidden md:inline-flex" />
             {assistantOn && (
               <Button variant="outline" onClick={() => setAssistantOpen(true)} title="Ask Claude about your sites">
@@ -156,7 +157,6 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-12 sm:px-6 md:px-10">{children}</main>
         <Toaster />
         {assistantOn && <AssistantDrawer />}
-        <QueuedProposals />
       </div>
     </div>
   );
