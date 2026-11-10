@@ -30,7 +30,9 @@ groups:
    **Plugins and themes**, **Database**, **Performance**, **Cron**, **Config**
 3. The server: **Server and PHP** (just **Server** without WordPress), **Domains and SSL**
 
-A tab a site lacks leaves the others where they are. A tab's badge counts only
+A tab a site lacks leaves the others where they are. Tabs that do not fit
+the width go under **More** at the end of the row, with their badges added
+up there, and the open tab always shows. A tab's badge counts only
 what needs a look: errors in `debug.log`, late WP-Cron events, local constants
 to set, names the certificate or hosts file leaves out.
 
@@ -69,13 +71,17 @@ Database tab's: **Plugins** and **Themes**.
 
 **Themes** lists the site's themes, read only: which one is on, the parent a
 child theme takes its templates from, the version and an update WordPress
-already found, and where each folder is. A theme in a repo of its own under
-`wp-content/repos` is listed too, marked **In its repo**. The theme is
-switched in wp-admin.
+already found, and where each folder is, with **Open folder** to it on the
+Files tab. A theme in a repo of its own under `wp-content/repos` is listed
+too, marked **In its repo**. The theme is switched in wp-admin.
 
 **Plugins**: each plugin on or off with one switch: search, filters, the updates WordPress
 already found, what each plugin needs and what needs it, and the plugins turned
 off at install and the local helpers marked. Undo is in the toast.
+**Details** adds what each plugin says it does and who made it, read from its
+header; it starts at **Compact** each time. A long list shows its first rows,
+with **Show more** and **Show all**. **Open folder** goes to the plugin's
+folder on the Files tab, or **Open file** for a plugin that is one file.
 
 **Missing plugins**, one row under the search and filters (and **missing
 themes**, one row in the Themes view): plugins the
@@ -155,6 +161,12 @@ WordPress). The Overview's Server and PHP tile shows both, like
     (conditions, handlers, environment variables). The translated ones go
     into the site's nginx file; untick one to leave it out. A rule that is
     not translated needs a tick, or pick nginx + Apache to keep it working.
+    The full screen button next to the title gives the list the whole
+    window. The panel looks for `.htaccess` files in up to 5,000 folders,
+    reading only the top two levels of `wp-content/cache` and
+    `wp-content/uploads` and none of the year folders of uploads, and one
+    nginx file takes up to 500 rules. When a site goes over either, the
+    dialog says which, and where the read stopped.
 
   A job writes the new server's config and the hosts line, checks the site
   answers, then the old config goes; Undo moves it back. The dialog says why

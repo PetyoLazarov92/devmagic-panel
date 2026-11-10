@@ -22,6 +22,11 @@ right of each item:
 - **Server**: Services, WP Cores.
 - **System**: Activity, Updates (a newer release), Settings.
 
+The fold button at the bottom of the menu, or Ctrl+B, folds it to a rail of
+icons for a wider page; each icon names its page when you point at it, and a
+dot marks news. The panel remembers which you chose. On a phone the menu is a
+drawer behind the button at the top left, with the theme switch.
+
 Pages that moved keep working at their old address: `/environment` opens
 Aura's Machine checks, `/environment/settings` Settings, `/jobs` and `/runs`
 Activity, and `/trash` the Sites page's Removed filter.

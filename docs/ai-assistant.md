@@ -36,4 +36,5 @@ looked at. Anything it wants to change comes back as a card you run yourself.
 The panel is also an MCP server. Copy the `claude mcp add` command from the AI
 assistant card and run it once. Claude Code then reads your sites with the same
 tools, and anything it wants to change shows up as a card in the panel that you
-run yourself. This needs no API key and works with the assistant off.
+run yourself. The cards wait behind **suggestions** in the bar at the top, next
+to the jobs, and a new one says so once. This needs no API key and works with the assistant off.

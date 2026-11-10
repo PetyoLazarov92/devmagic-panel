@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
+import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { pluginFolderHref, themeFolderHref } from '@/lib/file-links';
 import { Link, navigate, useQueryParam } from '@/lib/router';
 import { siteHref } from '@/lib/site-ref';
@@ -168,6 +169,14 @@ function PluginsView({ site }: { site: Site }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [busy, setBusy] = useState<string | null>(null);
   const [asking, setAsking] = useState<SitePlugin | null>(null);
+  // Details adds what each plugin says it does and who made it; it starts compact every time.
+  const [details, setDetails] = useState(false);
+  const plugins = data?.plugins ?? [];
+  const test = FILTERS.find((f) => f.value === filter)?.test ?? (() => true);
+  // Must-use plugins and drop-ins last, as wp-admin keeps them on tabs of their own.
+  const shown = plugins.filter((p) => test(p) && (pluginMatches(p.name, query) || pluginMatches(p.title, query))).sort((a, b) => Number(always(a)) - Number(always(b)));
+  // A long list shows its first rows, then Show more or Show all; a search or filter starts it short again.
+  const more = useShowMore(shown, { reset: `${query}|${filter}` });
 
   async function set(plugin: SitePlugin, active: boolean, undo = false) {
     setBusy(plugin.name);
@@ -202,11 +211,7 @@ function PluginsView({ site }: { site: Site }) {
   }
   if (!data) return <PluginsSkeleton />;
 
-  const plugins = data.plugins;
   const count = (f: (typeof FILTERS)[number]) => plugins.filter(f.test).length;
-  const test = FILTERS.find((f) => f.value === filter)?.test ?? (() => true);
-  // Must-use plugins and drop-ins last, as wp-admin keeps them on tabs of their own.
-  const shown = plugins.filter((p) => test(p) && (pluginMatches(p.name, query) || pluginMatches(p.title, query))).sort((a, b) => Number(always(a)) - Number(always(b)));
 
   return (
     <div className="grid gap-3">
@@ -215,7 +220,10 @@ function PluginsView({ site }: { site: Site }) {
           <span className="font-medium text-foreground">{plugins.filter(isOn).length} of {plugins.filter((p) => !always(p)).length}</span> plugins on
           {data.network && ', turned on network-wide'}
         </p>
-        <Button size="sm" variant="ghost" onClick={reload} disabled={loading}><RefreshCw className={cn(loading && 'animate-spin')} />Reload</Button>
+        <div className="flex items-center gap-2">
+          <Segmented label="How much each plugin shows" className="text-xs" value={details ? 'details' : 'compact'} onChange={(v) => setDetails(v === 'details')} options={[['compact', 'Compact'], ['details', 'Details']]} />
+          <Button size="sm" variant="ghost" onClick={reload} disabled={loading}><RefreshCw className={cn(loading && 'animate-spin')} />Reload</Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -270,38 +278,47 @@ function PluginsView({ site }: { site: Site }) {
           )}
         </div>
       ) : (
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-          {shown.map((p) => (
-            <li key={`${p.status}-${p.name}`} className="flex items-center gap-3 px-4 py-2.5">
-              {always(p) ? (
-                <span className="flex w-9 shrink-0 justify-center" title={p.status === 'dropin' ? 'Drop-in: WordPress always loads it' : 'Must-use: WordPress always loads it'}>
-                  <Lock className="size-4 text-muted-foreground" aria-label="Always on" />
-                </span>
-              ) : (
-                <Switch checked={isOn(p)} onChange={(v) => toggle(p, v)} label={`Turn ${p.title} ${isOn(p) ? 'off' : 'on'}`} disabled={busy !== null} />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium', !isOn(p) && !always(p) && 'text-muted-foreground')}>
-                  <span className="break-words">{p.title}</span>
-                  {p.productionOnly && <Badge tone="warning">Turned off at install</Badge>}
-                  {p.localHelper && <Badge tone="success">Local helper</Badge>}
-                  {p.status === 'active-network' && <Badge tone="primary">Network</Badge>}
-                  {busy === p.name && <RefreshCw className="size-3.5 animate-spin text-muted-foreground" aria-label="Working" />}
-                </p>
-                <p className="mt-0.5 text-xs break-words text-muted-foreground">
-                  <span className="font-mono">{p.name}</span>
-                  {p.version && <> · {p.version}</>}
-                  {p.update && <span className="text-warning"> · {p.update} available</span>}
-                  {p.status === 'must-use' && ' · must-use, always on'}
-                  {p.status === 'dropin' && ' · drop-in, always on'}
-                  {p.requires && <> · needs {p.requires.join(', ')}</>}
-                  {p.requiredBy && <> · needed by {p.requiredBy.join(', ')}</>}
-                  {p.path && <> · <Link href={pluginFolderHref(site, p)} className="font-medium text-primary hover:underline" aria-label={p.oneFile ? `Open the file of ${p.title}` : `Open the folder of ${p.title}`}>{p.oneFile ? 'Open file' : 'Open folder'}</Link></>}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <ul className="divide-y">
+            {more.shown.map((p) => (
+              <li key={`${p.status}-${p.name}`} className="flex items-center gap-3 px-4 py-2.5">
+                {always(p) ? (
+                  <span className="flex w-9 shrink-0 justify-center" title={p.status === 'dropin' ? 'Drop-in: WordPress always loads it' : 'Must-use: WordPress always loads it'}>
+                    <Lock className="size-4 text-muted-foreground" aria-label="Always on" />
+                  </span>
+                ) : (
+                  <Switch checked={isOn(p)} onChange={(v) => toggle(p, v)} label={`Turn ${p.title} ${isOn(p) ? 'off' : 'on'}`} disabled={busy !== null} />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium', !isOn(p) && !always(p) && 'text-muted-foreground')}>
+                    <span className="break-words">{p.title}</span>
+                    {p.productionOnly && <Badge tone="warning">Turned off at install</Badge>}
+                    {p.localHelper && <Badge tone="success">Local helper</Badge>}
+                    {p.status === 'active-network' && <Badge tone="primary">Network</Badge>}
+                    {busy === p.name && <RefreshCw className="size-3.5 animate-spin text-muted-foreground" aria-label="Working" />}
+                  </p>
+                  <p className="mt-0.5 text-xs break-words text-muted-foreground">
+                    <span className="font-mono">{p.name}</span>
+                    {p.version && <> · {p.version}</>}
+                    {p.update && <span className="text-warning"> · {p.update} available</span>}
+                    {p.status === 'must-use' && ' · must-use, always on'}
+                    {p.status === 'dropin' && ' · drop-in, always on'}
+                    {p.requires && <> · needs {p.requires.join(', ')}</>}
+                    {p.requiredBy && <> · needed by {p.requiredBy.join(', ')}</>}
+                    {p.path && <> · <Link href={pluginFolderHref(site, p)} className="font-medium text-primary hover:underline" aria-label={p.oneFile ? `Open the file of ${p.title}` : `Open the folder of ${p.title}`}>{p.oneFile ? 'Open file' : 'Open folder'}</Link></>}
+                  </p>
+                  {details && (p.description || p.author) && (
+                    <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
+                      {p.description}
+                      {p.author && <span className="text-muted-foreground/80">{p.description ? ' ' : ''}By {p.author}.</span>}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <ShowMore {...more.footer} noun="plugins" />
+        </div>
       )}
 
       <Dialog

@@ -17,9 +17,14 @@ never as root, and never leaves the site's folder.
 
 - The bar names where you are: the site folder, then each folder down to this
   one. Each part is a link, and `..` at the top of the list goes one up.
-- Under it, a filter for the names in this folder and the places worth one
-  click: `wp-content`, Themes, Plugins, Uploads, each git repo of the site,
-  `wp-config.php` and `debug.log`. Only the ones that are there show.
+- At the site's folder, tiles on top for the places worth one click:
+  `wp-content`, Themes, Plugins, Uploads, each git repo of the site,
+  `wp-config.php` and `debug.log`, each with a fact: how many themes or
+  plugins, how big a file is, and `debug.log` in warning colour from 10 MB.
+  Only the ones that are there show. In a folder below they are one slim row.
+- Then the bar with **Upload**, **New file**, **New folder** and **Check
+  again**, and under it the box: a filter for this folder, **Names below** or
+  **Text in files**.
 - The list has the name, size, when it changed and its permissions, folders
   first. Name, Size and Changed sort. On a phone only the name and size show.
 - A folder has no size until you ask: **Measure** in its Size cell counts
@@ -150,8 +155,9 @@ modes, each named with what it means:
 
 - The command palette (Ctrl+K) has **Files of** each site.
 - On the **Plugins and themes** tab each plugin and theme has **Open folder**,
-  which lands in its folder here. Must-use plugins, drop-ins and themes found
-  in a repo through Local mode have none.
+  which lands in its folder here, or **Open file** for a plugin that is one
+  file. A theme found in a repo through Local mode opens at its folder under
+  `wp-content/repos`. Must-use plugins and drop-ins have none.
 
 ## Upload, zip and extract
 

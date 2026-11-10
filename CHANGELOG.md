@@ -1,5 +1,18 @@
 # Changelog
 
+### v1.36.0 (2026-11-10)
+* **Web:** the menu folds to a rail of icons for a wider page, with the button at its bottom or Ctrl+B. Each icon names its page when you point at it, a dot marks news, and the panel remembers your choice
+* **Web:** on a phone the menu is a drawer behind a button at the top left, with the theme switch, and the bar on top fits the screen. Nothing scrolls sideways any more
+* **Web:** a site's tabs that do not fit the width go under **More** at the end of the row, with their badges added up, and the open tab always shows
+* **Web:** suggestions from Claude Code wait behind a **suggestions** button in the bar, next to the jobs, instead of a box over the page. A new one says so once
+* **Web:** the page behind an open dialog stays still. Any dialog that scrolls, or holds a long list like the .htaccess rules when you move a site to nginx, has the full screen button, and the list then takes the whole window. Full screen lasts while the dialog is open: the next one opens at its usual size
+* **Files:** at the site's folder the places worth one click are tiles, each with a fact: how many themes or plugins, how big wp-config.php is, and debug.log in warning colour from 10 MB. The bar below has Upload, New file and New folder, and the search box sits under it
+* **Plugins:** **Details** adds what each plugin says it does and who made it. A long list shows its first rows with Show more and Show all
+* **Plugins:** Open folder on a theme opens its folder; it went to a folder that does not exist. A theme found in a repo through Local mode has Open folder too, and a plugin that is one file has Open file
+* **New site:** **Go on without Claude** is a button next to Continue
+* **nginx:** the search for .htaccess files reads only the top of page caches and uploads and none of the year folders of uploads, so large sites reach its limit of 5,000 folders far less often. When a site still goes over it, or over 500 rules, the dialog says which limit, and where the read stopped
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.35.0 (2026-11-10)
 * **Files:** every site has a Files tab. It lists the site's folder one level at a time with name, size, date and permissions, folders first, sortable, with a filter for the folder and one-click places: wp-content, themes, plugins, uploads, each repo, wp-config.php and debug.log. `.git` and `node_modules` stay out until you switch on Show hidden. The folder is in the address, so Back and a reload land where you were
 * **Files:** a file opens in place of the list: text with line numbers up to 2 MB, png, jpg, gif and webp as pictures, anything else with its facts and Download. A download is always saved as a file, never opened as a page

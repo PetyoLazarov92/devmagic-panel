@@ -94,7 +94,8 @@ The step runs as one job, in two parts:
 
 They stay two runs of Claude Code on purpose: the one that reads the repo's
 text has no connectors, and only its checked form reaches the one that opens
-your links. **Go on without Claude** leaves the step at any time, and **Skip
+your links. **Go on without Claude**, next to Continue while Claude Code reads
+or after it failed, leaves the step at any time, and **Skip
 the links and pick a dump myself** leaves only the second part; **Check the
 links** runs it after all. When the links cannot be checked, the repo's
 answer stays and you go on to pick the dump yourself.

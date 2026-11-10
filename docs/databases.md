@@ -113,9 +113,9 @@ and tick rows on a page to delete them together.
 
 - Long values load in full before you edit them. NULL is a tick of its own.
 - The button next to a row's title fills the window, for a row with many
-  columns or long values. The panel remembers it: viewing, editing,
-  duplicating and adding rows, and a row of a SQL result, open the same way
-  until you switch back. The buttons stay below the columns as they scroll.
+  columns or long values. It lasts while the dialog is open; the next one
+  opens at its usual size. Any dialog that scrolls has the same button. The
+  buttons stay below the columns as they scroll.
 - A PHP serialized value whose string lengths no longer add up, or JSON that
   no longer reads, is flagged, with **Count the lengths again**.
 - A value with NUL bytes or Windows line breaks opens in an editor that shows

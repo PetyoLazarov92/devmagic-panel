@@ -4,7 +4,7 @@ import { type FormEvent, Fragment, useEffect, useId, useState } from 'react';
 import { Notice } from '@/components/page';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
+import { Dialog, DialogList } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { bytes, dateTime, timeAgo } from '@/lib/format';
@@ -142,6 +142,7 @@ export function FolderPicker({ site, open, title, verb, start, moving, sameFolde
       open={open}
       onClose={onClose}
       title={title}
+      expandable
       description={moving.length === 1 ? nameOf(moving[0] ?? '') : `${moving.length} entries`}
       footer={
         <>
@@ -166,30 +167,32 @@ export function FolderPicker({ site, open, title, verb, start, moving, sameFolde
           })}
         </nav>
         {error && <Notice>{error}</Notice>}
-        <ul className="max-h-64 min-h-24 divide-y overflow-y-auto rounded-lg border text-sm">
-          {dir !== '' && (
-            <li>
-              <button type="button" onClick={() => setDir(parentOf(dir))} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-muted-foreground hover:bg-muted/50 hover:text-foreground">
-                <Folder className="size-4 shrink-0" aria-hidden /><span aria-hidden>..</span><span className="sr-only">Up to {parentOf(dir) || 'the site folder'}</span>
-              </button>
-            </li>
-          )}
-          {!here && !error && <li className="px-3 py-2 text-muted-foreground">Reading the folder...</li>}
-          {here && folders.length === 0 && <li className="px-3 py-2 text-muted-foreground">No folders in here.</li>}
-          {folders.map((f) => {
-            const path = joinPath(dir, f.name);
-            const own = moving.includes(path);
-            return (
-              <li key={f.name}>
-                <button type="button" disabled={own} onClick={() => setDir(path)} className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50">
-                  <Folder className="size-4 shrink-0 text-primary" aria-hidden />
-                  <span className="min-w-0 [overflow-wrap:anywhere]">{f.name}</span>
-                  <ChevronRight className="ml-auto size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <DialogList className="max-h-64">
+          <ul className="min-h-24 divide-y rounded-lg border text-sm">
+            {dir !== '' && (
+              <li>
+                <button type="button" onClick={() => setDir(parentOf(dir))} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-muted-foreground hover:bg-muted/50 hover:text-foreground">
+                  <Folder className="size-4 shrink-0" aria-hidden /><span aria-hidden>..</span><span className="sr-only">Up to {parentOf(dir) || 'the site folder'}</span>
                 </button>
               </li>
-            );
-          })}
-        </ul>
+            )}
+            {!here && !error && <li className="px-3 py-2 text-muted-foreground">Reading the folder...</li>}
+            {here && folders.length === 0 && <li className="px-3 py-2 text-muted-foreground">No folders in here.</li>}
+            {folders.map((f) => {
+              const path = joinPath(dir, f.name);
+              const own = moving.includes(path);
+              return (
+                <li key={f.name}>
+                  <button type="button" disabled={own} onClick={() => setDir(path)} className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50">
+                    <Folder className="size-4 shrink-0 text-primary" aria-hidden />
+                    <span className="min-w-0 [overflow-wrap:anywhere]">{f.name}</span>
+                    <ChevronRight className="ml-auto size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </DialogList>
         {reason && <p className="text-xs text-muted-foreground">{reason}</p>}
       </div>
     </Dialog>

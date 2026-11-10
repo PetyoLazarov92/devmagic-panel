@@ -6,7 +6,7 @@ import { settled, useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
+import { Dialog, DialogList } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/field';
 import { api } from '@/lib/api';
 import { Link } from '@/lib/router';
@@ -140,7 +140,7 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
         )}
       </div>
 
-      <Dialog open={open} onClose={() => setOpen(false)} title={`Web server for ${site.domain}`} description="Pick the setup the site runs on in production, so it behaves the same here." size="lg">
+      <Dialog open={open} onClose={() => setOpen(false)} title={`Web server for ${site.domain}`} description="Pick the setup the site runs on in production, so it behaves the same here." size="lg" expandable={reviewing}>
         <div className="grid gap-4 text-sm">
           <fieldset className="grid gap-2 md:grid-cols-3">
             <legend className="sr-only">Web server</legend>
@@ -202,7 +202,7 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
               <p className="text-xs text-muted-foreground">nginx reads no .htaccess. The panel writes the translated rules into the site&apos;s nginx file; untick one to leave it out.</p>
               {htaccess.loading && !report && <p className="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Reading the .htaccess files</p>}
               {htaccess.error && <p role="alert" className="text-xs text-danger">{htaccess.error}</p>}
-              {report && <div className="max-h-80 overflow-y-auto pr-1"><HtaccessReview report={report} skip={skip} onSkip={setSkip} /></div>}
+              {report && <DialogList className="max-h-80"><HtaccessReview report={report} skip={skip} onSkip={setSkip} /></DialogList>}
               {report && left > 0 && (
                 <div className="grid gap-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2">
                   <p className="flex gap-2 text-warning">
