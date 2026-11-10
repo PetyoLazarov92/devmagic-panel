@@ -45,7 +45,44 @@ export const PLACEMENT_DIRS = [
   { dir: 'wp-content/themes', label: 'Themes' },
   { dir: 'wp-content/plugins', label: 'Plugins' },
   { dir: 'wp-content/mu-plugins', label: 'Must-use plugins' },
+  { dir: 'wp-content/repos', label: 'Theme inside the repo' },
 ] as const;
+
+/**
+ * Where a repo goes whose theme is one of its folders (tooling on top, the
+ * theme in wandworks/). Each repo right in this folder is one more themes
+ * folder to WordPress, through Local mode, so the theme keeps its own name
+ * (wandworks, as production's database has it) and nothing in the database
+ * changes. In wp-content/themes WordPress would list it as repo/wandworks.
+ */
+export const THEME_REPOS_DIR = 'wp-content/repos';
+
+/**
+ * A folder's files say theme: functions.php with style.css, or, where the
+ * build makes style.css, with index.php and one more file only a theme has.
+ */
+export function looksLikeTheme(names: readonly string[]): boolean {
+  const has = (n: string) => names.includes(n);
+  if (!has('functions.php')) return false;
+  return has('style.css') || (has('index.php') && ['header.php', 'footer.php', 'screenshot.png', 'theme.json'].some(has));
+}
+
+/**
+ * The one folder of a repo's top level that is a theme, from the repo's file
+ * paths: wandworks for wandworks/functions.php and the rest. Undefined when
+ * none or several are, or one is named like a folder tools fill.
+ */
+export function themeFolderIn(paths: Iterable<string>): string | undefined {
+  const byFolder = new Map<string, string[]>();
+  for (const path of paths) {
+    const parts = path.split('/');
+    if (parts.length !== 2) continue;
+    const [folder = '', name = ''] = parts;
+    byFolder.set(folder, [...(byFolder.get(folder) ?? []), name]);
+  }
+  const themes = [...byFolder].filter(([folder, names]) => SEGMENT.test(folder) && !['node_modules', 'vendor'].includes(folder) && looksLikeTheme(names)).map(([folder]) => folder);
+  return themes.length === 1 ? themes[0] : undefined;
+}
 
 /** The old fixed layouts, kept for drafts, presets and inputs from before 1.28. */
 export type LegacyLayout = 'site-root' | 'wp-content' | 'theme' | 'plugin';
@@ -68,7 +105,8 @@ export function placementForLayout(layout: LegacyLayout, url: string): RepoPlace
 export type RepoHolds = 'site' | 'wp-content' | 'theme' | 'plugin' | 'other';
 
 /** Where a repo goes by default, from what it holds; null when nothing says (you pick). */
-export function placementForKind(kind: RepoHolds, url: string): RepoPlacement | null {
+export function placementForKind(kind: RepoHolds, url: string, themeIn?: string): RepoPlacement | null {
+  if (themeIn) return { dir: THEME_REPOS_DIR, folder: repoBaseName(url) };
   if (kind === 'site') return { dir: '', folder: '' };
   if (kind === 'wp-content') return { dir: '', folder: 'wp-content' };
   if (kind === 'theme') return { dir: 'wp-content/themes', folder: repoBaseName(url) };
@@ -110,6 +148,7 @@ export function placementWarnings(target: string): string[] {
   const warnings: string[] = [];
   if (CORE_DIRS.some((d) => under(target, d))) warnings.push('WordPress core is usually kept out of git; fine if the repo patches core on purpose');
   if (under(target, UPLOADS_DIR)) warnings.push('Uploads are usually kept out of git; fine if the repo keeps some media on purpose');
+  if (target !== THEME_REPOS_DIR && under(target, THEME_REPOS_DIR)) warnings.push('WordPress reads the theme inside this repo under its own name through Local mode, so Local mode has to stay on for this site');
   return warnings;
 }
 

@@ -193,8 +193,11 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       Mailpit, noindex, a Local label, blocked hosts, logins from this computer
       only, `FS_METHOD` direct when
       wp-config.php has none, missing uploads from production for vhosts
-      made by hand, and on a network a My Sites menu that scrolls and has a
-      filter). Local mode is on for new
+      made by hand, each repo in `wp-content/repos` with a theme in a folder
+      of its own as one more themes folder (`themeFolders`, read from the
+      disk, so the theme keeps the name the database has and no link or
+      database change is needed), and on a network a My Sites menu that
+      scrolls and has a filter). Local mode is on for new
       sites and offered as an Aura fix for existing ones, never added
       silently. The panel never writes a file of its own into a repo: the
       wizard's answers per repo live in the panel's own database, and a

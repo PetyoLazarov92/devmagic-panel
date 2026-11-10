@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CompatScan, Site } from '@devmagic-panel/shared';
 import { LOCAL_MODE_DEFAULT_BLOCKED_HOSTS } from '@devmagic-panel/shared';
@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { coreStatusSource, MAX_AGE_MS, type CoreStatusMap } from '../src/core-status.js';
 import { hostsBlockDomains, readAura } from '../src/aura.js';
 import { coreIssueFor, discoverSites } from '../src/sites/discover.js';
-import { LOCAL_MODE_FILE, localModePlugin, readLocalMode, setLocalMode } from '../src/sites/local-mode.js';
+import { LOCAL_MODE_FILE, localModePlugin, readLocalMode, setLocalMode, themeDir } from '../src/sites/local-mode.js';
 import { parseVhost } from '../src/sites/vhost.js';
 import { fakeExec, NO_DEBUG_CONSTANTS, tempTree, wpSiteTree } from './helpers.js';
 
@@ -71,7 +71,7 @@ describe('site health checks', () => {
     const fake = fakeExec(certResponse(t.cert));
     await setLocalMode(fake.exec, t.docroot, true, ['api.sendgrid.com']);
     const file = join(t.docroot, 'wp-content/mu-plugins', LOCAL_MODE_FILE);
-    writeFileSync(file, readFileSync(file, 'utf8').replace('Version: 4', 'Version: 3'));
+    writeFileSync(file, readFileSync(file, 'utf8').replace('Version: 5', 'Version: 4'));
     const issue = (await discover(t, fake.exec)).issues.find((i) => i.id === 'local.outdated');
     expect(issue?.fix?.input).toEqual({ domain: 'local.shop.com', enabled: true, blockedHosts: ['api.sendgrid.com'] });
   });
@@ -133,6 +133,19 @@ describe('Local mode plugin', () => {
   it('keeps the chosen hosts when turned on again and removes the file when off', async () => {
     const t = wpSiteTree();
     const { exec } = fakeExec();
+    // A repo in wp-content/repos with a theme in a folder of its own is one more themes folder; one without is not.
+    await setLocalMode(exec, t.docroot, true);
+    const repos = join(t.docroot, 'wp-content', 'repos');
+    mkdirSync(join(repos, 'theme-kit', 'wandworks'), { recursive: true });
+    mkdirSync(join(repos, 'notes', 'docs'), { recursive: true });
+    for (const f of ['functions.php', 'index.php', 'header.php']) writeFileSync(join(repos, 'theme-kit', 'wandworks', f), '<?php');
+    expect(readLocalMode(t.docroot).current).toBe(false);
+    expect((await setLocalMode(exec, t.docroot, true)).stdout).toContain('themes also read from wp-content/repos/theme-kit');
+    expect(readLocalMode(t.docroot)).toMatchObject({ current: true, themeFolders: ['repos/theme-kit'] });
+    expect(readFileSync(join(t.docroot, 'wp-content', 'mu-plugins', LOCAL_MODE_FILE), 'utf8')).toContain("const DMP_LOCAL_MODE_THEME_FOLDERS = array( 'repos/theme-kit' );");
+    expect(themeDir(t.docroot, 'wandworks')).toBe(join(repos, 'theme-kit', 'wandworks'));
+    expect(() => localModePlugin([], null, ["repos/x', 'y"])).toThrow('not a folder of wp-content/repos');
+    rmSync(repos, { recursive: true });
     await setLocalMode(exec, t.docroot, true, ['api.hubapi.com', 'api.hubapi.com']);
     await setLocalMode(exec, t.docroot, true);
     expect(readLocalMode(t.docroot).blockedHosts).toEqual(['api.hubapi.com']);
@@ -152,7 +165,7 @@ describe('Local mode plugin', () => {
     expect(block).toContain("add_action( 'admin_head', $dmp_my_sites );");
     // After the check that the site's own address is local, like everything else it does.
     expect(text.indexOf('if ( is_multisite() ) {')).toBeGreaterThan(text.indexOf("if ( ! preg_match( '/^(www"));
-    expect(text).toContain(' * Version: 4');
+    expect(text).toContain(' * Version: 5');
   });
 
   it('refuses anything but a hostname inside the PHP file', () => {

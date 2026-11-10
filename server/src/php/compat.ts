@@ -8,7 +8,7 @@ import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
 import type { JobStep } from '../jobs.js';
 import type { RunStore } from '../store.js';
-import { LOCAL_MODE_FILE } from '../sites/local-mode.js';
+import { LOCAL_MODE_FILE, themeDir } from '../sites/local-mode.js';
 import { LOGIN_PLUGIN_FILE, SiteActionRefused, siteFor, SiteNotFoundError, type SiteRef } from '../sites/site-actions.js';
 import { readSiteVhosts } from '../sites/vhost.js';
 import { defaultPhpVersion } from './site-php.js';
@@ -139,7 +139,7 @@ export async function compatTargets(ctx: CompatContext, site: SiteRef, scope: 'a
   const targets: CompatTarget[] = [];
   for (const t of themes) {
     if (scope === 'active' && t.status !== 'active' && t.status !== 'parent') continue;
-    const dir = join(content, 'themes', t.name);
+    const dir = themeDir(site.docroot, t.name);
     const requiresPhp = requiresPhpOf(join(dir, 'style.css'));
     targets.push({ component: { kind: 'theme', name: t.name, title: t.title || t.name, version: t.version, status: t.status, ...updateOf(t), ...(requiresPhp ? { requiresPhp } : {}) }, path: dir });
   }

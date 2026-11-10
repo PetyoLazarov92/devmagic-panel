@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { SiteLocalMode } from '@devmagic-panel/shared';
-import { hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_SMTP, MAILPIT_WEB } from '@devmagic-panel/shared';
+import { hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, looksLikeTheme, MAILPIT_SMTP, MAILPIT_WEB, THEME_REPOS_DIR } from '@devmagic-panel/shared';
 import type { ExecResult, Executor } from '../exec.js';
 import { installMuPlugin, muPluginPath, removeMuPlugin } from './mu-plugins.js';
 
@@ -8,13 +9,58 @@ export const LOCAL_MODE_FILE = 'devmagic-panel-local.php';
 
 const BLOCKED_LINE = /^const DMP_LOCAL_MODE_BLOCKED_HOSTS = array\((.*)\);$/m;
 const UPLOADS_LINE = /^const DMP_LOCAL_MODE_UPLOADS_FROM = '([^']*)';$/m;
+/** A themes folder of Local mode, relative to wp-content: repos/wandworks-theme. Plain names only, safe inside single quotes. */
+const THEME_FOLDER = /^repos\/[A-Za-z0-9_@+][A-Za-z0-9_.@+-]{0,99}$/;
+
+const dirsIn = (dir: string): string[] => {
+  try {
+    return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  } catch {
+    return [];
+  }
+};
+const filesIn = (dir: string): string[] => {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * The repos of a site whose theme is a folder of theirs, read from the disk:
+ * each folder right in wp-content/repos with a theme one level down. They are
+ * what Local mode registers as themes folders, relative to wp-content.
+ */
+export function themeFolders(docroot: string): string[] {
+  const repos = join(docroot, THEME_REPOS_DIR);
+  return dirsIn(repos)
+    .filter((repo) => dirsIn(join(repos, repo)).some((sub) => sub !== 'node_modules' && sub !== 'vendor' && looksLikeTheme(filesIn(join(repos, repo, sub)))))
+    .map((repo) => `repos/${repo}`)
+    .filter((folder) => THEME_FOLDER.test(folder));
+}
+
+/** The folder of a theme by its name: wp-content/themes/<name>, or the repo in wp-content/repos that holds it. */
+export function themeDir(docroot: string, name: string): string {
+  const usual = join(docroot, 'wp-content', 'themes', name);
+  if (existsSync(usual)) return usual;
+  for (const folder of themeFolders(docroot)) {
+    const dir = join(docroot, 'wp-content', folder, name);
+    if (existsSync(dir)) return dir;
+  }
+  return usual;
+}
 
 /**
  * The Local mode mu-plugin. It only acts when the site's own address is a
  * local name, so a copy that reaches production by mistake does nothing.
  * Blocked hosts and the uploads host are validated hostnames, safe inside single quotes.
  */
-export function localModePlugin(blockedHosts: readonly string[], uploadsFrom: string | null = null): string {
+export function localModePlugin(blockedHosts: readonly string[], uploadsFrom: string | null = null, themes: readonly string[] = []): string {
+  const themeList = themes.map((t) => {
+    if (!THEME_FOLDER.test(t)) throw new Error(`not a folder of wp-content/repos: ${t}`);
+    return `'${t}'`;
+  });
   const hosts = blockedHosts.map((h) => {
     if (!hostname.safeParse(h).success) throw new Error(`not a hostname: ${h}`);
     return `'${h}'`;
@@ -23,8 +69,8 @@ export function localModePlugin(blockedHosts: readonly string[], uploadsFrom: st
   return `<?php
 /**
  * Plugin Name: devmagic-panel Local mode
- * Description: Keeps this local copy from reaching real people: mail goes to Mailpit, search engines are told not to index, a Local label shows in the admin bar, chosen outgoing hosts are blocked and logins work from this computer only. Plugins and themes update without FTP details, missing uploads can load from production, and a long My Sites menu scrolls and has a filter. Added by devmagic-panel and excluded from git locally.
- * Version: 4
+ * Description: Keeps this local copy from reaching real people: mail goes to Mailpit, search engines are told not to index, a Local label shows in the admin bar, chosen outgoing hosts are blocked and logins work from this computer only. A theme in a folder of its repo is found under its own name. Plugins and themes update without FTP details, missing uploads can load from production, and a long My Sites menu scrolls and has a filter. Added by devmagic-panel and excluded from git locally.
+ * Version: 5
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -33,12 +79,39 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const DMP_LOCAL_MODE_BLOCKED_HOSTS = array(${hosts.length ? ` ${hosts.join(', ')} ` : ''});
 const DMP_LOCAL_MODE_UPLOADS_FROM = '${uploadsFrom ?? ''}';
+const DMP_LOCAL_MODE_THEME_FOLDERS = array(${themeList.length ? ` ${themeList.join(', ')} ` : ''});
 
 $dmp_local_host = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
 if ( ! preg_match( '/^(www\\.)?local\\.|\\.test$|\\.localhost$/', $dmp_local_host ) ) {
 	return;
 }
 unset( $dmp_local_host );
+
+// A repo with its theme in a folder of its own is one more themes folder, so the theme keeps the name the database has.
+if ( DMP_LOCAL_MODE_THEME_FOLDERS ) {
+	foreach ( DMP_LOCAL_MODE_THEME_FOLDERS as $dmp_folder ) {
+		if ( is_dir( WP_CONTENT_DIR . '/' . $dmp_folder ) ) {
+			register_theme_directory( WP_CONTENT_DIR . '/' . $dmp_folder );
+		}
+	}
+	unset( $dmp_folder );
+	// Where the active theme is, read from the disk: WordPress's kept list of themes may be from before the repo was there.
+	$dmp_theme_root = static function ( $pre, $option ) {
+		$name = (string) get_option( 'stylesheet_root' === $option ? 'stylesheet' : 'template' );
+		if ( '' === $name || false !== strpos( $name, '..' ) ) {
+			return $pre;
+		}
+		foreach ( DMP_LOCAL_MODE_THEME_FOLDERS as $folder ) {
+			if ( is_dir( WP_CONTENT_DIR . '/' . $folder . '/' . $name ) ) {
+				return '/' . $folder;
+			}
+		}
+		return $pre;
+	};
+	add_filter( 'pre_option_stylesheet_root', $dmp_theme_root, 10, 2 );
+	add_filter( 'pre_option_template_root', $dmp_theme_root, 10, 2 );
+	unset( $dmp_theme_root );
+}
 
 // Plugin and theme installs and updates write files directly instead of asking for FTP details.
 if ( ! defined( 'FS_METHOD' ) ) {
@@ -243,7 +316,9 @@ export function readLocalMode(docroot: string): SiteLocalMode {
   const blockedHosts = [...list.matchAll(/'([^']+)'/g)].map((m) => m[1] as string).filter((h) => hostname.safeParse(h).success);
   const uploads = UPLOADS_LINE.exec(text)?.[1];
   const uploadsFrom = uploads && hostname.safeParse(uploads).success ? uploads : null;
-  return { enabled: true, current: text === localModePlugin(blockedHosts, uploadsFrom), blockedHosts, ...(uploadsFrom ? { uploadsFrom } : {}) };
+  // What the disk has now: a repo added or moved since makes the file out of date.
+  const themes = themeFolders(docroot);
+  return { enabled: true, current: text === localModePlugin(blockedHosts, uploadsFrom, themes), blockedHosts, ...(themes.length ? { themeFolders: themes } : {}), ...(uploadsFrom ? { uploadsFrom } : {}) };
 }
 
 export async function setLocalMode(
@@ -258,8 +333,9 @@ export async function setLocalMode(
   const current = readLocalMode(docroot);
   const hosts = blockedHosts ?? (current.enabled ? current.blockedHosts : LOCAL_MODE_DEFAULT_BLOCKED_HOSTS);
   const uploads = uploadsFrom === undefined ? (current.uploadsFrom ?? null) : uploadsFrom;
-  const result = await installMuPlugin(exec, docroot, LOCAL_MODE_FILE, localModePlugin([...new Set(hosts)], uploads), 'devmagic-panel Local mode, local only');
+  const themes = themeFolders(docroot);
+  const result = await installMuPlugin(exec, docroot, LOCAL_MODE_FILE, localModePlugin([...new Set(hosts)], uploads, themes), 'devmagic-panel Local mode, local only');
   return result.code === 0
-    ? { ...result, stdout: `Local mode on: mail goes to Mailpit, ${hosts.length} host${hosts.length === 1 ? '' : 's'} blocked` }
+    ? { ...result, stdout: `Local mode on: mail goes to Mailpit, ${hosts.length} host${hosts.length === 1 ? '' : 's'} blocked${themes.length ? `, themes also read from ${themes.map((t) => `wp-content/${t}`).join(', ')}` : ''}` }
     : result;
 }

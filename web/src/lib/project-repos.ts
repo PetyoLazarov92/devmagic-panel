@@ -10,6 +10,8 @@ export interface RepoHelpers {
   media?: boolean;
   builds?: RepoBuild[];
   kind?: RepoLookup['kind'];
+  /** The theme is this folder of the repo. */
+  themeIn?: string;
   core?: RepoLookup['core'];
   uploads?: boolean;
   /** Its plugin folders, as paths in the repo. */
@@ -53,13 +55,13 @@ export function rowPlacement(row: RepoRow): RepoPlacement {
   if (row.placement) return row.placement;
   const kind = row.helpers?.kind ?? row.kind;
   // An added repo is never the site root by default: the main repo is.
-  const byKind = kind && kind !== 'site' ? placementForKind(kind, row.url) : null;
+  const byKind = kind && kind !== 'site' ? placementForKind(kind, row.url, row.helpers?.themeIn) : null;
   return byKind ?? { dir: 'wp-content/plugins', folder: placementForKind('plugin', row.url)?.folder ?? '' };
 }
 
 /** Where the main repo goes: what you or a last install chose, else by what the repo holds, else the site root. */
 export function placementOf(state: Pick<WizardState, 'placement' | 'helpers' | 'repoUrl'>): RepoPlacement {
-  return state.placement ?? (state.helpers?.kind ? placementForKind(state.helpers.kind, state.repoUrl.trim()) : null) ?? ROOT;
+  return state.placement ?? (state.helpers?.kind ? placementForKind(state.helpers.kind, state.repoUrl.trim(), state.helpers.themeIn) : null) ?? ROOT;
 }
 
 /** The main repo's row, from the wizard's own fields. */
@@ -148,7 +150,7 @@ export function makeMain(s: WizardState, url: string): WizardState {
   const old = mainRow(s);
   if (!row || !old) return s;
   // The old main repo keeps where it went, so it does not move to the plugins folder.
-  const kept: RepoRow = { ...old, placement: old.placement ?? (old.helpers?.kind ? placementForKind(old.helpers.kind, old.url) : null) ?? ROOT };
+  const kept: RepoRow = { ...old, placement: old.placement ?? (old.helpers?.kind ? placementForKind(old.helpers.kind, old.url, old.helpers.themeIn) : null) ?? ROOT };
   // As shown now, with the old main as a row of its own; the new main keeps its place in it.
   const shown = shownOrder<RepoRow | null>([null, ...s.extra], s.mainAt).map((r) => r ?? kept);
   const promoted = withMain({ ...s, repoUrl: '', extra: shown.filter((r) => r !== row), mainAt: shown.indexOf(row) }, row, listedOf(row));

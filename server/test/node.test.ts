@@ -122,6 +122,10 @@ describe('a build with nvm', () => {
       'vite failed\nwp-content/themes/wandworks: a package needs Node ^20.19.0 || >=22.12.0 and this build ran on 20.18.0: run nvm install 20 in a terminal for the newest Node 20 (or set a newer one in .nvmrc), then Retry',
     );
     expect(engineHint('added 30 packages in 2s')).toBeUndefined();
+    // A package with compiled code that has no build for this Node: an older Node, not a newer one.
+    const gyp = ["npm error ModuleNotFoundError: No module named 'distutils'", 'npm error gyp ERR! configure error', `npm error gyp ERR! cwd ${m.clone}/wp-content/themes/wandworks/node_modules/node-sass`, 'npm error gyp ERR! node -v v22.23.4', 'npm error gyp ERR! not ok'].join('\n');
+    expect(engineHint(gyp)).toBe("node-sass has no ready build on Node 22 and could not compile itself: node-sass 7 and older run on Node 16. Put that version in the repo's .nvmrc, run nvm install for it in a terminal, then Retry");
+    expect(engineHint(gyp.replace('node-sass', 'bufferutil'))).toContain('bufferutil has no ready build on Node 22');
   });
 
   it('gives no Node hint for a package that only lists older Nodes', () => {

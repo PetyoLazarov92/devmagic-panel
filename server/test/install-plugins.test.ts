@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { installPlugins, missingOnSite, pluginPresent, removeInstalled, slugOf } from '../src/sites/install-plugins.js';
@@ -27,7 +27,7 @@ describe('installing missing plugins from WordPress.org', () => {
     expect(out.failed).toEqual(['wandworks-pro']);
     expect(out.installed).toEqual([join(plugins, 'redirection'), join(plugins, 'duplicate-post')]);
     const text = out.results.map((r) => r.stdout).join('\n');
-    expect(text).toContain('warn: wandworks-pro was not installed: No plugins installed.');
+    expect(text).toContain('warn: wandworks-pro was not installed: Plugin not found.');
     expect(text).toContain('redirection: installed 5.5.1 from WordPress.org, checksums match');
     expect(text).toContain('installed 2 of 3; not installed: wandworks-pro');
     expect(out.results.every((r) => r.code === 0)).toBe(true);
@@ -60,6 +60,41 @@ describe('installing missing plugins from WordPress.org', () => {
     expect(existsSync(join(plugins, 'tampered'))).toBe(false);
     expect(text).toContain('akismet: wp-content/plugins/akismet is there already; left as it is');
     expect(out.installed).toEqual([join(plugins, 'old-slider')]);
+  });
+
+  it('moves an upgrade folder the web server made aside for the run and puts it back, and says why WordPress installed nothing', async () => {
+    const t = wpSiteTree();
+    const content = join(t.docroot, 'wp-content');
+    const upgrade = join(content, 'upgrade');
+    mkdirSync(upgrade, { recursive: true });
+    writeFileSync(join(upgrade, 'index.php'), '<?php // Silence is golden.');
+    chmodSync(upgrade, 0o555);
+    const fake = fakeExec({
+      [`${base(t.docroot)} plugin install`]: (call: FakeCall) => {
+        const slug = call.args[4] as string;
+        // WordPress unpacks here first: the folder has to be one you can write in.
+        try {
+          mkdirSync(join(upgrade, slug), { recursive: true });
+        } catch {
+          return { code: 1, stderr: `Warning: ${slug}: Could not create directory. "${upgrade}/${slug}"\nError: No plugins installed.` };
+        }
+        if (slug === 'wandworks-pro') return { code: 1, stderr: 'Warning: wandworks-pro: Plugin not found.\nError: No plugins installed.' };
+        mkdirSync(join(content, 'plugins', slug), { recursive: true });
+        return { stdout: 'Success: Installed 1 of 1 plugins.' };
+      },
+      [`${base(t.docroot)} plugin verify-checksums`]: { stdout: 'Success: Verified 1 of 1 plugins.' },
+    });
+    const out = await installPlugins(fake.exec, t.docroot, 'local.shop.com', [{ slug: 'redirection' }, { slug: 'wandworks-pro' }]);
+    chmodSync(upgrade, 0o755);
+    const text = out.results.map((r) => r.stdout).join('\n');
+    expect(out.failed).toEqual(['wandworks-pro']);
+    expect(text).toContain('wp-content/upgrade was made by the web server and you cannot write in it: moved aside for this run and put back after');
+    expect(text).toContain('redirection: installed the latest version from WordPress.org');
+    expect(text).toContain('warn: wandworks-pro was not installed: Plugin not found.');
+    // Back as it was, with nothing of the run in it.
+    expect(readFileSync(join(upgrade, 'index.php'), 'utf8')).toContain('Silence is golden');
+    expect(existsSync(join(upgrade, 'redirection'))).toBe(false);
+    expect(existsSync(join(content, 'upgrade.devmagic-panel-aside'))).toBe(false);
   });
 
   it('finds what a live site lacks: every site of a network, network-wide, and what production had installed', async () => {

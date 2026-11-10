@@ -1,5 +1,6 @@
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from 'node:fs';
 import { join } from 'node:path';
+import { themeFolders } from '../sites/local-mode.js';
 
 /**
  * The lowest PHP a site's code asks for: composer.json's require.php, the
@@ -64,8 +65,10 @@ export function readPhpRequirements(docroot: string): { version: string; sources
       return [];
     }
   };
-  for (const theme of dirs(join(content, 'themes'))) {
-    const v = header(head(join(content, 'themes', theme, 'style.css')), 'Requires PHP');
+  // The themes folder, and each repo in wp-content/repos that holds a theme in a folder of its own.
+  const themeRoots = [join(content, 'themes'), ...themeFolders(docroot).map((f) => join(content, f))];
+  for (const [root, theme] of themeRoots.flatMap((root) => dirs(root).map((theme) => [root, theme] as const))) {
+    const v = header(head(join(root, theme, 'style.css')), 'Requires PHP');
     if (v && minor(v)) found.push({ version: minor(v) as string, source: `theme ${theme}` });
   }
   for (const plugin of dirs(join(content, 'plugins'))) {

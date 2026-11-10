@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { LocalHelperPlugin, RepoInspection, RepoLookup } from '@devmagic-panel/shared';
-import { classifyRepo, holdsCore, LOCAL_HELPER_PLUGINS, MEDIA_PLUGIN } from '@devmagic-panel/shared';
+import { classifyRepo, holdsCore, LOCAL_HELPER_PLUGINS, MEDIA_PLUGIN, themeFolderIn } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { BUILD_FILES, composerPlugins, planBuilds, SKIPPED_DIRS } from './builds.js';
 import { NO_PROMPTS } from './git.js';
@@ -126,11 +126,15 @@ export async function repoLookup(exec: Executor, workDir: string, url: string, b
     const env = 'error' in choice ? {} : nodeEnv(choice);
     const tools = await Promise.all((['composer', 'npm', 'yarn', 'pnpm'] as const).map(async (tool) => ((await exec(tool, ['--version'], { timeoutMs: 15_000, env })).code === 0 ? [tool] : [])));
     const version = /\$wp_version\s*=\s*'([^']+)'/.exec(text.get('wp-includes/version.php') ?? '')?.[1];
+    const topKind = classifyRepo(top);
+    // Tooling on top and the theme in a folder of the repo.
+    const themeIn = topKind === 'other' ? themeFolderIn(paths) : undefined;
     return {
       helpers: (Object.keys(LOCAL_HELPER_PLUGINS) as LocalHelperPlugin[]).filter(has),
       mediaPlugin: has(MEDIA_PLUGIN),
       builds: planBuilds(files, new Set(tools.flat())),
-      kind: classifyRepo(top),
+      kind: themeIn ? 'theme' : topKind,
+      ...(themeIn ? { themeIn } : {}),
       ...(withCore ? { core: version ? { version } : {} } : {}),
       ...([...paths].some((p) => p.startsWith('wp-content/uploads/') || p.startsWith('uploads/')) ? { uploads: true } : {}),
       plugins: [...new Set([...paths].flatMap((p) => /^((?:.*?\/)?plugins\/[^/]+)/.exec(p)?.[1] ?? []))].filter((p) => !p.split('/').includes('node_modules') && !p.split('/').includes('vendor')).slice(0, 2000),

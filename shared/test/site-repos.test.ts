@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { actions, legacyCreateInput, presetPlacement } from '../src/actions.js';
-import { cloneFolder, holdsCore, placementForKind, placementForLayout, placementProblems, placementWarnings, repoBaseName, repoTarget, siteDir, throughCoreLink } from '../src/site-repos.js';
+import { cloneFolder, holdsCore, looksLikeTheme, placementForKind, themeFolderIn, placementForLayout, placementProblems, placementWarnings, repoBaseName, repoTarget, siteDir, throughCoreLink } from '../src/site-repos.js';
 
 const URL = 'git@github.com:wandworks/wandworks-blocks.git';
 const base = {
@@ -42,6 +42,24 @@ describe('where a repo goes', () => {
     expect(placementProblems([{ dir: '', folder: '' }, { dir: 'wp-content/plugins', folder: 'x' }, { dir: 'wp-content/plugins/x', folder: 'inner' }])).toEqual([]);
     expect(placementProblems([{ dir: '', folder: '' }, { dir: '', folder: '' }])).toEqual(['Only one repo can be the site root']);
     expect(placementProblems([{ dir: 'wp-content/plugins', folder: 'x' }, { dir: 'wp-content', folder: 'plugins/x' as string }])).toEqual(['Two repos go to wp-content/plugins/x']);
+  });
+
+  it('finds a theme in a folder of its repo, style.css built or not, and sends that repo to wp-content/repos', () => {
+    expect(looksLikeTheme(['style.css', 'functions.php'])).toBe(true);
+    // The build makes style.css: functions.php, index.php and one more file only a theme has.
+    expect(looksLikeTheme(['functions.php', 'index.php', 'header.php', 'sass'])).toBe(true);
+    expect(looksLikeTheme(['functions.php', 'index.php'])).toBe(false);
+    expect(looksLikeTheme(['style.css', 'index.php'])).toBe(false);
+    const repo = ['package.json', 'gulpfile.js', 'README.md', 'wandworks/functions.php', 'wandworks/index.php', 'wandworks/screenshot.png', 'wandworks/inc/setup.php'];
+    expect(themeFolderIn(repo)).toBe('wandworks');
+    expect(themeFolderIn(['package.json', 'src/index.php'])).toBeUndefined();
+    // Two themes in one repo, or one in a folder tools fill: you place it.
+    expect(themeFolderIn([...repo, 'wandworks-child/functions.php', 'wandworks-child/style.css'])).toBeUndefined();
+    expect(themeFolderIn(['vendor/functions.php', 'vendor/style.css'])).toBeUndefined();
+    const url = 'git@github.com:wandworks/theme-kit.git';
+    expect(placementForKind('theme', url)).toEqual({ dir: 'wp-content/themes', folder: 'theme-kit' });
+    expect(placementForKind('theme', url, 'wandworks')).toEqual({ dir: 'wp-content/repos', folder: 'theme-kit' });
+    expect(placementWarnings('wp-content/repos/theme-kit')).toEqual(['WordPress reads the theme inside this repo under its own name through Local mode, so Local mode has to stay on for this site']);
   });
 
   it('warns about core and uploads in a repo without refusing them', () => {

@@ -70,8 +70,8 @@ export function useRepoLookups(state: WizardState, setState: SetState) {
         busy.current.add(key);
         setState((s) => updateRow(s, row.url, (r) => ({ ...r, helpers: { key } })));
         api.repoHelpers(row.url, row.branch).then(
-          ({ helpers: list, mediaPlugin, builds, kind, core, uploads, plugins }) =>
-            setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) } }))),
+          ({ helpers: list, mediaPlugin, builds, kind, themeIn, core, uploads, plugins }) =>
+            setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(themeIn ? { themeIn } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) } }))),
           (err: Error) => setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, error: err.message } }))),
         );
       }
@@ -201,7 +201,7 @@ function RepoCard({ row, main, state, setState, site, sites, onRemove, extras }:
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[13px] font-medium break-all">{row.fullName ?? row.url}</span>
             {main && <Badge tone="primary">Main</Badge>}
-            {kind && kind !== 'other' && <Badge>{REPO_KIND_LABELS[kind]}</Badge>}
+            {kind && kind !== 'other' && <Badge>{row.helpers?.themeIn ? `Theme, in the repo's ${row.helpers.themeIn} folder` : REPO_KIND_LABELS[kind]}</Badge>}
           </span>
           {row.fullName && <span className="font-mono text-[12px] break-all text-muted-foreground">{row.url}</span>}
         </div>

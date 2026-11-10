@@ -1,5 +1,14 @@
 # Changelog
 
+### v1.33.0 (2026-11-10)
+* **Fix:** missing plugins install on a site whose `wp-content/upgrade` folder the web server made (WordPress's own updates do that minutes after an install). You cannot write in that folder, so every plugin ended in "No plugins installed". It is now moved aside for the run, in the same folder, and put back after as it was
+* **Sites:** a plugin that was not installed says why (WordPress's own warning, like "Plugin not found." or "Could not create directory."), no longer only "No plugins installed."
+* **Sites:** a build that fails because a package with compiled code (node-sass, most often) has no ready build for the Node in use says so, and that the repo needs an older Node in its `.nvmrc`, under the long compiler output
+* **Sites:** a repo that keeps its theme in a folder of its own, with the tooling on top, is recognized as a theme. The wizard places it in `wp-content/repos`, and Local mode makes each repo there one more themes folder for WordPress. The theme is found under its own name, the one production's database has, so nothing is copied, linked or changed in the database and a refresh from production keeps working. It needs Local mode on
+* **Sites:** a theme whose `style.css` the build makes is recognized as a theme, by its `functions.php`, `index.php` and a file only a theme has
+* **Local mode:** its file is version 5. A site with the older one shows it as out of date, and Aura offers to rewrite it
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.32.2 (2026-11-10)
 * **Fix:** a dump from MariaDB 10.10 or later imports into MySQL: it no longer stops with `Unknown collation: 'utf8mb3_uca1400_ai_ci'`. Those collations (`utf8mb4_uca1400_ai_ci` and the like) are translated to the `unicode_520_ci` collation of the same character set as the dump streams in, in table definitions and settings only, never in rows. It applies to every import: a new site, Import a database, a snapshot restore and Services, MySQL. A case-sensitive or accent-sensitive one becomes the plain `unicode_520_ci` too
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

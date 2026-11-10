@@ -90,6 +90,8 @@ not a local name.
   It:
   - sends all mail to Mailpit (`127.0.0.1:1025`), tagged with the site so the
     Mail page can show it;
+  - reads the theme of a repo in `wp-content/repos` that keeps it in a folder
+    of its own, under the theme's own name;
   - tells search engines not to index, and shows a Local label after the site
     name in the admin bar;
   - accepts logins only from this computer (Apache answers on every network

@@ -146,5 +146,19 @@ export function engineHint(output: string): string | undefined {
     if (!range.split('||').some((r) => newerFits(r.trim(), Number(major)))) continue;
     return `a package needs Node ${range} and this build ran on ${major}${rest}: run nvm install ${major} in a terminal for the newest Node ${major} (or set a newer one in .nvmrc), then Retry`;
   }
-  return undefined;
+  return nativeHint(output);
+}
+
+/**
+ * What to do when a package with compiled code (node-sass, most often) had no
+ * ready build for this Node and could not compile itself: the repo was made
+ * for an older Node and says so nowhere, and no newer Node will help.
+ */
+function nativeHint(output: string): string | undefined {
+  if (!/gyp ERR!/.test(output)) return undefined;
+  const node = /gyp ERR! node -v v(\d+)/.exec(output)?.[1];
+  const pkg = /gyp ERR! cwd \S*\/node_modules\/((?:@[\w.-]+\/)?[\w.-]+)/.exec(output)?.[1] ?? 'a package';
+  const on = node ? ` on Node ${node}` : '';
+  const older = pkg === 'node-sass' ? 'node-sass 7 and older run on Node 16' : 'an older Node, the one the repo was made for, has one';
+  return `${pkg} has no ready build${on} and could not compile itself: ${older}. Put that version in the repo's .nvmrc, run nvm install for it in a terminal, then Retry`;
 }

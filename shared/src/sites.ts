@@ -210,6 +210,8 @@ export interface SiteLocalMode {
   /** False when the file on disk is an older version than the panel writes. */
   current: boolean;
   blockedHosts: string[];
+  /** Repos in wp-content/repos with a theme in a folder of theirs: each is one more themes folder to WordPress. */
+  themeFolders?: string[];
   /** Production host the plugin sends missing uploads to, for vhosts the panel did not make. */
   uploadsFrom?: string;
 }
@@ -930,6 +932,8 @@ export interface RepoLookup {
   builds: RepoBuild[];
   /** What the repo holds by its top level: a whole site, wp-content, a theme or a plugin. */
   kind?: 'site' | 'wp-content' | 'theme' | 'plugin' | 'other';
+  /** The theme is this folder of the repo, not the repo itself: it goes to wp-content/repos, which Local mode makes a themes folder. */
+  themeIn?: string;
   /** It holds WordPress core (wp-admin and wp-includes), and the version its wp-includes/version.php names. */
   core?: { version?: string };
   /** It keeps media in wp-content/uploads. */

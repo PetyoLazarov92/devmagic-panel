@@ -684,14 +684,14 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
     const timer = window.setTimeout(() => {
       setState((s) => ({ ...s, helpers: { key: helpersKey } }));
       api.repoHelpers(repoUrl, state.branch).then(
-        ({ helpers: list, mediaPlugin, builds, kind, core, uploads, plugins }) =>
+        ({ helpers: list, mediaPlugin, builds, kind, themeIn, core, uploads, plugins }) =>
           // Nothing is ticked for you: you pick the helpers to turn on. A repo with core of its own uses it, unless you chose.
           setState((s) =>
             s.helpers?.key !== helpersKey
               ? s
               : {
                   ...s,
-                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) },
+                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(kind ? { kind } : {}), ...(themeIn ? { themeIn } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) },
                   activate: s.activate.filter((slug) => list.includes(slug)),
                   coreMode: core && !s.passed.wordpress ? 'repo' : !core && s.coreMode === 'repo' ? 'wpcore' : s.coreMode,
                 },

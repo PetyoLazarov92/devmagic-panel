@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { type ClaudeEffort, type ClaudeRun, claudeRun, hostname } from './actions.js';
 import { gitlabHost, namespaceRef } from './repo-host.js';
 import { type InstallHow } from './sites.js';
-import { placementForKind, type RepoPlacement } from './site-repos.js';
+import { looksLikeTheme, placementForKind, type RepoPlacement } from './site-repos.js';
 
 /**
  * Installing a site from a GitHub organization or a GitLab group: the repos
@@ -174,7 +174,7 @@ export function classifyRepo(names: string[]): RepoKind {
   const has = (n: string) => names.includes(n);
   if (has('wp-config-sample.php') || has('wp-includes') || has('wp-admin') || has('wp-content')) return 'site';
   if (has('themes') && has('plugins')) return 'wp-content';
-  if (has('style.css') && has('functions.php')) return 'theme';
+  if (looksLikeTheme(names)) return 'theme';
   if (has('readme.txt') && names.some((n) => n.endsWith('.php'))) return 'plugin';
   return 'other';
 }

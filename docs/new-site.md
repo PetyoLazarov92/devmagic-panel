@@ -38,6 +38,13 @@ one first), where it goes in the site and the folder it is cloned into.
   folder itself. The wizard starts from what the repo holds: a whole site at
   the root, wp-content as `wp-content`, a theme or plugin in its folder named
   after the repo. The full path shows under the fields.
+- **A theme in a folder of its repo** (tooling on top, the theme in
+  `wandworks/`): the wizard says so and places the repo in
+  `wp-content/repos`. Local mode makes each repo there one more themes
+  folder for WordPress, so the theme is found under its own name, the one
+  production's database has. Nothing is copied or linked and the database is
+  not changed, so a refresh from production keeps working. It needs Local
+  mode on. A theme whose `style.css` the build makes is still recognized.
 - **More than one repo**: up to 10, each in its own folder. Two repos never go
   to one path and only one can be the site root. A repo inside another one's
   folder is cloned after it and listed in that repo's local

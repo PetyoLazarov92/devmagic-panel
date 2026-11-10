@@ -1714,6 +1714,8 @@ export const mockApi: Api = {
       { dir: 'wp-content/plugins/wandworks-forms', tool: 'npm', scripts: ['build'], script: 'build', needed: false, why: 'a wordpress.org plugin, built already', builtInRepo: true },
       { dir: 'wp-content/plugins/wandworks-maps', tool: 'composer', scripts: [], needed: false, why: 'its vendor/ is in the repo', builtInRepo: true },
     ];
+    // A repo with tooling on top and its theme in a folder of its own.
+    if (/theme-kit/i.test(url)) return { helpers: [], mediaPlugin: false, builds: [{ dir: '', tool: 'npm', scripts: ['build'], script: 'build', needed: true, why: 'wandworks/style.css is ignored by git' }], kind: 'theme', themeIn: 'wandworks' };
     return { helpers: /spellbook/i.test(url) && branch === 'develop' ? ['query-monitor', 'user-switching'] : ['query-monitor'], mediaPlugin: true, builds };
   },
   startJob: async (id, input) => {

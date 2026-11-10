@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs';
+import { accessSync, constants, existsSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DumpPlugin } from '@devmagic-panel/shared';
 import type { ExecResult, Executor } from '../exec.js';
@@ -24,6 +24,54 @@ export interface PluginToInstall {
 
 const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 const lastLine = (r: ExecResult) => (r.stderr || r.stdout).trim().split('\n').filter(Boolean).at(-1)?.replace(/^Error:\s*/, '') ?? `exit ${r.code}`;
+/**
+ * Why WP-CLI installed nothing: its last line only says "No plugins
+ * installed.", and the reason is the warning before it ("Plugin not found.",
+ * "Could not create directory.").
+ */
+function reason(r: ExecResult, slug: string): string {
+  const warning = `${r.stdout}\n${r.stderr}`.split('\n').map((l) => l.trim()).filter((l) => /^Warning:/.test(l)).at(-1);
+  return warning ? warning.replace(/^Warning:\s*/, '').replace(new RegExp(`^${slug}:\\s*`), '') : lastLine(r);
+}
+
+const writable = (path: string): boolean => {
+  try {
+    accessSync(path, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * WordPress unpacks a plugin in wp-content/upgrade first. Once the web server
+ * made that folder (its own updates, minutes after an install), you cannot
+ * write in it and every install ends in "Could not create directory". It only
+ * holds work in progress, so it is moved aside for the run, in the same
+ * folder, and put back after, as it was. Returns how to put it back.
+ */
+export function ownUpgradeFolder(docroot: string): { note?: string; restore: () => void } {
+  const upgrade = join(docroot, 'wp-content', 'upgrade');
+  const aside = join(docroot, 'wp-content', 'upgrade.devmagic-panel-aside');
+  const restore = () => {
+    if (!existsSync(aside)) return;
+    try {
+      rmSync(upgrade, { recursive: true, force: true });
+      renameSync(aside, upgrade);
+    } catch {
+      // Left aside: the next run puts it back.
+    }
+  };
+  // One left from a run that was cut short.
+  restore();
+  if (!existsSync(upgrade) || writable(upgrade)) return { restore: () => undefined };
+  try {
+    renameSync(upgrade, aside);
+  } catch {
+    return { note: 'warn: wp-content/upgrade was made by the web server and you cannot write in it, so WordPress has nowhere to unpack a plugin', restore: () => undefined };
+  }
+  return { note: 'wp-content/upgrade was made by the web server and you cannot write in it: moved aside for this run and put back after', restore };
+}
 /** What verify-checksums says when a file differs, is missing or was added: anything but "no checksums for this version". */
 const MISMATCH = /doesn't verify against checksum|File is missing|File was added|Plugin doesn't verify/i;
 
@@ -39,7 +87,15 @@ export async function installPlugins(exec: Executor, docroot: string, host: stri
   const results: ExecResult[] = [];
   const installed: string[] = [];
   const failed: string[] = [];
-  for (const { slug, version } of plugins) {
+  const upgrade = plugins.length ? ownUpgradeFolder(docroot) : { restore: () => undefined };
+  if (upgrade.note) results.push(ok(upgrade.note));
+  try {
+    await each();
+  } finally {
+    upgrade.restore();
+  }
+  async function each(): Promise<void> {
+   for (const { slug, version } of plugins) {
     const folder = join(docroot, 'wp-content', 'plugins', slug);
     if (existsSync(folder)) {
       results.push(ok(`${slug}: wp-content/plugins/${slug} is there already; left as it is`));
@@ -52,7 +108,7 @@ export async function installPlugins(exec: Executor, docroot: string, host: stri
       if (existsSync(folder)) rmSync(folder, { recursive: true, force: true });
       const latest = await wp(['plugin', 'install', slug]);
       if (latest.code === 0) {
-        results.push(ok(`${slug}: ${version}, production's version, is not on WordPress.org (${lastLine(r)}); took the latest instead`));
+        results.push(ok(`${slug}: ${version}, production's version, is not on WordPress.org (${reason(r, slug)}); took the latest instead`));
         got = 'the latest version';
       }
       r = latest;
@@ -60,7 +116,7 @@ export async function installPlugins(exec: Executor, docroot: string, host: stri
     if (r.code !== 0) {
       if (existsSync(folder)) rmSync(folder, { recursive: true, force: true });
       failed.push(slug);
-      results.push(ok(`warn: ${slug} was not installed: ${lastLine(r)}`));
+      results.push(ok(`warn: ${slug} was not installed: ${reason(r, slug)}`));
       continue;
     }
     const check = await wp(['plugin', 'verify-checksums', slug]);
@@ -73,6 +129,7 @@ export async function installPlugins(exec: Executor, docroot: string, host: stri
     installed.push(folder);
     await excludeLocally(exec, folder, 'devmagic-panel: installed from WordPress.org for this local copy');
     results.push(ok(`${slug}: installed ${got} from WordPress.org${check.code === 0 ? ', checksums match' : ', WordPress.org has no checksums for it'}`));
+   }
   }
   const done = plugins.length - failed.length;
   results.push(ok(failed.length ? `installed ${done} of ${plugins.length}; not installed: ${failed.join(', ')}` : `installed ${done} plugin${done === 1 ? '' : 's'} from WordPress.org`));
