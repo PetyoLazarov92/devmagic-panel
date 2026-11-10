@@ -1,4 +1,4 @@
-import type { AddressInput, DumpPlugin, InstallDraft, ServerFiles, RepoTrustAnswer, WporgPlugin, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
+import type { AddressInput, DumpPlugin, DumpTheme, InstallDraft, ServerFiles, RepoTrustAnswer, WporgPlugin, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
 import { actions, addressSummary, presetPlacement, repoTarget, branchName, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin } from '@devmagic-panel/shared';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, TriangleAlert, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -35,7 +35,7 @@ import { answersHash, stepViews } from '@/lib/steps';
 import { useAsync } from '@/lib/use-async';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import { allRows, placementOf, type RepoHelpers, type RepoRow, rowPlacement } from '@/lib/project-repos';
-import { askWporg, defaultPick, missingPlugins, onServer, pluginChoices, type PluginPick, pluginSlug, repoPluginPaths } from '@/lib/missing-plugins';
+import { askWporg, defaultPick, defaultThemePick, missingPlugins, missingThemes, onServer, pluginChoices, type PluginPick, pluginSlug, repoPluginPaths, repoThemeNames, themeChoices, type ThemePick } from '@/lib/missing-plugins';
 import { pastedRepo } from '@/lib/org-repos';
 import { asideUploads } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
@@ -120,6 +120,10 @@ export interface WizardState {
   wporg: Record<string, WporgPlugin | null>;
   /** The plugins the last install of the repo installed from WordPress.org, ticked again. */
   rememberedPlugins: string[];
+  /** What you chose for each theme the dump uses that no repo brings, by its folder. */
+  themePicks?: Record<string, ThemePick>;
+  /** WordPress.org's answer for each missing theme. */
+  wporgThemes?: Record<string, WporgPlugin | null>;
   /** The server the dump was exported from and its WordPress folder: what the dump names and nothing else has can be copied from there. No secret. */
   serverFrom?: { host: string; folder: string; wpCli?: string } | null;
   /** That server's password, when it asks for one: held for this visit only, sent with the install, never in a draft. */
@@ -314,6 +318,15 @@ export function missingOf(state: WizardState): { missing: DumpPlugin[]; reading:
   return { missing: reading ? [] : missingPlugins(plugins, present), reading };
 }
 
+/** The themes the dump's sites use that none of the install's repos brings. */
+export function missingThemesOf(state: WizardState): DumpTheme[] {
+  const themes = state.upload?.facts.themes;
+  if (state.source !== 'repo' || state.noDump || !themes?.length) return [];
+  const rows = placedRows(state);
+  if (rows.some((r) => !r.helpers || (!r.helpers.plugins && !r.helpers.error && !r.helpers.list))) return [];
+  return missingThemes(themes, repoThemeNames(rows.map((r) => ({ placement: r.placement, ...(r.helpers?.themes ? { themes: r.helpers.themes } : {}), ...(r.helpers?.themeIn ? { themeIn: r.helpers.themeIn } : {}) }))));
+}
+
 /** The request the server gets, built from what the wizard collected. */
 export function toInput(state: WizardState): CreateSiteInput {
   const { under, replace, locals: names } = addressesOf(state);
@@ -330,6 +343,7 @@ export function toInput(state: WizardState): CreateSiteInput {
   const active = new Set(state.upload?.facts.activePlugins ?? []);
   // The local helpers any of the repos has.
   const missing = pluginChoices(missingOf(state).missing, state.pluginPicks, state.wporg, state.rememberedPlugins, state.serverHas);
+  const themes = themeChoices(missingThemesOf(state), state.themePicks ?? {}, state.wporgThemes ?? {}, state.serverHas);
   const helpers = state.helpers?.list || state.extra.some((r) => r.helpers?.list) ? [...new Set([...(state.helpers?.list ?? []), ...state.extra.flatMap((r) => r.helpers?.list ?? [])])] : undefined;
   return {
     source: state.source,
@@ -359,8 +373,9 @@ export function toInput(state: WizardState): CreateSiteInput {
     // BE Media from Production loading the images is never also deactivated; a missing plugin you chose to turn off joins the list.
     deactivate: isRepo && state.upload && !state.noDump ? [...new Set([...state.deactivate, ...missing.off])].filter((slug) => !(via === 'plugin' && uploadsOk && slug === MEDIA_PLUGIN)) : [],
     installPlugins: isRepo && state.upload && !state.noDump ? missing.install : [],
-    ...(isRepo && state.upload && !state.noDump && state.serverFrom && missing.copy.length
-      ? { copyFromServer: { ...state.serverFrom, plugins: missing.copy, themes: [], ...(state.serverSecret ? { password: state.serverSecret } : {}) } }
+    installThemes: isRepo && state.upload && !state.noDump ? themes.install : [],
+    ...(isRepo && state.upload && !state.noDump && state.serverFrom && missing.copy.length + themes.copy.length
+      ? { copyFromServer: { ...state.serverFrom, plugins: missing.copy, themes: themes.copy, ...(state.serverSecret ? { password: state.serverSecret } : {}) } }
       : {}),
     ...(isRepo && state.upload && !state.noDump && state.cleanCopy && state.source !== 'empty' ? { clean: { user: cleanUserOf(state, (state.adminUser ?? defaults.user).trim(), state.adminPassword ?? defaults.password) } } : {}),
     // Only helpers a repo has, not the ones the dump has on already, and never one set to deactivate.
@@ -693,14 +708,14 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
     const timer = window.setTimeout(() => {
       setState((s) => ({ ...s, helpers: { key: helpersKey } }));
       api.repoHelpers(repoUrl, state.branch).then(
-        ({ helpers: list, mediaPlugin, builds, nodes, kind, themeIn, core, uploads, plugins }) =>
+        ({ helpers: list, mediaPlugin, builds, nodes, kind, themeIn, core, uploads, plugins, themes }) =>
           // Nothing is ticked for you: you pick the helpers to turn on. A repo with core of its own uses it, unless you chose.
           setState((s) =>
             s.helpers?.key !== helpersKey
               ? s
               : {
                   ...s,
-                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(nodes ? { nodes } : {}), ...(kind ? { kind } : {}), ...(themeIn ? { themeIn } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}) },
+                  helpers: { key: helpersKey, list, media: mediaPlugin, builds, ...(nodes ? { nodes } : {}), ...(kind ? { kind } : {}), ...(themeIn ? { themeIn } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}), ...(themes ? { themes } : {}) },
                   activate: s.activate.filter((slug) => list.includes(slug)),
                   coreMode: core && !s.passed.wordpress ? 'repo' : !core && s.coreMode === 'repo' ? 'wpcore' : s.coreMode,
                 },
@@ -1770,9 +1785,17 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
       .finally(() => setAsking(false));
   };
   useEffect(ask, [unknown.join('|')]);
+  // The themes the dump's sites use that no repo brings, asked about the same way.
+  const themes = missingThemesOf(state);
+  const wporgThemes = state.wporgThemes ?? {};
+  const unknownThemes = themes.map((t) => t.name).filter((name) => !(name in wporgThemes));
+  useEffect(() => {
+    if (unknownThemes.length === 0) return;
+    void askWporg(unknownThemes, api.wporgThemes).then(({ answers }) => set('wporgThemes', { ...wporgThemes, ...answers }));
+  }, [unknownThemes.join('|')]);
   // What WordPress.org does not have may be on the server the dump came from: read once, only then.
   const from = state.serverFrom ?? null;
-  const notOnWporg = missing.some((p) => state.wporg[pluginSlug(p)] === null);
+  const notOnWporg = missing.some((p) => state.wporg[pluginSlug(p)] === null) || themes.some((t) => wporgThemes[t.name] === null);
   const [readingServer, setReadingServer] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const readServer = () => {
@@ -1790,7 +1813,36 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
   const pick = (file: string, p: PluginPick) => set('pluginPicks', { ...state.pluginPicks, [file]: p });
   const active = missing.filter((p) => p.active);
   const inactive = missing.filter((p) => !p.active);
-  const copies = pluginChoices(missing, state.pluginPicks, state.wporg, state.rememberedPlugins, state.serverHas).copy.length;
+  const copies = pluginChoices(missing, state.pluginPicks, state.wporg, state.rememberedPlugins, state.serverHas).copy.length + themeChoices(themes, state.themePicks ?? {}, wporgThemes, state.serverHas).copy.length;
+  const themeRow = (t: DumpTheme) => {
+    const wp = wporgThemes[t.name];
+    const there = state.serverHas?.themes.find((x) => x.name === t.name);
+    const value = state.themePicks?.[t.name] ?? defaultThemePick(t, wp, state.serverHas);
+    const options: Array<[ThemePick, string]> = [
+      ...(wp ? ([['install', 'Install']] as Array<[ThemePick, string]>) : []),
+      ...(there && from ? ([['server', 'Copy from the server']] as Array<[ThemePick, string]>) : []),
+      ['leave', "Don't install"],
+    ];
+    return (
+      <li key={t.name} className="grid gap-1.5 rounded-lg border px-3 py-2.5 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{wp?.name ?? t.name}</span>
+          <code className="font-mono text-[12px] text-muted-foreground">wp-content/themes/{t.name}</code>
+          {t.parent ? <Badge>parent of the active theme</Badge> : <Badge tone="warning">active{t.sites !== undefined && t.sites > 1 ? ` on ${t.sites} sites` : ''}</Badge>}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {wp === undefined
+            ? 'Asking WordPress.org...'
+            : wp
+              ? `On WordPress.org${t.version ? `: installs ${t.version}, production's version (latest ${wp.version})` : `, latest ${wp.version}`}.`
+              : there && from
+                ? `Not on WordPress.org: a paid or custom theme. ${from.host} has it${there.version ? `, version ${there.version}` : ''}: it can be copied from there, reading only.`
+                : 'Not on WordPress.org: a paid or custom theme. Without it WordPress shows a blank page or falls back to a default theme: add its repo on the Code step, or get it from production.'}
+        </p>
+        <Segmented label={`What to do with the theme ${t.name}`} value={value} onChange={(v) => set('themePicks', { ...(state.themePicks ?? {}), [t.name]: v })} options={options} className="justify-self-start" />
+      </li>
+    );
+  };
   const row = (p: DumpPlugin) => {
     const slug = pluginSlug(p);
     const wp = state.wporg[slug];
@@ -1862,6 +1914,13 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
               <ul className="mt-3 grid gap-2">{inactive.map(row)}</ul>
             </details>
           )}
+        </>
+      )}
+      {themes.length > 0 && (
+        <>
+          <h2 className="mt-2 text-sm font-semibold">Missing themes</h2>
+          <p className="-mt-2 text-xs text-muted-foreground">The dump's sites use {themes.length === 1 ? 'this theme' : 'these themes'}, and none of the repos brings {themes.length === 1 ? 'it' : 'them'}. Installed after the import, never activated: the database already says which theme is on.</p>
+          <ul className="grid gap-2">{themes.map(themeRow)}</ul>
         </>
       )}
     </>

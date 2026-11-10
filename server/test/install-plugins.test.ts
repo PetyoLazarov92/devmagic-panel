@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { installPlugins, missingOnSite, pluginPresent, removeInstalled, slugOf } from '../src/sites/install-plugins.js';
+import { installPlugins, installThemes, missingOnSite, missingThemesOnSite, pluginPresent, removeInstalled, slugOf } from '../src/sites/install-plugins.js';
 import { RunStore } from '../src/store.js';
 import { wporgPlugins } from '../src/wporg-plugins.js';
 import { fakeExec, type FakeCall, wpSiteTree } from './helpers.js';
@@ -137,5 +137,43 @@ describe('installing missing plugins from WordPress.org', () => {
     await wporgPlugins(['redirection', 'wandworks-pro', 'down'], store, fetcher, now + 3_600_000);
     expect(asked.filter((s) => s === 'redirection')).toHaveLength(1);
     expect(asked.filter((s) => s === 'down')).toHaveLength(2);
+  });
+});
+
+describe('missing themes', () => {
+  it('lists each site\'s theme and a child\'s parent that the files lack, counting a theme in wp-content/repos as there', async () => {
+    const t = wpSiteTree();
+    mkdirSync(join(t.docroot, 'wp-content/themes/twentytwentyfive'), { recursive: true });
+    mkdirSync(join(t.docroot, 'wp-content/repos/theme-kit/wandworks'), { recursive: true });
+    for (const f of ['functions.php', 'index.php', 'header.php']) writeFileSync(join(t.docroot, 'wp-content/repos/theme-kit/wandworks', f), '<?php');
+    const fake = fakeExec({
+      [`${base(t.docroot)} site list`]: { code: 1, stderr: 'Error: This is not a multisite installation.' },
+      [`${base(t.docroot)} option get stylesheet`]: { stdout: 'wandworks\n' },
+      [`${base(t.docroot)} option get template`]: { stdout: 'wandworks-parent\n' },
+      [`${base(t.docroot)} transient get update_themes`]: { stdout: JSON.stringify({ checked: { 'wandworks-parent': '1.4.0', wandworks: '2.1.0' } }) },
+    });
+    expect(await missingThemesOnSite(fake.exec, t.docroot, 'local.shop.com')).toEqual([{ name: 'wandworks-parent', parent: true, version: '1.4.0' }]);
+  });
+
+  it('installs a theme from WordPress.org at production\'s version, notes one that fails, and never activates', async () => {
+    const t = wpSiteTree();
+    const themes = join(t.docroot, 'wp-content', 'themes');
+    mkdirSync(themes, { recursive: true });
+    const fake = fakeExec({
+      [`${base(t.docroot)} theme install`]: (call: FakeCall) => {
+        const slug = call.args[4] as string;
+        if (slug === 'wandworks-parent') return { code: 1, stderr: 'Warning: wandworks-parent: Theme not found.\nError: No themes installed.' };
+        mkdirSync(join(themes, slug), { recursive: true });
+        return { stdout: 'Success: Installed 1 of 1 themes.' };
+      },
+    });
+    const out = await installThemes(fake.exec, t.docroot, 'local.shop.com', [{ slug: 'wandworks-parent' }, { slug: 'twentytwentyfive', version: '1.3' }]);
+    expect(out.failed).toEqual(['wandworks-parent']);
+    expect(out.installed).toEqual([join(themes, 'twentytwentyfive')]);
+    const text = out.results.map((r) => r.stdout).join('\n');
+    expect(text).toContain('warn: the theme wandworks-parent was not installed: Theme not found.');
+    expect(text).toContain('twentytwentyfive: installed 1.3 of the theme from WordPress.org');
+    expect(fake.calls.some((c) => c.args.includes('activate'))).toBe(false);
+    expect(fake.calls.find((c) => c.args[4] === 'twentytwentyfive')?.args).toContain('--version=1.3');
   });
 });

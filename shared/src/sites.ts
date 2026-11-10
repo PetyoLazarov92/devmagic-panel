@@ -368,6 +368,18 @@ export interface WporgPlugin {
   version: string;
 }
 
+/** A theme a dump names: the active one of a site, or the parent a child theme needs. */
+export interface DumpTheme {
+  /** Its folder in wp-content/themes. */
+  name: string;
+  /** Only as the parent of an active child theme. */
+  parent?: true;
+  /** On a network: on how many sites it is the theme. */
+  sites?: number;
+  /** The version production ran, from WordPress's update check. */
+  version?: string;
+}
+
 /** A plugin a dump names: see DumpFacts.plugins. */
 export interface DumpPlugin {
   /** Its file in wp-content/plugins: akismet/akismet.php, or hello.php. */
@@ -524,6 +536,8 @@ export interface DumpFacts {
    * check found it there) or the recently turned off list.
    */
   plugins?: DumpPlugin[];
+  /** The themes the dump's sites use, and the parents their child themes need. */
+  themes?: DumpTheme[];
   /** True when the scan stopped after DUMP_SCAN_GB of a very large dump, before its users. */
   partial: boolean;
   /**
@@ -959,6 +973,8 @@ export interface RepoLookup {
   uploads?: boolean;
   /** The plugins it holds, as paths in the repo of each plugins folder's entries: wp-content/plugins/akismet, plugins/hello.php. */
   plugins?: string[];
+  /** The themes it holds, as paths in the repo of each themes folder's entries: wp-content/themes/wandworks, themes/wandworks. */
+  themes?: string[];
 }
 
 /** What the site page needs to move a site between web servers. */

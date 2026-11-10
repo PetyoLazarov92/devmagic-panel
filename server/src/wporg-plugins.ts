@@ -17,11 +17,16 @@ const fetchJson: FetchJson = async (url) => {
 };
 
 const KEEP_MS = 24 * 3_600_000;
-const key = (slug: string) => `wporg-plugin:${slug}`;
 export const wporgPluginUrl = (slug: string) =>
   `https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request[slug]=${encodeURIComponent(slug)}&request[fields][sections]=0&request[fields][description]=0&request[fields][screenshots]=0&request[fields][versions]=0`;
 
-export async function wporgPlugins(slugs: readonly string[], store: Pick<RunStore, 'getMeta' | 'setMeta'>, fetcher: FetchJson = fetchJson, now = Date.now()): Promise<Record<string, WporgPlugin | null>> {
+export const wporgThemeUrl = (slug: string) => `https://api.wordpress.org/themes/info/1.2/?action=theme_information&request[slug]=${encodeURIComponent(slug)}&request[fields][sections]=0&request[fields][description]=0&request[fields][versions]=0`;
+
+/** The same for themes, from WordPress.org's themes API: a paid or custom theme is null. */
+export const wporgThemes = (slugs: readonly string[], store: Pick<RunStore, 'getMeta' | 'setMeta'>, fetcher: FetchJson = fetchJson, now = Date.now()) => wporgPlugins(slugs, store, fetcher, now, 'theme');
+
+export async function wporgPlugins(slugs: readonly string[], store: Pick<RunStore, 'getMeta' | 'setMeta'>, fetcher: FetchJson = fetchJson, now = Date.now(), kind: 'plugin' | 'theme' = 'plugin'): Promise<Record<string, WporgPlugin | null>> {
+  const key = (slug: string) => `wporg-${kind}:${slug}`;
   const out: Record<string, WporgPlugin | null> = {};
   const wanted = [...new Set(slugs)].filter((s) => wpSlug.safeParse(s).success).slice(0, 100);
   await Promise.all(
@@ -36,7 +41,7 @@ export async function wporgPlugins(slugs: readonly string[], store: Pick<RunStor
         // asked again
       }
       try {
-        const { status, body } = await fetcher(wporgPluginUrl(slug));
+        const { status, body } = await fetcher(kind === 'theme' ? wporgThemeUrl(slug) : wporgPluginUrl(slug));
         const b = body as { slug?: unknown; name?: unknown; version?: unknown; error?: unknown } | null;
         const plugin: WporgPlugin | null =
           b && b.slug === slug && typeof b.version === 'string'

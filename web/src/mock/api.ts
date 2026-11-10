@@ -262,7 +262,7 @@ async function mockUpload(file: File, onProgress: (fraction: number) => void): P
   const tableHosts = Object.fromEntries(
     ['wp_options', 'wp_posts', 'wp_postmeta', 'wp_users', 'wp_usermeta', 'wp_comments', 'wp_wc_orders', 'wp_wc_orders_meta', 'wp_woocommerce_order_items', 'wp_woocommerce_sessions', 'wp_gf_entry', 'wp_gf_entry_meta', 'wp_actionscheduler_logs', 'wp_wfHits', 'wp_redirection_404'].map((t) => [t, ['www.spellbook.example']]),
   );
-  return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://www.spellbook.example', home: 'https://www.spellbook.example', dbVersion: 61833, multisite: false, hosts, activePlugins: plugins, plugins: MOCK_DUMP_PLUGINS, partial: false, httpHosts: [], tableHosts, storedObjects: false, admins: ['admin', 'spellbookadmin'] }, suggestions: { replace: suggest(hosts) } };
+  return { id, name: file.name, size: file.size, facts: { tablePrefix: 'wp_', siteUrl: 'https://www.spellbook.example', home: 'https://www.spellbook.example', dbVersion: 61833, multisite: false, hosts, activePlugins: plugins, plugins: MOCK_DUMP_PLUGINS, themes: [{ name: 'wandworks' }, { name: 'wandworks-parent', parent: true as const, version: '1.4.0' }], partial: false, httpHosts: [], tableHosts, storedObjects: false, admins: ['admin', 'spellbookadmin'] }, suggestions: { replace: suggest(hosts) } };
 }
 
 /** The store dump an organization's links find in the mockup. */
@@ -2057,6 +2057,14 @@ export const mockApi: Api = {
   missingPlugins: async () => {
     await wait(300);
     return MOCK_DUMP_PLUGINS.filter((p) => ['redirection/redirection.php', 'wandworks-pro-forms/loader.php', 'duplicate-post/duplicate-post.php'].includes(p.file));
+  },
+  missingThemes: async () => {
+    await wait(300);
+    return [{ name: 'wandworks-parent', parent: true as const, version: '1.4.0' }];
+  },
+  wporgThemes: async (slugs) => {
+    await wait(200);
+    return Object.fromEntries(slugs.map((slug) => [slug, slug === 'twentytwentyfive' ? { name: 'Twenty Twenty-Five', version: '1.3' } : null]));
   },
   wporgPlugins: async (slugs) => {
     await wait(250);

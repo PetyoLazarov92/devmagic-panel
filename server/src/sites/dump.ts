@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createGunzip } from 'node:zlib';
-import type { DumpFacts, DumpPlugin, PhpValue } from '@devmagic-panel/shared';
+import type { DumpFacts, DumpPlugin, DumpTheme, PhpValue } from '@devmagic-panel/shared';
 import { DUMP_SCAN_GB, parsePhpSerialized } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { freeSpace } from './space.js';
@@ -126,6 +126,11 @@ interface OptionValues {
   recentFiles?: string[];
   /** WordPress's update check, as stored (_site_transient_update_plugins on a single site). */
   updatePlugins?: string;
+  /** The active theme and the one its templates come from (the parent, for a child theme). */
+  stylesheet?: string;
+  template?: string;
+  /** WordPress's update check for themes, as stored. */
+  updateThemes?: string;
 }
 
 /** What a network's meta table says. */
@@ -135,6 +140,7 @@ interface NetworkMeta {
   sitewideFiles?: string[];
   /** A network's update check, kept in its meta table. */
   updatePlugins?: string;
+  updateThemes?: string;
   admins?: string[];
 }
 
@@ -218,6 +224,46 @@ export function readUpdateCheck(serialized: string): Map<string, { version?: str
   return out;
 }
 
+/** A theme's folder in wp-content/themes: plain characters, nothing that leaves the folder. */
+export const THEME_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+const themeName = (value: string) => (THEME_NAME.test(value) && !value.includes('..') ? value : undefined);
+
+/** The versions of the installed themes, from WordPress's update check for themes (its checked list). */
+export function readThemeCheck(serialized: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const value = parsePhpSerialized(serialized);
+  if (!value || (value.type !== 'object' && value.type !== 'array')) return out;
+  const checked = value.entries.find(([k]) => k.type === 'string' && k.value === 'checked')?.[1];
+  if (checked?.type !== 'array') return out;
+  for (const [k, v] of checked.entries) {
+    if (k.type === 'string' && v.type === 'string' && themeName(k.value) && /^[\w.+-]{1,40}$/.test(v.value)) out.set(k.value, v.value);
+  }
+  return out;
+}
+
+/** Every theme a dump's sites use: each site's own, and the parent a child theme takes its templates from. */
+export function dumpThemes(state: ScanState, prefix: string): DumpTheme[] {
+  const main = state.options.get(`${prefix}options`) ?? {};
+  const meta = state.meta.get(`${prefix}sitemeta`) ?? {};
+  const sub = new RegExp(`^${escapeRe(prefix)}\\d+_options$`);
+  const sites = [main, ...[...state.options].filter(([table]) => sub.test(table)).map(([, v]) => v)];
+  const used = new Map<string, number>();
+  const parents = new Set<string>();
+  for (const site of sites) {
+    const own = site.stylesheet ?? site.template;
+    if (own) used.set(own, (used.get(own) ?? 0) + 1);
+    if (site.template && site.template !== own) parents.add(site.template);
+  }
+  const raw = meta.updateThemes ?? main.updateThemes ?? '';
+  const versions = raw ? readThemeCheck(unquote(raw)) : new Map<string, string>();
+  const network = sites.length > 1;
+  const version = (name: string) => (versions.get(name) ? { version: versions.get(name) as string } : {});
+  return [
+    ...[...used].map(([name, n]): DumpTheme => ({ name, ...(network ? { sites: n } : {}), ...version(name) })),
+    ...[...parents].filter((name) => !used.has(name)).map((name): DumpTheme => ({ name, parent: true, ...version(name) })),
+  ].slice(0, 200);
+}
+
 /** Every plugin a dump names, from the main site, a network's other sites and meta, and the update check. */
 export function dumpPlugins(state: ScanState, prefix: string): DumpPlugin[] {
   const main = state.options.get(`${prefix}options`) ?? {};
@@ -273,9 +319,13 @@ function readRows(table: string | undefined, rows: string, state: ScanState): vo
   if (!table || !rows) return;
   if (table.endsWith('options')) {
     const values = state.options.get(table) ?? {};
-    for (const m of rows.matchAll(new RegExp(`\\(\\d+,'(siteurl|home|db_version|blogname|active_plugins|recently_activated|_site_transient_update_plugins)',${QUOTED}`, 'g'))) {
+    for (const m of rows.matchAll(new RegExp(`\\(\\d+,'(siteurl|home|db_version|blogname|active_plugins|recently_activated|_site_transient_update_plugins|template|stylesheet|_site_transient_update_themes)',${QUOTED}`, 'g'))) {
       const value = m[2] ?? '';
-      if (m[1] === 'siteurl') values.siteurl ??= unquote(value);
+      if (m[1] === 'template' || m[1] === 'stylesheet') {
+        const name = themeName(unquote(value));
+        if (name) values[m[1]] ??= name;
+      } else if (m[1] === '_site_transient_update_themes') values.updateThemes ??= value;
+      else if (m[1] === 'siteurl') values.siteurl ??= unquote(value);
       else if (m[1] === 'home') values.home ??= unquote(value);
       else if (m[1] === 'blogname') values.blogname ??= plainName(unquote(value));
       else if (m[1] === 'db_version') values.dbVersion ??= value;
@@ -301,9 +351,10 @@ function readRows(table: string | undefined, rows: string, state: ScanState): vo
   }
   if (table.endsWith('sitemeta')) {
     const meta = state.meta.get(table) ?? {};
-    for (const m of rows.matchAll(new RegExp(`\\(\\d+,\\d+,'(subdomain_install|active_sitewide_plugins|site_admins|_site_transient_update_plugins)',${QUOTED}\\)`, 'g'))) {
+    for (const m of rows.matchAll(new RegExp(`\\(\\d+,\\d+,'(subdomain_install|active_sitewide_plugins|site_admins|_site_transient_update_plugins|_site_transient_update_themes)',${QUOTED}\\)`, 'g'))) {
       const value = m[2] ?? '';
       if (m[1] === 'subdomain_install') meta.subdomainInstall ??= value === '1';
+      else if (m[1] === '_site_transient_update_themes') meta.updateThemes ??= value;
       else if (m[1] === '_site_transient_update_plugins') meta.updatePlugins ??= value;
       else if (m[1] === 'active_sitewide_plugins') {
         meta.sitewide ??= pluginSlugs(value);
@@ -376,6 +427,8 @@ function resolve(facts: DumpFacts, state: ScanState): void {
   if (main.activePlugins || meta.sitewide) facts.activePlugins = [...new Set([...(main.activePlugins ?? []), ...(meta.sitewide ?? [])])];
   const plugins = dumpPlugins(state, prefix);
   if (plugins.length) facts.plugins = plugins;
+  const themes = dumpThemes(state, prefix);
+  if (themes.length) facts.themes = themes;
   if (meta.admins) state.superAdmins = meta.admins;
   const blogs = state.blogs.get(`${prefix}blogs`) ?? [];
   if (blogs.length || state.tables.includes(`${prefix}blogs`)) facts.multisite = true;

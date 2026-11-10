@@ -227,6 +227,12 @@ production-only plugins go off as on every install from a dump.
   gets the one you gave for the dump, during the same visit only,
   and when WordPress.org gives no answer the step says so, with **Ask again**. One that fails is noted and
   the rest install; see [Sites](sites.md#plugins) for how.
+- **Missing themes**: the themes the dump's sites use (each site of a
+  network, and the parent a child theme takes its templates from) that no
+  repo brings. One on WordPress.org installs from there, at production's
+  version when the dump has it; a paid or custom one can be copied from the
+  server the dump was exported from, the same way as a plugin. Nothing is
+  activated: the database already says which theme is on.
 - **Uploads**: missing images load from the production domain you give.
 - **Build**: a checklist per repo lists every `composer.json` and
   `package.json` and ticks only the ones whose output the repo does not hold

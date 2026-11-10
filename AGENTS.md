@@ -216,7 +216,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       a failure noted and the rest installed, `--skip-plugins
       --skip-themes`, checked with `wp plugin verify-checksums` and kept out
       of git locally (`sites/install-plugins.ts`); never a zip, URL or path,
-      never activated by the panel. The ones WordPress.org does not have
+      never activated by the panel. Themes the site's sites use that the
+      files lack install the same way (`installThemes`, no checksums to
+      check). The ones WordPress.org does not have
       (paid and custom ones) may be copied from the site's own server over
       SSH when you tick them (`site.copyFromServer`,
       `sites/server-files.ts`): what arrives is checked before it is

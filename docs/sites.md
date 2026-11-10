@@ -78,10 +78,18 @@ the rest go on. Each is checked against WordPress.org's checksums, kept out of
 git locally, and not activated: the database already says which are active.
 Undo removes what was installed.
 
-A premium or custom plugin, which WordPress.org does not have, can be copied
-from the site's own server once Refresh from production is set up on the
-Database tab. **See what the server has** reads its list of plugins, and
-**Copy from the server** copies the ticked ones over SSH:
+The same row lists **missing themes**: the theme each site uses, and the
+parent a child theme needs, when the files lack it. A theme in a repo under
+`wp-content/repos` counts as there. Themes install from WordPress.org like
+plugins, without a checksum check (WordPress.org has none for themes).
+
+A premium or custom plugin or theme, which WordPress.org does not have, can
+be copied from the site's own server. The row shows that server (its SSH host
+and WordPress folder) with **Change**, and asks for both when none is saved
+yet. It is the same server Refresh from production on the Database tab uses,
+saved once for the site, with no password. **See what the server has** reads
+its lists of plugins and themes, and **Copy from the server** copies the
+ticked ones over SSH:
 
 - Only reads on the server: WP-CLI says where the plugins folder is, and
   `tar` streams one folder to this machine. Nothing is written there, and a

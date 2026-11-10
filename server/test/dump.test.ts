@@ -390,3 +390,20 @@ describe('plugins a dump names', () => {
     ]);
   });
 });
+
+describe('the themes a dump uses', () => {
+  it('names each site\'s theme, the parent a child theme needs, and production\'s versions', () => {
+    const facts = emptyFacts();
+    scanSql(
+      "CREATE TABLE `wp_options` (x int);\nINSERT INTO `wp_options` VALUES (1,'siteurl','https://www.spellbook.example','yes'),(2,'home','https://www.spellbook.example','yes'),(40,'template','wandworks-parent','yes'),(41,'stylesheet','wandworks','yes'),(90,'_site_transient_update_themes','O:8:\\\"stdClass\\\":2:{s:12:\\\"last_checked\\\";i:1790000000;s:7:\\\"checked\\\";a:2:{s:9:\\\"wandworks\\\";s:5:\\\"2.1.0\\\";s:16:\\\"wandworks-parent\\\";s:5:\\\"1.4.0\\\";}}','no');\n" +
+        "CREATE TABLE `wp_2_options` (x int);\nINSERT INTO `wp_2_options` VALUES (1,'siteurl','https://www.spellbook.example/learn','yes'),(40,'template','twentytwentyfive','yes'),(41,'stylesheet','twentytwentyfive','yes');\n" +
+        "CREATE TABLE `wp_3_options` (x int);\nINSERT INTO `wp_3_options` VALUES (40,'template','../../etc','yes'),(41,'stylesheet','wandworks','yes');\n",
+      facts,
+    );
+    expect(facts.themes).toEqual([
+      { name: 'wandworks', sites: 2, version: '2.1.0' },
+      { name: 'twentytwentyfive', sites: 1 },
+      { name: 'wandworks-parent', parent: true, version: '1.4.0' },
+    ]);
+  });
+});

@@ -39,7 +39,7 @@ import { type Getter, shownUrl, urlProblem } from './sites/fetch-dump.js';
 import { MoreDumpsRefused, planLocalDump, planServerDump, signedInWith } from './sites/more-dumps.js';
 import { planRefresh } from './sites/refresh.js';
 import { giveBack, planTakeOver, TakeoverRefused } from './sites/takeover.js';
-import { installPlugins, removeInstalled } from './sites/install-plugins.js';
+import { installPlugins, installThemes, removeInstalled } from './sites/install-plugins.js';
 import { copyFromServer, removeCopied } from './sites/server-files.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
@@ -757,16 +757,30 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   },
   'site.installPlugins': async (ctx, input) => {
     const site = siteFor(ctx.config, input.domain, input.path);
-    const step: JobStep = {
-      id: 'plugins',
-      label: `Install ${input.plugins.length} plugin${input.plugins.length === 1 ? '' : 's'} from WordPress.org`,
-      run: async (job) => {
-        const out = await installPlugins(ctx.exec, site.docroot, site.host, input.plugins);
-        if (out.installed.length) job.onUndo(`Remove the ${out.installed.length} plugin${out.installed.length === 1 ? '' : 's'} it installed`, async () => removeInstalled(out.installed));
-        return out.results;
-      },
-    };
-    return startJob(ctx, [step], `Install missing plugins on ${site.host}`, site.host);
+    const steps: JobStep[] = [];
+    if (input.plugins.length) {
+      steps.push({
+        id: 'plugins',
+        label: `Install ${input.plugins.length} plugin${input.plugins.length === 1 ? '' : 's'} from WordPress.org`,
+        run: async (job) => {
+          const out = await installPlugins(ctx.exec, site.docroot, site.host, input.plugins);
+          if (out.installed.length) job.onUndo(`Remove the ${out.installed.length} plugin${out.installed.length === 1 ? '' : 's'} it installed`, async () => removeInstalled(out.installed));
+          return out.results;
+        },
+      });
+    }
+    if (input.themes.length) {
+      steps.push({
+        id: 'themes',
+        label: `Install ${input.themes.length} theme${input.themes.length === 1 ? '' : 's'} from WordPress.org`,
+        run: async (job) => {
+          const out = await installThemes(ctx.exec, site.docroot, site.host, input.themes);
+          if (out.installed.length) job.onUndo(`Remove the ${out.installed.length} theme${out.installed.length === 1 ? '' : 's'} it installed`, async () => removeInstalled(out.installed));
+          return out.results;
+        },
+      });
+    }
+    return startJob(ctx, steps, `Install missing plugins and themes on ${site.host}`, site.host);
   },
   'site.copyFromServer': async (ctx, input) => {
     const site = siteFor(ctx.config, input.domain, input.path);

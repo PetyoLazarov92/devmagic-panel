@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
 import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { SystemConfig } from '../config.js';
@@ -17,8 +17,8 @@ import { listSnapshots, snapshotDir } from './db.js';
 import { cleanDir, listCleanCopies } from './export.js';
 import { listKept } from './kept.js';
 import { takeoverPreview, TakeoverRefused } from './takeover.js';
-import { missingOnSite } from './install-plugins.js';
-import { wporgPlugins } from '../wporg-plugins.js';
+import { missingOnSite, missingThemesOnSite } from './install-plugins.js';
+import { wporgPlugins, wporgThemes } from '../wporg-plugins.js';
 import { z } from 'zod';
 import { cleanPreview } from './clean-current.js';
 import { readLocalConstants } from '../local-constants.js';
@@ -296,6 +296,22 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     const body = productionSettings.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: body.error.issues[0]?.message ?? 'An ssh host, a folder and table names' });
     return saveProduction(deps.store, request.params.domain, request.query.path, body.data);
+  });
+  // The themes a site's database uses that its files lack. Read only.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/missing-themes', async (request, reply): Promise<DumpTheme[] | undefined> => {
+    if (!snapshotKey(request.params.domain, request.query.path)) return reply.code(404).send({ error: `no site called ${request.params.domain}${request.query.path ?? ''}` });
+    try {
+      const site = siteFor(deps.config, request.params.domain, request.query.path);
+      return await missingThemesOnSite(deps.exec, site.docroot, site.host);
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      throw error;
+    }
+  });
+  api.post<{ Body: unknown }>('/api/wporg/themes', async (request, reply) => {
+    const body = z.object({ slugs: z.array(z.string().max(200)).max(100) }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'Theme slugs like twentytwentyfive' });
+    return wporgThemes(body.data.slugs, deps.store);
   });
   // Whether plugins are on WordPress.org, by slug, kept a day. Read only.
   api.post<{ Body: unknown }>('/api/wporg/plugins', async (request, reply) => {

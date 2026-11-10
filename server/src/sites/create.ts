@@ -32,7 +32,7 @@ import { mysqlPassword } from './mysql-password.js';
 import { setConstant, setTablePrefix } from './wpconfig-edit.js';
 import { readLocalConstants } from '../local-constants.js';
 import { excludeLocally } from './mu-plugins.js';
-import { installPlugins, removeInstalled } from './install-plugins.js';
+import { installPlugins, installThemes, removeInstalled } from './install-plugins.js';
 import { signedInWith } from './more-dumps.js';
 import { copyFromServer, removeCopied } from './server-files.js';
 import { cleanStep, newCleanState, pluginsOffStep, userStep } from './clean.js';
@@ -595,6 +595,15 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
       if (out.installed.length) job.onUndo(`Remove the ${out.installed.length} plugin${out.installed.length === 1 ? '' : 's'} installed from WordPress.org`, async () => removeInstalled(out.installed));
       return out.results;
     }, 2, `The plugins were not installed from WordPress.org: install them on the site's Plugins tab, under Missing plugins.`);
+  }
+
+  if (isWp && input.installThemes.length > 0) {
+    const n = input.installThemes.length;
+    add('install-themes', `Install ${n} missing theme${n === 1 ? '' : 's'} from WordPress.org`, async (job) => {
+      const out = await installThemes(exec, docroot, host, input.installThemes);
+      if (out.installed.length) job.onUndo(`Remove the ${out.installed.length} theme${out.installed.length === 1 ? '' : 's'} installed from WordPress.org`, async () => removeInstalled(out.installed));
+      return out.results;
+    }, 1, `The themes were not installed from WordPress.org: install them on the site's Plugins tab, under Missing plugins and themes.`);
   }
 
   // The ones neither a repo nor WordPress.org has: from the site's own server, read only, when you ticked them.

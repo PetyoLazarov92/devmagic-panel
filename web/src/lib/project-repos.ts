@@ -18,6 +18,8 @@ export interface RepoHelpers {
   uploads?: boolean;
   /** Its plugin folders, as paths in the repo. */
   plugins?: string[];
+  /** Its theme folders, as paths in the repo. */
+  themes?: string[];
   error?: string;
 }
 

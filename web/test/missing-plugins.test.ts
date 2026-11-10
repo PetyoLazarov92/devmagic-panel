@@ -1,6 +1,6 @@
-import type { DumpPlugin } from '@devmagic-panel/shared';
+import type { DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { askWporg, defaultPick, missingPlugins, onServer, pluginChoices, pluginItem, pluginSitePath, pluginSlug, repoPluginPaths } from '../src/lib/missing-plugins.js';
+import { askWporg, defaultPick, defaultThemePick, missingPlugins, missingThemes, onServer, pluginChoices, pluginItem, pluginSitePath, pluginSlug, repoPluginPaths, repoThemeNames, themeChoices } from '../src/lib/missing-plugins.js';
 
 const dump: DumpPlugin[] = [
   { file: 'woocommerce/woocommerce.php', active: true, version: '9.4.1', slug: 'woocommerce' },
@@ -95,5 +95,26 @@ describe('plugins WordPress.org does not have', () => {
     expect(pluginChoices(missing, { 'hello.php': 'server' }, { 'wandworks-pro-forms': null, hello: null }, [], server).copy).toEqual(['wandworks-pro-forms', 'hello.php']);
     expect(pluginChoices(missing, {}, { 'wandworks-pro-forms': null, hello: null }, [], null).copy).toEqual([]);
     expect(pluginChoices([{ file: 'a b/x.php', active: true }], { 'a b/x.php': 'server' }, {}, [], { plugins: [{ name: 'a b' }], themes: [] }).copy).toEqual([]);
+  });
+});
+
+describe('missing themes of an install', () => {
+  const themes = [{ name: 'wandworks' }, { name: 'wandworks-parent', parent: true as const, version: '1.4.0' }, { name: 'twentytwentyfive' }];
+  it('counts a theme a repo brings: the repo itself, a themes folder of it, or a folder of a repo in wp-content/repos', () => {
+    expect([...repoThemeNames([{ placement: { dir: 'wp-content/themes', folder: 'wandworks' } }])]).toEqual(['wandworks']);
+    expect([...repoThemeNames([{ placement: { dir: '', folder: 'wp-content' }, themes: ['themes/wandworks', 'themes/wandworks-parent'] }])]).toEqual(['wandworks', 'wandworks-parent']);
+    expect([...repoThemeNames([{ placement: { dir: '', folder: '' }, themes: ['wp-content/themes/wandworks'] }])]).toEqual(['wandworks']);
+    expect([...repoThemeNames([{ placement: { dir: 'wp-content/repos', folder: 'theme-kit' }, themeIn: 'wandworks' }])]).toEqual(['wandworks']);
+    expect(missingThemes(themes, new Set(['wandworks'])).map((t) => t.name)).toEqual(['wandworks-parent', 'twentytwentyfive']);
+  });
+  it('installs the ones on WordPress.org, copies from the server what only it has, and leaves the rest', () => {
+    const wporg = { twentytwentyfive: { name: 'Twenty Twenty-Five', version: '1.3' }, 'wandworks-parent': null, wandworks: null };
+    const server = { plugins: [], themes: [{ name: 'wandworks-parent', version: '1.4.0' }] };
+    expect(defaultThemePick(themes[2] as DumpTheme, wporg.twentytwentyfive, server)).toBe('install');
+    expect(defaultThemePick(themes[1] as DumpTheme, null, server)).toBe('server');
+    expect(defaultThemePick(themes[0] as DumpTheme, null, server)).toBe('leave');
+    expect(themeChoices(themes, {}, wporg, server)).toEqual({ install: [{ slug: 'twentytwentyfive' }], copy: ['wandworks-parent'] });
+    expect(themeChoices(themes, { 'wandworks-parent': 'leave' }, wporg, server).copy).toEqual([]);
+    expect(themeChoices(themes, {}, wporg, null).copy).toEqual([]);
   });
 });

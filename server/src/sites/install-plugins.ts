@@ -1,8 +1,9 @@
 import { accessSync, constants, existsSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { DumpPlugin } from '@devmagic-panel/shared';
+import type { DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
 import type { ExecResult, Executor } from '../exec.js';
-import { PLUGIN_FILE } from './dump.js';
+import { PLUGIN_FILE, THEME_NAME } from './dump.js';
+import { themeDir } from './local-mode.js';
 import { excludeLocally } from './mu-plugins.js';
 
 /**
@@ -193,4 +194,97 @@ export async function missingOnSite(exec: Executor, docroot: string, host: strin
   }
   for (const file of files(await json(['option', 'get', 'recently_activated', '--format=json']))) byFile.set(file, get(file));
   return [...byFile.values()].filter((p) => !pluginPresent(docroot, p.file)).sort((a, b) => Number(b.active) - Number(a.active) || a.file.localeCompare(b.file));
+}
+
+/**
+ * Themes the database uses that the files lack, installed from
+ * WordPress.org by slug the same way: each on its own, production's version
+ * first and the latest when that one is gone, a failure noted, nothing
+ * activated (the database says which theme is on), kept out of git locally.
+ * WordPress.org has no checksums for themes to check against.
+ */
+export async function installThemes(exec: Executor, docroot: string, host: string, themes: readonly PluginToInstall[]): Promise<InstallOutcome> {
+  const wp = (args: string[]) => exec('wp', [`--path=${docroot}`, `--url=https://${host}/`, ...args, '--skip-plugins', '--skip-themes'], { timeoutMs: 10 * 60_000 });
+  const results: ExecResult[] = [];
+  const installed: string[] = [];
+  const failed: string[] = [];
+  const upgrade = themes.length ? ownUpgradeFolder(docroot) : { restore: () => undefined };
+  if (upgrade.note) results.push(ok(upgrade.note));
+  try {
+    for (const { slug, version } of themes) {
+      const folder = join(docroot, 'wp-content', 'themes', slug);
+      if (existsSync(themeDir(docroot, slug))) {
+        results.push(ok(`${slug}: the theme is there already; left as it is`));
+        continue;
+      }
+      let r = await wp(['theme', 'install', slug, ...(version ? [`--version=${version}`] : [])]);
+      let got = version ?? 'the latest version';
+      if (r.code !== 0 && version) {
+        if (existsSync(folder)) rmSync(folder, { recursive: true, force: true });
+        const latest = await wp(['theme', 'install', slug]);
+        if (latest.code === 0) {
+          results.push(ok(`${slug}: ${version}, production's version, is not on WordPress.org (${reason(r, slug)}); took the latest instead`));
+          got = 'the latest version';
+        }
+        r = latest;
+      }
+      if (r.code !== 0 || !existsSync(folder)) {
+        if (existsSync(folder)) rmSync(folder, { recursive: true, force: true });
+        failed.push(slug);
+        results.push(ok(`warn: the theme ${slug} was not installed: ${reason(r, slug)}`));
+        continue;
+      }
+      installed.push(folder);
+      await excludeLocally(exec, folder, 'devmagic-panel: installed from WordPress.org for this local copy');
+      results.push(ok(`${slug}: installed ${got} of the theme from WordPress.org`));
+    }
+  } finally {
+    upgrade.restore();
+  }
+  const done = themes.length - failed.length;
+  results.push(ok(failed.length ? `installed ${done} of ${themes.length} themes; not installed: ${failed.join(', ')}` : `installed ${done} theme${done === 1 ? '' : 's'} from WordPress.org`));
+  return { results, installed, failed };
+}
+
+/**
+ * The themes a site's database uses that its files lack, read with WP-CLI
+ * and nothing of the site loaded: each site's own theme and the parent a
+ * child theme takes its templates from, with production's version from
+ * WordPress's update check. A theme in a repo under wp-content/repos counts
+ * as there.
+ */
+export async function missingThemesOnSite(exec: Executor, docroot: string, host: string): Promise<DumpTheme[]> {
+  const run = async (args: string[], url = `https://${host}/`): Promise<string | undefined> => {
+    const r = await exec('wp', [`--path=${docroot}`, `--url=${url}`, ...args, '--skip-plugins', '--skip-themes'], { timeoutMs: 60_000 });
+    return r.code === 0 ? r.stdout.trim() : undefined;
+  };
+  const name = (v: string | undefined) => (v && THEME_NAME.test(v) && !v.includes('..') ? v : undefined);
+  let sites: unknown;
+  try {
+    sites = JSON.parse((await run(['site', 'list', '--fields=url', '--format=json'])) ?? 'null');
+  } catch {
+    sites = null;
+  }
+  const network = Array.isArray(sites);
+  const urls = Array.isArray(sites) ? sites.flatMap((s) => (s && typeof (s as { url?: unknown }).url === 'string' ? [(s as { url: string }).url] : [])).slice(0, 200) : [`https://${host}/`];
+  const used = new Map<string, number>();
+  const parents = new Set<string>();
+  for (const url of urls) {
+    const own = name(await run(['option', 'get', 'stylesheet'], url));
+    const template = name(await run(['option', 'get', 'template'], url));
+    if (own) used.set(own, (used.get(own) ?? 0) + 1);
+    if (template && template !== own) parents.add(template);
+  }
+  let versions: Record<string, unknown> = {};
+  try {
+    const check = JSON.parse((await run(['transient', 'get', 'update_themes', '--network', '--format=json'])) ?? 'null') as { checked?: unknown } | null;
+    if (check?.checked && typeof check.checked === 'object') versions = check.checked as Record<string, unknown>;
+  } catch {
+    // No update check kept: no versions.
+  }
+  const version = (n: string) => (typeof versions[n] === 'string' && /^[\w.+-]{1,40}$/.test(versions[n] as string) ? { version: versions[n] as string } : {});
+  return [
+    ...[...used].map(([n, count]): DumpTheme => ({ name: n, ...(network ? { sites: count } : {}), ...version(n) })),
+    ...[...parents].filter((n) => !used.has(n)).map((n): DumpTheme => ({ name: n, parent: true, ...version(n) })),
+  ].filter((t) => !existsSync(themeDir(docroot, t.name)));
 }

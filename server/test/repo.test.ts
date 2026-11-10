@@ -88,6 +88,7 @@ describe('inspectRepo', () => {
       kind: 'site',
       // Each plugin folder the repo holds, wherever its plugins folder is, for the missing plugins.
       plugins: ['wp-content/plugins/query-monitor', 'plugins/user-switching', 'wp-content/plugins/be-media-from-production', 'wp-content/plugins/wandworks-blocks'],
+      themes: ['themes/wp-crontrol', 'wp-content/themes/wandworks'],
     });
     // A big repo's file list fits: far more than the usual 8 MB.
     expect(fake.calls.find((c) => c.args.includes('ls-tree'))?.maxBufferBytes).toBeGreaterThanOrEqual(64 * 1024 * 1024);
@@ -131,7 +132,7 @@ describe('repo presets', () => {
           { url: 'git@github.com:x/blocks.git', branch: 'main', dir: 'wp-content/plugins', folder: 'blocks' },
         ],
         replace: [{ from: 'www.shop.com', to: 'local.shop.com' }], core: { mode: 'wpcore', version: '7.1.3' }, deactivate: ['wp-rocket'],
-        uploadsFrom: 'www.shop.com', uploadsVia: 'plugin', build: { composer: false, npm: true }, activate: ['query-monitor'], installPlugins: [], replaceExisting: false, remember: true, server: 'apache',
+        uploadsFrom: 'www.shop.com', uploadsVia: 'plugin', build: { composer: false, npm: true }, activate: ['query-monitor'], installPlugins: [], installThemes: [], replaceExisting: false, remember: true, server: 'apache',
       }),
     ).toEqual({
       domains: [{ production: 'www.shop.com', local: 'local.shop.com' }, { local: 'local.shop.de' }],

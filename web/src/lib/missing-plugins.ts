@@ -1,4 +1,4 @@
-import type { DumpPlugin, RepoPlacement, ServerFiles, WporgPlugin } from '@devmagic-panel/shared';
+import type { DumpPlugin, DumpTheme, RepoPlacement, ServerFiles, WporgPlugin } from '@devmagic-panel/shared';
 import { repoTarget } from '@devmagic-panel/shared';
 
 /**
@@ -99,4 +99,47 @@ export async function askWporg(slugs: readonly string[], ask: (slugs: string[]) 
     }
   }
   return { answers, failed };
+}
+
+// ── themes ───────────────────────────────────────────────────
+
+/** What to do with a theme the dump uses that no repo brings: install it from WordPress.org, copy it from the server, or leave it. */
+export type ThemePick = 'install' | 'server' | 'leave';
+
+/** The themes the repos bring, by folder name: a repo that is the theme, a repo's themes folders at its place, and a theme in a folder of a repo in wp-content/repos. */
+export function repoThemeNames(rows: ReadonlyArray<{ placement: RepoPlacement; themes?: readonly string[]; themeIn?: string }>): Set<string> {
+  const out = new Set<string>();
+  const inThemes = (path: string) => /^wp-content\/themes\/([^/]+)$/.exec(path)?.[1];
+  for (const r of rows) {
+    const at = repoTarget(r.placement);
+    const own = inThemes(at);
+    if (own) out.add(own);
+    for (const t of r.themes ?? []) {
+      const name = inThemes(at ? `${at}/${t}` : t);
+      if (name) out.add(name);
+    }
+    if (r.themeIn) out.add(r.themeIn);
+  }
+  return out;
+}
+
+/** The themes a dump uses that the repos do not bring. */
+export const missingThemes = (themes: readonly DumpTheme[], present: ReadonlySet<string>) => themes.filter((t) => !present.has(t.name));
+
+/** What happens to a missing theme unless you choose: one on WordPress.org is installed, one only the server has is copied from it, any other is left. */
+export function defaultThemePick(t: DumpTheme, wporg: WporgPlugin | null | undefined, server?: ServerFiles | null): ThemePick {
+  if (wporg) return 'install';
+  return wporg === null && server?.themes.some((x) => x.name === t.name) ? 'server' : 'leave';
+}
+
+/** The themes to install and to copy from the server, from the picks. */
+export function themeChoices(missing: readonly DumpTheme[], picks: Readonly<Record<string, ThemePick>>, wporg: Readonly<Record<string, WporgPlugin | null>>, server?: ServerFiles | null) {
+  const install: Array<{ slug: string; version?: string }> = [];
+  const copy: string[] = [];
+  for (const t of missing) {
+    const pick = picks[t.name] ?? defaultThemePick(t, wporg[t.name], server);
+    if (pick === 'install' && wporg[t.name] && WPORG_SLUG.test(t.name)) install.push({ slug: t.name, ...(t.version ? { version: t.version } : {}) });
+    if (pick === 'server' && server?.themes.some((x) => x.name === t.name) && SERVER_ITEM.test(t.name) && !t.name.includes('..')) copy.push(t.name);
+  }
+  return { install, copy };
 }

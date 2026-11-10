@@ -1572,11 +1572,13 @@ export const actions = {
       .refine(confirmDomain, { path: ['confirm'], message: 'Type the domain to confirm' }),
   },
   'site.installPlugins': {
-    title: 'Install missing plugins from WordPress.org',
+    title: 'Install missing plugins and themes from WordPress.org',
     description:
-      "Installs plugins the site's database has but its files lack, from WordPress.org only, by slug, at production's version when given (else, or when that version is gone, the latest). Each is tried in turn: one that fails is noted and the rest go on. WordPress.org's checksums are checked after each, a folder inside a repo is kept out of its git status locally, and nothing is activated: the database says which are active. Undo removes what it installed. Starts a job.",
+      "Installs plugins the site's database has but its files lack, and themes its sites use (themes, by slug the same way, with no checksums to check), from WordPress.org only, by slug, at production's version when given (else, or when that version is gone, the latest). Each is tried in turn: one that fails is noted and the rest go on. WordPress.org's checksums are checked after each, a folder inside a repo is kept out of its git status locally, and nothing is activated: the database says which are active. Undo removes what it installed. Starts a job.",
     changesSystem: true,
-    input: z.object({ domain: localName, path: sitePath, plugins: z.array(pluginInstall).min(1).max(100) }),
+    input: z
+      .object({ domain: localName, path: sitePath, plugins: z.array(pluginInstall).max(100).default([]), themes: z.array(pluginInstall).max(20).default([]) })
+      .refine((v) => v.plugins.length + v.themes.length > 0, { path: ['plugins'], message: 'Name a plugin or a theme to install' }),
   },
   'site.copyFromServer': {
     title: 'Copy missing plugins and themes from the server',
@@ -1649,6 +1651,8 @@ export const actions = {
         clean: z.object({ user: cleanUser }).optional(),
         /** Plugins the dump has that no repo brings, installed from WordPress.org after the import; one that fails is noted and the rest go on. */
         installPlugins: z.array(pluginInstall).max(100).default([]),
+        /** Themes the dump's sites use that no repo brings, installed from WordPress.org the same way. */
+        installThemes: z.array(pluginInstall).max(20).default([]),
         /** Plugins and themes the dump has that no repo and not WordPress.org brings, copied from the site's server over SSH after the import. */
         copyFromServer: serverCopy.optional(),
         /** Production host that serves uploads missing locally. */

@@ -1,10 +1,12 @@
-import type { DumpPlugin, ProductionSettings, ServerFiles, Site, WporgPlugin } from '@devmagic-panel/shared';
+import type { DumpPlugin, DumpTheme, ProductionSettings, ServerFiles, Site, WporgPlugin } from '@devmagic-panel/shared';
+import { isWpCliCommand, splitSshHost } from '@devmagic-panel/shared';
 import { Check, ChevronDown, Download, LoaderCircle, PackageX, Server } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { JobFooter } from '@/components/job-box';
 import { useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { askWporg, onServer, pluginItem, pluginSlug } from '@/lib/missing-plugins';
 import { siteTarget } from '@/lib/site-ref';
@@ -14,20 +16,34 @@ import { ServerPassword } from '@/pages/new-site-database';
 /**
  * Plugins the site's database names that its files lack, after a database
  * import or a pull: active ones, network-wide ones, and ones production had
- * installed. One row under the search and filters, always there and always
+ * installed; and the themes its sites use, with the parent a child theme
+ * needs. One row under the search and filters, always there and always
  * the same height, so the list never moves: it says it is checking, then
  * that nothing is missing, or how many are, and opens when you ask. The ones
  * on WordPress.org install from there; the ones it does not have can be
- * copied from the site's own server, when Refresh from production is set up.
+ * copied from the site's own server, named right here: the same server and
+ * folder Refresh from production uses, saved once for the site.
  * Each is tried on its own, a failure noted and the rest done; Undo removes
  * them.
  */
+/** A theme's tick, kept apart from a plugin file of the same name. */
+const themeKey = (name: string) => `theme:${name}`;
+
 export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged: () => void }) {
   const [missing, setMissing] = useState<DumpPlugin[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [wporg, setWporg] = useState<Record<string, WporgPlugin | null>>({});
+  const [themes, setThemes] = useState<DumpTheme[]>([]);
+  const [wporgThemes, setWporgThemes] = useState<Record<string, WporgPlugin | null>>({});
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
+  // The server's form: open while none is saved, or on Change.
+  const [editing, setEditing] = useState(false);
+  const [hostField, setHostField] = useState('');
+  const [folderField, setFolderField] = useState('');
+  const [wpCliField, setWpCliField] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [production, setProduction] = useState<ProductionSettings | null>(null);
   const [server, setServer] = useState<ServerFiles | null>(null);
   const [secret, setSecret] = useState('');
@@ -37,14 +53,18 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
   const copy = useJob();
   const read = () => {
     setFailed(false);
-    return api.missingPlugins(site.domain, site.path).then(async (list) => {
+    return Promise.all([api.missingPlugins(site.domain, site.path), api.missingThemes(site.domain, site.path).catch(() => [] as DumpTheme[])]).then(async ([list, themeList]) => {
       const answers = list.length ? (await askWporg(list.map(pluginSlug), api.wporgPlugins)).answers : ({} as Record<string, WporgPlugin | null>);
+      const themeAnswers = themeList.length ? (await askWporg(themeList.map((t) => t.name), api.wporgThemes)).answers : ({} as Record<string, WporgPlugin | null>);
       setWporg(answers);
+      setWporgThemes(themeAnswers);
+      setThemes(themeList);
       setMissing(list);
-      // Active ones on WordPress.org start ticked; ones production only had installed, not.
-      setTicked(new Set(list.filter((p) => p.active && answers[pluginSlug(p)]).map((p) => p.file)));
+      // Active ones on WordPress.org start ticked, and every theme there: a site without its theme shows nothing. Ones production only had installed, not.
+      setTicked(new Set([...list.filter((p) => p.active && answers[pluginSlug(p)]).map((p) => p.file), ...themeList.filter((t) => themeAnswers[t.name]).map((t) => themeKey(t.name))]));
     }, () => {
       setMissing([]);
+      setThemes([]);
       setFailed(true);
     });
   };
@@ -53,6 +73,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
     setOpen(false);
     setServer(null);
     void read();
+    setEditing(false);
     void api.productionSettings(site.domain, site.path).then(setProduction, () => setProduction(null));
   }, [site.domain, site.path]);
   const done = `${install.job?.status}|${copy.job?.status}`;
@@ -68,16 +89,17 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
     return (
       <p className={cn(row, 'text-muted-foreground')} role="status" aria-busy="true">
         <LoaderCircle className="size-4 shrink-0 animate-spin" />
-        Checking the database for plugins the files lack...
+        Checking the database for plugins and themes the files lack...
       </p>
     );
   }
   const running = install.job?.status === 'running' || copy.job?.status === 'running';
-  if (missing.length === 0 && !install.job && !copy.job) {
+  const total = missing.length + themes.length;
+  if (total === 0 && !install.job && !copy.job) {
     return (
       <p className={cn(row, 'text-muted-foreground')}>
         {failed ? <PackageX className="size-4 shrink-0" /> : <Check className="size-4 shrink-0 text-success" />}
-        {failed ? 'Could not check the database for missing plugins.' : 'No plugin is missing: the files have every plugin the database names.'}
+        {failed ? 'Could not check the database for missing plugins and themes.' : 'Nothing is missing: the files have every plugin and theme the database names.'}
         {failed && <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { setMissing(null); void read(); }}>Check again</Button>}
       </p>
     );
@@ -91,7 +113,10 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
   });
   const fromWporg = missing.filter((p) => ticked.has(p.file) && wporg[pluginSlug(p)]);
   const fromServer = missing.filter((p) => ticked.has(p.file) && !wporg[pluginSlug(p)] && onServer(p, server));
-  const others = missing.filter((p) => !wporg[pluginSlug(p)]);
+  const themeThere = (t: DumpTheme) => server?.themes.find((x) => x.name === t.name);
+  const themesFromWporg = themes.filter((t) => ticked.has(themeKey(t.name)) && wporgThemes[t.name]);
+  const themesFromServer = themes.filter((t) => ticked.has(themeKey(t.name)) && !wporgThemes[t.name] && themeThere(t));
+  const others = missing.filter((p) => !wporg[pluginSlug(p)]).length + themes.filter((t) => !wporgThemes[t.name]).length;
   const ask = () => {
     if (!production) return;
     setAsking(true);
@@ -99,19 +124,48 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
     void api.serverFiles(production.host, production.folder, secret || undefined, production.wpCli)
       .then((has) => {
         setServer(has);
-        // The active ones the server has start ticked.
-        setTicked((t) => new Set([...t, ...missing.filter((p) => p.active && !wporg[pluginSlug(p)] && onServer(p, has)).map((p) => p.file)]));
+        // The active plugins and the themes the server has start ticked.
+        setTicked((t) => new Set([
+          ...t,
+          ...missing.filter((p) => p.active && !wporg[pluginSlug(p)] && onServer(p, has)).map((p) => p.file),
+          ...themes.filter((x) => !wporgThemes[x.name] && has.themes.some((y) => y.name === x.name)).map((x) => themeKey(x.name)),
+        ]));
       }, (error: Error) => setServerError(error.message))
       .finally(() => setAsking(false));
+  };
+  const showForm = editing || !production;
+  const hostOk = splitSshHost(hostField.trim()) !== null;
+  const folderOk = /^\/[A-Za-z0-9._/-]+$/.test(folderField.trim()) && !folderField.split('/').includes('..');
+  const wpCliOk = wpCliField.trim() === '' || isWpCliCommand(wpCliField.trim());
+  const edit = () => {
+    setHostField(production?.host ?? '');
+    setFolderField(production?.folder ?? '');
+    setWpCliField(production?.wpCli ?? '');
+    setSaveError(null);
+    setEditing(true);
+  };
+  const save = () => {
+    setSaving(true);
+    setSaveError(null);
+    // The other settings Refresh from production keeps for the site stay as they are.
+    const { wpCli: _was, ...kept } = production ?? { excludeRows: [], clean: false };
+    void api.saveProductionSettings(site.domain, site.path, { ...kept, host: hostField.trim(), folder: folderField.trim(), ...(wpCliField.trim() ? { wpCli: wpCliField.trim() } : {}) } as ProductionSettings)
+      .then((settings) => {
+        setProduction(settings);
+        setServer(null);
+        setSecret('');
+        setEditing(false);
+      }, (error: Error) => setSaveError(error.message))
+      .finally(() => setSaving(false));
   };
   const active = missing.filter((p) => p.active).length;
   return (
     <section className="overflow-hidden rounded-xl border bg-card text-sm" aria-label="Missing plugins">
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-muted/50">
-        <PackageX className={cn('size-4 shrink-0', missing.length > 0 ? 'text-warning' : 'text-muted-foreground')} />
+        <PackageX className={cn('size-4 shrink-0', total > 0 ? 'text-warning' : 'text-muted-foreground')} />
         <span className="min-w-0 flex-1">
-          <span className="font-medium">{missing.length === 0 ? 'No plugin is missing any more' : `${missing.length} plugin${missing.length === 1 ? ' is' : 's are'} missing`}</span>
-          {missing.length > 0 && <span className="text-muted-foreground">: in the database, not in the files{active > 0 ? `, ${active} of them active` : ''}</span>}
+          <span className="font-medium">{total === 0 ? 'Nothing is missing any more' : `${[missing.length ? `${missing.length} plugin${missing.length === 1 ? '' : 's'}` : '', themes.length ? `${themes.length} theme${themes.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')} ${total === 1 ? 'is' : 'are'} missing`}</span>
+          {total > 0 && <span className="text-muted-foreground">: in the database, not in the files{active > 0 ? `, ${active} plugin${active === 1 ? '' : 's'} active` : ''}</span>}
         </span>
         {running && <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" />}
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">{open ? 'Hide' : 'Review'}<ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} /></span>
@@ -119,7 +173,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
       {open && (
         <div className="grid gap-3 border-t p-4">
           <p className="text-xs text-muted-foreground">
-            WordPress turns a missing active plugin off on its own. Ones on WordPress.org install from there at production's version when the database says it, checked against WordPress.org's checksums. Ones it does not have can be copied from the site's own server. Both are kept out of git locally.
+            WordPress turns a missing active plugin off on its own, and a site without its theme shows a blank page or a default theme. Ones on WordPress.org install from there at production's version when the database says it (plugins checked against WordPress.org's checksums). Ones it does not have can be copied from the site's own server. Both are kept out of git locally, and nothing is activated.
           </p>
           <ul className="grid gap-1.5">
             {missing.map((p) => {
@@ -151,46 +205,114 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
               );
             })}
           </ul>
-          {others.length > 0 && !server && (
-            production ? (
-              <div className="grid gap-2 rounded-lg border bg-background px-3 py-2.5">
-                <p className="text-xs text-muted-foreground">
-                  {others.length === 1 ? 'One is' : `${others.length} are`} not on WordPress.org. {production.host}, the server saved for Refresh from production, may have {others.length === 1 ? 'it' : 'them'}: asking only reads its list of plugins.
-                </p>
-                <ServerPassword id="missing-server-secret" host={production.host} value={secret} onChange={setSecret} />
-                <Button variant="outline" className="w-fit" disabled={asking} onClick={ask}>
-                  {asking ? <LoaderCircle className="animate-spin" /> : <Server />}
-                  See what {production.host} has
-                </Button>
-                {serverError && <p role="alert" className="text-xs text-danger">{serverError}</p>}
+          {themes.length > 0 && (
+            <ul className="grid gap-1.5">
+              {themes.map((t) => {
+                const wp = wporgThemes[t.name];
+                const there = themeThere(t);
+                const can = Boolean(wp || there);
+                const id = `missing-theme-${t.name.replace(/[^\w-]/g, '-')}`;
+                return (
+                  <li key={t.name} className="flex items-start gap-2.5">
+                    <input id={id} type="checkbox" disabled={!can} checked={ticked.has(themeKey(t.name)) && can} onChange={(e) => toggle(themeKey(t.name), e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
+                    <label htmlFor={id} className="grid min-w-0 gap-0.5">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{wp?.name ?? t.name}</span>
+                        <code className="font-mono text-[12px] text-muted-foreground">wp-content/themes/{t.name}</code>
+                        <Badge tone="primary">theme</Badge>
+                        {t.parent ? <Badge>parent of the active theme</Badge> : <Badge tone="warning">active{t.sites && t.sites > 1 ? ` on ${t.sites} sites` : ''}</Badge>}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {wp
+                          ? `On WordPress.org${t.version ? `: installs ${t.version} (latest ${wp.version})` : `, latest ${wp.version}`}`
+                          : there
+                            ? `Not on WordPress.org. ${production?.host} has it${there.version ? `, version ${there.version}` : ''}: copied from there, reading only`
+                            : server
+                              ? `Not on WordPress.org, and ${production?.host} does not have it either: add its repo, or get it from its vendor`
+                              : 'Not on WordPress.org: a paid or custom theme'}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {others > 0 && (
+            <div className="grid gap-2.5 rounded-lg border bg-background px-3 py-2.5">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <Server className="size-4 shrink-0 text-muted-foreground" />
+                <span className="font-medium">The site's server</span>
+                {production && !showForm && (
+                  <>
+                    <code className="font-mono text-[12px] text-muted-foreground">{production.host}:{production.folder}</code>
+                    <Button size="sm" variant="ghost" className="ml-auto" onClick={edit}>Change</Button>
+                  </>
+                )}
               </div>
-            ) : (
               <p className="text-xs text-muted-foreground">
-                {others.length === 1 ? 'One is' : `${others.length} are`} not on WordPress.org. To copy {others.length === 1 ? 'it' : 'them'} from the site's server, save the server under Refresh from production on the Database tab first.
+                {others === 1 ? 'One is' : `${others} are`} not on WordPress.org: paid or custom. The server production runs on may have {others === 1 ? 'it' : 'them'}, and the panel can copy {others === 1 ? 'it' : 'them'} from there over SSH. It only reads: nothing is written on the server.
               </p>
-            )
+              {showForm ? (
+                <div className="grid gap-2.5">
+                  <div className="grid gap-1.5">
+                    <label htmlFor="missing-server-host" className="text-xs font-medium">SSH host</label>
+                    <Input id="missing-server-host" value={hostField} onChange={(e) => setHostField(e.target.value)} placeholder="deploy@www.spellbook.example, or an alias from ~/.ssh/config" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={hostField.trim() !== '' && !hostOk ? true : undefined} />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label htmlFor="missing-server-folder" className="text-xs font-medium">WordPress folder on the server</label>
+                    <Input id="missing-server-folder" value={folderField} onChange={(e) => setFolderField(e.target.value)} placeholder="/var/www/spellbook" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={folderField.trim() !== '' && !folderOk ? true : undefined} />
+                  </div>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer font-medium text-primary">WP-CLI has another name on the server?</summary>
+                    <Input aria-label="WP-CLI command on the server" value={wpCliField} onChange={(e) => setWpCliField(e.target.value)} placeholder="wp" className="mt-2 font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={!wpCliOk ? true : undefined} />
+                  </details>
+                  <p className="text-xs text-muted-foreground">Saved for this site, with no password. Refresh from production on the Database tab uses the same server and folder.</p>
+                  {saveError && <p role="alert" className="text-xs text-danger">{saveError}</p>}
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" disabled={!hostOk || !folderOk || !wpCliOk || saving} onClick={save}>{saving && <LoaderCircle className="animate-spin" />}Save the server</Button>
+                    {production && <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
+                  </div>
+                </div>
+              ) : production && (
+                <>
+                  <ServerPassword id="missing-server-secret" host={production.host} value={secret} onChange={setSecret} />
+                  <Button variant="outline" className="w-fit" disabled={asking} onClick={ask}>
+                    {asking ? <LoaderCircle className="animate-spin" /> : <Server />}
+                    {server ? `Ask ${production.host} again` : `See what ${production.host} has`}
+                  </Button>
+                  {serverError && <p role="alert" className="text-xs text-danger">{serverError}</p>}
+                </>
+              )}
+            </div>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button disabled={fromWporg.length === 0 || running} onClick={() => void install.follow(api.startJob('site.installPlugins', { ...siteTarget(site), plugins: fromWporg.map((p) => ({ slug: pluginSlug(p), ...(p.version ? { version: p.version } : {}) })) }))}>
+            <Button
+              disabled={fromWporg.length + themesFromWporg.length === 0 || running}
+              onClick={() => void install.follow(api.startJob('site.installPlugins', {
+                ...siteTarget(site),
+                plugins: fromWporg.map((p) => ({ slug: pluginSlug(p), ...(p.version ? { version: p.version } : {}) })),
+                themes: themesFromWporg.map((t) => ({ slug: t.name, ...(t.version ? { version: t.version } : {}) })),
+              }))}
+            >
               {install.job?.status === 'running' ? <LoaderCircle className="animate-spin" /> : <Download />}
-              Install {fromWporg.length || ''} from WordPress.org
+              Install {fromWporg.length + themesFromWporg.length || ''} from WordPress.org
             </Button>
-            {server && production && (
+            {server && production && !showForm && (
               <Button
                 variant="outline"
-                disabled={fromServer.length === 0 || running}
+                disabled={fromServer.length + themesFromServer.length === 0 || running}
                 onClick={() => void copy.follow(api.startJob('site.copyFromServer', {
                   ...siteTarget(site),
                   host: production.host,
                   folder: production.folder,
                   ...(production.wpCli ? { wpCli: production.wpCli } : {}),
                   plugins: [...new Set(fromServer.map((p) => pluginItem(p.file)))],
-                  themes: [],
+                  themes: themesFromServer.map((t) => t.name),
                   ...(secret ? { password: secret } : {}),
                 }))}
               >
                 {copy.job?.status === 'running' ? <LoaderCircle className="animate-spin" /> : <Server />}
-                Copy {fromServer.length || ''} from {production.host}
+                Copy {fromServer.length + themesFromServer.length || ''} from {production.host}
               </Button>
             )}
           </div>
