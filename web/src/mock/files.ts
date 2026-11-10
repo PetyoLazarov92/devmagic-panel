@@ -1,4 +1,4 @@
-import { type ActionId, type ActionRunResult, type FileDiff, type FileEntry, type FileFindResult, type FileGitState, type FileGitStatus, type FileListing, type FileMatch, type FileShortcut, type FileTrashEntry, type FileView, FILE_CHANGED, FILE_FIND_MAX, FILE_IMAGE_TYPES, FILE_TEXT_MAX, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
+import { type ActionId, type ActionRunResult, type FileDiff, type FileEntry, type FileFindResult, type FileGitState, type FileGitStatus, type FileListing, type FileMatch, type FileShortcut, type FileSize, type FileTrashEntry, type FileView, FILE_CHANGED, FOLDER_MODES, FILE_FIND_MAX, FILE_IMAGE_TYPES, FILE_TEXT_MAX, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
 
 /** The mockup's site folder: the same tree for every site, made of files a WordPress site has. */
 
@@ -153,6 +153,14 @@ const SHORTCUTS: FileShortcut[] = [
   { label: 'debug.log', path: 'wp-content/debug.log', kind: 'file' },
 ];
 
+/** Folders whose permissions were changed in the mockup; the rest are 755. */
+const folderModes = new Map<string, string>();
+
+export function mockFileSize(dir: string): FileSize {
+  if (!isDir(dir)) throw new Error(`${dir} is not there any more`);
+  return { bytes: allPaths().filter((p) => p.startsWith(`${dir}/`)).reduce((sum, p) => sum + sizeOf(TREE[p] ?? {}), 0) };
+}
+
 export function mockFiles(domain: string, dir: string): FileListing {
   if (!isDir(dir)) throw new Error(`${dir} is not there any more`);
   const paths = allPaths();
@@ -164,7 +172,7 @@ export function mockFiles(domain: string, dir: string): FileListing {
     if (file?.link) return { name, kind: 'link', writable: false, target: file.link, targetKind: 'dir', outside: true, mode: '777', modifiedAt: when(file) };
     if (!file || file.dir) {
       const newest = Math.min(...paths.filter((p) => p.startsWith(`${path}/`)).map((p) => TREE[p]?.ago ?? 60 * 24 * 7), file?.ago ?? Infinity);
-      return { name, kind: 'dir', writable: !inCore(path), mode: '755', modifiedAt: when({ ago: newest }), ...(paths.includes(`${path}/.git/HEAD`) ? { note: 'repo' as const } : {}) };
+      return { name, kind: 'dir', writable: !inCore(path), mode: folderModes.get(path) ?? '755', modifiedAt: when({ ago: newest }), ...(paths.includes(`${path}/.git/HEAD`) ? { note: 'repo' as const } : {}) };
     }
     return { name, kind: 'file', writable: !file.readOnly, mode: file.mode ?? '644', modifiedAt: when(file), sizeBytes: sizeOf(file), ...(PANEL.has(path) ? { note: 'panel' as const } : {}) };
   });
@@ -374,6 +382,21 @@ export function mockFileAction(id: ActionId, input: Record<string, unknown>): Ac
       if (exists(to)) return refuse(`${String(input.name)} is already there`);
       relocate(from, to, false);
       return ok(`renamed ${from} to ${String(input.name)}`);
+    }
+    case 'file.chmod': {
+      const mode = String(input.mode);
+      for (const path of files) {
+        guard(path);
+        if (!exists(path)) return refuse(`${path} is not there any more`);
+        if (TREE[path]?.link) return refuse(`${path} is a link: its permissions are those of what it points at`);
+        if (isDir(path) && !(FOLDER_MODES as readonly string[]).includes(mode)) return refuse(`${path} is a folder: with ${mode} nobody could open it. Use ${FOLDER_MODES.join(' or ')}`);
+      }
+      for (const path of files) {
+        const file = TREE[path];
+        if (file && !file.dir) file.mode = mode;
+        else folderModes.set(path, mode);
+      }
+      return ok(`set ${mode} on ${files.join(', ')}`);
     }
     case 'file.move':
     case 'file.copy': {

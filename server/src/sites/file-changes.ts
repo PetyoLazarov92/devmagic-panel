@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { cp, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, type FileTrashEntry, isFileName, isFileTrashId, isSitePath, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
+import { FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, type FileTrashEntry, isFileName, isFileTrashId, isSitePath, joinPath, nameOf, parentOf, type FileMode, FOLDER_MODES } from '@devmagic-panel/shared';
 import { FileRefused, type FilesContext, hashOf, isText, locate } from './files.js';
 
 /**
@@ -134,6 +134,27 @@ export function renameEntry(ctx: FilesContext, rel: string, name: string): strin
     throw new FileRefused(why(error, rel));
   }
   return renamed;
+}
+
+/** One of the short list of permissions for each entry, checked for all before any is changed. Never what is inside a folder. */
+export function chmodEntries(ctx: FilesContext, files: string[], mode: FileMode): string[] {
+  const entries = files.map((rel) => {
+    const entry = present(ctx, rel);
+    const st = lstatSync(entry.full);
+    // chmod goes through a link to what it points at, which may be outside the site.
+    if (st.isSymbolicLink()) throw new FileRefused(`${rel} is a link: its permissions are those of what it points at`);
+    if (!st.isFile() && !st.isDirectory()) throw new FileRefused(`${rel} is not a file or a folder`);
+    if (st.isDirectory() && !FOLDER_MODES.includes(mode)) throw new FileRefused(`${rel} is a folder: with ${mode} nobody could open it. Use ${FOLDER_MODES.join(' or ')}`);
+    return { rel, full: entry.full };
+  });
+  for (const { rel, full } of entries) {
+    try {
+      chmodSync(full, Number.parseInt(mode, 8));
+    } catch (error) {
+      throw new FileRefused(why(error, rel));
+    }
+  }
+  return files;
 }
 
 /** Each entry with the place it goes to in a folder, refused before anything moves. */

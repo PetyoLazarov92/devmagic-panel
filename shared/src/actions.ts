@@ -5,7 +5,7 @@ import { PROFILE_NAME } from './profiles.js';
 import { mysqlIdentifier, WP_CONTENT_KINDS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS, WP_TABLE_FIXES } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
 import { SITE_SERVERS } from './nginx.js';
-import { FILE_TEXT_MAX, isFileName, isFileTrashId, isSitePath } from './files.js';
+import { FILE_MODES, FILE_TEXT_MAX, isFileName, isFileTrashId, isSitePath } from './files.js';
 import { isUploadsFolder } from './uploads.js';
 
 /** A review of a site's .htaccess rules: the checksum of each file as it was read, by folder, and the translated rules left out. */
@@ -1638,6 +1638,12 @@ export const actions = {
     description: "Gives a file or folder of the site another name in the same folder. A link is renamed as the link it is. Refuses a name that is already there.",
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath, file: filePath, name: fileName }),
+  },
+  'file.chmod': {
+    title: 'Change permissions',
+    description: "Sets the permissions of files and folders of the site to one of a short list: 644, 640 or 600 for a file, 755 or 750 for a file or a folder. Only the entries named, never what is inside a folder. As you, so only what you own; a link is refused, since its permissions are its target's.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, files: filePaths, mode: z.enum(FILE_MODES) }),
   },
   'file.move': {
     title: 'Move files',

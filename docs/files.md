@@ -22,6 +22,11 @@ never as root, and never leaves the site's folder.
   `wp-config.php` and `debug.log`. Only the ones that are there show.
 - The list has the name, size, when it changed and its permissions, folders
   first. Name, Size and Changed sort. On a phone only the name and size show.
+- A folder has no size until you ask: **Measure** in its Size cell counts
+  everything below it (`du`, staying on the folder's disk) and shows the
+  total until the list is read again.
+- Press `/` anywhere on the tab to go to the box, and Escape in it to empty
+  it and leave search results.
 - `.git` and `node_modules` are left out until you switch on **Show hidden**.
   Dot files like `.htaccess` always show.
 - A row says only what changes what you can do with it: **repo** for the top
@@ -116,6 +121,35 @@ syntax error is named with its line, with a button that goes there.
   to, Copy to and Delete for the selection. A row that cannot change keeps a
   greyed box.
 - A copy of more than 1 GB is refused: do that one in a terminal.
+
+## Permissions
+
+**Permissions**, in a row's menu or for the rows you tick, sets one of five
+modes, each named with what it means:
+
+| Mode | Meaning |
+| --- | --- |
+| `644` | you write, everyone reads |
+| `640` | you write, your group reads |
+| `600` | only you read and write |
+| `755` | you write, everyone reads and opens or runs it |
+| `750` | you write, your group reads and opens or runs it |
+
+- There is no box to type a number in, so nothing here lets everyone write
+  (`777`, `666`) or sets a setuid bit.
+- A folder takes `755` or `750` only: with the others nobody could open it.
+  Only the folder itself changes, never what is in it.
+- A link is refused, since its permissions are those of what it points at,
+  and so is anything in a shared core. Everything is checked before the first
+  one changes.
+- It runs as you, so a file another account owns says so and stays as it is.
+
+## From other places
+
+- The command palette (Ctrl+K) has **Files of** each site.
+- On the **Plugins and themes** tab each plugin and theme has **Open folder**,
+  which lands in its folder here. Must-use plugins, drop-ins and themes found
+  in a repo through Local mode have none.
 
 ## Upload, zip and extract
 

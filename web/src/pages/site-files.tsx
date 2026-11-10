@@ -1,9 +1,9 @@
 import { type ActionId, type FileDiff, type FileEntry, type FileGitState, type FileGitStatus, type FileListing, type FileMatch, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, GitBranch, GitCompare, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, GitBranch, GitCompare, KeyRound, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
 import { type DragEvent, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { DiffView } from '@/components/diff-view';
 import { EditorBoundary } from '@/components/editor-boundary';
-import { DeleteDialog, FileTrashCard, FolderPicker, NameDialog } from '@/components/file-dialogs';
+import { DeleteDialog, FileTrashCard, FolderPicker, NameDialog, PermissionsDialog } from '@/components/file-dialogs';
 import { EmptyState, Notice, ViewBar } from '@/components/page';
 import { LogSkeleton, TableSkeleton } from '@/components/skeletons';
 import { Badge } from '@/components/ui/badge';
@@ -105,6 +105,7 @@ type Asking =
   | { kind: 'new'; what: 'file' | 'dir' }
   | { kind: 'rename'; name: string }
   | { kind: 'move' | 'copy'; paths: string[] }
+  | { kind: 'chmod'; paths: string[]; folder: boolean; mode?: string }
   | { kind: 'delete'; paths: string[]; why: string };
 
 export function FilesTab({ site }: { site: Site }) {
@@ -328,8 +329,12 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [asking, setAsking] = useState<Asking | null>(null);
   const [busy, setBusy] = useState(false);
+  // What each folder holds, measured when asked: counting everything below can take a while.
+  const [sizes, setSizes] = useState<Readonly<Record<string, number | 'busy'>>>({});
+  const box = useRef<HTMLInputElement>(null);
   const first = useRef(true);
   useEffect(() => {
+    setSizes({});
     // Another folder starts with an empty box; the first one keeps the search its address has.
     if (!first.current) {
       setQuery('');
@@ -356,6 +361,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
   const changeable = (e: FileEntry) => canChange && !(e.kind === 'link' && e.outside);
   const pathOf = (name: string) => joinPath(dir, name);
   const refresh = () => {
+    setSizes({});
     reload();
     trash.reload();
     git.reload();
@@ -446,6 +452,33 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
     void upload(Array.from(e.dataTransfer.files));
   };
 
+  const measure = (name: string) => {
+    setSizes((was) => ({ ...was, [name]: 'busy' }));
+    const drop = () => setSizes(({ [name]: _gone, ...rest }) => rest);
+    api.fileSize(site.domain, pathOf(name), site.path).then(
+      // An answer for a folder left in the meantime finds no 'busy' to replace.
+      (size) => setSizes((was) => (was[name] === 'busy' ? { ...was, [name]: size.bytes } : was)),
+      (e: Error) => {
+        drop();
+        toast({ tone: 'danger', title: `${name} was not measured`, detail: e.message });
+      },
+    );
+  };
+  // A slash goes to the box from anywhere on the tab, as in a code host's file list.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest('input, textarea, select, [contenteditable="true"], dialog')) return;
+      if (!box.current) return;
+      e.preventDefault();
+      box.current.focus();
+      box.current.select();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const duplicate = (name: string) => void change('file.copy', { files: [pathOf(name)], to: dir }, `Copied ${name}`);
 
   const names = useMemo(() => (listing?.entries ?? []).map((e) => e.name), [listing]);
@@ -490,6 +523,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
             { label: 'Duplicate', icon: <CopyPlus />, onSelect: () => duplicate(e.name) },
             { label: 'Move to', icon: <FolderInput />, onSelect: () => setAsking({ kind: 'move', paths: [path] }) },
             { label: 'Copy to', icon: <Copy />, onSelect: () => setAsking({ kind: 'copy', paths: [path] }) },
+            ...(e.kind === 'file' || e.kind === 'dir' ? [{ label: 'Permissions', icon: <KeyRound />, onSelect: () => setAsking({ kind: 'chmod', paths: [path], folder: e.kind === 'dir', ...(e.mode ? { mode: e.mode } : {}) }) }] : []),
             ...(ARCHIVE.test(e.name) ? [] : [{ label: 'Compress', icon: <FileArchive />, onSelect: () => compress([e.name]) }]),
             { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => askDelete([e.name]) },
           ]
@@ -566,8 +600,18 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
             <div className="relative w-full sm:w-64">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
               <Input
+                ref={box}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                aria-keyshortcuts="/"
+                title="Press / to come here, Escape to clear"
+                onKeyDown={(e) => {
+                  if (e.key !== 'Escape' || (!query && !find)) return;
+                  // Escape empties the box and leaves the results, back to the folder as it is listed.
+                  e.preventDefault();
+                  setQuery('');
+                  if (find) navigate(filesHref(site, { dir }), { scroll: false });
+                }}
                 placeholder={mode === 'filter' ? 'Filter this folder' : mode === 'name' ? 'A name, then Enter' : 'Text in files, then Enter'}
                 aria-label={mode === 'filter' ? 'Filter this folder by name' : mode === 'name' ? 'Find files and folders by name, here and in the folders below' : 'Find text in the files here and in the folders below'}
                 className="h-8 pl-8 text-xs"
@@ -649,6 +693,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'copy', paths: pickedRows.map(pathOf) })}><Copy />Copy to</Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => downloadZip(site, pickedRows.map(pathOf))}><Download />Download</Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => compress(pickedRows)}><FileArchive />Compress</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'chmod', paths: pickedRows.map(pathOf), folder: (listing?.entries ?? []).some((e) => e.kind === 'dir' && pickedRows.includes(e.name)) })}><KeyRound />Permissions</Button>
           <Button size="sm" variant="outline" disabled={busy} className="text-danger" onClick={() => askDelete(pickedRows)}><Trash2 />Delete</Button>
           <Button size="icon" variant="ghost" className="size-8" aria-label="Clear the selection" onClick={() => setPicked(new Set())}><X /></Button>
         </div>
@@ -717,7 +762,19 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
                         <GitLabel state={gitStatus?.entries[e.name]} folder={isFolder(e)} />
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums">{e.sizeBytes === undefined ? '' : bytes(e.sizeBytes)}</td>
+                    <td className="px-3 py-2 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                      {e.sizeBytes !== undefined ? (
+                        bytes(e.sizeBytes)
+                      ) : e.kind !== 'dir' ? (
+                        ''
+                      ) : sizes[e.name] === 'busy' ? (
+                        <LoaderCircle className="ml-auto size-3.5 animate-spin" aria-label={`Measuring ${e.name}`} />
+                      ) : sizes[e.name] !== undefined ? (
+                        <span title="Everything below it counted">{bytes(sizes[e.name] as number)}</span>
+                      ) : (
+                        <button type="button" className="rounded hover:text-foreground hover:underline" aria-label={`Measure ${e.name}`} title="Count what this folder holds" onClick={() => measure(e.name)}>Measure</button>
+                      )}
+                    </td>
                     <td className="hidden px-3 py-2 text-xs whitespace-nowrap text-muted-foreground sm:table-cell">
                       {e.modifiedAt && <time dateTime={e.modifiedAt} title={dateTime(e.modifiedAt)}>{timeAgo(e.modifiedAt)}</time>}
                     </td>
@@ -774,6 +831,20 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
           if (asking?.kind !== 'move' && asking?.kind !== 'copy') return false;
           const what = asking.paths.length === 1 ? nameOf(asking.paths[0] ?? '') : `${asking.paths.length} entries`;
           const done = await change(asking.kind === 'copy' ? 'file.copy' : 'file.move', { files: asking.paths, to }, `${asking.kind === 'copy' ? 'Copied' : 'Moved'} ${what} to ${to || 'the site folder'}`);
+          if (done) setPicked(new Set());
+          return done;
+        }}
+      />
+      <PermissionsDialog
+        open={asking?.kind === 'chmod'}
+        items={asking?.kind === 'chmod' ? asking.paths : []}
+        folder={asking?.kind === 'chmod' && asking.folder}
+        current={asking?.kind === 'chmod' ? asking.mode : undefined}
+        onClose={() => setAsking(null)}
+        onSubmit={async (mode) => {
+          if (asking?.kind !== 'chmod') return false;
+          const what = asking.paths.length === 1 ? nameOf(asking.paths[0] ?? '') : `${asking.paths.length} entries`;
+          const done = await change('file.chmod', { files: asking.paths, mode }, `${what} set to ${mode}`);
           if (done) setPicked(new Set());
           return done;
         }}

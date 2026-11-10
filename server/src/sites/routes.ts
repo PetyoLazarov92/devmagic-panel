@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { AuraReport, CompatScan, FileDiff, FileFindResult, FileGitStatus, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, FileDiff, FileFindResult, FileGitStatus, FileSize, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
 import { FILE_TEXT_MAX, actions, sshHost, serverPath, wpCliCommand, branchName, cleanCopyName, gitUrl, isActionId, isSitePath, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { SystemConfig } from '../config.js';
@@ -36,7 +36,7 @@ import { fileTrashDir, listFileTrash } from './file-changes.js';
 import { stagedDir, stageUpload, zipForDownload } from './file-transfer.js';
 import { SiteActionRefused, siteFor, SiteNotFoundError, siteKey } from './site-actions.js';
 import { parseWpConfig } from './wpconfig.js';
-import { diffWithDisk, findByName, findInFiles, gitDiff, gitStatus } from './file-find.js';
+import { diffWithDisk, findByName, findInFiles, folderSize, gitDiff, gitStatus } from './file-find.js';
 import { FileRefused, type FilesContext, listFolder, rawFile, readFile, siteFolder } from './files.js';
 import type { WpCronReport } from '@devmagic-panel/shared';
 import { readProduction, saveProduction } from './refresh.js';
@@ -229,6 +229,9 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
   api.get<{ Params: { domain: string }; Querystring: { path?: string; dir?: string; q?: string; in?: string } }>('/api/sites/:domain/files/find', async (request, reply): Promise<FileFindResult | FastifyReply> =>
     filesAsk(request.params.domain, request.query.path, reply, async (ctx) =>
       request.query.in === 'text' ? findInFiles(deps.exec, ctx, request.query.dir ?? '', request.query.q ?? '') : findByName(ctx, request.query.dir ?? '', request.query.q ?? '')));
+  // How much a folder holds, when you ask: counting it for every row would make a listing slow.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; dir?: string } }>('/api/sites/:domain/files/size', async (request, reply): Promise<FileSize | FastifyReply> =>
+    filesAsk(request.params.domain, request.query.path, reply, (ctx) => folderSize(deps.exec, ctx, request.query.dir ?? '')));
   // What git says changed in a folder, and one file's changes since the last commit.
   api.get<{ Params: { domain: string }; Querystring: { path?: string; dir?: string } }>('/api/sites/:domain/files/git', async (request, reply): Promise<FileGitStatus | FastifyReply> =>
     filesAsk(request.params.domain, request.query.path, reply, (ctx) => gitStatus(deps.exec, ctx, request.query.dir ?? '')));

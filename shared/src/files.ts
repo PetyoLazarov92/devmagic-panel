@@ -135,6 +135,25 @@ export interface FileGitStatus {
   entries: Record<string, FileGitState>;
 }
 
+/** The permissions the Files tab sets: a short list, never a number typed by hand. */
+export const FILE_MODES = ['644', '640', '600', '755', '750'] as const;
+export type FileMode = (typeof FILE_MODES)[number];
+/** What each one means, in words. */
+export const FILE_MODE_WORDS: Readonly<Record<FileMode, string>> = {
+  '644': 'you write, everyone reads',
+  '640': 'you write, your group reads',
+  '600': 'only you read and write',
+  '755': 'you write, everyone reads and opens or runs it',
+  '750': 'you write, your group reads and opens or runs it',
+};
+/** A folder needs one of these: without the last bit nobody can open it. */
+export const FOLDER_MODES: readonly FileMode[] = ['755', '750'];
+
+export interface FileSize {
+  /** What a folder holds, in bytes, everything below it counted. */
+  bytes: number;
+}
+
 /** A diff longer than this is cut. */
 export const FILE_DIFF_MAX = 400_000;
 

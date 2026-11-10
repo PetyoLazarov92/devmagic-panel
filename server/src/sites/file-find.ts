@@ -1,6 +1,6 @@
 import { type Dirent, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { FILE_DIFF_MAX, FILE_FIND_MAX, type FileDiff, type FileFindResult, type FileGitState, type FileGitStatus, type FileMatch, joinPath, nameOf } from '@devmagic-panel/shared';
+import { FILE_DIFF_MAX, FILE_FIND_MAX, type FileDiff, type FileFindResult, type FileSize, type FileGitState, type FileGitStatus, type FileMatch, joinPath, nameOf } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { FileRefused, type FilesContext, locate } from './files.js';
 
@@ -90,6 +90,17 @@ export async function findInFiles(exec: Executor, ctx: FilesContext, rel: string
     matches.push({ path: joinPath(rel, found[1] as string), kind: 'file', line: Number(found[2]), text: text.length > LINE_MAX ? `${text.slice(0, LINE_MAX)}...` : text });
   }
   return { matches, more: cut };
+}
+
+/** How much a folder of the site holds, counted by du: it stays on the folder's disk and follows no link. */
+export async function folderSize(exec: Executor, ctx: FilesContext, rel: string): Promise<FileSize> {
+  const top = searchFolder(ctx, rel);
+  // -s: one total; -b: the bytes the files hold, not the blocks they take; -x: never onto another disk.
+  const result = await exec('du', ['-sbx', '--', top], { timeoutMs: 30_000 });
+  const bytes = Number(/^(\d+)\s/.exec(result.stdout)?.[1]);
+  // du ends with 1 when a folder in it could not be read: the total it gives is of what could.
+  if (!Number.isFinite(bytes)) throw new FileRefused(`The folder could not be measured: ${result.stderr.trim().split('\n').at(-1) || `du ended with ${result.code}`}`);
+  return { bytes };
 }
 
 /** The repo a folder of the site is in: the nearest folder with a .git, up to the site's folder and no further. */

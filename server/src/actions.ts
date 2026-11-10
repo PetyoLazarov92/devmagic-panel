@@ -15,7 +15,7 @@ import { readWpcoreConfig } from './wpcore.js';
 import { FileRefused, type FilesContext, siteFolder } from './sites/files.js';
 import { phpSyntax } from './sites/file-find.js';
 import { compressEntries, extractArchive, placeUploads, stagedDir } from './sites/file-transfer.js';
-import { copyEntries, createEntry, deleteEntries, fileTrashDir, moveEntries, renameEntry, restoreEntries, writeFile } from './sites/file-changes.js';
+import { chmodEntries, copyEntries, createEntry, deleteEntries, fileTrashDir, moveEntries, renameEntry, restoreEntries, writeFile } from './sites/file-changes.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
 import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
 import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
@@ -840,6 +840,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   },
   'file.create': async (ctx, { domain, path, dir, name, kind }) => [{ code: 0, stdout: `made ${createEntry(filesOf(ctx, domain, path), dir, name, kind)}`, stderr: '' }],
   'file.rename': async (ctx, { domain, path, file, name }) => [{ code: 0, stdout: `renamed ${file} to ${renameEntry(filesOf(ctx, domain, path), file, name)}`, stderr: '' }],
+  'file.chmod': async (ctx, { domain, path, files, mode }) => [{ code: 0, stdout: `set ${mode} on ${chmodEntries(filesOf(ctx, domain, path), files, mode).join(', ')}`, stderr: '' }],
   'file.move': async (ctx, { domain, path, files, to }) => [{ code: 0, stdout: `moved ${moveEntries(filesOf(ctx, domain, path), files, to).join(', ')}`, stderr: '' }],
   'file.copy': async (ctx, { domain, path, files, to }) => [{ code: 0, stdout: `copied to ${(await copyEntries(filesOf(ctx, domain, path), files, to)).join(', ')}`, stderr: '' }],
   'file.delete': async (ctx, { domain, path, files }) => {

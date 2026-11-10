@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/secrets.js';
-import { diffWithDisk, findByName, findInFiles, findQuery, gitDiff, gitStatus, phpSyntax, repoOf } from '../src/sites/file-find.js';
+import { diffWithDisk, findByName, findInFiles, findQuery, folderSize, gitDiff, gitStatus, phpSyntax, repoOf } from '../src/sites/file-find.js';
 import { FileRefused, type FilesContext } from '../src/sites/files.js';
 import { RunStore } from '../src/store.js';
 import { DMP, type FakeResponse, fakeExec, tempTree } from './helpers.js';
@@ -114,6 +114,27 @@ describe('findInFiles', () => {
     const { exec, calls } = fakeExec({ grep: {} });
     await expect(findInFiles(exec, ctx, 'wand-out', 'secret')).rejects.toThrow(/leaves the site/);
     await expect(findInFiles(exec, ctx, '', 'a\nb')).rejects.toThrow(FileRefused);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('folderSize', () => {
+  it('asks du for one total of the folder, on its own disk', async () => {
+    const { ctx, theme } = siteTree();
+    const { exec, calls } = fakeExec({ du: { stdout: `48213\t${theme}\n` } });
+    expect(await folderSize(exec, ctx, 'wp-content/themes/wandworks')).toEqual({ bytes: 48213 });
+    expect(calls).toMatchObject([{ file: 'du', args: ['-sbx', '--', theme] }]);
+  });
+
+  it('keeps the total when a folder in it could not be read, and refuses a file, a link out and a missing du', async () => {
+    const { ctx } = siteTree();
+    expect(await folderSize(fakeExec({ du: { code: 1, stdout: '900\t/x\n', stderr: 'du: cannot read directory' } }).exec, ctx, '')).toEqual({ bytes: 900 });
+    const { exec, calls } = fakeExec({});
+    await expect(folderSize(exec, ctx, '')).rejects.toThrow(/could not be measured/);
+    calls.length = 0;
+    await expect(folderSize(exec, ctx, 'wp-config.php')).rejects.toThrow(/not a folder/);
+    await expect(folderSize(exec, ctx, 'wand-out')).rejects.toThrow(FileRefused);
+    await expect(folderSize(exec, ctx, '..')).rejects.toThrow(FileRefused);
     expect(calls).toEqual([]);
   });
 });
@@ -247,6 +268,7 @@ describe('the find, git and compare routes', () => {
   const responses: Record<string, FakeResponse> = {
     grep: { stdout: './wp-config.php\u00001:<?php define(\'DB_NAME\', \'shop_com\');\n' },
     'git -C': (call) => (call.args.includes('status') ? { stdout: '## main\0 M functions.php\0' } : { stdout: '@@ -1 +1 @@\n-<?php\n+<?php // Wand setup\n' }),
+    du: { stdout: '2048\t/x\n' },
     diff: { code: 1, stdout: '--- on disk\n+++ what you typed\n@@ -1 +1 @@\n-old\n+new\n' },
   };
 
@@ -303,6 +325,13 @@ describe('the find, git and compare routes', () => {
     expect(diff.json().diff).toContain('+<?php // Wand setup');
     expect((await get('/api/sites/local.shop.com/files/diff?file=wp-config.php')).statusCode).toBe(400);
     expect((await get('/api/sites/local.shop.com/files/diff?file=leak.txt')).statusCode).toBe(400);
+  });
+
+  it('measure a folder when asked, after a login only', async () => {
+    expect((await get('/api/sites/local.shop.com/files/size?dir=wp-content', false)).statusCode).toBe(401);
+    expect((await get('/api/sites/local.shop.com/files/size?dir=wp-content')).json()).toEqual({ bytes: 2048 });
+    expect((await get('/api/sites/local.shop.com/files/size?dir=wand-out')).statusCode).toBe(400);
+    expect((await get('/api/sites/local.shop.com/files/size?dir=wp-config.php')).statusCode).toBe(400);
   });
 
   it('compare a file with what was typed, writing nothing', async () => {

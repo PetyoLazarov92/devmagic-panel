@@ -1,4 +1,4 @@
-import { type FileListing, type FileTrashEntry, type Site, FILE_TRASH_DAYS, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
+import { type FileListing, type FileMode, type FileTrashEntry, type Site, FILE_MODES, FILE_MODE_WORDS, FILE_TRASH_DAYS, FOLDER_MODES, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
 import { ChevronRight, Folder, FolderOpen, LoaderCircle, Undo2 } from 'lucide-react';
 import { type FormEvent, Fragment, useEffect, useId, useState } from 'react';
 import { Notice } from '@/components/page';
@@ -192,6 +192,61 @@ export function FolderPicker({ site, open, title, verb, start, moving, sameFolde
         </ul>
         {reason && <p className="text-xs text-muted-foreground">{reason}</p>}
       </div>
+    </Dialog>
+  );
+}
+
+/** The few permissions a site's files need, by number with what each means; never one that lets everyone write. */
+export function PermissionsDialog({ open, items, folder, current, onSubmit, onClose }: {
+  open: boolean;
+  items: readonly string[];
+  /** A folder is among them: only the modes a folder can be opened with are offered. */
+  folder: boolean;
+  /** What a single entry has now. */
+  current: string | undefined;
+  onSubmit: (mode: FileMode) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const id = useId();
+  const modes = folder ? FOLDER_MODES : FILE_MODES;
+  const [mode, setMode] = useState<FileMode>();
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) setMode(undefined);
+  }, [open]);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!mode || busy) return;
+    setBusy(true);
+    const done = await onSubmit(mode);
+    setBusy(false);
+    if (done) onClose();
+  };
+  const known = current !== undefined && (FILE_MODES as readonly string[]).includes(current);
+  return (
+    <Dialog open={open} onClose={onClose} title="Permissions" description={items.length === 1 ? nameOf(items[0] ?? '') : `${items.length} entries`} size="sm">
+      <form onSubmit={(e) => void submit(e)} className="grid gap-4 text-sm">
+        {current !== undefined && (
+          <p className="text-muted-foreground">
+            Now <span className="font-mono text-foreground">{current}</span>{known ? `: ${FILE_MODE_WORDS[current as FileMode]}.` : ', which is not one of these.'}
+          </p>
+        )}
+        <fieldset className="grid gap-1.5">
+          <legend className="mb-1.5 font-medium">Set to</legend>
+          {modes.map((m) => (
+            <label key={m} htmlFor={`${id}-${m}`} className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 has-checked:border-primary has-checked:bg-primary/5">
+              <input id={`${id}-${m}`} type="radio" name={id} value={m} checked={mode === m} onChange={() => setMode(m)} className="size-4 accent-[var(--primary)]" />
+              <span className="font-mono">{m}</span>
+              <span className="text-muted-foreground">{FILE_MODE_WORDS[m]}</span>
+            </label>
+          ))}
+        </fieldset>
+        <p className="text-xs text-muted-foreground">{folder ? 'A folder needs a mode it can be opened with. Only the folder itself changes, not what is in it.' : 'Nothing here lets everyone write.'}</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" disabled={!mode || mode === current || busy}>{busy && <LoaderCircle className="animate-spin" />}Set</Button>
+        </div>
+      </form>
     </Dialog>
   );
 }

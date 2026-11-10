@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { hashPassword } from '../src/secrets.js';
-import { copyEntries, copyName, createEntry, deleteEntries, fileTrashDir, listFileTrash, moveEntries, pruneFileTrash, renameEntry, restoreEntries, writeFile } from '../src/sites/file-changes.js';
+import { chmodEntries, copyEntries, copyName, createEntry, deleteEntries, fileTrashDir, listFileTrash, moveEntries, pruneFileTrash, renameEntry, restoreEntries, writeFile } from '../src/sites/file-changes.js';
 import { FileRefused, type FilesContext, hashOf } from '../src/sites/files.js';
 import { RunStore } from '../src/store.js';
 import { DMP, fakeExec, tempTree } from './helpers.js';
@@ -85,6 +85,33 @@ describe('writeFile', () => {
     expect(() => writeFile(ctx, { file: 'wp-content', content: 'x' })).toThrow(/not a file/);
     expect(() => writeFile(ctx, { file: 'wp-content/uploads/archive.bin', content: 'x' })).toThrow(/not text/);
     expect(() => writeFile(ctx, { file: 'nope.php', content: 'x' })).toThrow(/not there/);
+  });
+});
+
+describe('chmodEntries', () => {
+  it('sets one of the short list on files and folders, and never what is inside a folder', () => {
+    const { ctx, siteRoot } = siteTree();
+    const mode = (rel: string) => statSync(join(siteRoot, rel)).mode & 0o777;
+    const inside = mode('wp-content/themes/wandworks/inc/setup.php');
+    expect(chmodEntries(ctx, [STYLE, 'wp-content/themes/wandworks/inc'], '750')).toEqual([STYLE, 'wp-content/themes/wandworks/inc']);
+    expect(mode(STYLE)).toBe(0o750);
+    expect(mode('wp-content/themes/wandworks/inc')).toBe(0o750);
+    expect(mode('wp-content/themes/wandworks/inc/setup.php')).toBe(inside);
+    chmodEntries(ctx, ['wp-config.php'], '600');
+    expect(mode('wp-config.php')).toBe(0o600);
+  });
+
+  it('refuses a link, a folder nobody could open, the shared core and what is gone, before anything changes', () => {
+    const { ctx, siteRoot, root } = siteTree();
+    const secret = statSync(join(root, 'secret.txt')).mode & 0o777;
+    expect(() => chmodEntries(ctx, [STYLE, 'leak.txt'], '600')).toThrow(/is a link/);
+    expect(() => chmodEntries(ctx, [STYLE, 'out'], '755')).toThrow(/is a link/);
+    expect(() => chmodEntries(ctx, [STYLE, 'wp-content/uploads'], '644')).toThrow(/nobody could open it/);
+    expect(() => chmodEntries(ctx, [STYLE, 'wp-admin/index.php'], '644')).toThrow(/read only/);
+    expect(() => chmodEntries(ctx, [STYLE, 'nope.php'], '644')).toThrow(/not there/);
+    expect(() => chmodEntries(ctx, ['../secret.txt'], '644')).toThrow(FileRefused);
+    expect(statSync(join(root, 'secret.txt')).mode & 0o777).toBe(secret);
+    expect(statSync(join(siteRoot, STYLE)).mode & 0o777).not.toBe(0o600);
   });
 });
 
@@ -268,6 +295,9 @@ describe('the Files actions', () => {
     expect((await run('file.write', { file: '../secret.txt', content: 'x' })).statusCode).toBe(400);
     expect((await run('file.delete', { files: ['/etc/passwd'] })).statusCode).toBe(400);
     expect((await run('file.rename', { file: 'wp-config.php', name: 'a/b' })).statusCode).toBe(400);
+    for (const mode of ['777', '4755', '0644', 'u+s', 644]) expect((await run('file.chmod', { files: ['wp-config.php'], mode })).statusCode, String(mode)).toBe(400);
+    expect((await run('file.chmod', { files: ['leak.txt'], mode: '644' })).statusCode).toBe(400);
+    expect(statSync(join(siteRoot, 'wp-config.php')).mode & 0o777).toBe(0o640);
     expect((await app.inject({ method: 'POST', url: '/api/actions/file.delete', headers: { host: HOST, origin: ORIGIN, cookie }, payload: { domain: 'local.nope.com', files: ['a'] } })).statusCode).toBe(400);
     expect(readFileSync(join(siteRoot, 'wp-config.php'), 'utf8')).toContain('shop_com');
   });
@@ -278,6 +308,8 @@ describe('the Files actions', () => {
     expect((await run('file.rename', { file: 'tools/notes.txt', name: 'readme.txt' })).json()).toMatchObject({ ok: true });
     expect((await run('file.copy', { files: ['tools/readme.txt'], to: 'tools' })).json()).toMatchObject({ ok: true });
     expect((await run('file.move', { files: ['tools/readme copy.txt'], to: '' })).json()).toMatchObject({ ok: true });
+    expect((await run('file.chmod', { files: ['readme copy.txt'], mode: '600' })).json()).toMatchObject({ ok: true });
+    expect(statSync(join(siteRoot, 'readme copy.txt')).mode & 0o777).toBe(0o600);
     expect(existsSync(join(siteRoot, 'readme copy.txt'))).toBe(true);
     const gone = await run('file.delete', { files: ['tools'] });
     expect(gone.json()).toMatchObject({ ok: true });

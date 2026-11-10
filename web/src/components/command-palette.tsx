@@ -1,6 +1,6 @@
 import type { ActionId, InstallDraft, Site } from '@devmagic-panel/shared';
 import { branchWebUrl, repoWeb } from '@devmagic-panel/shared';
-import { Activity, Archive, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
+import { Activity, Archive, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, Folder, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { openInVSCode, siteUrl } from '@/components/site-bits';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { setAssistantOpen } from '@/lib/assistant';
 import { draftHref, draftProgress } from '@/lib/drafts';
 import { currentSite, paletteRuns } from '@/lib/palette';
+import { filesHref } from '@/lib/file-links';
 import { navigate, usePath } from '@/lib/router';
 import { lastLine, openWpAdmin } from '@/lib/site-actions';
 import { siteHref, siteName } from '@/lib/site-ref';
@@ -124,6 +125,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
         { id: `go:${name}`, label: name, hint: s.title ?? '', icon: <Globe />, group: 'Sites', run: () => navigate(siteHref(s)) },
         { id: `open:${name}`, label: `Open ${name}`, icon: <ExternalLink />, group: 'Open', run: () => window.open(siteUrl(s.domain, s.path), '_blank', 'noopener') },
         { id: `admin:${name}`, label: `wp-admin on ${name}`, icon: <LogIn />, group: 'Open', run: () => void openWpAdmin(s) },
+        { id: `files:${name}`, label: `Files of ${name}`, hint: s.docroot, icon: <Folder />, group: 'Open', run: () => navigate(filesHref(s)) },
         { id: `code:${name}`, label: `${name} in VS Code`, hint: s.docroot, icon: <Code2 />, group: 'Open', run: () => openInVSCode(s.docroot) },
         ...branchCommand(s),
       ];
