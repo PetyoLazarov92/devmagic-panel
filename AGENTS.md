@@ -111,7 +111,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
 11. **No new runtime dependencies without a reason.** Run history uses
     `node:sqlite` on purpose. The SQL runner's editor is CodeMirror 6, in the
     web app only and loaded with the SQL view: a code editor with
-    suggestions is not worth writing by hand. Prefer what Fastify, zod and
+    suggestions is not worth writing by hand. The Files tab's editor is the
+    same CodeMirror with its language packages, loaded with the editor.
+    Prefer what Fastify, zod and
     React already give.
 12. **Respect the existing setup.** The panel lives next to sites made by hand
     or by devmagic:
@@ -269,6 +271,26 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       Panel-made folders are listed in the root-owned registry
       `$STATE_DIR/sites/<domain>` (path and device:inode), so nothing of the
       panel's sits in the folder.
+    - **The Files tab works as you, inside the site's folder**
+      (`server/src/sites/files.ts`, `file-changes.ts`, `file-transfer.ts`,
+      `file-find.ts`): no root and no `dmp-root` command. A path is checked
+      as written and again after links are followed; a link that leaves the
+      folder is shown and never followed or written through, except reading
+      a shared core. Nothing is written over: a taken name is refused, and a
+      save of a file that changed on disk asks first. Nothing is saved until
+      you press Save. Delete moves the entry to the panel's own file trash
+      (`<dataDir>/file-trash`, outside the site, 14 days, 1 GB at most) with
+      Undo. An archive is read before it is unpacked (nothing outside its
+      new folder, links left out, 1 GB at most). Permissions come from a
+      fixed list (`FILE_MODES`: never one that lets everyone write, never a
+      typed number, a folder only `FOLDER_MODES`, not recursive). Find and
+      git only read (`grep`, `git status`, `git diff`), and a saved PHP file
+      is checked with `php -n -l`, which never runs it. File contents, a
+      diff included, go to the browser only: every `file.*` action is in
+      `ASSISTANT_EXCLUDED_ACTIONS`, and run history stores what was saved as
+      `(hidden)`. Uploads from production (`sites/uploads-compare.ts`) only
+      reads on the server and only adds here; a file that changed there is
+      replaced only when you switch that on, through the file trash.
     - **Cron is your crontab only**: the panel's tasks live in one marked
       block of the panel user's crontab (`server/src/cron.ts`, written with
       `crontab -` and the text on stdin), every other line stays as it is,

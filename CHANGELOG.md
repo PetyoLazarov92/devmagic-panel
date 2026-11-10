@@ -19,6 +19,7 @@
 * **Files:** Permissions, in a row's menu or for the rows you tick, sets 644, 640, 600, 755 or 750, each named with what it means. There is no number to type, so nothing can be opened to everyone for writing; a folder takes 755 or 750 only and only the folder itself changes; a link is refused
 * **Files:** Measure in a folder's Size cell counts what the folder holds, everything below it, when you ask. Press / to go to the box and Escape to empty it and leave search results
 * **Files:** the command palette has Files of each site, and each plugin and theme on the Plugins and themes tab has Open folder
+* **Web:** a wrapped line of text no longer ends in a word or two on a row of its own, and headings split evenly
 * **Web:** a row's menu opens next to its button near the bottom of a list too, instead of being cut off
 * **Logs:** a line that names a file of the site, like `functions.php on line 28`, links to that file at that line on the Files tab
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

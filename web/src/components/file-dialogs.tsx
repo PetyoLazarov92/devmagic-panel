@@ -212,8 +212,9 @@ export function PermissionsDialog({ open, items, folder, current, onSubmit, onCl
   const [mode, setMode] = useState<FileMode>();
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (open) setMode(undefined);
-  }, [open]);
+    // What it has now is the row that is picked, so the list shows the state and Set waits for another one.
+    if (open) setMode(current !== undefined && (modes as readonly string[]).includes(current) ? (current as FileMode) : undefined);
+  }, [open, current, modes]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!mode || busy) return;
@@ -222,26 +223,27 @@ export function PermissionsDialog({ open, items, folder, current, onSubmit, onCl
     setBusy(false);
     if (done) onClose();
   };
-  const known = current !== undefined && (FILE_MODES as readonly string[]).includes(current);
+  const known = current !== undefined && (modes as readonly string[]).includes(current);
   return (
-    <Dialog open={open} onClose={onClose} title="Permissions" description={items.length === 1 ? nameOf(items[0] ?? '') : `${items.length} entries`} size="sm">
+    <Dialog open={open} onClose={onClose} title="Permissions" description={items.length === 1 ? nameOf(items[0] ?? '') : `${items.length} entries`}>
       <form onSubmit={(e) => void submit(e)} className="grid gap-4 text-sm">
-        {current !== undefined && (
+        {current !== undefined && !known && (
           <p className="text-muted-foreground">
-            Now <span className="font-mono text-foreground">{current}</span>{known ? `: ${FILE_MODE_WORDS[current as FileMode]}.` : ', which is not one of these.'}
+            Now <span className="font-mono text-foreground">{current}</span>, which is not one of these.
           </p>
         )}
         <fieldset className="grid gap-1.5">
           <legend className="mb-1.5 font-medium">Set to</legend>
           {modes.map((m) => (
             <label key={m} htmlFor={`${id}-${m}`} className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 has-checked:border-primary has-checked:bg-primary/5">
-              <input id={`${id}-${m}`} type="radio" name={id} value={m} checked={mode === m} onChange={() => setMode(m)} className="size-4 accent-[var(--primary)]" />
+              <input id={`${id}-${m}`} type="radio" name={id} value={m} checked={mode === m} onChange={() => setMode(m)} className="size-4 shrink-0 accent-[var(--primary)]" />
               <span className="font-mono">{m}</span>
-              <span className="text-muted-foreground">{FILE_MODE_WORDS[m]}</span>
+              <span className="min-w-0 text-balance text-muted-foreground">{FILE_MODE_WORDS[m]}</span>
+              {m === current && <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">now</span>}
             </label>
           ))}
         </fieldset>
-        <p className="text-xs text-muted-foreground">{folder ? 'A folder needs a mode it can be opened with. Only the folder itself changes, not what is in it.' : 'Nothing here lets everyone write.'}</p>
+        <p className="text-xs text-pretty text-muted-foreground">{folder ? 'Only the folder changes, not what is in it.' : 'Nothing here lets everyone write.'}</p>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
           <Button type="submit" disabled={!mode || mode === current || busy}>{busy && <LoaderCircle className="animate-spin" />}Set</Button>

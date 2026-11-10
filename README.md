@@ -53,7 +53,7 @@ listens on localhost.
 - ✅ **Shared WordPress cores** through `wpcore`: add a release, switch sites to it, remove unused ones. [More](docs/pages.md#wp-cores)
 - ✅ **Local mode**: mail goes to Mailpit, search engines are told not to index, logins work from this computer only. [More](docs/existing-setup.md#the-two-files-the-panel-adds-to-a-site)
 - ✅ **One click**: wp-admin login, caches, rewrite rules, debug constants, `debug.log`, VS Code, branches and pull. [More](docs/sites.md#quick-actions)
-- ✅ **Files**: browse a site's folder and open its files, with links from the log lines that name them. [More](docs/files.md)
+- ✅ **Files**: browse, edit, upload, zip and find in a site's folder, with Undo for deletes, git changes and uploads from production. [More](docs/files.md)
 - ✅ **Databases**: browse and edit rows, run SQL, clean up WordPress, snapshot, import and export, each change saved first for Undo. [More](docs/databases.md)
 - ✅ **Import a database**: from production over SSH in one click, or any dump, as it is or cleaned of private data, with your old tables kept. [More](docs/databases.md#backups-and-tools)
 - ✅ **Performance**: a tab per site with Xdebug profiles by plugin and function, and the top queries of its database. [More](docs/sites.md#performance)

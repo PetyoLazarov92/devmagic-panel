@@ -135,6 +135,8 @@ modes, each named with what it means:
 | `755` | you write, everyone reads and opens or runs it |
 | `750` | you write, your group reads and opens or runs it |
 
+- The mode an entry has now is the one picked, marked **now**, and Set waits
+  until you pick another.
 - There is no box to type a number in, so nothing here lets everyone write
   (`777`, `666`) or sets a setuid bit.
 - A folder takes `755` or `750` only: with the others nobody could open it.
