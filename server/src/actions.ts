@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ActionId, ActionInput, ActionRunResult, ClaudeRun, ClaudeStep, ClaudeUsage } from '@devmagic-panel/shared';
-import { accessKey, actions, LINKS_EFFORT, MIN_CLAUDE_CAP, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, totalTokens } from '@devmagic-panel/shared';
+import { accessKey, actions, FILE_TRASH_DAYS, LINKS_EFFORT, MIN_CLAUDE_CAP, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, totalTokens } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { CoreStatusMap } from './core-status.js';
 import { NSS_NICKNAME } from './environment.js';
@@ -11,6 +11,9 @@ import {
   addAliases, clearCache, reloadCommands, clearDebugLog, fixWritable, flushRewrites, login, removeLegacySalts, setConstant, setDebug, setLocalMode, shuffleSalts, setUploadsFrom, SiteActionRefused, siteFor, siteKey, SiteNotFoundError, switchCore, writeHtaccess, type HandlerOutcome,
 } from './sites/site-actions.js';
 import { findVhost } from './sites/discover.js';
+import { readWpcoreConfig } from './wpcore.js';
+import { FileRefused, type FilesContext, siteFolder } from './sites/files.js';
+import { copyEntries, createEntry, deleteEntries, fileTrashDir, moveEntries, renameEntry, restoreEntries, writeFile } from './sites/file-changes.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
 import { readSecrets, type Secrets, writeSecrets } from './secrets.js';
 import { createReadOnlyAccount, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
@@ -111,6 +114,9 @@ export interface CronSetup {
 type Handler<Id extends ActionId> = (ctx: ActionContext, input: ActionInput<Id>) => Promise<ExecResult[] | HandlerOutcome>;
 
 const root = (ctx: ActionContext, ...args: string[]) => runRoot(ctx.exec, ctx.dmpRoot, args);
+
+/** The Files tab's view of a site: its folder, and the shared cores a link may be read through. */
+const filesOf = (ctx: ActionContext, domain: string, path: string | undefined): FilesContext => ({ root: siteFolder(ctx.config, domain, path), readRoots: [readWpcoreConfig(ctx.wpcoreConf)?.coresDir ?? ''].filter(Boolean) });
 
 /** What the MySQL actions need: the admin account, the panel's kept databases and where deletions are saved. */
 const mysqlCtx = (ctx: ActionContext): MysqlContext => ({
@@ -793,6 +799,20 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     };
     return startJob(ctx, [step], `Copy uploads to ${site.host}`, site.host);
   },
+  'file.write': async (ctx, { domain, path, ...input }) => {
+    const { hash } = writeFile(filesOf(ctx, domain, path), input);
+    return { results: [{ code: 0, stdout: `saved ${input.file}`, stderr: '' }], data: { hash } };
+  },
+  'file.create': async (ctx, { domain, path, dir, name, kind }) => [{ code: 0, stdout: `made ${createEntry(filesOf(ctx, domain, path), dir, name, kind)}`, stderr: '' }],
+  'file.rename': async (ctx, { domain, path, file, name }) => [{ code: 0, stdout: `renamed ${file} to ${renameEntry(filesOf(ctx, domain, path), file, name)}`, stderr: '' }],
+  'file.move': async (ctx, { domain, path, files, to }) => [{ code: 0, stdout: `moved ${moveEntries(filesOf(ctx, domain, path), files, to).join(', ')}`, stderr: '' }],
+  'file.copy': async (ctx, { domain, path, files, to }) => [{ code: 0, stdout: `copied to ${(await copyEntries(filesOf(ctx, domain, path), files, to)).join(', ')}`, stderr: '' }],
+  'file.delete': async (ctx, { domain, path, files }) => {
+    const entry = await deleteEntries(filesOf(ctx, domain, path), fileTrashDir(dirname(ctx.uploadsDir)), siteKey(domain, path), files);
+    return { results: [{ code: 0, stdout: `deleted ${entry.items.join(', ')}; kept ${FILE_TRASH_DAYS} days`, stderr: '' }], data: { trashId: entry.id } };
+  },
+  'file.restore': async (ctx, { domain, path, id }) =>
+    [{ code: 0, stdout: `put back ${(await restoreEntries(filesOf(ctx, domain, path), fileTrashDir(dirname(ctx.uploadsDir)), siteKey(domain, path), id)).join(', ')}`, stderr: '' }],
   'site.copyFromServer': async (ctx, input) => {
     const site = siteFor(ctx.config, input.domain, input.path);
     const n = input.plugins.length + input.themes.length;
@@ -861,8 +881,8 @@ export class ActionBusyError extends Error {
   }
 }
 
-/** Actions that only read or hand out a login, so they may run while a job works on the site. */
-const LOCK_FREE = new Set<ActionId>(['git.fetch', 'site.login']);
+/** Actions that only read or hand out a login, or save one file from the editor, so they may run while a job works on the site. */
+const LOCK_FREE = new Set<ActionId>(['git.fetch', 'site.login', 'file.write']);
 
 /**
  * What an action locks: its site (local.shop.com, or local.shop.com/learn
@@ -881,8 +901,8 @@ export function lockKey(id: ActionId, input: unknown): string | undefined {
   return undefined;
 }
 
-/** Inputs run history never keeps: passwords, and a row's values and key or SQL that writes (data from a database). */
-const HIDDEN_INPUTS = new Set(['password', 'rowKey', 'rowKeys', 'rowValues', 'rowWas', 'sql']);
+/** Inputs run history never keeps: passwords, a row's values and key or SQL that writes (data from a database), and a file's text. */
+const HIDDEN_INPUTS = new Set(['password', 'rowKey', 'rowKeys', 'rowValues', 'rowWas', 'sql', 'content']);
 
 /** The input as run history keeps it: any field called password, or holding a row's data, is blanked out, and an address keeps no query (signed links carry tokens there). */
 export function withoutPasswords(value: unknown): unknown {
@@ -931,7 +951,7 @@ export async function runAction(ctx: ActionContext, id: ActionId, rawInput: unkn
     const result = await handler({ ...ctx, runId, actionId: id }, parsed.data as ActionInput<ActionId>);
     outcome = Array.isArray(result) ? { results: result } : result;
   } catch (error) {
-    if (error instanceof SiteNotFoundError || error instanceof SiteActionRefused || error instanceof DumpRefused || error instanceof MoreDumpsRefused || error instanceof TakeoverRefused || error instanceof TrashRefused || error instanceof CreateRefused || error instanceof RemoveRefused || error instanceof DbRefused || error instanceof CoreRefused || error instanceof MysqlRefused || error instanceof PhpSettingsRefused || error instanceof CronRefused) {
+    if (error instanceof SiteNotFoundError || error instanceof SiteActionRefused || error instanceof DumpRefused || error instanceof MoreDumpsRefused || error instanceof TakeoverRefused || error instanceof TrashRefused || error instanceof CreateRefused || error instanceof RemoveRefused || error instanceof DbRefused || error instanceof CoreRefused || error instanceof MysqlRefused || error instanceof PhpSettingsRefused || error instanceof CronRefused || error instanceof FileRefused) {
       ctx.store.finish(runId, 2, error.message);
       throw new ActionInputError(error.message);
     }

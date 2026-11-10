@@ -5,6 +5,7 @@ import { PROFILE_NAME } from './profiles.js';
 import { mysqlIdentifier, WP_CONTENT_KINDS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS, WP_TABLE_FIXES } from './db-browser.js';
 import { NETWORK_PATH } from './network.js';
 import { SITE_SERVERS } from './nginx.js';
+import { FILE_TEXT_MAX, isFileName, isFileTrashId, isSitePath } from './files.js';
 
 /** A review of a site's .htaccess rules: the checksum of each file as it was read, by folder, and the translated rules left out. */
 const htaccessChoice = z.object({
@@ -206,6 +207,13 @@ export function mountFolder(domain: string, path: string): string | null {
  * local.spellbook.example (an Alias in its vhost); left out for the site at the root.
  */
 const sitePath = mountPath.optional();
+
+/** A file or folder of the Files tab: a path inside the site's folder, like wp-content/themes/wandworks/style.css. */
+const filePath = z.string().refine((v) => isSitePath(v) && v !== '', 'A path inside the site, like wp-content/themes');
+/** A folder of the Files tab; empty is the site's folder itself. */
+const fileDir = z.string().refine(isSitePath, 'A folder inside the site, like wp-content/themes');
+const fileName = z.string().refine(isFileName, 'A name without slashes');
+const filePaths = z.array(filePath).min(1).max(500);
 
 /** A snapshot file in the site's snapshot folder: `20261024-091500-before-import.sql.gz`. */
 export const snapshotName = z.string().regex(/^\d{8}-\d{6}(-[a-z0-9-]{1,40})?\.sql\.gz$/, 'A snapshot file name');
@@ -1595,6 +1603,56 @@ export const actions = {
       "Copies the site's uploads from its own server over SSH into wp-content/uploads, only when you ask: all of them, or the last months (the year and month folders). Only reads there: wp plugin path says where wp-content is, du how much the uploads hold, and rsync brings the files (your ssh config and key, or password for a server that asks for one: for this run only, never kept; nothing is written or deleted on the server). Here it only adds: a file that exists is never written over and nothing is deleted, so a second run brings what is new, and a run that stopped goes on from where it was. PHP files, .htaccess, SQL dumps, links and the cache, log and backup folders of plugins are left out. Refuses when the files would not fit on this disk. Starts a job.",
     changesSystem: true,
     input: uploadsCopy.extend({ domain: localName, path: sitePath }),
+  },
+  'file.write': {
+    title: 'Save a file',
+    description:
+      "Saves the text of a file in the site's folder, from the Files tab's editor: a temp file next to it, then a rename, with the permissions it had and its line endings kept. Refuses when the file changed on disk since it was opened, unless you say to save anyway. As you, never as root; never through a link that leaves the site's folder, and never in a shared WordPress core. Run history keeps the file's name, not its text.",
+    changesSystem: true,
+    input: z.object({
+      domain: localName, path: sitePath, file: filePath,
+      content: z.string().max(FILE_TEXT_MAX),
+      /** The sha256 the editor read the file with. */
+      hash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      force: z.boolean().optional(),
+      eol: z.enum(['lf', 'crlf']).optional(),
+    }),
+  },
+  'file.create': {
+    title: 'New file or folder',
+    description: "Makes an empty file or a folder in a folder of the site. Refuses a name that is already there.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, dir: fileDir, name: fileName, kind: z.enum(['file', 'dir']) }),
+  },
+  'file.rename': {
+    title: 'Rename a file or folder',
+    description: "Gives a file or folder of the site another name in the same folder. A link is renamed as the link it is. Refuses a name that is already there.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, file: filePath, name: fileName }),
+  },
+  'file.move': {
+    title: 'Move files',
+    description: "Moves files and folders of the site into another of its folders. Refuses when one of them is already there, and never moves a folder into itself.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, files: filePaths, to: fileDir }),
+  },
+  'file.copy': {
+    title: 'Copy files',
+    description: "Copies files and folders of the site into one of its folders, up to 1 GB. A copy next to its original is named like \"style copy.css\"; links are copied as links.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, files: filePaths, to: fileDir }),
+  },
+  'file.delete': {
+    title: 'Delete files',
+    description: "Deletes files and folders of the site: they move to the panel's file trash, where they stay 14 days and can be put back from the Files tab. More than 1 GB at once is refused and left to a terminal. A link is deleted as the link, never what it points at.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, files: filePaths }),
+  },
+  'file.restore': {
+    title: 'Put deleted files back',
+    description: "Puts the files of one delete back where they were, from the panel's file trash. A file that is there again is left alone, and the deleted one stays in the trash.",
+    changesSystem: true,
+    input: z.object({ domain: localName, path: sitePath, id: z.string().refine(isFileTrashId, 'A delete from the Files tab') }),
   },
   'site.copyFromServer': {
     title: 'Copy missing plugins and themes from the server',

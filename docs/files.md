@@ -6,6 +6,9 @@ never as root, and never leaves the site's folder.
 
 - [Browsing](#browsing)
 - [Opening a file](#opening-a-file)
+- [Editing a file](#editing-a-file)
+- [New, rename, move, copy](#new-rename-move-copy)
+- [Delete and Undo](#delete-and-undo)
 - [What stays out of reach](#what-stays-out-of-reach)
 
 ## Browsing
@@ -24,7 +27,8 @@ never as root, and never leaves the site's folder.
   adds, **shared core, read only** for `wp-admin` and `wp-includes` of a
   shared core, **link** for other links, and **read only** for a file another
   account owns (often `www-data`).
-- The row's menu opens it, downloads it or copies its full path.
+- The row's menu opens it, downloads it or copies its full path, and for what
+  you can change: Edit, Rename, Duplicate, Move to, Copy to and Delete.
 - The folder and the file are in the address
   (`?tab=files&dir=wp-content/themes`), so Back, a reload and a bookmark land
   where you were. A very long folder lists its first 5,000 entries and says
@@ -44,6 +48,56 @@ never as root, and never leaves the site's folder.
 - A download is always sent as a file to save, never as a page: with
   `Content-Disposition: attachment`, `nosniff` and a policy that runs nothing.
 
+## Editing a file
+
+- **Edit** on a text file you can write opens it in an editor: line numbers,
+  the language coloured by the file's ending (PHP, JS, CSS, HTML, JSON, SQL),
+  Ctrl+F to find, Tab to indent with the file's own indent. `&edit=1` in the
+  address opens a file that way.
+- **Save**, or Ctrl+S in the editor, writes the file: to a temporary file next to it first,
+  then in its place, so a save never leaves half a file. Its permissions and
+  its line endings stay as they were.
+- If the file changed on disk since you opened it (an editor, git, WordPress),
+  the save stops and says so. **Reload from disk** drops what you typed;
+  **Save anyway** replaces what is on disk.
+- Nothing is written while you type: only **Save** writes. **Cancel** drops
+  what you typed and leaves the file as it is on disk, asking once on the
+  button first, and the browser asks before a reload or a closed tab loses
+  what you typed.
+- `wp-config.php` gets a warning while you edit it. A file another account
+  owns, a file of a shared core and anything that is not text have no Edit.
+- The editor is loaded when you first press Edit. If it cannot load, the file
+  still shows as text.
+
+## New, rename, move, copy
+
+- **New file** and **New folder** make one in the folder you are in. A new
+  file opens in the editor.
+- **Rename** changes a name in its folder. A name has no slash, and nothing is
+  ever written over: a name that is taken is refused.
+- **Move to** and **Copy to** open a picker of the site's folders. A folder
+  cannot go into itself, and a folder you may not write is refused with the
+  reason. **Duplicate** makes `name copy.ext` next to the original.
+- Tick rows, or the box in the header for all of them, and a bar offers Move
+  to, Copy to and Delete for the selection. A row that cannot change keeps a
+  greyed box.
+- A copy of more than 1 GB is refused: do that one in a terminal.
+
+## Delete and Undo
+
+- **Delete** moves the entry to the panel's file trash, in the panel's data
+  folder and outside the site, and the message that says so has **Undo**.
+- The list ends with **Changes you can undo**: each delete of the last 14
+  days with **Put back**. After 14 days it is removed for good.
+- Put back never writes over something: if another file took the name in the
+  meantime, both are kept and the panel says which.
+- A delete that would break the site asks first, with the reason:
+  `wp-config.php`, `index.php`, `.htaccess` and `wp-content` in the site
+  folder, the themes, plugins, uploads and mu-plugins folders, one of the
+  panel's two files, and a git repo (commits never pushed go with it).
+- More than 1 GB is too much to keep for Undo and is refused: delete that in
+  a terminal.
+
 ## What stays out of reach
 
 - A path is checked as it is written and again after links are followed.
@@ -53,5 +107,8 @@ never as root, and never leaves the site's folder.
   read only here: a core is shared by other sites.
 - Nothing here needs root, and no `dmp-root` command is involved. A file you
   may not read as yourself says so.
+- A link that leaves the site's folder is never written through, renamed,
+  moved or deleted here: it is the site's wiring.
 - File contents stay between the panel and your browser. They are never sent
-  to the AI assistant and never stored in the run history.
+  to the AI assistant, the assistant cannot run the Files actions, and the
+  run history stores what you saved as `(hidden)`.

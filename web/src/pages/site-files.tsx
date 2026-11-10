@@ -1,18 +1,22 @@
-import { type FileEntry, type FileListing, type FileView, type Site, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowUp, ChevronRight, Copy, Download, File, FileCode, FileImage, FileText, Folder, FolderGit2, FolderOpen, Link2, Lock, Search } from 'lucide-react';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { type ActionId, type FileEntry, type FileListing, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
+import { ArrowDown, ArrowUp, ChevronRight, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { EditorBoundary } from '@/components/editor-boundary';
+import { DeleteDialog, FileTrashCard, FolderPicker, NameDialog } from '@/components/file-dialogs';
 import { EmptyState, Notice, ViewBar } from '@/components/page';
 import { LogSkeleton, TableSkeleton } from '@/components/skeletons';
 import { Badge } from '@/components/ui/badge';
-import { ButtonLink } from '@/components/ui/button';
+import { Button, ButtonLink } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Menu, type MenuItem } from '@/components/ui/menu';
 import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { Switch } from '@/components/ui/switch';
 import { api, fileUrl, isMockup } from '@/lib/api';
+import { loadFileEditor } from '@/lib/file-editor-load';
 import { filesHref } from '@/lib/file-links';
 import { bytes, dateTime, timeAgo } from '@/lib/format';
 import { Link, navigate, useQueryParam } from '@/lib/router';
+import { lastLine } from '@/lib/output';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
@@ -21,7 +25,11 @@ import { cn } from '@/lib/utils';
  * A site's files: one folder at a time, or one file in the folder's place.
  * The folder and the file are in the address (?tab=files&dir=... or
  * &file=...&line=42), so Back, a reload and a link from a log all land there.
+ * Every change is an action of the registry (file.write, file.delete, ...),
+ * and a delete goes to the file trash, where Undo finds it.
  */
+
+const FileEditor = lazy(loadFileEditor);
 
 type SiteId = Pick<Site, 'domain' | 'path'>;
 
@@ -53,11 +61,43 @@ function download(site: SiteId, file: string) {
   a.click();
 }
 
+const siteInput = (site: SiteId) => ({ domain: site.domain, ...(site.path ? { path: site.path } : {}) });
+
+/** Runs one of the Files actions; a refusal comes back as its message. */
+async function fileAction(site: SiteId, id: ActionId, input: Record<string, unknown>): Promise<{ ok: true; data?: { hash?: string; trashId?: string } } | { ok: false; error: string }> {
+  try {
+    const result = await api.runAction(id, { ...siteInput(site), ...input });
+    return result.ok ? { ok: true, ...(result.data ? { data: result.data } : {}) } : { ok: false, error: lastLine(result.output) };
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+/** Why a delete is asked about first, when it is: what breaks, or what goes with it. */
+function deleteRisk(dir: string, entries: readonly FileEntry[]): string | undefined {
+  for (const e of entries) {
+    if (e.note === 'panel') return `${e.name} is one of the two files the panel adds to a site: what it does (the login button, or Local mode) stops for this site without it.`;
+    if (e.note === 'repo') return `${e.name} is a git repo: commits and branches that were never pushed go with it.`;
+    if (dir === '' && e.name === 'wp-config.php') return "WordPress cannot start without wp-config.php: it holds the database's name and password.";
+    if (dir === '' && (e.name === 'index.php' || e.name === '.htaccess')) return `The site's addresses stop working without ${e.name}.`;
+    if (dir === '' && e.name === 'wp-content') return "wp-content holds the site's themes, plugins and uploads.";
+    if (dir === 'wp-content' && ['themes', 'plugins', 'uploads', 'mu-plugins'].includes(e.name)) return `This is the site's ${e.name} folder, with everything in it.`;
+  }
+  return undefined;
+}
+
+type Asking =
+  | { kind: 'new'; what: 'file' | 'dir' }
+  | { kind: 'rename'; name: string }
+  | { kind: 'move' | 'copy'; paths: string[] }
+  | { kind: 'delete'; paths: string[]; why: string };
+
 export function FilesTab({ site }: { site: Site }) {
   const file = useQueryParam('file');
   const dir = useQueryParam('dir') ?? '';
   const line = Number(useQueryParam('line')) || undefined;
-  return file !== null ? <FileViewer site={site} file={file} line={line} /> : <FolderView site={site} dir={dir} />;
+  const edit = useQueryParam('edit') === '1';
+  return file !== null ? <FileViewer key={file} site={site} file={file} line={line} edit={edit} /> : <FolderView site={site} dir={dir} />;
 }
 
 /** Where you are: the site's folder, then each folder down to this one. */
@@ -147,14 +187,78 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
   const [query, setQuery] = useState('');
   const [hidden, setHidden] = useState(false);
   const [sort, setSort] = useState<Sort>({ key: 'name', down: false });
-  useEffect(() => setQuery(''), [key]);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const [asking, setAsking] = useState<Asking | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setQuery('');
+    setPicked(new Set());
+  }, [key]);
+  const trash = useAsync(() => api.fileTrash(site.domain, site.path), [site.domain, site.path]);
 
+  const canChange = Boolean(listing?.writable) && !listing?.readOnly;
+  // A link out of the site (a shared core's wp-admin) is the site's wiring: nothing here renames or deletes it.
+  const changeable = (e: FileEntry) => canChange && !(e.kind === 'link' && e.outside);
+  const pathOf = (name: string) => joinPath(dir, name);
+  const refresh = () => {
+    reload();
+    trash.reload();
+  };
+
+  /** Runs a change, says how it went, and reads the folder again. */
+  const change = async (id: ActionId, input: Record<string, unknown>, done: string): Promise<boolean> => {
+    setBusy(true);
+    const result = await fileAction(site, id, input);
+    setBusy(false);
+    if (result.ok) toast({ tone: 'success', title: done });
+    else toast({ tone: 'danger', title: 'Nothing changed', detail: result.error });
+    refresh();
+    return result.ok;
+  };
+  const restore = async (id: string, what: string) => {
+    await change('file.restore', { id }, `${what} is back`);
+  };
+  const remove = async (paths: string[]) => {
+    setBusy(true);
+    const result = await fileAction(site, 'file.delete', { files: paths });
+    setBusy(false);
+    const what = paths.length === 1 ? nameOf(paths[0] ?? '') : `${paths.length} entries`;
+    if (result.ok) {
+      const id = result.data?.trashId;
+      toast({ tone: 'success', title: `Deleted ${what}`, detail: `Kept for ${FILE_TRASH_DAYS} days.`, ...(id ? { action: { label: 'Undo', run: () => void restore(id, what) } } : {}) });
+      setPicked(new Set());
+    } else {
+      toast({ tone: 'danger', title: 'Nothing was deleted', detail: result.error });
+    }
+    refresh();
+  };
+  const askDelete = (names: string[]) => {
+    const entries = (listing?.entries ?? []).filter((e) => names.includes(e.name));
+    const why = deleteRisk(dir, entries);
+    const paths = names.map(pathOf);
+    if (why) setAsking({ kind: 'delete', paths, why });
+    else void remove(paths);
+  };
+  const duplicate = (name: string) => void change('file.copy', { files: [pathOf(name)], to: dir }, `Copied ${name}`);
+
+  const names = useMemo(() => (listing?.entries ?? []).map((e) => e.name), [listing]);
   const hiddenCount = listing?.entries.filter((e) => HIDDEN.has(e.name)).length ?? 0;
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sortEntries((listing?.entries ?? []).filter((e) => (hidden || !HIDDEN.has(e.name)) && (!q || e.name.toLowerCase().includes(q))), sort);
   }, [listing, query, hidden, sort]);
   const { shown, footer } = useShowMore(rows, { step: 100, reset: `${key}|${query}|${sort.key}|${sort.down}` });
+
+  // Only what is listed now can be selected: a filter never leaves a hidden row ticked.
+  const pickable = useMemo(() => rows.filter((e) => Boolean(listing?.writable) && !listing?.readOnly && !(e.kind === 'link' && e.outside)).map((e) => e.name), [rows, listing]);
+  const pickedRows = useMemo(() => pickable.filter((name) => picked.has(name)), [pickable, picked]);
+  const toggle = (name: string, on: boolean) =>
+    setPicked((was) => {
+      const next = new Set(was);
+      if (on) next.add(name);
+      else next.delete(name);
+      return next;
+    });
 
   const hrefOf = (e: FileEntry) => {
     const path = joinPath(dir, e.name);
@@ -165,10 +269,21 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
   const menuOf = (e: FileEntry): MenuItem[] => {
     const path = joinPath(dir, e.name);
     const href = hrefOf(e);
+    const can = changeable(e);
     return [
       ...(href ? [{ label: 'Open', icon: isFolder(e) ? <FolderOpen /> : <FileText />, onSelect: () => navigate(href, { scroll: false }) }] : []),
+      ...(e.kind === 'file' && e.writable && can ? [{ label: 'Edit', icon: <Pencil />, onSelect: () => navigate(filesHref(site, { file: path, edit: true }), { scroll: false }) }] : []),
       ...(e.kind === 'file' ? [{ label: 'Download', icon: <Download />, onSelect: () => download(site, path) }] : []),
       { label: 'Copy path', icon: <Copy />, onSelect: () => copyPath(`${listing?.root ?? site.docroot}/${path}`) },
+      ...(can
+        ? [
+            { label: 'Rename', icon: <TextCursorInput />, onSelect: () => setAsking({ kind: 'rename', name: e.name }) },
+            { label: 'Duplicate', icon: <CopyPlus />, onSelect: () => duplicate(e.name) },
+            { label: 'Move to', icon: <FolderInput />, onSelect: () => setAsking({ kind: 'move', paths: [path] }) },
+            { label: 'Copy to', icon: <Copy />, onSelect: () => setAsking({ kind: 'copy', paths: [path] }) },
+            { label: 'Delete', icon: <Trash2 />, danger: true, onSelect: () => askDelete([e.name]) },
+          ]
+        : []),
     ];
   };
   const header = (label: string, k: SortKey, className?: string) => (
@@ -220,6 +335,12 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
               );
             })}
           </ul>
+          {canChange && (
+            <div className="ml-auto flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setAsking({ kind: 'new', what: 'file' })}><FilePlus />New file</Button>
+              <Button size="sm" variant="outline" onClick={() => setAsking({ kind: 'new', what: 'dir' })}><FolderPlus />New folder</Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -233,12 +354,35 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
           {query ? 'The filter looks at the names in this folder only.' : listing.entries.length > 0 ? 'Switch on Show hidden to see .git and node_modules.' : undefined}
         </EmptyState>
       )}
+      {pickedRows.length > 0 && (
+        <div role="region" aria-label="Selected entries" className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card px-4 py-2 text-sm shadow-md">
+          <p className="mr-auto font-medium">{pickedRows.length} selected</p>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'move', paths: pickedRows.map(pathOf) })}><FolderInput />Move to</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'copy', paths: pickedRows.map(pathOf) })}><Copy />Copy to</Button>
+          <Button size="sm" variant="outline" disabled={busy} className="text-danger" onClick={() => askDelete(pickedRows)}><Trash2 />Delete</Button>
+          <Button size="icon" variant="ghost" className="size-8" aria-label="Clear the selection" onClick={() => setPicked(new Set())}><X /></Button>
+        </div>
+      )}
       {listing && rows.length > 0 && (
         <div className={cn('overflow-hidden rounded-xl border bg-card shadow-xs', loading && 'opacity-70')}>
           <table className="w-full table-fixed text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>
-                {header('Name', 'name', 'pl-4')}
+                {canChange && (
+                  <th scope="col" className="w-9 py-2.5 pl-4">
+                    <input
+                      type="checkbox"
+                      aria-label="Select everything listed"
+                      className="size-4 align-middle accent-[var(--primary)]"
+                      checked={pickable.length > 0 && pickedRows.length === pickable.length}
+                      ref={(el) => {
+                        if (el) el.indeterminate = pickedRows.length > 0 && pickedRows.length < pickable.length;
+                      }}
+                      onChange={(e) => setPicked(new Set(e.target.checked ? pickable : []))}
+                    />
+                  </th>
+                )}
+                {header('Name', 'name', canChange ? 'pl-2' : 'pl-4')}
                 {header('Size', 'size', 'w-20 text-right sm:w-24 [&>button]:flex-row-reverse')}
                 {header('Changed', 'changed', 'hidden w-32 sm:table-cell')}
                 <th scope="col" className="hidden w-24 px-3 py-2.5 font-medium md:table-cell">Permissions</th>
@@ -248,7 +392,7 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
             <tbody className="divide-y">
               {dir !== '' && !query && (
                 <tr className="hover:bg-muted/40">
-                  <td colSpan={5} className="px-4 py-2">
+                  <td colSpan={canChange ? 6 : 5} className="px-4 py-2">
                     <Link href={filesHref(site, { dir: parentOf(dir) })} className="flex items-center gap-2.5 text-muted-foreground hover:text-foreground">
                       <Folder className="size-4 shrink-0" aria-hidden />
                       <span aria-hidden>..</span>
@@ -260,8 +404,18 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
               {shown.map((e) => {
                 const href = hrefOf(e);
                 return (
-                  <tr key={e.name} className="hover:bg-muted/40">
-                    <td className="py-2 pr-3 pl-4">
+                  <tr key={e.name} className={cn('hover:bg-muted/40', picked.has(e.name) && 'bg-primary/5')}>
+                    {canChange && (
+                      <td className="py-2 pl-4">
+                        {changeable(e) ? (
+                          <input type="checkbox" aria-label={`Select ${e.name}`} className="size-4 align-middle accent-[var(--primary)]" checked={picked.has(e.name)} onChange={(ev) => toggle(e.name, ev.target.checked)} />
+                        ) : (
+                          // A row that cannot change keeps its box, so the names line up; it is off and says why.
+                          <input type="checkbox" disabled checked={false} readOnly aria-label={`${e.name} cannot be selected`} title="Read only: it cannot be moved, copied or deleted here" className="size-4 cursor-not-allowed align-middle opacity-40" />
+                        )}
+                      </td>
+                    )}
+                    <td className={cn('py-2 pr-3', canChange ? 'pl-2' : 'pl-4')}>
                       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
                         <EntryIcon entry={e} />
                         {href ? (
@@ -286,24 +440,143 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
           <ShowMore {...footer} noun={query ? 'matches' : 'entries'} />
         </div>
       )}
+
+      <FileTrashCard entries={trash.data ?? []} onRestore={(entry: FileTrashEntry) => restore(entry.id, entry.items.length === 1 ? nameOf(entry.items[0] ?? '') : `${entry.items.length} entries`)} />
+
+      <NameDialog
+        open={asking?.kind === 'new'}
+        title={asking?.kind === 'new' && asking.what === 'dir' ? 'New folder' : 'New file'}
+        description={`In ${dir || 'the site folder'}`}
+        label="Name"
+        initial=""
+        action="Create"
+        taken={names}
+        onClose={() => setAsking(null)}
+        onSubmit={async (name) => {
+          const what = asking?.kind === 'new' ? asking.what : 'file';
+          const made = await change('file.create', { dir, name, kind: what }, `Made ${name}`);
+          // A new file opens in the editor, since writing it is what comes next.
+          if (made && what === 'file') navigate(filesHref(site, { file: pathOf(name), edit: true }), { scroll: false });
+          return made;
+        }}
+      />
+      <NameDialog
+        open={asking?.kind === 'rename'}
+        title="Rename"
+        label="New name"
+        initial={asking?.kind === 'rename' ? asking.name : ''}
+        action="Rename"
+        taken={names}
+        onClose={() => setAsking(null)}
+        onSubmit={(name) => change('file.rename', { file: pathOf(asking?.kind === 'rename' ? asking.name : ''), name }, `Renamed to ${name}`)}
+      />
+      <FolderPicker
+        site={site}
+        open={asking?.kind === 'move' || asking?.kind === 'copy'}
+        title={asking?.kind === 'copy' ? 'Copy to' : 'Move to'}
+        verb={asking?.kind === 'copy' ? 'Copy here' : 'Move here'}
+        start={dir}
+        moving={asking?.kind === 'move' || asking?.kind === 'copy' ? asking.paths : []}
+        sameFolder={asking?.kind === 'copy'}
+        onClose={() => setAsking(null)}
+        onPick={async (to) => {
+          if (asking?.kind !== 'move' && asking?.kind !== 'copy') return false;
+          const what = asking.paths.length === 1 ? nameOf(asking.paths[0] ?? '') : `${asking.paths.length} entries`;
+          const done = await change(asking.kind === 'copy' ? 'file.copy' : 'file.move', { files: asking.paths, to }, `${asking.kind === 'copy' ? 'Copied' : 'Moved'} ${what} to ${to || 'the site folder'}`);
+          if (done) setPicked(new Set());
+          return done;
+        }}
+      />
+      <DeleteDialog
+        open={asking?.kind === 'delete'}
+        items={asking?.kind === 'delete' ? asking.paths : []}
+        why={asking?.kind === 'delete' ? asking.why : ''}
+        onClose={() => setAsking(null)}
+        onDelete={() => remove(asking?.kind === 'delete' ? asking.paths : [])}
+      />
     </div>
   );
 }
 
-function FileViewer({ site, file, line }: { site: Site; file: string; line: number | undefined }) {
+function FileViewer({ site, file, line, edit }: { site: Site; file: string; line: number | undefined; edit: boolean }) {
   const { data, error, loading, reload } = useAsync(async () => ({ view: await api.fileView(site.domain, file, site.path), at: new Date().toISOString() }), [site.domain, site.path, file]);
   const view = data?.view.path === file ? data.view : undefined;
   const full = `${site.docroot}/${file}`;
   const up = filesHref(site, { dir: parentOf(file) });
+  const canEdit = view?.kind === 'text' && view.writable && !view.readOnly;
+  const editing = edit && canEdit;
+
+  // What is on disk as the editor knows it, and what is typed. A read of the file replaces both only while nothing is typed.
+  const [base, setBase] = useState<{ text: string; hash: string | undefined } | null>(null);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<{ changed: boolean; text: string } | null>(null);
+  const dirty = base !== null && draft !== base.text;
+  const dirtyNow = useRef(false);
+  dirtyNow.current = dirty;
+  useEffect(() => {
+    if (view?.kind !== 'text' || dirtyNow.current) return;
+    setBase({ text: view.text ?? '', hash: view.hash });
+    setDraft(view.text ?? '');
+    setProblem(null);
+  }, [view]);
+  // Typed text is not lost to a reload or a closed tab without a word.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  const save = async (force = false) => {
+    if (!base || saving || !dirtyNow.current) return;
+    const content = draft;
+    setSaving(true);
+    setProblem(null);
+    const result = await fileAction(site, 'file.write', { file, content, ...(base.hash ? { hash: base.hash } : {}), ...(view?.eol ? { eol: view.eol } : {}), ...(force ? { force: true } : {}) });
+    setSaving(false);
+    if (result.ok) {
+      setBase({ text: content, hash: result.data?.hash });
+      toast({ tone: 'success', title: `Saved ${nameOf(file)}`, key: 'file-save' });
+    } else {
+      setProblem({ changed: result.error.includes(FILE_CHANGED), text: result.error });
+    }
+  };
+  // Cancel drops what is typed and leaves the editor; with something typed it asks once, on the button itself.
+  const [sure, setSure] = useState(false);
+  useEffect(() => setSure(false), [draft]);
+  const cancel = () => {
+    if (dirty && !sure) return setSure(true);
+    if (base) setDraft(base.text);
+    setProblem(null);
+    setSure(false);
+    setEdit(false);
+  };
+  /** Takes the file as it is on disk now, dropping what is typed. */
+  const takeDisk = () => {
+    dirtyNow.current = false;
+    setBase(null);
+    setProblem(null);
+    reload();
+  };
+  const setEdit = (on: boolean) => navigate(filesHref(site, { file, ...(on ? { edit: true } : {}), ...(line ? { line } : {}) }), { replace: true });
+  const plain = <TextView text={draft} line={line} name={nameOf(file)} />;
 
   return (
     <div className="grid gap-4">
       <ViewBar
-        onCheck={reload}
+        {...(editing ? {} : { onCheck: reload })}
         loading={loading}
         checkedAt={view ? data?.at : undefined}
         actions={
           <>
+            {canEdit && !editing && <Button size="sm" onClick={() => setEdit(true)}><Pencil />Edit</Button>}
+            {editing && (
+              <>
+                <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>{saving ? <LoaderCircle className="animate-spin" /> : <Save />}Save</Button>
+                <Button size="sm" variant="outline" disabled={saving} onClick={cancel}>{dirty ? (sure ? 'Drop what you typed?' : 'Cancel') : 'Close'}</Button>
+              </>
+            )}
             <ButtonLink size="sm" variant="outline" href={fileUrl(site.domain, file, site.path)} download={nameOf(file)} onClick={mockDownload}><Download />Download</ButtonLink>
             <Menu items={[{ label: 'Copy path', icon: <Copy />, onSelect: () => copyPath(full) }]} label={`More for ${nameOf(file)}`} />
           </>
@@ -317,9 +590,38 @@ function FileViewer({ site, file, line }: { site: Site; file: string; line: numb
       {view?.readOnly && <Notice tone="info">{view.readOnly}</Notice>}
       {view?.note === 'panel' && <Notice tone="info">This is one of the two files the panel adds to a site. The panel writes it again when it changes, so edits here do not last.</Notice>}
       {view && !view.writable && !view.readOnly && <Notice tone="info">Another account owns this file (often www-data), so you can read it here and not change it.</Notice>}
+      {editing && file === 'wp-config.php' && <Notice tone="warning">WordPress reads this file on every request: a mistake here takes the site down until it is fixed.</Notice>}
+      {problem && !problem.changed && <Notice>{problem.text}</Notice>}
+      {problem?.changed && (
+        <Notice
+          tone="warning"
+          action={
+            <span className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={saving} onClick={takeDisk}>Reload from disk</Button>
+              <Button size="sm" variant="outline" disabled={saving} onClick={() => void save(true)}>Save anyway</Button>
+            </span>
+          }
+        >
+          This file changed on disk since you opened it, by an editor, git or WordPress. Reload from disk drops what you typed here; Save anyway replaces what is on disk.
+        </Notice>
+      )}
 
       {!view && loading && <LogSkeleton lines={14} />}
-      {view?.kind === 'text' && <TextView text={view.text ?? ''} line={line} name={nameOf(file)} />}
+      {view?.kind === 'text' && !editing && <TextView text={view.text ?? ''} line={line} name={nameOf(file)} />}
+      {view?.kind === 'text' && editing && base && (
+        <div className="overflow-hidden rounded-xl border bg-card shadow-xs focus-within:border-primary/60">
+          <EditorBoundary fallback={plain}>
+            <Suspense fallback={plain}>
+              <FileEditor value={draft} onChange={setDraft} onSave={() => void save()} name={nameOf(file)} label={`${nameOf(file)}, editing`} line={line} />
+            </Suspense>
+          </EditorBoundary>
+        </div>
+      )}
+      {editing && (
+        <p className="text-xs text-muted-foreground" role="status">
+          {dirty ? 'Not saved yet. ' : ''}Nothing is written to the file until you press Save, or Ctrl+S. Cancel leaves it as it is on disk. Ctrl+F finds in the file.
+        </p>
+      )}
       {view?.kind === 'image' && (
         <div className="grid place-items-center overflow-hidden rounded-xl border bg-[repeating-conic-gradient(var(--color-muted)_0_25%,transparent_0_50%)] bg-[length:20px_20px] p-4">
           <img src={fileUrl(site.domain, file, site.path, true)} alt={nameOf(file)} className="max-h-[70vh] max-w-full rounded shadow-sm" />

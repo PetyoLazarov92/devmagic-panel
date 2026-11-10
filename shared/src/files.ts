@@ -77,3 +77,30 @@ export function isSitePath(path: unknown): path is string {
 export const parentOf = (path: string): string => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
 export const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 export const joinPath = (dir: string, name: string): string => (dir ? `${dir}/${name}` : name);
+
+/** A file or folder name on its own: no slash, not a dot folder that climbs, no control characters. */
+export function isFileName(name: unknown): name is string {
+  return typeof name === 'string' && name.length > 0 && name.length <= 255 && name !== '.' && name !== '..' && !/[\u0000-\u001f\u007f\\/]/.test(name) && name.trim() === name;
+}
+
+/** What a save answers when the file is not the one the editor opened any more. */
+export const FILE_CHANGED = 'The file changed on disk since you opened it';
+
+/** Most that one delete moves to the file trash; more than this is left to a terminal. */
+export const FILE_TRASH_MAX = 1024 * 1024 * 1024;
+/** Deleted files are kept this many days. */
+export const FILE_TRASH_DAYS = 14;
+
+/** One delete from the Files tab that can still be put back. */
+export interface FileTrashEntry {
+  /** 20261110-091500-a1b2c3 */
+  id: string;
+  deletedAt: string;
+  /** What was deleted, as paths in the site's folder. */
+  items: string[];
+  sizeBytes: number;
+  /** Why it is here when not a plain delete: a file a newer one replaced. */
+  reason?: 'replaced';
+}
+
+export const isFileTrashId = (id: unknown): id is string => typeof id === 'string' && /^\d{8}-\d{6}-[a-f0-9]{6}$/.test(id);

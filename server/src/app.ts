@@ -46,6 +46,7 @@ import { registerAssistantRoutes } from './assistant/routes.js';
 import { registerCreateRoutes } from './sites/create-routes.js';
 import { purgeKept } from './sites/kept.js';
 import { registerSiteRoutes } from './sites/routes.js';
+import { fileTrashDir, pruneFileTrash } from './sites/file-changes.js';
 import { sitesByVersion } from './php/pools.js';
 import { registerPhpRoutes } from './php/routes.js';
 import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
@@ -199,6 +200,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         if (runs || dumps.length) app.log.info(`housekeeping: pruned ${runs} runs and ${dumps.length} dumps`);
         const saved = pruneMysqlBackups(mysqlBackupsDir(deps.uploadsDir));
         if (saved.length) app.log.info(`housekeeping: removed ${saved.length} MySQL backups older than 14 days`);
+        const files = pruneFileTrash(fileTrashDir(dirname(deps.uploadsDir)));
+        if (files.length) app.log.info(`housekeeping: removed ${files.length} deletes of the Files tab older than 14 days`);
       } catch (error) {
         app.log.warn(`housekeeping: ${(error as Error).message}`);
       }

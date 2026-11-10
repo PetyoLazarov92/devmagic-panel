@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
+import { dirname, join } from 'node:path';
+import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
 import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { SystemConfig } from '../config.js';
@@ -32,6 +32,7 @@ import { currentSite } from './archive.js';
 import { listTrash, TRASH_DAYS, trashFreeBytes } from './trash.js';
 import { productionOnlyFor, readPlugins, readThemes } from './plugins.js';
 import { readNetworkAdmins } from './network-admin.js';
+import { fileTrashDir, listFileTrash } from './file-changes.js';
 import { SiteActionRefused, siteFor, SiteNotFoundError, siteKey } from './site-actions.js';
 import { parseWpConfig } from './wpconfig.js';
 import { FileRefused, type FilesContext, listFolder, rawFile, readFile, siteFolder } from './files.js';
@@ -205,6 +206,9 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     filesAnswer(request, reply, (ctx) => listFolder(ctx, request.query.dir ?? '')) ?? reply);
   api.get<{ Params: { domain: string }; Querystring: { path?: string; file?: string } }>('/api/sites/:domain/files/view', async (request, reply): Promise<FileView | FastifyReply> =>
     filesAnswer(request, reply, (ctx) => readFile(ctx, request.query.file ?? '')) ?? reply);
+  // What the Files tab deleted and can still put back.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/files/trash', async (request, reply): Promise<FileTrashEntry[] | FastifyReply> =>
+    filesAnswer(request, reply, () => listFileTrash(fileTrashDir(dirname(deps.workDir)), siteKey(request.params.domain, request.query.path))) ?? reply);
   // Always a download, except the four image types the tab shows: a site's HTML or SVG never runs in the panel's origin.
   api.get<{ Params: { domain: string }; Querystring: { path?: string; file?: string; show?: string } }>('/api/sites/:domain/files/raw', async (request, reply) => {
     const raw = filesAnswer(request, reply, (ctx) => rawFile(ctx, request.query.file ?? ''));

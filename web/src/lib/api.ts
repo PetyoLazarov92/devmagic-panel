@@ -1,4 +1,4 @@
-import type { FileListing, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -146,6 +146,8 @@ export interface Api {
   files: (domain: string, dir: string, path?: string) => Promise<FileListing>;
   /** One file to look at: its text, or what it is. */
   fileView: (domain: string, file: string, path?: string) => Promise<FileView>;
+  /** What the Files tab deleted on a site and can still put back, newest first. */
+  fileTrash: (domain: string, path?: string) => Promise<FileTrashEntry[]>;
   /** Your crontab: the panel's tasks with their last run, your own lines, and system cron read only. */
   cron: () => Promise<CronReport>;
   /** A task's runs, newest first, without output. */
@@ -380,6 +382,7 @@ const realApi: Api = {
   themes: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/themes${atPath(path, '?')}`),
   files: (domain, dir, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files?dir=${encodeURIComponent(dir)}${atPath(path, '&')}`),
   fileView: (domain, file, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/view?file=${encodeURIComponent(file)}${atPath(path, '&')}`),
+  fileTrash: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/trash${atPath(path, '?')}`),
   cron: () => request('GET', '/api/cron'),
   cronRuns: (id) => request('GET', `/api/cron/tasks/${encodeURIComponent(id)}/runs`),
   cronRun: (run) => request('GET', `/api/cron/runs/${run}`),

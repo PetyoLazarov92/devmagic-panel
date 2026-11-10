@@ -3,9 +3,9 @@ import { siteHref } from './site-ref.js';
 
 type SiteId = { domain: string; path?: string };
 
-/** A place in a site's Files tab: a folder, or a file and a line in it. */
-export function filesHref(site: SiteId, at: { dir?: string; file?: string; line?: number } = {}): string {
-  const query = at.file !== undefined ? `&file=${encodeURIComponent(at.file)}${at.line ? `&line=${at.line}` : ''}` : at.dir ? `&dir=${encodeURIComponent(at.dir)}` : '';
+/** A place in a site's Files tab: a folder, or a file and a line in it, open to read or to edit. */
+export function filesHref(site: SiteId, at: { dir?: string; file?: string; line?: number; edit?: boolean } = {}): string {
+  const query = at.file !== undefined ? `&file=${encodeURIComponent(at.file)}${at.line ? `&line=${at.line}` : ''}${at.edit ? '&edit=1' : ''}` : at.dir ? `&dir=${encodeURIComponent(at.dir)}` : '';
   return `${siteHref(site)}?tab=files${query}`;
 }
 

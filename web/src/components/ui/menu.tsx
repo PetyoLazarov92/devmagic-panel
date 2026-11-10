@@ -1,5 +1,5 @@
 import { MoreHorizontal } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface MenuItem {
@@ -10,11 +10,35 @@ export interface MenuItem {
   disabled?: boolean;
 }
 
-/** A small popover menu with click-outside and Escape to close. */
+/**
+ * A small popover menu with click-outside and Escape to close. It is placed
+ * against the window, not its parent, so a table or card that clips its
+ * content never cuts it, and it opens upwards when there is no room below.
+ */
 export function Menu({ items, label = 'More actions', align = 'end' }: { items: MenuItem[]; label?: string; align?: 'start' | 'end' }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<CSSProperties>({ visibility: 'hidden' });
   const id = useId();
+
+  useLayoutEffect(() => {
+    if (!open) return setPlace({ visibility: 'hidden' });
+    const button = root.current?.querySelector('button')?.getBoundingClientRect();
+    const menu = list.current;
+    if (!button || !menu) return;
+    const { width, height } = menu.getBoundingClientRect();
+    const gap = 4;
+    const below = window.innerHeight - button.bottom;
+    const up = below < height + gap + 8 && button.top > below;
+    const top = up ? Math.max(8, button.top - gap - height) : button.bottom + gap;
+    const left = Math.min(Math.max(8, align === 'end' ? button.right - width : button.left), window.innerWidth - width - 8);
+    // An ancestor with a transform or a filter moves where "fixed" starts: measure and take the difference off.
+    menu.style.top = '0px';
+    menu.style.left = '0px';
+    const origin = menu.getBoundingClientRect();
+    setPlace({ top: top - origin.top, left: left - origin.left });
+  }, [open, align, items.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -22,12 +46,20 @@ export function Menu({ items, label = 'More actions', align = 'end' }: { items: 
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    // It does not follow the page: scrolling or resizing closes it.
+    const close = (e: Event) => {
+      if (!list.current?.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
-    root.current?.querySelector<HTMLButtonElement>('[role=menuitem]:not([disabled])')?.focus();
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    root.current?.querySelector<HTMLButtonElement>('[role=menuitem]:not([disabled])')?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
     };
   }, [open]);
 
@@ -51,11 +83,10 @@ export function Menu({ items, label = 'More actions', align = 'end' }: { items: 
       {open && (
         <div
           id={id}
+          ref={list}
           role="menu"
-          className={cn(
-            'absolute z-30 mt-1 min-w-48 rounded-lg border bg-card p-1 shadow-lg',
-            align === 'end' ? 'right-0' : 'left-0',
-          )}
+          style={place}
+          className="fixed z-50 min-w-48 rounded-lg border bg-card p-1 text-left shadow-lg"
         >
           {items.map((item) => (
             <button

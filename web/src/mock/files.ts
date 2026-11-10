@@ -1,4 +1,4 @@
-import { type FileEntry, type FileListing, type FileShortcut, type FileView, FILE_IMAGE_TYPES, FILE_TEXT_MAX, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
+import { type ActionId, type ActionRunResult, type FileEntry, type FileListing, type FileShortcut, type FileTrashEntry, type FileView, FILE_CHANGED, FILE_IMAGE_TYPES, FILE_TEXT_MAX, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
 
 /** The mockup's site folder: the same tree for every site, made of files a WordPress site has. */
 
@@ -11,6 +11,8 @@ interface MockFile {
   link?: string;
   readOnly?: true;
   binary?: true;
+  /** A folder with nothing in it, made in the mockup. */
+  dir?: true;
 }
 
 const FUNCTIONS = `<?php
@@ -129,8 +131,15 @@ const CORE_NOTE = 'This folder is part of a shared WordPress core, outside the s
 const PANEL = new Set(['wp-content/mu-plugins/devmagic-panel-login.php', 'wp-content/mu-plugins/devmagic-panel-local.php']);
 const when = (file: MockFile) => new Date(NOW - (file.ago ?? 60 * 24 * 7) * 60_000).toISOString();
 const sizeOf = (file: MockFile) => file.size ?? file.text?.length ?? 0;
-const paths = Object.keys(TREE);
-const isDir = (path: string) => path === '' || TREE[path]?.link !== undefined || paths.some((p) => p.startsWith(`${path}/`));
+// The tree changes as you make, move and delete things in the mockup, so its paths are read each time.
+const allPaths = () => Object.keys(TREE);
+const isDir = (path: string) => path === '' || TREE[path]?.link !== undefined || TREE[path]?.dir === true || allPaths().some((p) => p.startsWith(`${path}/`));
+/** Not a real hash: enough for the mockup to notice a file that changed. */
+const hashOf = (text: string) => {
+  let h = 0;
+  for (let i = 0; i < text.length; i += 1) h = (h * 31 + text.charCodeAt(i)) | 0;
+  return `mock-${text.length}-${(h >>> 0).toString(16)}`;
+};
 const inCore = (path: string) => /^wp-(admin|includes)(\/|$)/.test(path);
 const rootOf = (domain: string) => `/var/www/${domain}`;
 
@@ -146,14 +155,15 @@ const SHORTCUTS: FileShortcut[] = [
 
 export function mockFiles(domain: string, dir: string): FileListing {
   if (!isDir(dir)) throw new Error(`${dir} is not there any more`);
+  const paths = allPaths();
   const names = new Set<string>();
   for (const p of paths) if (parentOf(p) === dir || (dir === '' ? true : p.startsWith(`${dir}/`))) names.add((dir ? p.slice(dir.length + 1) : p).split('/')[0] as string);
   const entries: FileEntry[] = [...names].map((name) => {
     const path = joinPath(dir, name);
     const file = TREE[path];
     if (file?.link) return { name, kind: 'link', writable: false, target: file.link, targetKind: 'dir', outside: true, mode: '777', modifiedAt: when(file) };
-    if (!file) {
-      const newest = Math.min(...paths.filter((p) => p.startsWith(`${path}/`)).map((p) => TREE[p]?.ago ?? 60 * 24 * 7));
+    if (!file || file.dir) {
+      const newest = Math.min(...paths.filter((p) => p.startsWith(`${path}/`)).map((p) => TREE[p]?.ago ?? 60 * 24 * 7), file?.ago ?? Infinity);
       return { name, kind: 'dir', writable: !inCore(path), mode: '755', modifiedAt: when({ ago: newest }), ...(paths.includes(`${path}/.git/HEAD`) ? { note: 'repo' as const } : {}) };
     }
     return { name, kind: 'file', writable: !file.readOnly, mode: file.mode ?? '644', modifiedAt: when(file), sizeBytes: sizeOf(file), ...(PANEL.has(path) ? { note: 'panel' as const } : {}) };
@@ -164,13 +174,13 @@ export function mockFiles(domain: string, dir: string): FileListing {
 
 export function mockFileView(_domain: string, path: string): FileView {
   const file = TREE[path];
-  if (!file || file.link) throw new Error(`${path} is not a file`);
+  if (!file || file.link || file.dir) throw new Error(`${path} is not a file`);
   const facts = { path, sizeBytes: sizeOf(file), modifiedAt: when(file), mode: file.mode ?? '644', writable: !file.readOnly, ...(file.readOnly ? { readOnly: CORE_NOTE } : {}), ...(PANEL.has(path) ? { note: 'panel' as const } : {}) };
   const ext = nameOf(path).split('.').pop()?.toLowerCase() ?? '';
   if (FILE_IMAGE_TYPES[ext]) return { ...facts, kind: 'image' };
   if (facts.sizeBytes > FILE_TEXT_MAX) return { ...facts, kind: 'large' };
   if (file.binary || file.text === undefined) return { ...facts, kind: 'binary' };
-  return { ...facts, kind: 'text', text: file.text, hash: `mock-${file.text.length}`, eol: 'lf' };
+  return { ...facts, kind: 'text', text: file.text, hash: hashOf(file.text), eol: 'lf' };
 }
 
 /** The mockup has no files to send: a drawn picture for an image, nothing for a download. */
@@ -179,4 +189,119 @@ export function mockFileUrl(path: string, show: boolean): string {
   const label = nameOf(path).replace(/[<>&"]/g, '');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400"><rect width="600" height="400" fill="#7c6ee6"/><circle cx="470" cy="110" r="46" fill="#f5d76e"/><path d="M0 400 180 190l120 130 90-80 210 160z" fill="#3d3580"/><text x="24" y="44" font-family="sans-serif" font-size="20" fill="#fff">${label}</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+const trash: Array<FileTrashEntry & { files: Record<string, MockFile> }> = [
+  { id: '20261109-164210-3fa9c1', deletedAt: new Date(NOW - 17 * 3_600_000).toISOString(), items: ['wp-content/themes/wandworks/inc/old-widgets.php'], sizeBytes: 3_412, files: { 'wp-content/themes/wandworks/inc/old-widgets.php': { text: '<?php\n// The widgets the theme had before blocks.\n', ago: 60 * 24 * 300 } } },
+];
+
+export const mockFileTrash = (): FileTrashEntry[] => trash.map(({ files: _files, ...entry }) => entry);
+
+/** Everything at a path: the file, or the folder with what is in it. */
+const under = (path: string) => allPaths().filter((p) => p === path || p.startsWith(`${path}/`));
+const exists = (path: string) => TREE[path] !== undefined || isDir(path);
+const refuse = (message: string): never => {
+  throw new Error(message);
+};
+const ok = (output: string, data?: ActionRunResult['data']): ActionRunResult => ({ runId: 42, ok: true, exitCode: 0, output, ...(data ? { data } : {}) });
+
+function relocate(from: string, to: string, keep: boolean) {
+  for (const p of under(from)) {
+    const file = TREE[p];
+    if (!file) continue;
+    TREE[`${to}${p.slice(from.length)}`] = { ...file, ago: keep ? 0 : (file.ago ?? 0) };
+    if (!keep) delete TREE[p];
+  }
+  // A folder left empty by a move is still a folder.
+  const parent = parentOf(from);
+  if (!keep && parent && !isDir(parent)) TREE[parent] = { dir: true, ago: 0 };
+}
+
+function copyName(dir: string, name: string): string {
+  const dot = name.lastIndexOf('.');
+  const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
+  for (let n = 1; ; n += 1) {
+    const candidate = `${stem} copy${n === 1 ? '' : ` ${n}`}${ext}`;
+    if (!exists(joinPath(dir, candidate))) return candidate;
+  }
+}
+
+/** The Files tab's actions on the mockup's tree; undefined for any other action. */
+export function mockFileAction(id: ActionId, input: Record<string, unknown>): ActionRunResult | undefined {
+  if (!id.startsWith('file.')) return undefined;
+  const files = (input.files as string[] | undefined) ?? [];
+  const guard = (path: string) => inCore(path) && refuse(`${path} is part of a shared WordPress core: it is read only here`);
+  switch (id) {
+    case 'file.write': {
+      const path = String(input.file);
+      const file = TREE[path];
+      if (!file || file.text === undefined) return refuse(`${path} is not there any more`);
+      guard(path);
+      if (input.hash && input.hash !== hashOf(file.text) && !input.force) return refuse(`${FILE_CHANGED}: ${path}`);
+      const text = String(input.content);
+      Object.assign(file, { text, ago: 0 });
+      delete file.size;
+      return ok(`saved ${path}`, { hash: hashOf(text) });
+    }
+    case 'file.create': {
+      const path = joinPath(String(input.dir), String(input.name));
+      guard(path);
+      if (exists(path)) return refuse(`${String(input.name)} is already there`);
+      TREE[path] = input.kind === 'dir' ? { dir: true, ago: 0 } : { text: '', ago: 0 };
+      return ok(`made ${path}`);
+    }
+    case 'file.rename': {
+      const from = String(input.file);
+      const to = joinPath(parentOf(from), String(input.name));
+      guard(from);
+      if (exists(to)) return refuse(`${String(input.name)} is already there`);
+      relocate(from, to, false);
+      return ok(`renamed ${from} to ${String(input.name)}`);
+    }
+    case 'file.move':
+    case 'file.copy': {
+      const to = String(input.to);
+      guard(to || 'x');
+      for (const from of files) {
+        guard(from);
+        const copy = id === 'file.copy';
+        const name = copy && exists(joinPath(to, nameOf(from))) ? copyName(to, nameOf(from)) : nameOf(from);
+        if (exists(joinPath(to, name))) return refuse(`${name} is already there`);
+        relocate(from, joinPath(to, name), copy);
+      }
+      return ok(`${id === 'file.copy' ? 'copied' : 'moved'} ${files.length} to ${to || 'the site folder'}`);
+    }
+    case 'file.delete': {
+      const kept: Record<string, MockFile> = {};
+      let sizeBytes = 0;
+      for (const from of files) {
+        guard(from);
+        for (const p of under(from)) {
+          const file = TREE[p];
+          if (!file) continue;
+          kept[p] = file;
+          sizeBytes += sizeOf(file);
+          delete TREE[p];
+        }
+        const parent = parentOf(from);
+        if (parent && !isDir(parent)) TREE[parent] = { dir: true, ago: 0 };
+      }
+      const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+      const entry = { id: `${stamp}-${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')}`, deletedAt: new Date().toISOString(), items: files, sizeBytes, files: kept };
+      trash.unshift(entry);
+      return ok(`deleted ${files.length}`, { trashId: entry.id });
+    }
+    case 'file.restore': {
+      const at = trash.findIndex((t) => t.id === input.id);
+      const entry = trash[at];
+      if (!entry) return refuse('That delete is not kept any more');
+      const there = entry.items.find((item) => exists(item));
+      if (there) return refuse(`${there} is there again: rename or delete it first`);
+      Object.assign(TREE, entry.files);
+      trash.splice(at, 1);
+      return ok(`put back ${entry.items.join(', ')}`);
+    }
+    default:
+      return undefined;
+  }
 }

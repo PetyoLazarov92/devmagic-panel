@@ -4,7 +4,7 @@ import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { mockFileView, mockFiles } from './files';
+import { mockFileAction, mockFileTrash, mockFileView, mockFiles } from './files';
 import { mockProfile, mockProfileFiles, mockProfiles } from './profiles';
 import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
@@ -1092,6 +1092,8 @@ export const mockApi: Api = {
     await wait(700);
     const cron = mockCronAction(id, input);
     if (cron) return cron;
+    const file = mockFileAction(id, input);
+    if (file) return file;
     const row = mockRowAction(id, input);
     if (row) return row;
     const undone = mockUndoCleanup(id, input);
@@ -1761,6 +1763,10 @@ export const mockApi: Api = {
   fileView: async (domain, file) => {
     await wait(150);
     return mockFileView(domain, file);
+  },
+  fileTrash: async () => {
+    await wait(100);
+    return mockFileTrash();
   },
   logs: async (domain, source) => {
     await wait(150);

@@ -4,6 +4,10 @@
 * **Files:** every site has a Files tab. It lists the site's folder one level at a time with name, size, date and permissions, folders first, sortable, with a filter for the folder and one-click places: wp-content, themes, plugins, uploads, each repo, wp-config.php and debug.log. `.git` and `node_modules` stay out until you switch on Show hidden. The folder is in the address, so Back and a reload land where you were
 * **Files:** a file opens in place of the list: text with line numbers up to 2 MB, png, jpg, gif and webp as pictures, anything else with its facts and Download. A download is always saved as a file, never opened as a page
 * **Files:** everything is read as you and stays in the site's folder. A link that leaves it is shown and not followed, except into a shared core's wp-admin and wp-includes, which are read only. The panel's two mu-plugins and files another account owns are marked
+* **Files:** Edit opens a text file in an editor with line numbers, colours for PHP, JS, CSS, HTML, JSON and SQL, Ctrl+F and Ctrl+S. Nothing is written until you press Save, and Cancel leaves the file as it is. A save keeps the file's permissions and line endings, and stops when the file changed on disk since you opened it, with Reload from disk and Save anyway
+* **Files:** New file, New folder, Rename, Duplicate, Move to and Copy to, from each row's menu or for the rows you tick. Nothing is ever written over, and a link that leaves the site is never changed
+* **Files:** Delete moves the entry to the panel's file trash with Undo, and Changes you can undo lists the deletes of the last 14 days with Put back. A delete that would break the site asks first and says why
+* **Web:** a row's menu opens next to its button near the bottom of a list too, instead of being cut off
 * **Logs:** a line that names a file of the site, like `functions.php on line 28`, links to that file at that line on the Files tab
 * Nothing changes in the root scripts. An update installs this release from the panel as usual
 
