@@ -33,6 +33,8 @@ import { setConstant, setTablePrefix } from './wpconfig-edit.js';
 import { readLocalConstants } from '../local-constants.js';
 import { excludeLocally } from './mu-plugins.js';
 import { installPlugins, removeInstalled } from './install-plugins.js';
+import { signedInWith } from './more-dumps.js';
+import { copyFromServer, removeCopied } from './server-files.js';
 import { cleanStep, newCleanState, pluginsOffStep, userStep } from './clean.js';
 import { NO_PROMPTS } from './git.js';
 
@@ -593,6 +595,18 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
       if (out.installed.length) job.onUndo(`Remove the ${out.installed.length} plugin${out.installed.length === 1 ? '' : 's'} installed from WordPress.org`, async () => removeInstalled(out.installed));
       return out.results;
     }, 2, `The plugins were not installed from WordPress.org: install them on the site's Plugins tab, under Missing plugins.`);
+  }
+
+  // The ones neither a repo nor WordPress.org has: from the site's own server, read only, when you ticked them.
+  const fromServer = input.copyFromServer;
+  if (isWp && fromServer && fromServer.plugins.length + fromServer.themes.length > 0) {
+    const n = fromServer.plugins.length + fromServer.themes.length;
+    const signedIn = signedInWith(ctx, fromServer.host, fromServer.password);
+    add('copy-from-server', `Copy ${n} missing plugin${n === 1 ? '' : 's'} and themes from ${fromServer.host}`, (job) => signedIn(async (signed) => {
+      const out = await copyFromServer(signed, docroot, { host: fromServer.host, folder: fromServer.folder, wpCli: fromServer.wpCli }, fromServer, ctx.uploadsDir);
+      if (out.made.length) job.onUndo(`Remove the ${out.made.length} copied from ${fromServer.host}`, async () => removeCopied(out.made));
+      return out.results;
+    }), 3, `Nothing was copied from ${fromServer.host}: copy them on the site's Plugins tab, under Missing plugins.`);
   }
 
   // Cleaning keeps one user itself, the admin; the admin step is for a copy kept as it is.

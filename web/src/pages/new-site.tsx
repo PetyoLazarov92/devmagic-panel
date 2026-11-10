@@ -1,4 +1,4 @@
-import type { AddressInput, DumpPlugin, InstallDraft, RepoTrustAnswer, WporgPlugin, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
+import type { AddressInput, DumpPlugin, InstallDraft, ServerFiles, RepoTrustAnswer, WporgPlugin, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
 import { actions, addressSummary, presetPlacement, repoTarget, branchName, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin } from '@devmagic-panel/shared';
 import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, TriangleAlert, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -35,7 +35,7 @@ import { answersHash, stepViews } from '@/lib/steps';
 import { useAsync } from '@/lib/use-async';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import { allRows, placementOf, type RepoHelpers, type RepoRow, rowPlacement } from '@/lib/project-repos';
-import { askWporg, defaultPick, missingPlugins, pluginChoices, type PluginPick, pluginSlug, repoPluginPaths } from '@/lib/missing-plugins';
+import { askWporg, defaultPick, missingPlugins, onServer, pluginChoices, type PluginPick, pluginSlug, repoPluginPaths } from '@/lib/missing-plugins';
 import { pastedRepo } from '@/lib/org-repos';
 import { asideUploads } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
@@ -120,6 +120,12 @@ export interface WizardState {
   wporg: Record<string, WporgPlugin | null>;
   /** The plugins the last install of the repo installed from WordPress.org, ticked again. */
   rememberedPlugins: string[];
+  /** The server the dump was exported from and its WordPress folder: what the dump names and nothing else has can be copied from there. No secret. */
+  serverFrom?: { host: string; folder: string; wpCli?: string } | null;
+  /** That server's password, when it asks for one: held for this visit only, sent with the install, never in a draft. */
+  serverSecret?: string | null;
+  /** The plugins and themes that server has, once read. */
+  serverHas?: ServerFiles | null;
   /** A hash of each step's answers when you continued from it, so the step list can open the steps you reached (lib/steps). */
   passed: Partial<Record<Step, string>>;
 }
@@ -323,7 +329,7 @@ export function toInput(state: WizardState): CreateSiteInput {
   const uploadsOk = hostname.safeParse(uploadsFrom).success && !isLocalName(uploadsFrom);
   const active = new Set(state.upload?.facts.activePlugins ?? []);
   // The local helpers any of the repos has.
-  const missing = pluginChoices(missingOf(state).missing, state.pluginPicks, state.wporg, state.rememberedPlugins);
+  const missing = pluginChoices(missingOf(state).missing, state.pluginPicks, state.wporg, state.rememberedPlugins, state.serverHas);
   const helpers = state.helpers?.list || state.extra.some((r) => r.helpers?.list) ? [...new Set([...(state.helpers?.list ?? []), ...state.extra.flatMap((r) => r.helpers?.list ?? [])])] : undefined;
   return {
     source: state.source,
@@ -353,6 +359,9 @@ export function toInput(state: WizardState): CreateSiteInput {
     // BE Media from Production loading the images is never also deactivated; a missing plugin you chose to turn off joins the list.
     deactivate: isRepo && state.upload && !state.noDump ? [...new Set([...state.deactivate, ...missing.off])].filter((slug) => !(via === 'plugin' && uploadsOk && slug === MEDIA_PLUGIN)) : [],
     installPlugins: isRepo && state.upload && !state.noDump ? missing.install : [],
+    ...(isRepo && state.upload && !state.noDump && state.serverFrom && missing.copy.length
+      ? { copyFromServer: { ...state.serverFrom, plugins: missing.copy, themes: [], ...(state.serverSecret ? { password: state.serverSecret } : {}) } }
+      : {}),
     ...(isRepo && state.upload && !state.noDump && state.cleanCopy && state.source !== 'empty' ? { clean: { user: cleanUserOf(state, (state.adminUser ?? defaults.user).trim(), state.adminPassword ?? defaults.password) } } : {}),
     // Only helpers a repo has, not the ones the dump has on already, and never one set to deactivate.
     activate: isRepo && helpers ? state.activate.filter((slug) => helpers.includes(slug) && !active.has(slug) && !state.deactivate.includes(slug)) : [],
@@ -377,7 +386,7 @@ export function stateFromDraft(draft: InstallDraft): WizardState {
   // An install from a repo and a dump from before 1.28 had no project state: its repo becomes the picked one.
   if (saved.source === 'repo' && !saved.org) saved.org = { ...newOrgState('', false), repo: pastedRepo(saved.repoUrl?.trim() ?? '') };
   const upload = saved.upload && draft.uploads.includes(saved.upload.id) ? saved.upload : null;
-  const kept: WizardState = { ...initial, ...saved, upload, adminPassword: null, org: saved.org ? keptOrg(saved.org, draft.uploads) : null };
+  const kept: WizardState = { ...initial, ...saved, upload, adminPassword: null, serverSecret: null, org: saved.org ? keptOrg(saved.org, draft.uploads) : null };
   // Lookups that were still running when you left start again: the repo's and its helpers'.
   const state: WizardState = {
     ...kept,
@@ -413,7 +422,7 @@ export function draftOf(state: WizardState, step: Step, input: CreateSiteInput):
     kind: state.org ? 'organization' : 'manual',
     title: titleOf(state, input),
     step,
-    state: { ...state, adminPassword: null } as unknown as Record<string, unknown>,
+    state: { ...state, adminPassword: null, serverSecret: null } as unknown as Record<string, unknown>,
     // The dumps of repos an organization install put aside stay with the draft too.
     uploads: [...new Set([...(state.upload ? [state.upload.id] : []), ...asideUploads(state.org)])],
   };
@@ -1761,16 +1770,35 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
       .finally(() => setAsking(false));
   };
   useEffect(ask, [unknown.join('|')]);
+  // What WordPress.org does not have may be on the server the dump came from: read once, only then.
+  const from = state.serverFrom ?? null;
+  const notOnWporg = missing.some((p) => state.wporg[pluginSlug(p)] === null);
+  const [readingServer, setReadingServer] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const readServer = () => {
+    if (!from || readingServer) return;
+    setReadingServer(true);
+    setServerError(null);
+    void api.serverFiles(from.host, from.folder, state.serverSecret || undefined, from.wpCli)
+      .then((has) => set('serverHas', has), (error: Error) => setServerError(error.message))
+      .finally(() => setReadingServer(false));
+  };
+  useEffect(() => {
+    if (from && notOnWporg && !state.serverHas && !serverError) readServer();
+  }, [from?.host, from?.folder, notOnWporg, Boolean(state.serverHas)]);
   if (!state.upload?.facts.plugins) return null;
   const pick = (file: string, p: PluginPick) => set('pluginPicks', { ...state.pluginPicks, [file]: p });
   const active = missing.filter((p) => p.active);
   const inactive = missing.filter((p) => !p.active);
+  const copies = pluginChoices(missing, state.pluginPicks, state.wporg, state.rememberedPlugins, state.serverHas).copy.length;
   const row = (p: DumpPlugin) => {
     const slug = pluginSlug(p);
     const wp = state.wporg[slug];
-    const value = state.pluginPicks[p.file] ?? defaultPick(p, wp, state.rememberedPlugins);
+    const there = onServer(p, state.serverHas);
+    const value = state.pluginPicks[p.file] ?? defaultPick(p, wp, state.rememberedPlugins, state.serverHas);
     const options: Array<[PluginPick, string]> = [
       ...(wp ? ([['install', 'Install']] as Array<[PluginPick, string]>) : []),
+      ...(there && from ? ([['server', 'Copy from the server']] as Array<[PluginPick, string]>) : []),
       ...(p.active ? ([['off', 'Turn off']] as Array<[PluginPick, string]>) : []),
       ['leave', "Don't install"],
     ];
@@ -1787,7 +1815,11 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
             ? asking ? 'Asking WordPress.org...' : 'WordPress.org did not answer for this one, so it cannot be installed yet.'
             : wp
               ? `On WordPress.org${p.version ? `: installs ${p.version}, production's version (latest ${wp.version})` : `, latest ${wp.version}`}.`
-              : 'Not on WordPress.org: a premium or custom plugin. Get it from its vendor or from production, or turn it off.'}
+              : there && from
+                ? `Not on WordPress.org: a premium or custom plugin. ${from.host} has it${there.version ? `, version ${there.version}` : ''}: it can be copied from there, reading only.`
+                : from && readingServer
+                  ? `Not on WordPress.org: a premium or custom plugin. Asking ${from.host} whether it has it...`
+                  : 'Not on WordPress.org: a premium or custom plugin. Get it from its vendor or from production, or turn it off.'}
         </p>
         <Segmented label={`What to do with ${slug}`} value={value} onChange={(v) => pick(p.file, v)} options={options} className="justify-self-start" />
       </li>
@@ -1809,6 +1841,18 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
             <p role="alert" className="flex flex-wrap items-center gap-2 text-sm text-warning">
               WordPress.org did not answer for some plugins, so they are not set to install.
               <Button size="sm" variant="outline" onClick={ask}><RefreshCw />Ask again</Button>
+            </p>
+          )}
+          {serverError && from && (
+            <p role="alert" className="flex flex-wrap items-center gap-2 text-sm text-warning">
+              Could not read the plugins on {from.host}, so none is set to be copied from there: {serverError}
+              <Button size="sm" variant="outline" onClick={readServer}><RefreshCw />Ask again</Button>
+            </p>
+          )}
+          {from && copies > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {copies} {copies === 1 ? 'is' : 'are'} copied from {from.host} over SSH after the import: tar reads the folder there and nothing is written on the server. What arrives is checked before it is unpacked and kept out of git locally.
+              {!state.serverSecret && ' A server that asks for a password gets the one you gave for the dump during this visit; after a reload, copy them on the site\'s Plugins tab instead.'}
             </p>
           )}
           {active.length > 0 && <ul className="grid gap-2">{active.map(row)}</ul>}

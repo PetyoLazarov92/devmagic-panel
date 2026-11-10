@@ -44,6 +44,7 @@ function PluginsSkeleton() {
         <div className={cn(bar, 'h-9 min-w-52 flex-1 rounded-md')} />
         {[14, 12, 12].map((w, i) => <div key={i} className={cn(bar, 'h-7 rounded-full')} style={{ width: `${w * 4}px` }} />)}
       </div>
+      <div className={cn(bar, 'h-11 rounded-xl')} />
       <ul className="divide-y overflow-hidden rounded-xl border bg-card">
         {[56, 40, 64, 48, 36, 52].map((w, i) => (
           <li key={i} className="flex items-center gap-3 px-4 py-3">
@@ -117,7 +118,6 @@ export function PluginsTab({ site }: { site: Site }) {
 
   return (
     <div className="grid gap-3">
-      <MissingPluginsCard site={site} onChanged={reload} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{plugins.filter(isOn).length} of {plugins.filter((p) => !always(p)).length}</span> plugins on
@@ -165,6 +165,9 @@ export function PluginsTab({ site }: { site: Site }) {
           ))}
         </div>
       </div>
+
+      {/* Under the search and filters, one row that keeps its height while it checks: the list below never moves. */}
+      <MissingPluginsCard site={site} onChanged={reload} />
 
       {shown.length === 0 ? (
         <div className="grid justify-items-center gap-2 rounded-xl border border-dashed bg-card px-6 py-10 text-center text-sm">

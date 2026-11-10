@@ -590,6 +590,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'space', label: 'Check free disk space' },
       { id: 'download', label: `Download ${String(input.path).split('/').pop()} from ${String(input.remote)} and read it` },
     ],
+    'site.copyFromServer': [{ id: 'copy', label: `Copy ${((input.plugins as unknown[] | undefined)?.length ?? 0) + ((input.themes as unknown[] | undefined)?.length ?? 0)} plugins and themes from ${String(input.host)}` }],
     'site.installPlugins': [{ id: 'plugins', label: `Install ${(input.plugins as unknown[] | undefined)?.length ?? 0} plugins from WordPress.org` }],
     'site.takeOver': [
       { id: 'cert', label: 'Issue a certificate for 2 names from the local CA' },
@@ -2039,6 +2040,10 @@ export const mockApi: Api = {
       { name: 'wp_users', bytes: 2_000_000 },
     ];
     return { tables, ...knownLeftOut(tables.map((t) => t.name)) };
+  },
+  serverFiles: async () => {
+    await wait(700);
+    return { plugins: [{ name: 'wandworks-pro-forms', version: '3.2.0', status: 'active' }, { name: 'redirection', version: '5.5.1', status: 'active' }], themes: [{ name: 'wandworks', version: '2.1.0', status: 'active' }, { name: 'wandworks-parent', version: '1.4.0', status: 'parent' }] };
   },
   productionSettings: async (domain) => {
     await wait(120);

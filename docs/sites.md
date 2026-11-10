@@ -64,8 +64,11 @@ Each plugin on or off with one switch: search, filters, the updates WordPress
 already found, what each plugin needs and what needs it, and the plugins turned
 off at install and the local helpers marked. Undo is in the toast.
 
-**Missing plugins**, at the top while there are any: plugins the database
-names that the site's files lack, after a database import or a pull. Active
+**Missing plugins**, one row under the search and filters: plugins the
+database names that the site's files lack, after a database import or a pull.
+The row is always there and keeps its height, so the list under it never
+moves: it says it is checking, then that no plugin is missing, or how many
+are, and **Review** opens it. Active
 ones (on any site of a network, or network-wide) and ones production had
 installed, read from WordPress's own update check, which also gives
 production's version and the plugin's WordPress.org slug. Ones on WordPress.org
@@ -73,8 +76,24 @@ install from there, at production's version when it is known (else, or when
 that version is gone, the latest), one at a time: one that fails is noted and
 the rest go on. Each is checked against WordPress.org's checksums, kept out of
 git locally, and not activated: the database already says which are active.
-Undo removes what was installed. A premium or custom plugin is listed with
-where to get it.
+Undo removes what was installed.
+
+A premium or custom plugin, which WordPress.org does not have, can be copied
+from the site's own server once Refresh from production is set up on the
+Database tab. **See what the server has** reads its list of plugins, and
+**Copy from the server** copies the ticked ones over SSH:
+
+- Only reads on the server: WP-CLI says where the plugins folder is, and
+  `tar` streams one folder to this machine. Nothing is written there, and a
+  password the server asks for is used for that run only.
+- What arrives is checked before it is unpacked: every entry inside the one
+  folder asked for, no hard links, nothing under a link. Links are dropped.
+- A folder that exists is never written over, the copy is kept out of git
+  locally, and nothing is activated.
+- A plugin is at most 500 MB and a run 3 GB. mu-plugins, drop-ins and core
+  are never copied.
+- A copied paid plugin keeps production's licence, so it may ask for a key or
+  switch its updates off on a local address.
 
 ### Database
 

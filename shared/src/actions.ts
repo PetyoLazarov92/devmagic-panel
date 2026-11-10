@@ -307,6 +307,20 @@ export const wpCliCommand = z.string().max(200).refine(isWpCliCommand, 'A progra
 export const sshHost = z.string().max(300).refine((v) => splitSshHost(v) !== null, 'An alias from ~/.ssh/config, or user@host, with :port when it is not 22');
 /** A path on a server: no spaces, quotes or shell characters, as ssh hands it to the server's shell. */
 export const serverPath = z.string().max(500).regex(/^\/[A-Za-z0-9._/-]+$/, 'An absolute path with letters, digits and . _ - / only').refine((p) => !p.split('/').some((x) => x === '..'), 'No .. in the path');
+/** A plugin's or theme's folder (or a single-file plugin) on a server: plain characters, as ssh hands it to the server's shell. */
+export const SERVER_ITEM = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+export const serverItem = z.string().regex(SERVER_ITEM, 'A folder name of letters, digits and . _ - only').refine((v) => !v.includes('..'), 'No .. in the name');
+/** Plugins and themes to copy from a site's own server over SSH: the ones no repo and not WordPress.org has. */
+export const serverCopy = z.object({
+  host: sshHost,
+  /** The WordPress folder on the server. */
+  folder: serverPath,
+  wpCli: wpCliCommand.optional(),
+  plugins: z.array(serverItem).max(100).default([]),
+  themes: z.array(serverItem).max(20).default([]),
+  /** The server's password, when it asks for one: for this run only. */
+  password: z.string().max(1024).optional(),
+});
 /** What a site keeps for Refresh from production: where WordPress is on the server and how to copy it. No secret. */
 export const productionSettings = z.object({
   host: sshHost,
@@ -1564,6 +1578,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({ domain: localName, path: sitePath, plugins: z.array(pluginInstall).min(1).max(100) }),
   },
+  'site.copyFromServer': {
+    title: 'Copy missing plugins and themes from the server',
+    description:
+      "Copies plugins and themes the site's database names, and neither a repo nor WordPress.org has, from the site's own server over SSH, when you tick them. Only reads there: wp plugin path and wp theme path say where the folders are, and tar streams one folder each to this machine (your ssh config and key, or password for a server that asks for one: for this run only, never kept; nothing is written on the server). What arrives is checked before it is unpacked (nothing outside its folder, no hard links, links dropped), never written over a folder that exists, and kept out of git locally. Never mu-plugins, drop-ins or core. One that fails is noted and the rest go on; nothing is activated. Undo removes what it copied. Starts a job.",
+    changesSystem: true,
+    input: serverCopy.extend({ domain: localName, path: sitePath }).refine((v) => v.plugins.length + v.themes.length > 0, { path: ['plugins'], message: 'Name a plugin or a theme to copy' }),
+  },
   'site.takeOver': {
     title: 'Take over a site made by hand',
     description:
@@ -1628,6 +1649,8 @@ export const actions = {
         clean: z.object({ user: cleanUser }).optional(),
         /** Plugins the dump has that no repo brings, installed from WordPress.org after the import; one that fails is noted and the rest go on. */
         installPlugins: z.array(pluginInstall).max(100).default([]),
+        /** Plugins and themes the dump has that no repo and not WordPress.org brings, copied from the site's server over SSH after the import. */
+        copyFromServer: serverCopy.optional(),
         /** Production host that serves uploads missing locally. */
         uploadsFrom: hostname.optional(),
         /** redirect: the panel's vhost (Local mode under a path); plugin: BE Media from Production, which the repo must have. */

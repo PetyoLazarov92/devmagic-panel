@@ -51,12 +51,12 @@ function responses(docroot: string, cert: string) {
     [`${git} rev-list --left-right --count @{upstream}...HEAD`]: { stdout: '1\t3\n' },
     [`${git} status --porcelain`]: { stdout: ' M a.php\n?? b.php\n' },
     [`${git} log -1`]: { stdout: 'abc1234\x1fAdd cart\x1fDev\x1f2026-10-24T08:00:00+00:00\n' },
-    'mysql --batch --skip-column-names --user root --host localhost -e SELECT table_schema,': { stdout: 'shop_com\t1048576\t12\nother\t1\t1\n' },
-    "mysql --batch --skip-column-names --user root --host localhost -e SELECT option_value FROM `shop_com`.`wp_options`": { stdout: 'Shop\n' },
-    'mysql --batch --skip-column-names --user root --host localhost -e SELECT blog_id,': { stdout: '1\tlocal.shop.com\t/\n2\tlocal.shop.com\t/de/\n' },
+    'mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e SELECT table_schema,': { stdout: 'shop_com\t1048576\t12\nother\t1\t1\n' },
+    "mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e SELECT option_value FROM `shop_com`.`wp_options`": { stdout: 'Shop\n' },
+    'mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e SELECT blog_id,': { stdout: '1\tlocal.shop.com\t/\n2\tlocal.shop.com\t/de/\n' },
     // No domain mapping plugin: its table is not there.
-    'mysql --batch --skip-column-names --user root --host localhost -e SELECT blog_id, domain FROM `shop_com`.`wp_domain_mapping`': { code: 1, stderr: "ERROR 1146 (42S02): Table 'shop_com.wp_domain_mapping' doesn't exist" },
-    'mysql --batch --skip-column-names --user root --host localhost -e SELECT 1, CONVERT(option_value USING utf8mb4)': { stdout: '1\tShop\n2\tShop DE\n' },
+    'mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e SELECT blog_id, domain FROM `shop_com`.`wp_domain_mapping`': { code: 1, stderr: "ERROR 1146 (42S02): Table 'shop_com.wp_domain_mapping' doesn't exist" },
+    'mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e SELECT 1, CONVERT(option_value USING utf8mb4)': { stdout: '1\tShop\n2\tShop DE\n' },
   };
 }
 
@@ -115,7 +115,7 @@ describe('discoverSites', () => {
     const t = siteTree();
     mkdirSync(join(t.docroot, 'wp-content/plugins/be-media-from-production'), { recursive: true });
     writeFileSync(join(t.docroot, 'wp-config.php'), `${readFileSync(join(t.docroot, 'wp-config.php'), 'utf8')}define( 'BE_MEDIA_FROM_PRODUCTION_URL', 'https://www.shop.com/' );\n`);
-    const active = "mysql --batch --skip-column-names --user root --host localhost -e SELECT option_value FROM `shop_com`.`wp_options` WHERE option_name = 'active_plugins'";
+    const active = "mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e SELECT option_value FROM `shop_com`.`wp_options` WHERE option_name = 'active_plugins'";
     const on = fakeExec({ ...responses(t.docroot, t.cert), [active]: { stdout: 'a:1:{i:0;s:51:"be-media-from-production/be-media-from-production.php";}\n' } });
     const [site] = await discoverSites({ config: t.config, exec: on.exec, secrets, wpcoreConf: join(t.root, 'wpcore.conf'), now: () => NOW });
     expect(site?.uploadsFrom).toEqual({ host: 'www.shop.com', via: 'plugin' });
@@ -132,8 +132,10 @@ describe('discoverSites', () => {
 
   it('reads a multisite network with its sites and titles', async () => {
     const t = siteTree({ multisite: true });
-    const { exec } = fakeExec(responses(t.docroot, t.cert));
+    const { exec, calls } = fakeExec(responses(t.docroot, t.cert));
     const [site] = await discoverSites({ config: t.config, exec, secrets, wpcoreConf: join(t.root, 'wpcore.conf'), now: () => NOW });
+    // Titles are asked for in utf8mb4 by name: the service's locale would turn Cyrillic into question marks.
+    expect(calls.filter((c) => c.file === 'mysql' && (c.args.at(-1) ?? '').includes('blogname')).every((c) => c.args.includes('--default-character-set=utf8mb4'))).toBe(true);
     expect(site?.network).toEqual({
       mode: 'subdirectory',
       type: 'subdirectory',
@@ -147,7 +149,7 @@ describe('discoverSites', () => {
 
   it('tells a subdomain network by its sites, with SUBDOMAIN_INSTALL off, takes mapped domains, and marks the hosts it does not serve', async () => {
     const t = siteTree({ multisite: true });
-    const mysql = 'mysql --batch --skip-column-names --user root --host localhost -e';
+    const mysql = 'mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e';
     const { exec } = fakeExec({
       ...responses(t.docroot, t.cert),
       [`${mysql} SELECT blog_id,`]: { stdout: '1\tlocal.shop.com\t/\n2\tlocal.shop.de\t/\n3\tlocal.shop.fr\t/\n4\tlocal.shop.com\t/it/\n' },
@@ -174,7 +176,7 @@ describe('discoverSites', () => {
 
   it("marks archived, spam and hidden network sites, and lists deleted ones apart without reading their tables", async () => {
     const t = siteTree({ multisite: true });
-    const mysql = 'mysql --batch --skip-column-names --user root --host localhost -e';
+    const mysql = 'mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e';
     const { exec, calls } = fakeExec({
       ...responses(t.docroot, t.cert),
       // blog_id, domain, path, archived, spam, deleted, public

@@ -216,7 +216,14 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       a failure noted and the rest installed, `--skip-plugins
       --skip-themes`, checked with `wp plugin verify-checksums` and kept out
       of git locally (`sites/install-plugins.ts`); never a zip, URL or path,
-      never activated by the panel. No other file goes into a site.
+      never activated by the panel. The ones WordPress.org does not have
+      (paid and custom ones) may be copied from the site's own server over
+      SSH when you tick them (`site.copyFromServer`,
+      `sites/server-files.ts`): what arrives is checked before it is
+      unpacked (nothing outside its one folder, no hard links, links
+      dropped), never written over a folder that exists, and kept out of git
+      locally; never mu-plugins, drop-ins or core. No other file goes into a
+      site.
     - **Repos go where you place them**: each repo of an install has a folder
       of the site and a folder name (`dir`, `folder` in `site.create`),
       cloned as you, never through a link (a shared core's `wp-admin` is one)
@@ -230,7 +237,10 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       SSH (`sites/more-dumps.ts`) uses your own ssh config with BatchMode and
       StrictHostKeyChecking, sftp for a file and only `wp db export` for an
       export, with a path of plain characters; WP-CLI's command there is `wp`
-      or the plain program name or path you give (`wpCliCommand`). A server that asks for a
+      or the plain program name or path you give (`wpCliCommand`). Copying
+      plugins and themes from the server only reads there too: `wp plugin
+      path`, `wp theme path` and their lists, and `tar` of one folder with a
+      plain name to stdout. A server that asks for a
       password gets the one you give for that run (`sites/ssh-password.ts`):
       it reaches ssh through its askpass helper and a FIFO only you can
       open, never argv, the environment, a file or a log, is handed out once

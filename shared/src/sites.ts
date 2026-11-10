@@ -383,6 +383,21 @@ export interface DumpPlugin {
   slug?: string;
 }
 
+/** A plugin or theme a server has, as its WP-CLI lists it. */
+export interface ServerItem {
+  /** Its folder, or a single-file plugin's name without .php. */
+  name: string;
+  version?: string;
+  /** active, inactive, active-network, must-use, dropin, parent. */
+  status?: string;
+}
+
+/** What a site's server has that could be copied from it: its plugins and themes. */
+export interface ServerFiles {
+  plugins: ServerItem[];
+  themes: ServerItem[];
+}
+
 /** What taking over a site made by hand would do, read by dmp-root vhost-adopt --check. */
 export interface TakeoverPreview {
   /** Its vhost files in sites-available, and the enabled ones. */

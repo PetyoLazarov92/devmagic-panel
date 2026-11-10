@@ -112,6 +112,24 @@ function scratch(ctx: MoreDumpsContext, name: string): string {
 }
 
 /**
+ * A step's work with an executor that signs in to the server: as it is with
+ * your key, or with the server's password when one was given, for this one
+ * run of the step. The password is handed out once: a Retry has none.
+ */
+export function signedInWith(ctx: Pick<MoreDumpsContext, 'exec' | 'sshPassword'>, host: string, given: string | undefined) {
+  const secret = oncePassword(given);
+  return async (work: (exec: Executor) => Promise<ExecResult | ExecResult[]>): Promise<ExecResult | ExecResult[]> => {
+    if (!secret.given) return work(ctx.exec);
+    const password = secret.take();
+    // Dropped when the step ended the first time: a Retry has none.
+    if (password === undefined) return { code: 1, stdout: '', stderr: 'The password was used once and is gone: start this again and give the password' };
+    const out = await withSshPassword({ exec: ctx.exec, ...ctx.sshPassword }, password, work);
+    const said = (r: ExecResult): ExecResult => ({ ...r, stderr: refusalWithPassword(host, r.stderr) });
+    return Array.isArray(out) ? out.map(said) : said(out);
+  };
+}
+
+/**
  * From a server over SSH, with your own ssh config and agent (an alias from
  * ~/.ssh/config, or user@host): a dump file there, copied with sftp, or a
  * fresh export with WP-CLI on the server, streamed into a gzip here. Only
@@ -121,17 +139,7 @@ function scratch(ctx: MoreDumpsContext, name: string): string {
  */
 export function planServerDump(ctx: MoreDumpsContext, input: ActionInput<'dump.fromServer'>, onUpload: (id: string) => void): JobStep[] {
   const from = `${input.host}:${input.path}`;
-  const secret = oncePassword(input.password);
-  /** The step's work with an executor that signs in: with the server's password when one was given, for this one run of the step. */
-  const signedIn = async (work: (exec: Executor) => Promise<ExecResult | ExecResult[]>): Promise<ExecResult | ExecResult[]> => {
-    if (!secret.given) return work(ctx.exec);
-    const password = secret.take();
-    // Dropped when the step ended the first time: a Retry has none.
-    if (password === undefined) return { code: 1, stdout: '', stderr: 'The password was used once and is gone: start this again and give the password' };
-    const out = await withSshPassword({ exec: ctx.exec, ...ctx.sshPassword }, password, work);
-    const said = (r: ExecResult): ExecResult => ({ ...r, stderr: refusalWithPassword(input.host, r.stderr) });
-    return Array.isArray(out) ? out.map(said) : said(out);
-  };
+  const signedIn = signedInWith(ctx, input.host, input.password);
   if (input.mode === 'file') {
     return [
       {
@@ -306,18 +314,28 @@ export async function exportOverSsh(exec: Executor, host: string, path: string, 
   }
 }
 
-/** The tables of a WordPress database on a server, biggest first, with their size, read with WP-CLI (and its fallback). */
-export async function serverTables(exec: Executor, host: string, path: string, command = 'wp'): Promise<Array<{ name: string; bytes: number }>> {
-  const args = [`--path=${path}`, 'db', 'size', '--tables', '--size_format=b', '--format=json', '--skip-plugins', '--skip-themes'];
+/**
+ * A WP-CLI command that only reads, run on a server in its WordPress folder,
+ * nothing of the site loaded, with the fallback when WP-CLI dies without a
+ * word. Throws what went wrong, in words for a person.
+ */
+export async function wpOverSsh(exec: Executor, host: string, path: string, words: string[], command = 'wp'): Promise<string> {
+  const args = [`--path=${path}`, ...words, '--skip-plugins', '--skip-themes'];
   let { result } = await sshWp(exec, host, null, args, undefined, command);
   if (quietDeath(result, result.stdout.length)) {
     const fallback = await fallbackWp(exec, host, command);
     if (fallback) ({ result } = await sshWp(exec, host, fallback, args));
   }
   if (result.code !== 0) throw new MoreDumpsRefused(sshProblem(host, result.stderr, result.code, exportHint(host, path)));
+  return result.stdout;
+}
+
+/** The tables of a WordPress database on a server, biggest first, with their size, read with WP-CLI (and its fallback). */
+export async function serverTables(exec: Executor, host: string, path: string, command = 'wp'): Promise<Array<{ name: string; bytes: number }>> {
+  const stdout = await wpOverSsh(exec, host, path, ['db', 'size', '--tables', '--size_format=b', '--format=json'], command);
   let list: Array<{ Name?: unknown; Size?: unknown }>;
   try {
-    list = JSON.parse(result.stdout) as typeof list;
+    list = JSON.parse(stdout) as typeof list;
   } catch {
     throw new MoreDumpsRefused(`${host} answered something that is not a list of tables`);
   }

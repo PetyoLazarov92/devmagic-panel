@@ -184,7 +184,8 @@ function mysqlRunner(exec: Executor, secrets: Secrets | null): Mysql | null {
   const account = secrets?.mysql;
   if (!account) return null;
   return async (sql) => {
-    const out = await exec('mysql', ['--batch', '--skip-column-names', '--user', account.user, '--host', account.host, '-e', sql], {
+    // utf8mb4 by name: the service has no UTF-8 locale, and the client's own default turns a title in Cyrillic into question marks.
+    const out = await exec('mysql', ['--batch', '--skip-column-names', '--user', account.user, '--host', account.host, '--default-character-set=utf8mb4', '-e', sql], {
       env: { MYSQL_PWD: account.password },
       timeoutMs: 15_000,
     });

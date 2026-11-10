@@ -175,7 +175,18 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
         {source === 'downloads' && <FromDownloads working={working} onUse={(file) => void start('dump.useDownloaded', { file })} />}
         {source === 'cloud' && <FromCloud working={working} onRemote={(remote, entry) => void start('dump.fromRemote', { remote, path: entry.path, ...(entry.sizeBytes !== null ? { sizeBytes: entry.sizeBytes } : {}) })} onDriveLink={(link) => void start('dump.download', { link })} />}
         {source === 'url' && <FromUrl working={working} onFetch={(url) => void start('dump.fetch', { url })} />}
-        {source === 'server' && <FromServer working={working} clean={Boolean(state.cleanCopy)} setClean={setClean} onTake={(input) => void start('dump.fromServer', input)} />}
+        {source === 'server' && (
+          <FromServer
+            working={working}
+            clean={Boolean(state.cleanCopy)}
+            setClean={setClean}
+            onTake={(input) => {
+              // An export names the WordPress folder there: missing plugins can be copied from it later. The password stays in memory only.
+              setState((s) => ({ ...s, serverFrom: input.mode === 'export' ? { host: input.host, folder: input.path, ...(input.wpCli ? { wpCli: input.wpCli } : {}) } : null, serverSecret: input.password ?? null, serverHas: null }));
+              void start('dump.fromServer', input);
+            }}
+          />
+        )}
         {source === 'local' && <FromThisMachine working={working} onTake={(input) => void start('dump.fromLocal', input)} />}
         {source === 'none' && (
           <p className="text-muted-foreground">

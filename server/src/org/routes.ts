@@ -10,6 +10,7 @@ import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } 
 import { DumpRefused, listRemote, rcloneRemotes, recentDownloads, rcloneRemote } from './dumps.js';
 import { z } from 'zod';
 import { MoreDumpsRefused, refusalWithPassword, serverSignIn, serverTables } from '../sites/more-dumps.js';
+import { serverFiles } from '../sites/server-files.js';
 import { withSshPassword } from '../sites/ssh-password.js';
 import { ghStatus } from '../repo-hosts/github.js';
 import { type GitHostDetector, glabOverview, HostRefused, listNamespaces, remotesOf } from '../repo-hosts/index.js';
@@ -178,6 +179,20 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
       const tables = password.success && password.data ? await withSshPassword({ exec: deps.exec }, password.data, read) : await read(deps.exec);
       const kept = deps.store.getMeta(`server-export:${body.data.host}|${body.data.path}`);
       return { tables, ...knownLeftOut(tables.map((t) => t.name)), ...(kept ? { remembered: JSON.parse(kept) as string[] } : {}) };
+    } catch (error) {
+      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: password.success && password.data ? refusalWithPassword(body.data.host, error.message) : error.message });
+      throw error;
+    }
+  });
+
+  // The plugins and themes a server has, for copying the ones a site lacks from it. Read only: wp plugin list and wp theme list.
+  api.post<{ Body: unknown }>('/api/dumps/server-files', async (request, reply) => {
+    const body = serverFolder.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'An ssh host and an absolute folder' });
+    const password = z.string().max(1024).optional().safeParse((request.body as { password?: unknown } | null)?.password);
+    try {
+      const read = (exec: typeof deps.exec) => serverFiles(exec, { host: body.data.host, folder: body.data.path, wpCli: body.data.wpCli });
+      return password.success && password.data ? await withSshPassword({ exec: deps.exec }, password.data, read) : await read(deps.exec);
     } catch (error) {
       if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: password.success && password.data ? refusalWithPassword(body.data.host, error.message) : error.message });
       throw error;

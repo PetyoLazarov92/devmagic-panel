@@ -11,6 +11,7 @@ export { PRODUCTION_ONLY_PLUGINS } from '@devmagic-panel/shared';
  */
 export function previewSteps(input: CreateSiteInput, dbName: string, dumpName?: string, cores?: string[], addresses?: AddressInput): RunStep[] {
   const isWp = input.source !== 'empty';
+  const fromServer = (input.copyFromServer?.plugins.length ?? 0) + (input.copyFromServer?.themes.length ?? 0);
   // Every address in one step, none when the dump already answers here; without the dump's facts, every host gets its https pass.
   const replace = addressSummary(addresses ?? { hosts: input.replace, moves: [], locals: [input.domain, ...input.aliases], httpHosts: undefined }, input.network?.layout);
   const names = 1 + input.aliases.length;
@@ -46,6 +47,7 @@ export function previewSteps(input: CreateSiteInput, dbName: string, dumpName?: 
     ['install', 'Install WordPress', input.source === 'wordpress' || (input.source === 'repo' && !input.uploadId)],
     ['plugins', `Deactivate ${input.deactivate.length} production-only plugin${input.deactivate.length === 1 ? '' : 's'} when active`, Boolean(input.uploadId) && input.deactivate.length > 0],
     ['install-plugins', `Install ${input.installPlugins.length} missing plugin${input.installPlugins.length === 1 ? '' : 's'} from WordPress.org`, isWp && input.installPlugins.length > 0],
+    ['copy-from-server', `Copy ${fromServer} missing plugin${fromServer === 1 ? '' : 's'} and themes from ${input.copyFromServer?.host ?? 'the server'}`, isWp && fromServer > 0],
     [
       'admin',
       input.admin?.ifExists === 'keep' ? `Add ${input.admin.user} unless the database has it` : `Make sure ${input.admin?.user ?? ''} is an administrator`,

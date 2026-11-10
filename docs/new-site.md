@@ -218,7 +218,13 @@ production-only plugins go off as on every install from a dump.
   check has it; others you can turn off or leave (WordPress turns a missing
   active plugin off on its own). Ones production had installed but not active
   are listed apart, to install if you want them. A folder name WordPress.org
-  could not have (capitals, a dot, a space) counts as not on WordPress.org,
+  could not have (capitals, a dot, a space) counts as not on WordPress.org.
+  When the dump was exported from a server over SSH, the ones WordPress.org
+  does not have (paid and custom plugins) can be copied from that server:
+  the step asks it for its list of plugins, and **Copy from the server** is
+  picked for an active one it has. The copy runs after the import, reading
+  only (see [Sites](sites.md#plugins)). A server that asks for a password
+  gets the one you gave for the dump, during the same visit only,
   and when WordPress.org gives no answer the step says so, with **Ask again**. One that fails is noted and
   the rest install; see [Sites](sites.md#plugins) for how.
 - **Uploads**: missing images load from the production domain you give.

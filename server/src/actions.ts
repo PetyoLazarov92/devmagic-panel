@@ -36,10 +36,11 @@ import type { Drafts } from './drafts.js';
 import { findClaude } from './org/claude-code.js';
 import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded } from './org/dumps.js';
 import { type Getter, shownUrl, urlProblem } from './sites/fetch-dump.js';
-import { MoreDumpsRefused, planLocalDump, planServerDump } from './sites/more-dumps.js';
+import { MoreDumpsRefused, planLocalDump, planServerDump, signedInWith } from './sites/more-dumps.js';
 import { planRefresh } from './sites/refresh.js';
 import { giveBack, planTakeOver, TakeoverRefused } from './sites/takeover.js';
 import { installPlugins, removeInstalled } from './sites/install-plugins.js';
+import { copyFromServer, removeCopied } from './sites/server-files.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
 import { planRemove, RemoveRefused, stampDate } from './sites/remove.js';
@@ -766,6 +767,21 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       },
     };
     return startJob(ctx, [step], `Install missing plugins on ${site.host}`, site.host);
+  },
+  'site.copyFromServer': async (ctx, input) => {
+    const site = siteFor(ctx.config, input.domain, input.path);
+    const n = input.plugins.length + input.themes.length;
+    const signedIn = signedInWith(ctx, input.host, input.password);
+    const step: JobStep = {
+      id: 'copy',
+      label: `Copy ${n} plugin${n === 1 ? '' : 's'} and themes from ${input.host}`,
+      run: (job) => signedIn(async (exec) => {
+        const out = await copyFromServer(exec, site.docroot, { host: input.host, folder: input.folder, wpCli: input.wpCli }, input, ctx.uploadsDir);
+        if (out.made.length) job.onUndo(`Remove the ${out.made.length} it copied`, async () => removeCopied(out.made));
+        return out.results;
+      }),
+    };
+    return startJob(ctx, [step], `Copy missing plugins and themes to ${site.host}`, site.host);
   },
   'site.takeOver': async (ctx, input) => startJob(ctx, await planTakeOver(ctx, input), `Take over ${input.domain}`, input.domain),
   'site.giveBack': async (ctx, input) => giveBack(ctx, input),
