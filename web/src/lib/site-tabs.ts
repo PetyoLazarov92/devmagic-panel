@@ -26,7 +26,7 @@ export function siteTabItems(site: Site, counts: TabCounts = NO_COUNTS): TabItem
     [{ value: 'overview', label: 'Overview' }, { value: 'logs', label: 'Logs', ...badge(counts.logs, 'danger') }],
     [
       site.network ? { value: 'network', label: 'Network' } : false,
-      wordpress && { value: 'plugins', label: 'Plugins' },
+      wordpress && { value: 'plugins', label: 'Plugins and themes' },
       site.db ? { value: 'database', label: 'Database' } : false,
       wordpress || site.db ? { value: 'performance', label: 'Performance' } : false,
       wordpress && { value: 'cron', label: 'Cron', ...badge(counts.cron, 'warning') },

@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
 import { actions, branchName, cleanCopyName, gitUrl, isActionId, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { SystemConfig } from '../config.js';
@@ -30,7 +30,7 @@ import { htaccessDismissed } from './htaccess-watch.js';
 import { inspectRepo, repoLookup, RepoRefused } from './repo.js';
 import { currentSite } from './archive.js';
 import { listTrash, TRASH_DAYS, trashFreeBytes } from './trash.js';
-import { productionOnlyFor, readPlugins } from './plugins.js';
+import { productionOnlyFor, readPlugins, readThemes } from './plugins.js';
 import { readNetworkAdmins } from './network-admin.js';
 import { SiteActionRefused, siteFor, SiteNotFoundError, siteKey } from './site-actions.js';
 import { parseWpConfig } from './wpconfig.js';
@@ -181,6 +181,19 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
     const log = readSiteLog(deps.config, request.params.domain, request.query.source === 'apache' ? 'apache' : 'debug', path);
     return log ?? reply.code(404).send({ error: `no site called ${request.params.domain}` });
+  });
+
+  // Every theme of a site, with where its folder is. Read only.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/themes', async (request, reply): Promise<SiteThemes | undefined> => {
+    const { path } = request.query;
+    if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
+    try {
+      return await readThemes(deps.exec, siteFor(deps.config, request.params.domain, path));
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      if (error instanceof SiteActionRefused) return reply.code(502).send({ error: error.message });
+      throw error;
+    }
   });
 
   // Every plugin of a site, with the ones its install turned off as production-only marked.

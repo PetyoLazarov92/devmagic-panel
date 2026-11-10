@@ -344,6 +344,27 @@ export interface SitePlugins {
   network: boolean;
 }
 
+/** A theme a site has, as WP-CLI lists it, with where its folder is. */
+export interface SiteTheme {
+  name: string;
+  title: string;
+  /** active: this site's theme; parent: the one an active child theme takes its templates from. */
+  status: 'active' | 'parent' | 'inactive';
+  version: string;
+  /** A newer version WordPress already found. */
+  update?: string;
+  /** Its folder in the site: wp-content/themes/wandworks, or wp-content/repos/theme-kit/wandworks. */
+  folder: string;
+  /** In a repo of its own under wp-content/repos, which Local mode makes a themes folder. */
+  inRepo?: true;
+}
+
+export interface SiteThemes {
+  themes: SiteTheme[];
+  /** A multisite network: each site has a theme of its own; this is the main site's. */
+  network: boolean;
+}
+
 export interface SiteInstall {
   how: InstallHow;
   /** When it was installed or restored; unknown for sites made by hand. */

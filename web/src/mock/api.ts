@@ -1663,6 +1663,17 @@ export const mockApi: Api = {
     await wait(400);
     return { plugins: structuredClone(mockPlugins), network: Boolean(sites.find((s) => s.domain === domain)?.network) };
   },
+  themes: async (domain) => {
+    await wait(350);
+    return {
+      themes: [
+        { name: 'wandworks', title: 'Wandworks', status: 'active' as const, version: '2.1.0', folder: 'wp-content/repos/theme-kit/wandworks', inRepo: true as const },
+        { name: 'twentytwentyfive', title: 'Twenty Twenty-Five', status: 'inactive' as const, version: '1.2', update: '1.3', folder: 'wp-content/themes/twentytwentyfive' },
+        { name: 'twentytwentyfour', title: 'Twenty Twenty-Four', status: 'inactive' as const, version: '1.3', folder: 'wp-content/themes/twentytwentyfour' },
+      ],
+      network: Boolean(sites.find((s) => s.domain === domain)?.network),
+    };
+  },
   snapshots: async (domain, path) => {
     await wait(150);
     return structuredClone(snapshots.get(`${domain}${path ?? ''}`) ?? []);

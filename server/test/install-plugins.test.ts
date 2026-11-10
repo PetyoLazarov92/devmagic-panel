@@ -2,6 +2,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { installPlugins, installThemes, missingOnSite, missingThemesOnSite, pluginPresent, removeInstalled, slugOf } from '../src/sites/install-plugins.js';
+import { readThemes } from '../src/sites/plugins.js';
+import { siteFor } from '../src/sites/site-actions.js';
 import { RunStore } from '../src/store.js';
 import { wporgPlugins } from '../src/wporg-plugins.js';
 import { fakeExec, type FakeCall, wpSiteTree } from './helpers.js';
@@ -175,5 +177,30 @@ describe('missing themes', () => {
     expect(text).toContain('twentytwentyfive: installed 1.3 of the theme from WordPress.org');
     expect(fake.calls.some((c) => c.args.includes('activate'))).toBe(false);
     expect(fake.calls.find((c) => c.args[4] === 'twentytwentyfive')?.args).toContain('--version=1.3');
+  });
+});
+
+describe('the themes of a site', () => {
+  it('lists what WP-CLI has and the themes in repos under wp-content/repos, with the one that is on first', async () => {
+    const t = wpSiteTree();
+    const kit = join(t.docroot, 'wp-content/repos/theme-kit/wandworks');
+    mkdirSync(kit, { recursive: true });
+    for (const f of ['functions.php', 'index.php', 'header.php']) writeFileSync(join(kit, f), '<?php');
+    writeFileSync(join(kit, 'style.css'), '/*\nTheme Name: Wandworks\nVersion: 2.1.0\n*/');
+    mkdirSync(join(t.docroot, 'wp-content/repos/theme-kit/node_modules/x'), { recursive: true });
+    const fake = fakeExec({
+      [`${base(t.docroot)} theme list`]: { stdout: JSON.stringify([{ name: 'twentytwentyfive', title: 'Twenty Twenty-Five', status: 'inactive', version: '1.2', update: 'available', update_version: '1.3' }]) },
+      [`${base(t.docroot)} option get stylesheet`]: { stdout: 'wandworks\n' },
+      [`${base(t.docroot)} option get template`]: { stdout: 'wandworks\n' },
+    });
+    const site = siteFor(t.config, 'local.shop.com');
+    expect(await readThemes(fake.exec, site)).toEqual({
+      network: false,
+      themes: [
+        { name: 'wandworks', title: 'Wandworks', status: 'active', version: '2.1.0', folder: 'wp-content/repos/theme-kit/wandworks', inRepo: true },
+        { name: 'twentytwentyfive', title: 'Twenty Twenty-Five', status: 'inactive', version: '1.2', update: '1.3', folder: 'wp-content/themes/twentytwentyfive' },
+      ],
+    });
+    expect(fake.calls.every((c) => c.args.includes('--skip-plugins') && c.args.includes('--skip-themes'))).toBe(true);
   });
 });

@@ -1,11 +1,14 @@
-import type { Site, SitePlugin, SitePlugins } from '@devmagic-panel/shared';
+import type { Site, SitePlugin, SitePlugins, SiteThemes } from '@devmagic-panel/shared';
 import { MissingPluginsCard } from '@/components/missing-plugins-card';
-import { Lock, Plug, RefreshCw, Search, X } from 'lucide-react';
+import { Lock, Palette, Plug, RefreshCw, Search, X } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Segmented } from '@/components/ui/segmented';
+import { navigate, useQueryParam } from '@/lib/router';
+import { siteHref } from '@/lib/site-ref';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { pluginMatches } from '@/lib/plugin-search';
@@ -60,12 +63,99 @@ function PluginsSkeleton() {
   );
 }
 
+type View = 'plugins' | 'themes';
+
+/**
+ * A site's plugins and themes, in two views kept in the address (view=themes),
+ * as the Database tab keeps its own. Each view has its list and, under its
+ * head, the row for what the database names and the files lack.
+ */
+export function PluginsTab({ site }: { site: Site }) {
+  const view: View = useQueryParam('view') === 'themes' ? 'themes' : 'plugins';
+  const go = (next: View) => navigate(`${siteHref(site)}?tab=plugins${next === 'themes' ? '&view=themes' : ''}`, { scroll: false });
+  return (
+    <div className="grid gap-3">
+      <Segmented label="Plugins and themes" value={view} onChange={go} options={[['plugins', 'Plugins'], ['themes', 'Themes']]} className="justify-self-start" />
+      {view === 'themes' ? <ThemesView site={site} /> : <PluginsView site={site} />}
+    </div>
+  );
+}
+
+const lastThemes = new Map<string, SiteThemes>();
+
+/** A site's themes, read only: which one is on, the parent a child theme needs, and where each folder is. */
+function ThemesView({ site }: { site: Site }) {
+  const key = `${site.domain}${site.path ?? ''}`;
+  const { data: fresh, error, loading, reload } = useAsync(() => api.themes(site.domain, site.path).then((list) => (lastThemes.set(key, list), list)), [site.domain, site.path]);
+  const data = fresh ?? lastThemes.get(key);
+  if (error && !data) {
+    return (
+      <div className="rounded-xl border bg-card px-5 py-4 text-sm">
+        <p role="alert" className="text-danger">{error}</p>
+        <Button size="sm" variant="outline" className="mt-3" onClick={reload}><RefreshCw />Try again</Button>
+      </div>
+    );
+  }
+  const bar = 'animate-pulse rounded bg-muted';
+  if (!data) {
+    return (
+      <div className="grid gap-3" aria-busy="true">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><RefreshCw className="size-3.5 animate-spin" />Reading the themes with WP-CLI...</p>
+        <div className={cn(bar, 'h-11 rounded-xl')} />
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+          {[40, 56, 48].map((w, i) => <li key={i} className="grid gap-2 px-4 py-3"><div className={cn(bar, 'h-4')} style={{ width: `${w * 4}px` }} /><div className={cn(bar, 'h-3 w-64 max-w-full')} /></li>)}
+        </ul>
+      </div>
+    );
+  }
+  const active = data.themes.find((t) => t.status === 'active');
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{data.themes.length}</span> theme{data.themes.length === 1 ? '' : 's'}
+          {active ? <>, <span className="font-medium text-foreground">{active.title}</span> is on</> : ', none of them is on'}
+          {data.network && ' on the main site; each site of a network has its own'}
+        </p>
+        <Button size="sm" variant="ghost" onClick={reload} disabled={loading}><RefreshCw className={cn(loading && 'animate-spin')} />Reload</Button>
+      </div>
+      <MissingPluginsCard site={site} show="themes" onChanged={reload} />
+      {data.themes.length === 0 ? (
+        <div className="grid justify-items-center gap-2 rounded-xl border border-dashed bg-card px-6 py-10 text-center text-sm">
+          <Palette className="size-6 text-muted-foreground" />
+          <p className="text-muted-foreground">This site has no themes.</p>
+        </div>
+      ) : (
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+          {data.themes.map((t) => (
+            <li key={t.folder} className="px-4 py-2.5">
+              <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium', t.status === 'inactive' && 'text-muted-foreground')}>
+                <span className="break-words">{t.title}</span>
+                {t.status === 'active' && <Badge tone="success">On</Badge>}
+                {t.status === 'parent' && <Badge tone="primary">Parent of the theme that is on</Badge>}
+                {t.inRepo && <Badge>In its repo</Badge>}
+              </p>
+              <p className="mt-0.5 text-xs break-words text-muted-foreground">
+                <span className="font-mono">{t.folder}</span>
+                {t.version && <> · {t.version}</>}
+                {t.update && <span className="text-warning"> · {t.update} available</span>}
+                {t.inRepo && ' · found through Local mode'}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-muted-foreground">The theme is switched in wp-admin, under Appearance: the panel only lists them.</p>
+    </div>
+  );
+}
+
 /**
  * A site's plugins, each with a switch that turns it on or off at once, as its
  * link in wp-admin does. Undo in the toast turns it back. Turning off one that
  * other active plugins need asks first.
  */
-export function PluginsTab({ site }: { site: Site }) {
+function PluginsView({ site }: { site: Site }) {
   const key = `${site.domain}${site.path ?? ''}`;
   const { data: fresh, error, loading, reload } = useAsync(
     () => api.plugins(site.domain, site.path).then((list) => (lastLists.set(key, list), list)),
@@ -167,7 +257,7 @@ export function PluginsTab({ site }: { site: Site }) {
       </div>
 
       {/* Under the search and filters, one row that keeps its height while it checks: the list below never moves. */}
-      <MissingPluginsCard site={site} onChanged={reload} />
+      <MissingPluginsCard site={site} show="plugins" onChanged={reload} />
 
       {shown.length === 0 ? (
         <div className="grid justify-items-center gap-2 rounded-xl border border-dashed bg-card px-6 py-10 text-center text-sm">

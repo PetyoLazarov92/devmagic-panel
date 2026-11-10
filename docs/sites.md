@@ -27,7 +27,7 @@ groups:
 
 1. **Overview** and **Logs**
 2. WordPress, its data and its speed: **Network** (on a multisite),
-   **Plugins**, **Database**, **Performance**, **Cron**, **Config**
+   **Plugins and themes**, **Database**, **Performance**, **Cron**, **Config**
 3. The server: **Server and PHP** (just **Server** without WordPress), **Domains and SSL**
 
 A tab a site lacks leaves the others where they are. A tab's badge counts only
@@ -60,11 +60,21 @@ Undo on the job takes it back.
 
 ### Plugins
 
-Each plugin on or off with one switch: search, filters, the updates WordPress
+The **Plugins and themes** tab has two views, kept in the address like the
+Database tab's: **Plugins** and **Themes**.
+
+**Themes** lists the site's themes, read only: which one is on, the parent a
+child theme takes its templates from, the version and an update WordPress
+already found, and where each folder is. A theme in a repo of its own under
+`wp-content/repos` is listed too, marked **In its repo**. The theme is
+switched in wp-admin.
+
+**Plugins**: each plugin on or off with one switch: search, filters, the updates WordPress
 already found, what each plugin needs and what needs it, and the plugins turned
 off at install and the local helpers marked. Undo is in the toast.
 
-**Missing plugins**, one row under the search and filters: plugins the
+**Missing plugins**, one row under the search and filters (and **missing
+themes**, one row in the Themes view): plugins the
 database names that the site's files lack, after a database import or a pull.
 The row is always there and keeps its height, so the list under it never
 moves: it says it is checking, then that no plugin is missing, or how many
@@ -78,7 +88,7 @@ the rest go on. Each is checked against WordPress.org's checksums, kept out of
 git locally, and not activated: the database already says which are active.
 Undo removes what was installed.
 
-The same row lists **missing themes**: the theme each site uses, and the
+The Themes view's row lists **missing themes**: the theme each site uses, and the
 parent a child theme needs, when the files lack it. A theme in a repo under
 `wp-content/repos` counts as there. Themes install from WordPress.org like
 plugins, without a checksum check (WordPress.org has none for themes).

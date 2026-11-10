@@ -29,7 +29,7 @@ import { ServerPassword } from '@/pages/new-site-database';
 /** A theme's tick, kept apart from a plugin file of the same name. */
 const themeKey = (name: string) => `theme:${name}`;
 
-export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged: () => void }) {
+export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** Which view it sits in: each lists its own. */ show: 'plugins' | 'themes'; onChanged: () => void }) {
   const [missing, setMissing] = useState<DumpPlugin[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [wporg, setWporg] = useState<Record<string, WporgPlugin | null>>({});
@@ -53,7 +53,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
   const copy = useJob();
   const read = () => {
     setFailed(false);
-    return Promise.all([api.missingPlugins(site.domain, site.path), api.missingThemes(site.domain, site.path).catch(() => [] as DumpTheme[])]).then(async ([list, themeList]) => {
+    return Promise.all([show === 'plugins' ? api.missingPlugins(site.domain, site.path) : Promise.resolve([] as DumpPlugin[]), show === 'themes' ? api.missingThemes(site.domain, site.path) : Promise.resolve([] as DumpTheme[])]).then(async ([list, themeList]) => {
       const answers = list.length ? (await askWporg(list.map(pluginSlug), api.wporgPlugins)).answers : ({} as Record<string, WporgPlugin | null>);
       const themeAnswers = themeList.length ? (await askWporg(themeList.map((t) => t.name), api.wporgThemes)).answers : ({} as Record<string, WporgPlugin | null>);
       setWporg(answers);
@@ -75,7 +75,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
     void read();
     setEditing(false);
     void api.productionSettings(site.domain, site.path).then(setProduction, () => setProduction(null));
-  }, [site.domain, site.path]);
+  }, [site.domain, site.path, show]);
   const done = `${install.job?.status}|${copy.job?.status}`;
   useEffect(() => {
     if (install.job?.status === 'done' || copy.job?.status === 'done') {
@@ -89,7 +89,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
     return (
       <p className={cn(row, 'text-muted-foreground')} role="status" aria-busy="true">
         <LoaderCircle className="size-4 shrink-0 animate-spin" />
-        Checking the database for plugins and themes the files lack...
+        Checking the database for {show} the files lack...
       </p>
     );
   }
@@ -99,7 +99,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
     return (
       <p className={cn(row, 'text-muted-foreground')}>
         {failed ? <PackageX className="size-4 shrink-0" /> : <Check className="size-4 shrink-0 text-success" />}
-        {failed ? 'Could not check the database for missing plugins and themes.' : 'Nothing is missing: the files have every plugin and theme the database names.'}
+        {failed ? `Could not check the database for missing ${show}.` : show === 'plugins' ? 'No plugin is missing: the files have every plugin the database names.' : 'No theme is missing: the files have the theme of every site, and its parent.'}
         {failed && <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { setMissing(null); void read(); }}>Check again</Button>}
       </p>
     );
@@ -160,7 +160,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
   };
   const active = missing.filter((p) => p.active).length;
   return (
-    <section className="overflow-hidden rounded-xl border bg-card text-sm" aria-label="Missing plugins">
+    <section className="overflow-hidden rounded-xl border bg-card text-sm" aria-label={`Missing ${show}`}>
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-muted/50">
         <PackageX className={cn('size-4 shrink-0', total > 0 ? 'text-warning' : 'text-muted-foreground')} />
         <span className="min-w-0 flex-1">
@@ -173,9 +173,12 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
       {open && (
         <div className="grid gap-3 border-t p-4">
           <p className="text-xs text-muted-foreground">
-            WordPress turns a missing active plugin off on its own, and a site without its theme shows a blank page or a default theme. Ones on WordPress.org install from there at production's version when the database says it (plugins checked against WordPress.org's checksums). Ones it does not have can be copied from the site's own server. Both are kept out of git locally, and nothing is activated.
+            {show === 'plugins'
+              ? "WordPress turns a missing active plugin off on its own. Ones on WordPress.org install from there at production's version when the database says it, checked against WordPress.org's checksums."
+              : "A site without its theme shows a blank page or falls back to a default theme. Ones on WordPress.org install from there at production's version when the database says it."}{' '}
+            Ones it does not have can be copied from the site's own server. Both are kept out of git locally, and nothing is activated.
           </p>
-          <ul className="grid gap-1.5">
+          {missing.length > 0 && <ul className="grid gap-1.5">
             {missing.map((p) => {
               const slug = pluginSlug(p);
               const wp = wporg[slug];
@@ -204,7 +207,7 @@ export function MissingPluginsCard({ site, onChanged }: { site: Site; onChanged:
                 </li>
               );
             })}
-          </ul>
+          </ul>}
           {themes.length > 0 && (
             <ul className="grid gap-1.5">
               {themes.map((t) => {
