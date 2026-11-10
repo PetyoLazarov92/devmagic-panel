@@ -222,7 +222,10 @@ describe('the Files actions', () => {
     writeFileSync(join(config.APACHE_SITES_AVAILABLE, `${SITE}-ssl.conf`), `<VirtualHost *:443>\n ServerName ${SITE}\n DocumentRoot ${tree.siteRoot}\n</VirtualHost>\n`);
     symlinkSync(join(config.APACHE_SITES_AVAILABLE, `${SITE}-ssl.conf`), join(config.APACHE_SITES_ENABLED, `${SITE}-ssl.conf`));
     store = new RunStore(':memory:');
-    const fake = fakeExec();
+    // PHP reads the file as it is on disk, as the real one would.
+    const fake = fakeExec({
+      'php -n -l': (call) => (readFileSync(call.args.at(-1) as string, 'utf8').trim().endsWith('(') ? { code: 255, stdout: `PHP Parse error:  syntax error, unexpected end of file in ${call.args.at(-1)} on line 1\n` } : { stdout: 'No syntax errors detected' }),
+    });
     calls = fake.calls;
     const hash = await hashPassword('correct horse');
     app = await buildApp({ config, exec: fake.exec, store, secrets: () => ({ panelPasswordHash: hash }), hostPaths: tree.hostPaths, dmpRoot: DMP, version: '9.9.9', uploadsDir: join(tree.root, 'data', 'uploads'), production: true });
@@ -243,11 +246,19 @@ describe('the Files actions', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, data: { hash: hashOf("<?php // a secret salt\n") } });
     expect(readFileSync(join(siteRoot, 'wp-config.php'), 'utf8')).toBe("<?php // a secret salt\n");
-    expect(calls.length).toBe(before);
+    // Only PHP is asked about the syntax, by the file's path: the text is in no argument.
+    expect(calls.slice(before).map((c) => `${c.file} ${c.args.slice(0, 3).join(' ')}`)).toEqual(['php -n -l --']);
+    expect(JSON.stringify(calls.slice(before))).not.toContain('secret salt');
     const kept = store.recent()[0];
     expect(kept).toMatchObject({ action: 'file.write', exitCode: 0 });
     expect(JSON.stringify(kept)).not.toContain('secret salt');
     expect(JSON.stringify(kept)).toContain('(hidden)');
+  });
+
+  it("save a PHP file that does not parse, and say what PHP said", async () => {
+    const res = await run('file.write', { file: 'wp-config.php', content: '<?php if (' });
+    expect(res.json()).toMatchObject({ ok: true, data: { warning: 'syntax error, unexpected end of file, on line 1' } });
+    expect(readFileSync(join(siteRoot, 'wp-config.php'), 'utf8')).toBe('<?php if (');
   });
 
   it('answer 400 for a file that changed on disk, a path that climbs and a site that is not there', async () => {

@@ -1,6 +1,7 @@
-import { type ActionId, type FileEntry, type FileListing, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
+import { type ActionId, type FileDiff, type FileEntry, type FileGitState, type FileGitStatus, type FileListing, type FileMatch, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
+import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, GitBranch, GitCompare, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
 import { type DragEvent, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { DiffView } from '@/components/diff-view';
 import { EditorBoundary } from '@/components/editor-boundary';
 import { DeleteDialog, FileTrashCard, FolderPicker, NameDialog } from '@/components/file-dialogs';
 import { EmptyState, Notice, ViewBar } from '@/components/page';
@@ -78,7 +79,7 @@ function downloadZip(site: SiteId, files: readonly string[]) {
 const siteInput = (site: SiteId) => ({ domain: site.domain, ...(site.path ? { path: site.path } : {}) });
 
 /** Runs one of the Files actions; a refusal comes back as its message. */
-async function fileAction(site: SiteId, id: ActionId, input: Record<string, unknown>): Promise<{ ok: true; data?: { hash?: string; trashId?: string } } | { ok: false; error: string }> {
+async function fileAction(site: SiteId, id: ActionId, input: Record<string, unknown>): Promise<{ ok: true; data?: { hash?: string; trashId?: string; warning?: string } } | { ok: false; error: string }> {
   try {
     const result = await api.runAction(id, { ...siteInput(site), ...input });
     return result.ok ? { ok: true, ...(result.data ? { data: result.data } : {}) } : { ok: false, error: lastLine(result.output) };
@@ -113,6 +114,9 @@ export function FilesTab({ site }: { site: Site }) {
   const edit = useQueryParam('edit') === '1';
   const wordpress = site.core.kind !== 'none';
   const uploads = useQueryParam('view') === 'uploads' && wordpress;
+  const q = useQueryParam('find');
+  const where = useQueryParam('in') === 'text' ? 'text' : 'name';
+  const find = useMemo(() => (q ? { q, where } as const : null), [q, where]);
   if (file !== null) return <FileViewer key={file} site={site} file={file} line={line} edit={edit} />;
   return (
     <div className="grid gap-4">
@@ -125,7 +129,7 @@ export function FilesTab({ site }: { site: Site }) {
           options={[['browse', 'Browse'], ['uploads', 'Uploads from production']]}
         />
       )}
-      {uploads ? <UploadsFromProduction site={site} /> : <FolderView site={site} dir={dir} />}
+      {uploads ? <UploadsFromProduction site={site} /> : <FolderView site={site} dir={dir} find={find} />}
     </div>
   );
 }
@@ -202,7 +206,109 @@ function EntryLabels({ entry, listing }: { entry: FileEntry; listing: FileListin
   );
 }
 
-function FolderView({ site, dir }: { site: Site; dir: string }) {
+/** What git says about an entry, in a word. Colour is never the only sign: each has its word. */
+const GIT_LABEL: Record<FileGitState, { text: string; tone: 'warning' | 'success' | 'danger' | 'primary'; title: string }> = {
+  modified: { text: 'modified', tone: 'warning', title: 'Changed since the last commit' },
+  new: { text: 'new', tone: 'success', title: 'Not in git yet' },
+  added: { text: 'added', tone: 'success', title: 'New, and staged for the next commit' },
+  renamed: { text: 'renamed', tone: 'primary', title: 'Renamed since the last commit' },
+  deleted: { text: 'deleted', tone: 'danger', title: 'Deleted since the last commit' },
+  conflict: { text: 'conflict', tone: 'danger', title: 'A merge left this file with both sides in it' },
+};
+
+function GitLabel({ state, folder }: { state: FileGitState | undefined; folder: boolean }) {
+  if (!state) return null;
+  const label = GIT_LABEL[state];
+  // A folder that is not new as a whole only says something in it changed.
+  if (folder && state !== 'new') return <Badge tone="warning" title="Something in this folder changed since the last commit">changes inside</Badge>;
+  return <Badge tone={label.tone} title={label.title}>{label.text}</Badge>;
+}
+
+type Find = { q: string; where: 'name' | 'text' };
+
+/** A line of a file with each place the text was found marked. */
+function Marked({ text, q }: { text: string; q: string }) {
+  const parts: Array<{ text: string; hit: boolean }> = [];
+  const lower = text.toLowerCase();
+  const needle = q.toLowerCase();
+  let at = 0;
+  for (let i = lower.indexOf(needle); needle && i >= 0; i = lower.indexOf(needle, at)) {
+    if (i > at) parts.push({ text: text.slice(at, i), hit: false });
+    parts.push({ text: text.slice(i, i + needle.length), hit: true });
+    at = i + needle.length;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at), hit: false });
+  return <>{parts.map((p, i) => (p.hit ? <mark key={i} className="rounded-xs bg-warning/30 text-foreground">{p.text}</mark> : <Fragment key={i}>{p.text}</Fragment>))}</>;
+}
+
+/** What a search under a folder found, in the folder's place: names, or the lines of text files, file by file. */
+function FindResults({ site, dir, find }: { site: Site; dir: string; find: Find }) {
+  const key = `${site.domain}${site.path ?? ''}|${dir}|${find.where}|${find.q}`;
+  const { data, error, loading, reload } = useAsync(async () => ({ key, result: await api.fileFind(site.domain, dir, find.q, find.where, site.path) }), [key]);
+  const result = data?.key === key ? data.result : undefined;
+  const short = (path: string) => (dir ? path.slice(dir.length + 1) : path);
+  const groups = useMemo(() => {
+    const byFile = new Map<string, FileMatch[]>();
+    for (const m of result?.matches ?? []) byFile.set(m.path, [...(byFile.get(m.path) ?? []), m]);
+    return [...byFile];
+  }, [result]);
+  const place = dir || 'the site folder';
+  return (
+    <section aria-label="Search results" className="grid gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <p className="text-sm" role="status">
+          {loading && !result ? (
+            <span className="inline-flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />Looking in {place}</span>
+          ) : result ? (
+            <>
+              <span className="font-medium">{find.where === 'text' ? `${result.matches.length} ${result.matches.length === 1 ? 'line' : 'lines'} in ${groups.length} ${groups.length === 1 ? 'file' : 'files'}` : `${result.matches.length} ${result.matches.length === 1 ? 'name' : 'names'}`}</span>
+              <span className="text-muted-foreground"> with <span className="font-mono text-foreground">{find.q}</span> in {place}{result.more ? ', and more that are not listed: look in a folder further down, or for a longer text' : ''}.</span>
+            </>
+          ) : null}
+        </p>
+        <span className="ml-auto flex gap-2">
+          {result && <Button size="sm" variant="ghost" disabled={loading} onClick={reload}>Look again</Button>}
+          <ButtonLink size="sm" variant="outline" href={filesHref(site, { dir })} onClick={(e) => (e.preventDefault(), navigate(filesHref(site, { dir }), { scroll: false }))}><X />Back to the folder</ButtonLink>
+        </span>
+      </div>
+      {error && !loading && <Notice>{error}</Notice>}
+      {result && result.matches.length === 0 && (
+        <EmptyState icon={Search} title={find.where === 'text' ? 'No file here has that text' : 'Nothing here by that name'}>
+          {find.where === 'text' ? 'Text files are read whatever the case of the letters. .git, node_modules and minified files are left out.' : 'Names are matched whatever the case of the letters. What is inside .git and node_modules is left out.'}
+        </EmptyState>
+      )}
+      {result && result.matches.length > 0 && (
+        <ul className={cn('divide-y overflow-hidden rounded-xl border bg-card text-sm shadow-xs', loading && 'opacity-70')}>
+          {groups.map(([path, matches]) => {
+            const folder = matches[0]?.kind === 'dir';
+            return (
+              <li key={path} className="px-4 py-2">
+                <Link href={folder ? filesHref(site, { dir: path }) : filesHref(site, { file: path })} className="flex min-w-0 items-center gap-2.5 font-medium hover:text-primary hover:underline">
+                  {folder ? <Folder className="size-4 shrink-0 text-primary" aria-hidden /> : <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+                  <span className="min-w-0 [overflow-wrap:anywhere]">{find.where === 'name' ? <Marked text={short(path)} q={find.q} /> : short(path)}</span>
+                </Link>
+                {find.where === 'text' && (
+                  <ul className="mt-1 grid gap-0.5 pl-6.5">
+                    {matches.map((m) => (
+                      <li key={m.line}>
+                        <Link href={filesHref(site, { file: path, ...(m.line ? { line: m.line } : {}) })} className="flex min-w-0 gap-3 rounded px-1 font-mono text-xs leading-5 hover:bg-muted">
+                          <span className="w-10 shrink-0 text-right text-muted-foreground tabular-nums">{m.line}</span>
+                          <span className="min-w-0 truncate"><Marked text={m.text ?? ''} q={find.q} /></span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find | null }) {
   const key = `${site.domain}${site.path ?? ''}|${dir}`;
   const { data, error, loading, reload } = useAsync(async () => {
     const listing = await api.files(site.domain, dir, site.path);
@@ -214,16 +320,35 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
   const read = data?.listing.dir === dir ? data : lastLists.get(key);
   const listing = read?.listing;
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(find?.q ?? '');
+  // The box filters the names of this folder as you type, or looks further down when you press Enter.
+  const [mode, setMode] = useState<'filter' | 'name' | 'text'>(find?.where ?? 'filter');
   const [hidden, setHidden] = useState(false);
   const [sort, setSort] = useState<Sort>({ key: 'name', down: false });
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [asking, setAsking] = useState<Asking | null>(null);
   const [busy, setBusy] = useState(false);
+  const first = useRef(true);
   useEffect(() => {
-    setQuery('');
+    // Another folder starts with an empty box; the first one keeps the search its address has.
+    if (!first.current) {
+      setQuery('');
+      setMode('filter');
+    }
+    first.current = false;
     setPicked(new Set());
   }, [key]);
+  const filter = mode === 'filter' && !find ? query : '';
+  const look = () => {
+    const q = query.trim();
+    if (mode === 'filter') return;
+    if (q.length < 2) return void toast({ tone: 'info', title: 'Type at least 2 characters to look for' });
+    navigate(filesHref(site, { dir, find: { q, where: mode } }), { scroll: false });
+  };
+  // What git says about this folder: nothing outside a repo, and nothing when git is not there.
+  const git = useAsync(async () => ({ key, status: await api.fileGit(site.domain, dir, site.path).catch((): FileGitStatus => ({ entries: {} })) }), [key]);
+  const gitStatus = git.data?.key === key ? git.data.status : undefined;
+  const gitChanges = Object.keys(gitStatus?.entries ?? {}).length;
   const trash = useAsync(() => api.fileTrash(site.domain, site.path), [site.domain, site.path]);
 
   const canChange = Boolean(listing?.writable) && !listing?.readOnly;
@@ -233,6 +358,7 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
   const refresh = () => {
     reload();
     trash.reload();
+    git.reload();
   };
 
   /** Runs a change, says how it went, and reads the folder again. */
@@ -325,10 +451,10 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
   const names = useMemo(() => (listing?.entries ?? []).map((e) => e.name), [listing]);
   const hiddenCount = listing?.entries.filter((e) => HIDDEN.has(e.name)).length ?? 0;
   const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = filter.trim().toLowerCase();
     return sortEntries((listing?.entries ?? []).filter((e) => (hidden || !HIDDEN.has(e.name)) && (!q || e.name.toLowerCase().includes(q))), sort);
-  }, [listing, query, hidden, sort]);
-  const { shown, footer } = useShowMore(rows, { step: 100, reset: `${key}|${query}|${sort.key}|${sort.down}` });
+  }, [listing, filter, hidden, sort]);
+  const { shown, footer } = useShowMore(rows, { step: 100, reset: `${key}|${filter}|${sort.key}|${sort.down}` });
 
   // Only what is listed now can be selected: a filter never leaves a hidden row ticked.
   const pickable = useMemo(() => rows.filter((e) => Boolean(listing?.writable) && !listing?.readOnly && !(e.kind === 'link' && e.outside)).map((e) => e.name), [rows, listing]);
@@ -396,11 +522,19 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
       onDrop={drop}
     >
       <ViewBar
-        onCheck={reload}
+        onCheck={refresh}
         loading={loading}
         checkedAt={read?.at}
+        note={
+          gitStatus?.repo !== undefined && (
+            <span className="mr-1 inline-flex items-center gap-1">
+              <GitBranch className="size-3" aria-hidden />
+              Repo {nameOf(gitStatus.repo) || 'of the site folder'}{gitStatus.branch ? `, on ${gitStatus.branch}` : ''}: {gitChanges === 0 ? 'nothing changed here since the last commit.' : `${gitChanges} changed here since the last commit.`}
+            </span>
+          )
+        }
         actions={
-          hiddenCount > 0 && (
+          hiddenCount > 0 && !find && (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Switch checked={hidden} onChange={setHidden} label="Show .git and node_modules" />
               Show hidden ({hiddenCount})
@@ -421,10 +555,37 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
 
       {listing && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div className="relative w-full sm:w-64">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter this folder" aria-label="Filter this folder by name" className="h-8 pl-8 text-xs" />
-          </div>
+          <form
+            className="flex w-full flex-wrap items-center gap-2 sm:w-auto"
+            role="search"
+            onSubmit={(e) => {
+              e.preventDefault();
+              look();
+            }}
+          >
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={mode === 'filter' ? 'Filter this folder' : mode === 'name' ? 'A name, then Enter' : 'Text in files, then Enter'}
+                aria-label={mode === 'filter' ? 'Filter this folder by name' : mode === 'name' ? 'Find files and folders by name, here and in the folders below' : 'Find text in the files here and in the folders below'}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+            <Segmented
+              label="What the box looks at"
+              className="text-xs"
+              value={mode}
+              onChange={(v) => {
+                setMode(v);
+                // Back to the filter leaves the results; the folder is listed again.
+                if (v === 'filter' && find) navigate(filesHref(site, { dir }), { scroll: false });
+              }}
+              options={[['filter', 'This folder'], ['name', 'Names below'], ['text', 'Text in files']]}
+            />
+            {mode !== 'filter' && <Button type="submit" size="sm" variant="outline">Find</Button>}
+          </form>
           <ul className="flex flex-wrap gap-1.5" aria-label="Places of this site">
             {listing.shortcuts.map((s) => {
               const here = s.kind === 'dir' && s.path === dir;
@@ -475,12 +636,13 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
         </div>
       )}
       {!listing && loading && <TableSkeleton columns={4} rows={8} />}
-      {listing && rows.length === 0 && (
-        <EmptyState icon={query ? Search : Folder} title={query ? 'Nothing here by that name' : listing.entries.length > 0 ? 'Only hidden folders here' : 'This folder is empty'}>
-          {query ? 'The filter looks at the names in this folder only.' : listing.entries.length > 0 ? 'Switch on Show hidden to see .git and node_modules.' : undefined}
+      {find && listing && <FindResults site={site} dir={dir} find={find} />}
+      {!find && listing && rows.length === 0 && (
+        <EmptyState icon={filter ? Search : Folder} title={filter ? 'Nothing here by that name' : listing.entries.length > 0 ? 'Only hidden folders here' : 'This folder is empty'}>
+          {filter ? 'The filter looks at the names in this folder only. Names below looks in the folders under it too.' : listing.entries.length > 0 ? 'Switch on Show hidden to see .git and node_modules.' : undefined}
         </EmptyState>
       )}
-      {pickedRows.length > 0 && (
+      {!find && pickedRows.length > 0 && (
         <div role="region" aria-label="Selected entries" className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card px-4 py-2 text-sm shadow-md">
           <p className="mr-auto font-medium">{pickedRows.length} selected</p>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'move', paths: pickedRows.map(pathOf) })}><FolderInput />Move to</Button>
@@ -491,7 +653,7 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
           <Button size="icon" variant="ghost" className="size-8" aria-label="Clear the selection" onClick={() => setPicked(new Set())}><X /></Button>
         </div>
       )}
-      {listing && rows.length > 0 && (
+      {!find && listing && rows.length > 0 && (
         <div className={cn('overflow-hidden rounded-xl border bg-card shadow-xs', loading && 'opacity-70')}>
           <table className="w-full table-fixed text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
@@ -518,7 +680,7 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {dir !== '' && !query && (
+              {dir !== '' && !filter && (
                 <tr className="hover:bg-muted/40">
                   <td colSpan={canChange ? 6 : 5} className="px-4 py-2">
                     <Link href={filesHref(site, { dir: parentOf(dir) })} className="flex items-center gap-2.5 text-muted-foreground hover:text-foreground">
@@ -552,6 +714,7 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
                           <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{e.name}</span>
                         )}
                         <EntryLabels entry={e} listing={listing} />
+                        <GitLabel state={gitStatus?.entries[e.name]} folder={isFolder(e)} />
                       </div>
                     </td>
                     <td className="px-3 py-2 text-right text-xs whitespace-nowrap text-muted-foreground tabular-nums">{e.sizeBytes === undefined ? '' : bytes(e.sizeBytes)}</td>
@@ -565,7 +728,7 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
               })}
             </tbody>
           </table>
-          <ShowMore {...footer} noun={query ? 'matches' : 'entries'} />
+          <ShowMore {...footer} noun={filter ? 'matches' : 'entries'} />
         </div>
       )}
 
@@ -639,6 +802,31 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<{ changed: boolean; text: string } | null>(null);
+  // What PHP said about the file as it was saved, until the next save.
+  const [warning, setWarning] = useState<string | null>(null);
+  // What git says about this file, and its changes since the last commit when asked.
+  const git = useAsync(async () => ({ file, status: await api.fileGit(site.domain, parentOf(file), site.path).catch((): FileGitStatus => ({ entries: {} })) }), [site.domain, site.path, file]);
+  const gitState = git.data?.file === file ? git.data.status.entries[nameOf(file)] : undefined;
+  const [changes, setChanges] = useState<{ diff?: FileDiff; error?: string; loading?: boolean } | null>(null);
+  const showChanges = async () => {
+    if (changes) return setChanges(null);
+    setChanges({ loading: true });
+    try {
+      setChanges({ diff: await api.fileDiff(site.domain, file, site.path) });
+    } catch (e) {
+      setChanges({ error: (e as Error).message });
+    }
+  };
+  // What is on disk next to what is typed, when a save found the file changed.
+  const [compared, setCompared] = useState<{ diff?: FileDiff; error?: string; loading?: boolean } | null>(null);
+  const compare = async () => {
+    setCompared({ loading: true });
+    try {
+      setCompared({ diff: await api.fileCompare(site.domain, site.path, { file, content: draft, ...(view?.eol ? { eol: view.eol } : {}) }) });
+    } catch (e) {
+      setCompared({ error: (e as Error).message });
+    }
+  };
   const dirty = base !== null && draft !== base.text;
   const dirtyNow = useRef(false);
   dirtyNow.current = dirty;
@@ -661,13 +849,17 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
     const content = draft;
     setSaving(true);
     setProblem(null);
+    setCompared(null);
     const result = await fileAction(site, 'file.write', { file, content, ...(base.hash ? { hash: base.hash } : {}), ...(view?.eol ? { eol: view.eol } : {}), ...(force ? { force: true } : {}) });
     setSaving(false);
     if (result.ok) {
       setBase({ text: content, hash: result.data?.hash });
-      toast({ tone: 'success', title: `Saved ${nameOf(file)}`, key: 'file-save' });
+      setWarning(result.data?.warning ?? null);
+      toast(result.data?.warning ? { tone: 'info', title: `Saved ${nameOf(file)}, with a syntax error`, detail: result.data.warning, key: 'file-save' } : { tone: 'success', title: `Saved ${nameOf(file)}`, key: 'file-save' });
       // The file is read again, so its size and date follow, and the view outside the editor shows what was saved.
       reload();
+      git.reload();
+      setChanges(null);
     } else {
       setProblem({ changed: result.error.includes(FILE_CHANGED), text: result.error });
     }
@@ -679,6 +871,7 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
     if (dirty && !sure) return setSure(true);
     if (base) setDraft(base.text);
     setProblem(null);
+    setCompared(null);
     setSure(false);
     setEdit(false);
   };
@@ -687,6 +880,8 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
     dirtyNow.current = false;
     setBase(null);
     setProblem(null);
+    setCompared(null);
+    setWarning(null);
     reload();
   };
   const setEdit = (on: boolean) => navigate(filesHref(site, { file, ...(on ? { edit: true } : {}), ...(line ? { line } : {}) }), { replace: true });
@@ -700,6 +895,9 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
         checkedAt={view ? data?.at : undefined}
         actions={
           <>
+            {gitState && gitState !== 'new' && gitState !== 'deleted' && !editing && (
+              <Button size="sm" variant="outline" aria-pressed={changes !== null} onClick={() => void showChanges()}><GitCompare />{changes ? 'Hide changes' : 'Changes'}</Button>
+            )}
             {canEdit && !editing && <Button size="sm" onClick={() => setEdit(true)}><Pencil />Edit</Button>}
             {editing && (
               <>
@@ -711,7 +909,7 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
             <Menu items={[{ label: 'Copy path', icon: <Copy />, onSelect: () => copyPath(full) }]} label={`More for ${nameOf(file)}`} />
           </>
         }
-        note={view && <FileFacts view={view} />}
+        note={view && <><FileFacts view={view} />{gitState ? ` In git: ${GIT_LABEL[gitState].title.toLowerCase()}.` : ''}</>}
       >
         <Breadcrumb site={site} path={file} />
       </ViewBar>
@@ -727,6 +925,7 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
           tone="warning"
           action={
             <span className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={saving || compared?.loading} onClick={() => void compare()}>{compared?.loading ? <LoaderCircle className="animate-spin" /> : <GitCompare />}See the difference</Button>
               <Button size="sm" variant="outline" disabled={saving} onClick={takeDisk}>Reload from disk</Button>
               <Button size="sm" variant="outline" disabled={saving} onClick={() => void save(true)}>Save anyway</Button>
             </span>
@@ -735,6 +934,22 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
           This file changed on disk since you opened it, by an editor, git or WordPress. Reload from disk drops what you typed here; Save anyway replaces what is on disk.
         </Notice>
       )}
+      {problem?.changed && compared?.error && <Notice>{compared.error}</Notice>}
+      {problem?.changed && compared?.diff && <DiffView diff={compared.diff} label="From what is on disk to what you typed" same="What is on disk now is the same as what you typed." />}
+      {warning && (
+        <Notice
+          tone="warning"
+          action={(() => {
+            const at = Number(/on line (\d+)$/.exec(warning)?.[1]) || undefined;
+            return at ? <Button size="sm" variant="outline" onClick={() => navigate(filesHref(site, { file, line: at, edit: canEdit }), { replace: true })}>Go to line {at}</Button> : undefined;
+          })()}
+        >
+          The file is saved, and PHP cannot read it: {warning}. A page that loads this file fails until it is fixed.
+        </Notice>
+      )}
+      {changes?.error && <Notice>{changes.error}</Notice>}
+      {changes?.loading && <LogSkeleton lines={6} />}
+      {changes?.diff && !editing && <DiffView diff={changes.diff} label="Changes since the last commit" same="Nothing in this file changed since the last commit." />}
 
       {!view && loading && <LogSkeleton lines={14} />}
       {view?.kind === 'text' && !editing && <TextView text={base?.text ?? view.text ?? ''} line={line} name={nameOf(file)} />}

@@ -22,7 +22,7 @@ export interface ActionRunResult {
   exitCode: number;
   output: string;
   /** Extra results some actions return, like a one-time login URL. */
-  data?: { url?: string; jobId?: string; backup?: string; hash?: string; trashId?: string };
+  data?: { url?: string; jobId?: string; backup?: string; hash?: string; trashId?: string; warning?: string };
 }
 export * from './org.js';
 export * from './preferences.js';

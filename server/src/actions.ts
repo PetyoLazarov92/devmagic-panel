@@ -13,6 +13,7 @@ import {
 import { findVhost } from './sites/discover.js';
 import { readWpcoreConfig } from './wpcore.js';
 import { FileRefused, type FilesContext, siteFolder } from './sites/files.js';
+import { phpSyntax } from './sites/file-find.js';
 import { compressEntries, extractArchive, placeUploads, stagedDir } from './sites/file-transfer.js';
 import { copyEntries, createEntry, deleteEntries, fileTrashDir, moveEntries, renameEntry, restoreEntries, writeFile } from './sites/file-changes.js';
 import { Jobs, KEPT_ACTIVITY, type JobOptions, type JobStep } from './jobs.js';
@@ -831,8 +832,11 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     return startJob(ctx, [step], `Copy uploads to ${site.host}`, site.host, { ...done, stoppable: true });
   },
   'file.write': async (ctx, { domain, path, ...input }) => {
-    const { hash } = writeFile(filesOf(ctx, domain, path), input);
-    return { results: [{ code: 0, stdout: `saved ${input.file}`, stderr: '' }], data: { hash } };
+    const files = filesOf(ctx, domain, path);
+    const { hash } = writeFile(files, input);
+    // The file is saved either way; PHP's word on its syntax comes back as a warning.
+    const warning = await phpSyntax(ctx.exec, files, input.file).catch(() => undefined);
+    return { results: [{ code: 0, stdout: `saved ${input.file}`, stderr: '' }], data: { hash, ...(warning ? { warning } : {}) } };
   },
   'file.create': async (ctx, { domain, path, dir, name, kind }) => [{ code: 0, stdout: `made ${createEntry(filesOf(ctx, domain, path), dir, name, kind)}`, stderr: '' }],
   'file.rename': async (ctx, { domain, path, file, name }) => [{ code: 0, stdout: `renamed ${file} to ${renameEntry(filesOf(ctx, domain, path), file, name)}`, stderr: '' }],

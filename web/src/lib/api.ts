@@ -1,4 +1,4 @@
-import type { FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { FileDiff, FileFindResult, FileGitStatus, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -146,6 +146,14 @@ export interface Api {
   files: (domain: string, dir: string, path?: string) => Promise<FileListing>;
   /** One file to look at: its text, or what it is. */
   fileView: (domain: string, file: string, path?: string) => Promise<FileView>;
+  /** Files and folders under a folder by name, or the lines of its text files that hold the text. */
+  fileFind: (domain: string, dir: string, q: string, where: 'name' | 'text', path?: string) => Promise<FileFindResult>;
+  /** What git says changed in a folder: nothing outside a repo. */
+  fileGit: (domain: string, dir: string, path?: string) => Promise<FileGitStatus>;
+  /** A file's changes since the last commit of its repo. */
+  fileDiff: (domain: string, file: string, path?: string) => Promise<FileDiff>;
+  /** What is on disk next to what the editor holds. Writes nothing. */
+  fileCompare: (domain: string, path: string | undefined, typed: { file: string; content: string; eol?: 'lf' | 'crlf' }) => Promise<FileDiff>;
   /** What the Files tab deleted on a site and can still put back, newest first. */
   fileTrash: (domain: string, path?: string) => Promise<FileTrashEntry[]>;
   /** What the site has in wp-content/uploads, the room on its disk and the last copy from its server. */
@@ -388,6 +396,10 @@ const realApi: Api = {
   themes: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/themes${atPath(path, '?')}`),
   files: (domain, dir, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files?dir=${encodeURIComponent(dir)}${atPath(path, '&')}`),
   fileView: (domain, file, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/view?file=${encodeURIComponent(file)}${atPath(path, '&')}`),
+  fileFind: (domain, dir, q, where, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/find?dir=${encodeURIComponent(dir)}&q=${encodeURIComponent(q)}&in=${where}${atPath(path, '&')}`),
+  fileGit: (domain, dir, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/git?dir=${encodeURIComponent(dir)}${atPath(path, '&')}`),
+  fileDiff: (domain, file, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/diff?file=${encodeURIComponent(file)}${atPath(path, '&')}`),
+  fileCompare: (domain, path, typed) => request('POST', `/api/sites/${encodeURIComponent(domain)}/files/compare`, { ...(path ? { path } : {}), ...typed }),
   fileTrash: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/trash${atPath(path, '?')}`),
   uploadsHere: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/uploads${atPath(path, '?')}`),
   compareUploads: (domain, path, server) => request('POST', `/api/sites/${encodeURIComponent(domain)}/uploads/compare`, { ...(path ? { path } : {}), ...server }),

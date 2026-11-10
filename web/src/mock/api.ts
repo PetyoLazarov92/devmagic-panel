@@ -4,7 +4,7 @@ import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN,
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
-import { mockFileAction, mockFileTrash, mockFileView, mockFiles, mockStageFile } from './files';
+import { mockFileAction, mockFileCompare, mockFileDiff, mockFileFind, mockFileGit, mockFileTrash, mockFileView, mockFiles, mockStageFile } from './files';
 import { mockUploadsCompare, mockUploadsCopied, mockUploadsHere } from './uploads';
 import { mockProfile, mockProfileFiles, mockProfiles } from './profiles';
 import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
@@ -1788,6 +1788,22 @@ export const mockApi: Api = {
   fileView: async (domain, file) => {
     await wait(150);
     return mockFileView(domain, file);
+  },
+  fileFind: async (_domain, dir, q, where) => {
+    await wait(where === 'text' ? 500 : 250);
+    return mockFileFind(dir, q, where);
+  },
+  fileGit: async (_domain, dir) => {
+    await wait(120);
+    return mockFileGit(dir);
+  },
+  fileDiff: async (_domain, file) => {
+    await wait(200);
+    return mockFileDiff(file);
+  },
+  fileCompare: async (_domain, _path, typed) => {
+    await wait(200);
+    return mockFileCompare(typed.file, typed.content);
   },
   uploadsHere: async () => {
     await wait(150);

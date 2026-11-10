@@ -71,6 +71,38 @@ never as root, and never leaves the site's folder.
 - The editor is loaded when you first press Edit. If it cannot load, the file
   still shows as text.
 
+## Find, git and changes
+
+The box above the list has three ways to look. **This folder** filters the
+names of the folder you are in as you type. **Names below** and **Text in
+files** look in the folder and every folder under it once you press Enter,
+and the results take the list's place:
+
+- Names are matched whatever the case of the letters, nearest folders first.
+- Text is read from text files only, whatever the case, as plain characters
+  (no patterns). Each line found is a link that opens the file at that line.
+- `.git` and `node_modules` are left out, and minified files and source maps
+  for text. Links are named and never followed.
+- A search lists up to 200 results and says when there are more.
+
+A search has an address of its own, so Back and a reload keep it.
+
+In a folder of a git repo the bar names the repo and its branch, and each
+entry says what git says about it: modified, new, added, renamed, conflict,
+or "changes inside" for a folder. A file that changed has a **Changes**
+button that shows its diff since the last commit. git is only read: no
+program of the repo's config runs for it, and the panel never commits,
+stages or checks out.
+
+When a save finds the file changed on disk, **See the difference** shows
+what is on disk next to what you typed before you choose. A diff holds the
+file's text, so it goes to the browser only: never stored, never sent to an
+AI.
+
+After a save of a PHP file the panel asks PHP whether it parses
+(`php -n -l`, which never runs the file). The save is never held back: a
+syntax error is named with its line, with a button that goes there.
+
 ## New, rename, move, copy
 
 - **New file** and **New folder** make one in the folder you are in. A new

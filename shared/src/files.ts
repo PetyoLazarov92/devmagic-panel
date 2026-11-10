@@ -104,3 +104,42 @@ export interface FileTrashEntry {
 }
 
 export const isFileTrashId = (id: unknown): id is string => typeof id === 'string' && /^\d{8}-\d{6}-[a-f0-9]{6}$/.test(id);
+
+/** Most matches one search of the Files tab lists. */
+export const FILE_FIND_MAX = 200;
+
+/** One match of a search under a folder: an entry by its name, or a line of a file. */
+export interface FileMatch {
+  /** Relative to the site's folder. */
+  path: string;
+  kind: 'file' | 'dir';
+  line?: number;
+  /** The line that matched, cut when it is very long. */
+  text?: string;
+}
+
+export interface FileFindResult {
+  matches: FileMatch[];
+  /** There is more than is listed: the search stopped at its limit. */
+  more: boolean;
+}
+
+/** What git says about an entry. A folder is modified when something in it changed. */
+export type FileGitState = 'modified' | 'new' | 'added' | 'deleted' | 'renamed' | 'conflict';
+
+export interface FileGitStatus {
+  /** The repo the folder is in, relative to the site's folder ('' is the folder itself); absent outside a repo. */
+  repo?: string;
+  branch?: string;
+  /** By the entry's name in the folder asked about. */
+  entries: Record<string, FileGitState>;
+}
+
+/** A diff longer than this is cut. */
+export const FILE_DIFF_MAX = 400_000;
+
+export interface FileDiff {
+  /** A unified diff; empty when the two are the same. */
+  diff: string;
+  cut: boolean;
+}

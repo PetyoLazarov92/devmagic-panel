@@ -1,4 +1,4 @@
-import { type ActionId, type ActionRunResult, type FileEntry, type FileListing, type FileShortcut, type FileTrashEntry, type FileView, FILE_CHANGED, FILE_IMAGE_TYPES, FILE_TEXT_MAX, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
+import { type ActionId, type ActionRunResult, type FileDiff, type FileEntry, type FileFindResult, type FileGitState, type FileGitStatus, type FileListing, type FileMatch, type FileShortcut, type FileTrashEntry, type FileView, FILE_CHANGED, FILE_FIND_MAX, FILE_IMAGE_TYPES, FILE_TEXT_MAX, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
 
 /** The mockup's site folder: the same tree for every site, made of files a WordPress site has. */
 
@@ -191,6 +191,112 @@ export function mockFileUrl(path: string, show: boolean): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+/** Entries under a folder by name, or lines of its text files, as the server's search answers. */
+export function mockFileFind(dir: string, q: string, where: 'name' | 'text'): FileFindResult {
+  const needle = q.trim().toLowerCase();
+  if (needle.length < 2) throw new Error('Type 2 to 200 characters to look for');
+  const below = allPaths().filter((p) => (dir === '' || p.startsWith(`${dir}/`)) && !/(^|\/)(\.git|node_modules)\//.test(p)).sort();
+  const matches: FileMatch[] = [];
+  if (where === 'text') {
+    for (const path of below) {
+      const lines = TREE[path]?.text?.split('\n') ?? [];
+      lines.forEach((text, i) => text.toLowerCase().includes(needle) && matches.push({ path, kind: 'file', line: i + 1, text: text.trim() }));
+    }
+  } else {
+    const seen = new Set<string>();
+    for (const path of below) {
+      // Each folder on the way to a file is an entry too.
+      const parts = path.slice(dir ? dir.length + 1 : 0).split('/');
+      parts.forEach((part, i) => {
+        const at = joinPath(dir, parts.slice(0, i + 1).join('/'));
+        if (seen.has(at) || !part.toLowerCase().includes(needle)) return;
+        seen.add(at);
+        matches.push({ path: at, kind: i < parts.length - 1 || TREE[at]?.dir || TREE[at]?.link ? 'dir' : 'file' });
+      });
+    }
+    matches.sort((a, b) => a.path.split('/').length - b.path.split('/').length || a.path.localeCompare(b.path));
+  }
+  return { matches: matches.slice(0, FILE_FIND_MAX), more: matches.length > FILE_FIND_MAX };
+}
+
+/** The mockup's one repo, and each changed file's text as the last commit has it (none for a new file). */
+const REPO = 'wp-content/themes/wandworks';
+const committed = new Map<string, string | undefined>([
+  [`${REPO}/functions.php`, FUNCTIONS.replace("const VERSION = '3.4.0';", "const VERSION = '3.3.2';")],
+  [`${REPO}/inc/blocks.php`, "<?php\nnamespace Wandworks;\n\nadd_action( 'init', function () {\n\tregister_block_type( __DIR__ . '/../blocks/spell' );\n} );\n"],
+  [`${REPO}/theme.json`, undefined],
+]);
+/** A save or a new file in the repo is a change git sees. */
+const touched = (path: string, was: string | undefined) => {
+  if (path.startsWith(`${REPO}/`) && !committed.has(path)) committed.set(path, was);
+};
+
+export function mockFileGit(dir: string): FileGitStatus {
+  if (dir !== REPO && !dir.startsWith(`${REPO}/`)) return { entries: {} };
+  const entries: Record<string, FileGitState> = {};
+  for (const [path, was] of committed) {
+    if (!path.startsWith(`${dir}/`) || TREE[path]?.text === was) continue;
+    const [name, ...rest] = path.slice(dir.length + 1).split('/') as [string, ...string[]];
+    entries[name] = rest.length > 0 ? 'modified' : TREE[path] === undefined ? 'deleted' : was === undefined ? 'new' : 'modified';
+  }
+  return { repo: REPO, branch: 'develop', entries };
+}
+
+/** A unified diff of two small texts, with three lines around each change. */
+function unified(from: string, to: string, labels: [string, string]): string {
+  const a = from.split('\n');
+  const b = to.split('\n');
+  if (a.at(-1) === '') a.pop();
+  if (b.at(-1) === '') b.pop();
+  const lcs = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i -= 1) for (let j = b.length - 1; j >= 0; j -= 1) (lcs[i] as number[])[j] = a[i] === b[j] ? (lcs[i + 1]?.[j + 1] ?? 0) + 1 : Math.max(lcs[i + 1]?.[j] ?? 0, lcs[i]?.[j + 1] ?? 0);
+  const ops: Array<{ sign: ' ' | '-' | '+'; text: string; a: number; b: number }> = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) ops.push({ sign: ' ', text: a[i] as string, a: i++, b: j++ });
+    else if (j >= b.length || (i < a.length && (lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0))) ops.push({ sign: '-', text: a[i] as string, a: i++, b: j });
+    else ops.push({ sign: '+', text: b[j] as string, a: i, b: j++ });
+  }
+  const changed = ops.map((op, at) => (op.sign === ' ' ? -1 : at)).filter((at) => at >= 0);
+  if (changed.length === 0) return '';
+  const out = [`--- ${labels[0]}`, `+++ ${labels[1]}`];
+  let start = 0;
+  while (start < changed.length) {
+    let end = start;
+    while (end + 1 < changed.length && (changed[end + 1] as number) - (changed[end] as number) <= 6) end += 1;
+    const hunk = ops.slice(Math.max(0, (changed[start] as number) - 3), Math.min(ops.length, (changed[end] as number) + 4));
+    const first = hunk[0] as (typeof ops)[number];
+    out.push(`@@ -${first.a + 1},${hunk.filter((o) => o.sign !== '+').length} +${first.b + 1},${hunk.filter((o) => o.sign !== '-').length} @@`, ...hunk.map((o) => `${o.sign}${o.text}`));
+    start = end + 1;
+  }
+  return `${out.join('\n')}\n`;
+}
+
+export function mockFileDiff(path: string): FileDiff {
+  if (!path.startsWith(`${REPO}/`)) throw new Error(`${path} is not in a git repo`);
+  const name = path.slice(REPO.length + 1);
+  const diff = unified(committed.has(path) ? (committed.get(path) ?? '') : (TREE[path]?.text ?? ''), TREE[path]?.text ?? '', [`a/${name}`, `b/${name}`]);
+  return { diff: diff && `diff --git a/${name} b/${name}\n${diff}`, cut: false };
+}
+
+export const mockFileCompare = (path: string, typed: string): FileDiff => ({ diff: unified(TREE[path]?.text ?? '', typed, ['on disk', 'what you typed']), cut: false });
+
+/** What PHP would say about braces that do not pair up: enough for the mockup to show the warning. */
+function phpWarning(path: string, text: string): string | undefined {
+  if (!/\.(php|inc|phtml)$/i.test(path)) return undefined;
+  const lines = text.split('\n');
+  let open = 0;
+  for (const [i, line] of lines.entries()) {
+    for (const c of line) {
+      if (c === '{') open += 1;
+      if (c === '}') open -= 1;
+      if (open < 0) return `syntax error, unexpected token "}", on line ${i + 1}`;
+    }
+  }
+  return open > 0 ? `syntax error, unexpected end of file, on line ${lines.length}` : undefined;
+}
+
 const trash: Array<FileTrashEntry & { files: Record<string, MockFile> }> = [
   { id: '20261109-164210-3fa9c1', deletedAt: new Date(NOW - 17 * 3_600_000).toISOString(), items: ['wp-content/themes/wandworks/inc/old-widgets.php'], sizeBytes: 3_412, files: { 'wp-content/themes/wandworks/inc/old-widgets.php': { text: '<?php\n// The widgets the theme had before blocks.\n', ago: 60 * 24 * 300 } } },
 ];
@@ -247,15 +353,18 @@ export function mockFileAction(id: ActionId, input: Record<string, unknown>): Ac
       guard(path);
       if (input.hash && input.hash !== hashOf(file.text) && !input.force) return refuse(`${FILE_CHANGED}: ${path}`);
       const text = String(input.content);
+      touched(path, file.text);
       Object.assign(file, { text, ago: 0 });
       delete file.size;
-      return ok(`saved ${path}`, { hash: hashOf(text) });
+      const warning = phpWarning(path, text);
+      return ok(`saved ${path}`, { hash: hashOf(text), ...(warning ? { warning } : {}) });
     }
     case 'file.create': {
       const path = joinPath(String(input.dir), String(input.name));
       guard(path);
       if (exists(path)) return refuse(`${String(input.name)} is already there`);
       TREE[path] = input.kind === 'dir' ? { dir: true, ago: 0 } : { text: '', ago: 0 };
+      if (input.kind !== 'dir') touched(path, undefined);
       return ok(`made ${path}`);
     }
     case 'file.rename': {

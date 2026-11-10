@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
-import { actions, sshHost, serverPath, wpCliCommand, branchName, cleanCopyName, gitUrl, isActionId, isSitePath, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, FileDiff, FileFindResult, FileGitStatus, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
+import { FILE_TEXT_MAX, actions, sshHost, serverPath, wpCliCommand, branchName, cleanCopyName, gitUrl, isActionId, isSitePath, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
@@ -36,6 +36,7 @@ import { fileTrashDir, listFileTrash } from './file-changes.js';
 import { stagedDir, stageUpload, zipForDownload } from './file-transfer.js';
 import { SiteActionRefused, siteFor, SiteNotFoundError, siteKey } from './site-actions.js';
 import { parseWpConfig } from './wpconfig.js';
+import { diffWithDisk, findByName, findInFiles, gitDiff, gitStatus } from './file-find.js';
 import { FileRefused, type FilesContext, listFolder, rawFile, readFile, siteFolder } from './files.js';
 import type { WpCronReport } from '@devmagic-panel/shared';
 import { readProduction, saveProduction } from './refresh.js';
@@ -213,6 +214,32 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
   // What the Files tab deleted and can still put back.
   api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/files/trash', async (request, reply): Promise<FileTrashEntry[] | FastifyReply> =>
     filesAnswer(request, reply, () => listFileTrash(fileTrashDir(dirname(deps.workDir)), siteKey(request.params.domain, request.query.path))) ?? reply);
+  // The same for a read that runs a program (grep, git, diff): the refusals answer alike.
+  const filesAsk = async <T>(domain: string, path: string | undefined, reply: FastifyReply, read: (ctx: FilesContext) => Promise<T>): Promise<T | FastifyReply> => {
+    if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
+    try {
+      return await read(filesOf(domain, path));
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      if (error instanceof FileRefused) return reply.code(400).send({ error: error.message });
+      throw error;
+    }
+  };
+  // A search under a folder: entries by name, or lines of its text files.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; dir?: string; q?: string; in?: string } }>('/api/sites/:domain/files/find', async (request, reply): Promise<FileFindResult | FastifyReply> =>
+    filesAsk(request.params.domain, request.query.path, reply, async (ctx) =>
+      request.query.in === 'text' ? findInFiles(deps.exec, ctx, request.query.dir ?? '', request.query.q ?? '') : findByName(ctx, request.query.dir ?? '', request.query.q ?? '')));
+  // What git says changed in a folder, and one file's changes since the last commit.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; dir?: string } }>('/api/sites/:domain/files/git', async (request, reply): Promise<FileGitStatus | FastifyReply> =>
+    filesAsk(request.params.domain, request.query.path, reply, (ctx) => gitStatus(deps.exec, ctx, request.query.dir ?? '')));
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; file?: string } }>('/api/sites/:domain/files/diff', async (request, reply): Promise<FileDiff | FastifyReply> =>
+    filesAsk(request.params.domain, request.query.path, reply, (ctx) => gitDiff(deps.exec, ctx, request.query.file ?? '')));
+  // What is on disk next to what the editor holds. Nothing is written: the typed text is only compared.
+  api.post<{ Params: { domain: string }; Body: unknown }>('/api/sites/:domain/files/compare', { bodyLimit: 4 * FILE_TEXT_MAX }, async (request, reply): Promise<FileDiff | FastifyReply> => {
+    const body = z.object({ path: mountPath.optional(), file: z.string().min(1).refine(isSitePath), content: z.string().max(FILE_TEXT_MAX), eol: z.enum(['lf', 'crlf']).optional() }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'Send the file of the site and the text to compare it with' });
+    return filesAsk(request.params.domain, body.data.path, reply, (ctx) => diffWithDisk(deps.exec, ctx, body.data.file, body.data.content, body.data.eol));
+  });
   // Always a download, except the four image types the tab shows: a site's HTML or SVG never runs in the panel's origin.
   api.get<{ Params: { domain: string }; Querystring: { path?: string; file?: string; show?: string } }>('/api/sites/:domain/files/raw', async (request, reply) => {
     const raw = filesAnswer(request, reply, (ctx) => rawFile(ctx, request.query.file ?? ''));
