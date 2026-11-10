@@ -78,6 +78,21 @@ describe('site routes', () => {
     expect(statusAsks).toEqual([{ fresh: false }, { fresh: true }]);
   });
 
+  it('say what a site has in uploads, and compare with its server only for a site and a host that are real', async () => {
+    mkdirSync(join(backupDir, '..', 'www', 'local.shop.com', 'wp-content', 'uploads', '2026', '11'), { recursive: true });
+    const here = (await get('/api/sites/local.shop.com/uploads')).json();
+    expect(here).toMatchObject({ files: 0, bytes: 0 });
+    expect(here.freeBytes).toBeGreaterThan(0);
+    store.setMeta('uploads-copy:local.shop.com', JSON.stringify({ at: '2026-11-09T10:00:00.000Z', host: 'shop-prod' }));
+    expect((await get('/api/sites/local.shop.com/uploads')).json().last).toEqual({ at: '2026-11-09T10:00:00.000Z', host: 'shop-prod' });
+    expect((await get('/api/sites/local.nothere.com/uploads')).statusCode).toBe(404);
+    const post = (url: string, payload: Record<string, unknown>) => app.inject({ method: 'POST', url, headers: { host: HOST, origin: ORIGIN, cookie }, payload });
+    expect((await post('/api/sites/local.shop.com/uploads/compare', { host: 'shop prod; rm', folder: '/srv/www/shop' })).statusCode).toBe(400);
+    expect((await post('/api/sites/local.nothere.com/uploads/compare', { host: 'shop-prod', folder: '/srv/www/shop' })).statusCode).toBe(404);
+    // The server does not answer here: a refusal in words, not a crash.
+    expect((await post('/api/sites/local.shop.com/uploads/compare', { host: 'shop-prod', folder: '/srv/www/shop' })).statusCode).toBe(400);
+  });
+
   it("keep a site's Refresh from production settings, checked, and say no site for an unknown one", async () => {
     const put = (url: string, payload: Record<string, unknown>) => app.inject({ method: 'PUT', url, headers: { host: HOST, origin: ORIGIN, cookie }, payload });
     expect((await get('/api/sites/local.shop.com/production')).json()).toBeNull();

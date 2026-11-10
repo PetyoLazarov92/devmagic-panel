@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
-import { actions, branchName, cleanCopyName, gitUrl, isActionId, isSitePath, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
+import { actions, sshHost, serverPath, wpCliCommand, branchName, cleanCopyName, gitUrl, isActionId, isSitePath, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { SystemConfig } from '../config.js';
 import type { CoreStatusSource } from '../core-status.js';
@@ -39,6 +39,9 @@ import { parseWpConfig } from './wpconfig.js';
 import { FileRefused, type FilesContext, listFolder, rawFile, readFile, siteFolder } from './files.js';
 import type { WpCronReport } from '@devmagic-panel/shared';
 import { readProduction, saveProduction } from './refresh.js';
+import { MoreDumpsRefused, refusalWithPassword } from './more-dumps.js';
+import { withSshPassword } from './ssh-password.js';
+import { compareUploads, uploadsCopied, uploadsHere } from './uploads-compare.js';
 import { type CronContext, CronRefused } from '../cron.js';
 import { readWpCron, testWpCron } from './wp-cron.js';
 
@@ -386,6 +389,36 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     const body = productionSettings.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: body.error.issues[0]?.message ?? 'An ssh host, a folder and table names' });
     return saveProduction(deps.store, request.params.domain, request.query.path, body.data);
+  });
+  // Uploads from production: what the site has in wp-content/uploads here, and the last copy that finished.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/uploads', async (request, reply): Promise<UploadsHere | undefined> => {
+    const key = snapshotKey(request.params.domain, request.query.path);
+    if (!key) return reply.code(404).send({ error: `no site called ${request.params.domain}${request.query.path ?? ''}` });
+    try {
+      const site = siteFor(deps.config, request.params.domain, request.query.path);
+      const last = deps.store.getMeta(uploadsCopied(siteKey(request.params.domain, request.query.path)));
+      return { ...uploadsHere(site.docroot), ...(last ? { last: JSON.parse(last) as { at: string; host: string } } : {}) };
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      throw error;
+    }
+  });
+  // What the site's own server has in uploads next to what is here. Read only on both sides: rsync lists there, nothing is copied.
+  api.post<{ Params: { domain: string }; Body: unknown }>('/api/sites/:domain/uploads/compare', async (request, reply): Promise<UploadsCompare | undefined> => {
+    const body = z.object({ path: z.string().max(200).optional(), host: sshHost, folder: serverPath, wpCli: wpCliCommand.optional() }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'An ssh host and an absolute folder' });
+    if (!snapshotKey(request.params.domain, body.data.path)) return reply.code(404).send({ error: `no site called ${request.params.domain}${body.data.path ?? ''}` });
+    // The server's password, when it asks for one: for this one read, never kept or logged.
+    const password = z.string().max(1024).optional().safeParse((request.body as { password?: unknown } | null)?.password);
+    try {
+      const site = siteFor(deps.config, request.params.domain, body.data.path);
+      const read = (exec: Executor) => compareUploads(exec, site.docroot, { host: body.data.host, folder: body.data.folder, wpCli: body.data.wpCli });
+      return password.success && password.data ? await withSshPassword({ exec: deps.exec }, password.data, read) : await read(deps.exec);
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: password.success && password.data ? refusalWithPassword(body.data.host, error.message) : error.message });
+      throw error;
+    }
   });
   // The themes a site's database uses that its files lack. Read only.
   api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/missing-themes', async (request, reply): Promise<DumpTheme[] | undefined> => {

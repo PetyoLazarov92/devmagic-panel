@@ -12,7 +12,7 @@ import { lastLine } from '@/lib/site-actions';
  * Retry when it failed and the way to Undo once it settled. The header's jobs
  * indicator is the view of every job.
  */
-export function JobBox({ job, onRetry, onStop }: { job: JobView; onRetry: () => void; onStop?: () => void }) {
+export function JobBox({ job, onRetry, onStop, stopNote }: { job: JobView; onRetry: () => void; onStop?: () => void; /** What a stop leaves, when it is not a clean-up's batches. */ stopNote?: string }) {
   const [open, setOpen] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   // A new job comes into view where it was started, clear of a sticky strip at the top (the PHP tab's).
@@ -31,7 +31,7 @@ export function JobBox({ job, onRetry, onStop }: { job: JobView; onRetry: () => 
             {job.stopping ? 'Stopping...' : 'Stop'}
           </Button>
           <span className="text-xs text-muted-foreground">
-            {job.stopping ? 'It ends after the batch it is on.' : 'Ends after the batch it is on; Retry carries on, Undo puts back what it removed.'}
+            {stopNote ?? (job.stopping ? 'It ends after the batch it is on.' : 'Ends after the batch it is on; Retry carries on, Undo puts back what it removed.')}
           </span>
         </div>
       )}
@@ -57,11 +57,11 @@ export function JobBox({ job, onRetry, onStop }: { job: JobView; onRetry: () => 
  * way every page shows one: never a box of its own between cards, so the cards
  * around it stay where they are. With the error when the job did not start.
  */
-export function JobFooter({ job, error, onRetry, onStop }: { job: JobView | null; error?: string | null; onRetry: () => void; onStop?: () => void }) {
+export function JobFooter({ job, error, onRetry, onStop, stopNote }: { job: JobView | null; error?: string | null; onRetry: () => void; onStop?: () => void; stopNote?: string }) {
   if (!job && !error) return null;
   return (
     <div className="grid gap-3 border-t px-5 py-4 text-sm">
-      {job && <JobBox job={job} onRetry={onRetry} {...(onStop ? { onStop } : {})} />}
+      {job && <JobBox job={job} onRetry={onRetry} {...(onStop ? { onStop } : {})} {...(stopNote ? { stopNote } : {})} />}
       {error && <p role="alert" className="text-danger">{error}</p>}
     </div>
   );

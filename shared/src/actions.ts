@@ -6,6 +6,7 @@ import { mysqlIdentifier, WP_CONTENT_KINDS, WP_KEEP_REVISIONS, WP_ORPHAN_KINDS, 
 import { NETWORK_PATH } from './network.js';
 import { SITE_SERVERS } from './nginx.js';
 import { FILE_TEXT_MAX, isFileName, isFileTrashId, isSitePath } from './files.js';
+import { isUploadsFolder } from './uploads.js';
 
 /** A review of a site's .htaccess rules: the checksum of each file as it was read, by folder, and the translated rules left out. */
 const htaccessChoice = z.object({
@@ -336,6 +337,14 @@ export const uploadsCopy = z.object({
   wpCli: wpCliCommand.optional(),
   /** Only the year and month folders of the last months; all of them when unset. */
   months: z.number().int().min(1).max(240).optional(),
+  /** The folders to bring, as the Uploads from production view names them; with these, months is not read. */
+  folders: z.array(z.string().max(160).refine(isUploadsFolder, 'A folder of uploads, like 2026/11')).min(1).max(2000).optional(),
+  /** With folders: files larger than this stay on the server. */
+  maxFileMb: z.number().int().min(1).max(100_000).optional(),
+  /** With folders: the resized copies of images stay on the server; WordPress can make them again. */
+  originalsOnly: z.boolean().optional(),
+  /** With folders: also bring files that are here and newer on the server; the local ones go to the file trash first. */
+  changed: z.boolean().optional(),
   password: z.string().max(1024).optional(),
 });
 /** What a site keeps for Refresh from production: where WordPress is on the server and how to copy it. No secret. */

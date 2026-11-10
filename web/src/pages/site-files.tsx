@@ -1,5 +1,5 @@
 import { type ActionId, type FileEntry, type FileListing, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowUp, ChevronRight, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
 import { type DragEvent, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorBoundary } from '@/components/editor-boundary';
 import { DeleteDialog, FileTrashCard, FolderPicker, NameDialog } from '@/components/file-dialogs';
@@ -10,10 +10,12 @@ import { Button, ButtonLink } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Menu, type MenuItem } from '@/components/ui/menu';
 import { ShowMore, useShowMore } from '@/components/ui/show-more';
+import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '@/components/ui/switch';
+import { UploadsFromProduction } from '@/components/uploads-from-production';
 import { api, fileUrl, isMockup, zipUrl } from '@/lib/api';
 import { loadFileEditor } from '@/lib/file-editor-load';
-import { filesHref } from '@/lib/file-links';
+import { filesHref, uploadsHref } from '@/lib/file-links';
 import { bytes, dateTime, timeAgo } from '@/lib/format';
 import { Link, navigate, useQueryParam } from '@/lib/router';
 import { lastLine } from '@/lib/output';
@@ -109,7 +111,23 @@ export function FilesTab({ site }: { site: Site }) {
   const dir = useQueryParam('dir') ?? '';
   const line = Number(useQueryParam('line')) || undefined;
   const edit = useQueryParam('edit') === '1';
-  return file !== null ? <FileViewer key={file} site={site} file={file} line={line} edit={edit} /> : <FolderView site={site} dir={dir} />;
+  const wordpress = site.core.kind !== 'none';
+  const uploads = useQueryParam('view') === 'uploads' && wordpress;
+  if (file !== null) return <FileViewer key={file} site={site} file={file} line={line} edit={edit} />;
+  return (
+    <div className="grid gap-4">
+      {wordpress && (
+        <Segmented
+          label="What the Files tab shows"
+          className="w-fit"
+          value={uploads ? 'uploads' : 'browse'}
+          onChange={(v) => navigate(v === 'uploads' ? uploadsHref(site) : filesHref(site, { dir }), { scroll: false })}
+          options={[['browse', 'Browse'], ['uploads', 'Uploads from production']]}
+        />
+      )}
+      {uploads ? <UploadsFromProduction site={site} /> : <FolderView site={site} dir={dir} />}
+    </div>
+  );
 }
 
 /** Where you are: the site's folder, then each folder down to this one. */
@@ -392,6 +410,14 @@ function FolderView({ site, dir }: { site: Site; dir: string }) {
       >
         <Breadcrumb site={site} path={dir} />
       </ViewBar>
+
+      {site.core.kind !== 'none' && (dir === 'wp-content/uploads' || dir.startsWith('wp-content/uploads/')) && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
+          <CloudDownload className="size-4 shrink-0" aria-hidden />
+          Missing files that production has?
+          <Link href={uploadsHref(site)} className="font-medium text-primary hover:underline">Copy from the server</Link>
+        </p>
+      )}
 
       {listing && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">

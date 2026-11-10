@@ -9,6 +9,9 @@ export function filesHref(site: SiteId, at: { dir?: string; file?: string; line?
   return `${siteHref(site)}?tab=files${query}`;
 }
 
+/** Uploads from production, the Files tab's second view. */
+export const uploadsHref = (site: SiteId): string => `${siteHref(site)}?tab=files&view=uploads`;
+
 export interface FileMention {
   /** Where the mention starts and ends in the text. */
   start: number;

@@ -10,6 +10,7 @@ never as root, and never leaves the site's folder.
 - [New, rename, move, copy](#new-rename-move-copy)
 - [Upload, zip and extract](#upload-zip-and-extract)
 - [Delete and Undo](#delete-and-undo)
+- [Uploads from production](#uploads-from-production)
 - [What stays out of reach](#what-stays-out-of-reach)
 
 ## Browsing
@@ -118,6 +119,48 @@ never as root, and never leaves the site's folder.
   panel's two files, and a git repo (commits never pushed go with it).
 - More than 1 GB is too much to keep for Undo and is refused: delete that in
   a terminal.
+
+## Uploads from production
+
+The Files tab of a WordPress site has two views: **Browse** and **Uploads
+from production** (`?tab=files&view=uploads`). The second brings files of
+`wp-content/uploads` from the site's own server, over SSH, when you ask.
+Nothing about uploads is on the Database tab, and a refresh from production
+never copies them.
+
+- It uses the server saved for Refresh from production (SSH host and
+  WordPress folder), with **Change**, and asks for both when none is saved. A
+  server that asks for a password gets the one you type for that run; it is
+  never kept.
+- **Here** says what this computer has: the files and size of uploads, the
+  free space, the last copy, and whether Local mode already loads missing
+  files from production when a page asks for them.
+- **Compare** lists the files on the server and reads the ones here. It
+  copies nothing. Then every folder shows what is new, what changed and its
+  size, in four groups: **Media** by month (and by site on a network),
+  **Generated and rebuildable** (styles and converted images plugins make
+  again), **Private data** (form entries, order files, paid downloads,
+  members' files) and **Other folders**. Only media with something new starts
+  ticked, and private data has a warning when you tick it.
+- **All media**, **Last 3 months** and **Nothing** tick for you. **Originals
+  only** leaves resized copies like `photo-300x200.jpg` on the server
+  (`wp media regenerate` makes them again), and **Skip files larger than**
+  leaves big files there.
+- **Bring** copies what you ticked. It only adds: a file that is here already
+  stays as it is, and nothing here is deleted. It is refused when it would
+  not fit with 1 GB to spare. **Stop** keeps what came, and a new run brings
+  the rest.
+- Files that are here too and newer on the server are listed. Bringing them
+  is its own switch, off by default: each file here goes to the file trash
+  first, and **Changes you can undo** on Browse puts it back for 14 days.
+- Files that are only here are listed, and nothing is done with them.
+- Never copied: PHP files, links, `.htaccess`, database dumps, and plugins'
+  cache, log and backup folders. A folder with a name the panel does not take
+  is left on the server and counted.
+- Nothing is written or deleted on the server, no key is added there, and its
+  host key is still checked. It needs `rsync` on both sides.
+- In `wp-content/uploads`, Browse has a line that leads here. The new site
+  wizard's **Also copy the uploads** stays as it is.
 
 ## What stays out of reach
 

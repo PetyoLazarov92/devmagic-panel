@@ -1,4 +1,4 @@
-import type { FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -148,6 +148,10 @@ export interface Api {
   fileView: (domain: string, file: string, path?: string) => Promise<FileView>;
   /** What the Files tab deleted on a site and can still put back, newest first. */
   fileTrash: (domain: string, path?: string) => Promise<FileTrashEntry[]>;
+  /** What the site has in wp-content/uploads, the room on its disk and the last copy from its server. */
+  uploadsHere: (domain: string, path?: string) => Promise<UploadsHere>;
+  /** The uploads on the site's server next to the ones here, folder by folder. Only reads, on both sides. */
+  compareUploads: (domain: string, path: string | undefined, server: { host: string; folder: string; wpCli?: string; password?: string }) => Promise<UploadsCompare>;
   /** Sends one file to the panel, where file.upload picks it up by its id and puts it in a folder. */
   stageFile: (file: File, onProgress: (fraction: number) => void) => Promise<{ id: string; sizeBytes: number }>;
   /** Your crontab: the panel's tasks with their last run, your own lines, and system cron read only. */
@@ -385,6 +389,8 @@ const realApi: Api = {
   files: (domain, dir, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files?dir=${encodeURIComponent(dir)}${atPath(path, '&')}`),
   fileView: (domain, file, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/view?file=${encodeURIComponent(file)}${atPath(path, '&')}`),
   fileTrash: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/trash${atPath(path, '?')}`),
+  uploadsHere: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/uploads${atPath(path, '?')}`),
+  compareUploads: (domain, path, server) => request('POST', `/api/sites/${encodeURIComponent(domain)}/uploads/compare`, { ...(path ? { path } : {}), ...server }),
   stageFile: (file, onProgress) => xhrUpload('/api/files/uploads', file, onProgress),
   cron: () => request('GET', '/api/cron'),
   cronRuns: (id) => request('GET', `/api/cron/tasks/${encodeURIComponent(id)}/runs`),

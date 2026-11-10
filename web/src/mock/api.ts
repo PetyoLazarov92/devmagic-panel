@@ -5,6 +5,7 @@ import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
 import { mockFileAction, mockFileTrash, mockFileView, mockFiles, mockStageFile } from './files';
+import { mockUploadsCompare, mockUploadsCopied, mockUploadsHere } from './uploads';
 import { mockProfile, mockProfileFiles, mockProfiles } from './profiles';
 import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
@@ -141,6 +142,21 @@ function advance(job: JobView, list: 'steps' | 'undo', failAt?: string, outputs:
   const tick = () => {
     const running = steps.find((s) => s.status === 'running');
     // A stop ends a clean-up's removal between two batches, as the panel does.
+    if (running && running.id === 'bring' && job.stopping) {
+      delete running.progress;
+      delete running.note;
+      running.status = 'failed';
+      running.output = 'stopped: what came so far is kept, and a new run brings the rest';
+      job.status = 'failed';
+      return;
+    }
+    if (running && running.id === 'bring' && (running.progress ?? 0) < 1) {
+      running.progress = Math.min(1, (running.progress ?? 0) + 0.125);
+      running.note = `New files: ${Math.round(running.progress * 1_840).toLocaleString('en-US')} of 1,840`;
+      job.progress = running.progress;
+      setTimeout(tick, 600);
+      return;
+    }
     if (running && running.id === 'remove' && job.stopping) {
       delete running.progress;
       delete running.note;
@@ -592,7 +608,7 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
       { id: 'space', label: 'Check free disk space' },
       { id: 'download', label: `Download ${String(input.path).split('/').pop()} from ${String(input.remote)} and read it` },
     ],
-    'site.copyUploads': [{ id: 'uploads', label: `Copy ${input.months ? `the last ${String(input.months)} months of uploads` : 'the uploads'} from ${String(input.host)}` }],
+    'site.copyUploads': Array.isArray(input.folders) ? [{ id: 'bring', label: `Bring the uploads of ${input.folders.length === 1 ? '1 folder' : `${input.folders.length} folders`} from ${String(input.host)}` }] : [{ id: 'uploads', label: `Copy ${input.months ? `the last ${String(input.months)} months of uploads` : 'the uploads'} from ${String(input.host)}` }],
     'site.copyFromServer': [{ id: 'copy', label: `Copy ${((input.plugins as unknown[] | undefined)?.length ?? 0) + ((input.themes as unknown[] | undefined)?.length ?? 0)} plugins and themes from ${String(input.host)}` }],
     'site.installPlugins': [{ id: 'plugins', label: `Install ${(input.plugins as unknown[] | undefined)?.length ?? 0} plugins from WordPress.org` }],
     'site.takeOver': [
@@ -646,6 +662,15 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     const done = () => {
       if (job.status === 'running') return void window.setTimeout(done, 400);
       if (job.status === 'done') mockPluginGone(db, names);
+    };
+    done();
+  }
+  if (id === 'site.copyUploads' && Array.isArray(input.folders)) {
+    job.title = `Bring uploads from ${String(input.host)}`;
+    job.stoppable = true;
+    const done = () => {
+      if (job.status === 'running' || job.status === 'queued') return void window.setTimeout(done, 40);
+      if (job.status === 'done') mockUploadsCopied(input.folders as string[], String(input.host), input.changed === true);
     };
     done();
   }
@@ -1763,6 +1788,14 @@ export const mockApi: Api = {
   fileView: async (domain, file) => {
     await wait(150);
     return mockFileView(domain, file);
+  },
+  uploadsHere: async () => {
+    await wait(150);
+    return mockUploadsHere();
+  },
+  compareUploads: async (_domain, _path, server) => {
+    await wait(900);
+    return mockUploadsCompare(server.host, server.folder);
   },
   fileTrash: async () => {
     await wait(100);

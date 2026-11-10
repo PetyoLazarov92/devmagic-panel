@@ -274,6 +274,47 @@ export async function deleteEntries(ctx: FilesContext, trash: string, site: stri
   return entry;
 }
 
+/**
+ * Keeps files a newer one replaced, for Undo: run fills a folder with them
+ * (as rsync's --backup-dir does, each under its path), and they become one
+ * entry of the file trash, each file an item. Nothing kept, no entry.
+ */
+export async function keepReplaced(trash: string, site: string, prefix: string, run: (backup: string) => Promise<void>, now = new Date()): Promise<FileTrashEntry | null> {
+  const id = `${stamp(now)}-${randomBytes(3).toString('hex')}`;
+  const dir = join(trash, id);
+  const backup = join(dir, 'backup');
+  mkdirSync(join(dir, 'items'), { recursive: true, mode: 0o700 });
+  mkdirSync(backup, { mode: 0o700 });
+  const record: TrashRecord = { id, site, deletedAt: now.toISOString(), items: [], sizeBytes: 0, reason: 'replaced' };
+  try {
+    await run(backup);
+  } finally {
+    // What was replaced is recorded, also when the run ended halfway, so it can be put back.
+    const walk = (at: string, rel: string) => {
+      for (const entry of readdirSync(at, { withFileTypes: true })) {
+        const full = join(at, entry.name);
+        const path = rel ? `${rel}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) walk(full, path);
+        else if (entry.isFile() && isSitePath(`${prefix}/${path}`)) {
+          record.sizeBytes += lstatSync(full).size;
+          renameSync(full, join(dir, 'items', String(record.items.length)));
+          record.items.push(`${prefix}/${path}`);
+        }
+      }
+    };
+    try {
+      walk(backup, '');
+    } finally {
+      rmSync(backup, { recursive: true, force: true });
+      if (record.items.length) writeFileSync(join(dir, 'entry.json'), JSON.stringify(record, null, 2), { mode: 0o600 });
+      else rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  if (record.items.length === 0) return null;
+  const { site: _site, ...entry } = record;
+  return entry;
+}
+
 /** What can still be put back for a site, newest first. */
 export function listFileTrash(trash: string, site: string): FileTrashEntry[] {
   let names: string[];
@@ -300,6 +341,7 @@ export async function restoreEntries(ctx: FilesContext, trash: string, site: str
   const back: string[] = [];
   const left: string[] = [];
   const kept: Array<{ rel: string; index: number }> = [];
+  let swapped = 0;
   for (const [index, rel] of record.items.entries()) {
     const from = join(dir, 'items', String(index));
     if (!exists(from)) continue;
@@ -308,6 +350,20 @@ export async function restoreEntries(ctx: FilesContext, trash: string, site: str
     let parent = dirname(target);
     while (!existsSync(parent)) parent = dirname(parent);
     if (!within(realpathSync(parent), root)) throw new FileRefused(`${rel} would land outside the site's folder`);
+    // A file a newer one replaced trades places with it: the newer one is kept here in its turn, so this can be undone too.
+    if (record.reason === 'replaced' && lstatSync(target, { throwIfNoEntry: false })?.isFile()) {
+      try {
+        const aside = `${from}.new`;
+        await carry(target, aside);
+        await carry(from, target);
+        renameSync(aside, from);
+      } catch (error) {
+        throw new FileRefused(why(error, rel));
+      }
+      swapped += 1;
+      back.push(rel);
+      continue;
+    }
     if (exists(target)) {
       left.push(rel);
       kept.push({ rel, index });
@@ -321,7 +377,8 @@ export async function restoreEntries(ctx: FilesContext, trash: string, site: str
     }
     back.push(rel);
   }
-  if (kept.length === 0) rmSync(dir, { recursive: true, force: true });
+  if (swapped > 0) writeFileSync(join(dir, 'entry.json'), JSON.stringify({ ...record, deletedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  else if (kept.length === 0) rmSync(dir, { recursive: true, force: true });
   if (left.length) throw new FileRefused(`${left.join(', ')} ${left.length === 1 ? 'is' : 'are'} there again: rename or delete ${left.length === 1 ? 'it' : 'them'} first${back.length ? `. Put back: ${back.join(', ')}` : ''}`);
   return back;
 }

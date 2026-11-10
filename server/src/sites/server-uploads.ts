@@ -27,7 +27,7 @@ export const UPLOADS_LEFT_OUT = [
 ];
 
 /** Room kept free on the disk after the copy. */
-const ROOM_TO_SPARE = 1024 ** 3;
+export const ROOM_TO_SPARE = 1024 ** 3;
 
 const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 const fail = (stderr: string): ExecResult => ({ code: 1, stdout: '', stderr });
@@ -55,6 +55,38 @@ export function monthFilters(months: number, now = new Date()): string[] {
   ];
 }
 
+/** wp-content and its uploads folder here, or why nothing is copied into it: through a link the files would land somewhere else, a shared folder or another site. */
+export function uploadsTarget(docroot: string): { content: string; local: string } | { problem: string } {
+  const content = join(docroot, 'wp-content');
+  const local = join(content, 'uploads');
+  const real = (path: string) => existsSync(path) && lstatSync(path).isDirectory();
+  if (!real(content) || (existsSync(local) && !real(local)) || lstatSync(local, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    return { problem: 'wp-content/uploads is not a folder of this site (wp-content is missing, or one of them is a link), so nothing was copied into it' };
+  }
+  return { content, local };
+}
+
+/** ssh as rsync runs it: the same options as every connection of the panel's, and the port when one was given. No word of it has a space. */
+export const rsyncSsh = (port: number | undefined): string => ['ssh', ...SSH_OPTIONS, ...(port !== undefined ? ['-p', String(port)] : [])].join(' ');
+
+/** Why rsync ended badly, in words that say what to do. */
+export function rsyncProblem(host: string, r: ExecResult): string {
+  const text = `${r.stderr}\n${r.stdout}`;
+  return /rsync: (command )?not found|rsync: not found/i.test(text)
+    ? `${host} has no rsync, which this copy needs on both sides`
+    : r.code === 127
+      ? 'rsync is not installed on this machine: sudo apt install rsync, then Retry'
+      : /No space left/i.test(text)
+        ? 'this disk is full: what came so far is kept, and Retry goes on once there is room'
+        : sshProblem(host, r.stderr, r.code, 'rsync stopped; what came so far is kept, and Retry goes on from there');
+}
+
+/** What rsync's --stats say came: the number of files as it prints it, and their bytes. */
+export function transferred(stdout: string): { files: string | undefined; bytes: number } {
+  const stat = (label: string) => new RegExp(`${label}:\\s*([\\d,.]+)`).exec(stdout)?.[1]?.replace(/[,.]/g, '');
+  return { files: stat('Number of regular files transferred') ?? stat('Number of files transferred'), bytes: Number(stat('Total transferred file size')) };
+}
+
 /** The uploads folder on the server: uploads beside the plugins folder its WordPress names. */
 export async function serverUploadsDir(exec: Executor, src: ServerSource): Promise<string> {
   return `${dirname(await serverDir(exec, src, 'plugin'))}/uploads`;
@@ -75,13 +107,9 @@ export async function serverUploadsSize(exec: Executor, src: ServerSource, dir: 
  * months. One step's work, with an executor that signs in.
  */
 export async function copyUploads(exec: Executor, docroot: string, src: ServerSource, months: number | undefined, now = new Date()): Promise<ExecResult[]> {
-  const content = join(docroot, 'wp-content');
-  const local = join(content, 'uploads');
-  const real = (path: string) => existsSync(path) && lstatSync(path).isDirectory();
-  // Through a link the files would land somewhere else: a shared folder, or another site.
-  if (!real(content) || (existsSync(local) && !real(local)) || lstatSync(local, { throwIfNoEntry: false })?.isSymbolicLink()) {
-    return [fail('wp-content/uploads is not a folder of this site (wp-content is missing, or one of them is a link), so nothing was copied into it')];
-  }
+  const target = uploadsTarget(docroot);
+  if ('problem' in target) return [fail(target.problem)];
+  const { content, local } = target;
   const parts = splitSshHost(src.host);
   if (!parts) return [fail(`${src.host} is not an ssh alias or user@host`)];
   let dir: string;
@@ -100,7 +128,7 @@ export async function copyUploads(exec: Executor, docroot: string, src: ServerSo
   }
   mkdirSync(local, { recursive: true });
   // ssh as rsync runs it: the same options as every connection of the panel's, and the port when one was given. No word of it has a space.
-  const ssh = ['ssh', ...SSH_OPTIONS, ...(parts.port !== undefined ? ['-p', String(parts.port)] : [])].join(' ');
+  const ssh = rsyncSsh(parts.port);
   const r = await exec(
     'rsync',
     [
@@ -112,19 +140,10 @@ export async function copyUploads(exec: Executor, docroot: string, src: ServerSo
     { timeoutMs: 6 * 60 * 60_000, maxBufferBytes: 16 * 1024 ** 2 },
   );
   if (r.code !== 0) {
-    const text = `${r.stderr}\n${r.stdout}`;
-    const why = /rsync: (command )?not found|rsync: not found/i.test(text)
-      ? `${src.host} has no rsync, which this copy needs on both sides`
-      : r.code === 127
-        ? 'rsync is not installed on this machine: sudo apt install rsync, then Retry'
-        : /No space left/i.test(text)
-          ? 'this disk is full: what came so far is kept, and Retry goes on once there is room'
-          : sshProblem(src.host, r.stderr, r.code, 'rsync stopped; what came so far is kept, and Retry goes on from there');
+    const why = rsyncProblem(src.host, r);
     return [...results, fail(why)];
   }
-  const stat = (label: string) => new RegExp(`${label}:\\s*([\\d,.]+)`).exec(r.stdout)?.[1]?.replace(/[,.]/g, '');
-  const files = stat('Number of regular files transferred') ?? stat('Number of files transferred');
-  const sent = Number(stat('Total transferred file size'));
+  const { files, bytes: sent } = transferred(r.stdout);
   results.push(ok(`copied ${files ?? 'the new'} file${files === '1' ? '' : 's'}${Number.isFinite(sent) && sent > 0 ? ` (${formatBytes(sent)})` : ''} into wp-content/uploads; files that were here already were left as they are, and nothing was written on ${src.host}`));
   results.push(ok('left on the server: PHP files, .htaccess, SQL dumps, links, and the cache, log and backup folders of plugins'));
   return results;

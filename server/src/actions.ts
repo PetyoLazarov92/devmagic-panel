@@ -46,6 +46,7 @@ import { giveBack, planTakeOver, TakeoverRefused } from './sites/takeover.js';
 import { installPlugins, installThemes, removeInstalled } from './sites/install-plugins.js';
 import { copyFromServer, removeCopied } from './sites/server-files.js';
 import { copyUploads } from './sites/server-uploads.js';
+import { copyChosenUploads, uploadsCopied } from './sites/uploads-compare.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
 import { planRemove, RemoveRefused, stampDate } from './sites/remove.js';
@@ -793,12 +794,41 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'site.copyUploads': async (ctx, input) => {
     const site = siteFor(ctx.config, input.domain, input.path);
     const signedIn = signedInWith(ctx, input.host, input.password);
+    const src = { host: input.host, folder: input.folder, wpCli: input.wpCli };
+    const key = siteKey(input.domain, input.path);
+    const done = { onDone: (view: { status: string }) => void (view.status === 'done' && ctx.store.setMeta(uploadsCopied(key), JSON.stringify({ at: new Date().toISOString(), host: input.host }))) };
+    const { folders } = input;
+    if (!folders) {
+      const step: JobStep = {
+        id: 'uploads',
+        label: `Copy ${input.months ? `the last ${input.months} month${input.months === 1 ? '' : 's'} of uploads` : 'the uploads'} from ${input.host}`,
+        run: () => signedIn((exec) => copyUploads(exec, site.docroot, src, input.months)),
+      };
+      return startJob(ctx, [step], `Copy uploads to ${site.host}`, site.host, done);
+    }
+    // The folders chosen in the Uploads from production view. Stop ends rsync; what came stays, and a new run brings the rest.
     const step: JobStep = {
       id: 'uploads',
-      label: `Copy ${input.months ? `the last ${input.months} month${input.months === 1 ? '' : 's'} of uploads` : 'the uploads'} from ${input.host}`,
-      run: () => signedIn((exec) => copyUploads(exec, site.docroot, { host: input.host, folder: input.folder, wpCli: input.wpCli }, input.months)),
+      label: `Copy ${folders.length} folder${folders.length === 1 ? '' : 's'} of uploads from ${input.host}`,
+      run: async (job) => {
+        const stop = new AbortController();
+        const watch = setInterval(() => job.stopped?.() && stop.abort(), 500);
+        try {
+          return await signedIn((exec) =>
+            copyChosenUploads(exec, site.docroot, src, { folders, maxFileMb: input.maxFileMb, originalsOnly: input.originalsOnly, changed: input.changed }, {
+              trash: fileTrashDir(dirname(ctx.uploadsDir)),
+              site: key,
+              root: siteFolder(ctx.config, input.domain, input.path),
+              signal: stop.signal,
+              progress: (fraction, note) => job.progress(fraction, note),
+            }),
+          );
+        } finally {
+          clearInterval(watch);
+        }
+      },
     };
-    return startJob(ctx, [step], `Copy uploads to ${site.host}`, site.host);
+    return startJob(ctx, [step], `Copy uploads to ${site.host}`, site.host, { ...done, stoppable: true });
   },
   'file.write': async (ctx, { domain, path, ...input }) => {
     const { hash } = writeFile(filesOf(ctx, domain, path), input);
