@@ -87,7 +87,7 @@ export function QueuedProposals() {
           <div className="grid max-h-[70vh] gap-2 overflow-y-auto p-3">
             {shown.map((p) => (
               <div key={p.id} className="grid gap-1">
-                <p className="text-[11px] text-muted-foreground">From {p.source}, {timeAgo(p.createdAt)}</p>
+                <p className="text-2xs text-muted-foreground">From {p.source}, {timeAgo(p.createdAt)}</p>
                 <ProposalCard
                   proposal={p}
                   onClose={(status) => {

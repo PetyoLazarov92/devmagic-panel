@@ -1,6 +1,6 @@
 import type { CheckFix, CheckGroup, CheckResult, EnvironmentReport } from '@devmagic-panel/shared';
 import { CHECK_GROUP_LABELS } from '@devmagic-panel/shared';
-import { ChevronRight, CircleAlert, CircleCheck, CircleX, LoaderCircle, Wrench } from 'lucide-react';
+import { ChevronRight, CircleAlert, CircleCheck, CircleX, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { groupsOf, openAfterCheck } from '@/lib/environment';
 import { cn } from '@/lib/utils';
 import { CheckAgain, Notice } from '@/components/page';
 import { CardsSkeleton } from '@/components/skeletons';
+import { Spinner } from '@/components/ui/spinner';
 
 const statusIcon = {
   ok: <CircleCheck className="size-4.5 text-success" aria-label="OK" />,
@@ -113,8 +114,8 @@ export function MachineChecks() {
           <div className="ml-auto flex flex-wrap gap-1">
             {report && (
               <>
-                <Button size="sm" variant="ghost" disabled={open.size === groups.length} onClick={() => setOpen(new Set(groups.map((g) => g.group)))}>Expand all</Button>
-                <Button size="sm" variant="ghost" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</Button>
+                <Button size="sm" variant="soft" disabled={open.size === groups.length} onClick={() => setOpen(new Set(groups.map((g) => g.group)))}>Expand all</Button>
+                <Button size="sm" variant="soft" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</Button>
               </>
             )}
             <CheckAgain size="sm" onClick={() => void load()} loading={loading} />
@@ -178,7 +179,7 @@ export function MachineChecks() {
                                       disabled={fix?.phase === 'running'}
                                       onClick={() => startFix(check, f, i)}
                                     >
-                                      {running ? <LoaderCircle className="animate-spin" /> : <Wrench />}
+                                      {running ? <Spinner /> : <Wrench />}
                                       {f.label}
                                     </Button>
                                   );
@@ -190,17 +191,17 @@ export function MachineChecks() {
                               if (fix?.key !== key) return null;
                               if (fix.phase === 'confirm') {
                                 return (
-                                  <div key={key} className="mt-2 rounded-md border border-warning/40 bg-warning/8 px-3 py-2 text-sm">
+                                  <Notice key={key} tone="warning" size="inline" className="mt-2">
                                     <p>{f.confirm}</p>
                                     <div className="mt-2 flex gap-2">
                                       <Button size="sm" variant="danger" onClick={() => void runFix(key, f)}>
                                         {f.label}
                                       </Button>
-                                      <Button size="sm" variant="ghost" onClick={() => setFix(null)}>
+                                      <Button size="sm" variant="soft" onClick={() => setFix(null)}>
                                         Cancel
                                       </Button>
                                     </div>
-                                  </div>
+                                  </Notice>
                                 );
                               }
                               if (!fix.output) return null;

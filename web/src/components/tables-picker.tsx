@@ -29,9 +29,9 @@ export function TablesPicker({ found, value, onChange }: { found: ServerTables; 
         <span>
           {found.tables.length} tables, {bytes(total)}; {value.length ? `the rows of ${value.length} (${bytes(left)}) stay on the server` : 'every row comes'}.
         </span>
-        {found.logs.length > 0 && <Button size="sm" variant="ghost" onClick={() => tickAll(found.logs)}>Tick the logs</Button>}
-        {found.personal.length > 0 && <Button size="sm" variant="ghost" onClick={() => tickAll(found.personal)}>Tick personal data</Button>}
-        {value.length > 0 && <Button size="sm" variant="ghost" onClick={() => onChange([])}>Untick all</Button>}
+        {found.logs.length > 0 && <Button size="sm" variant="soft" onClick={() => tickAll(found.logs)}>Tick the logs</Button>}
+        {found.personal.length > 0 && <Button size="sm" variant="soft" onClick={() => tickAll(found.personal)}>Tick personal data</Button>}
+        {value.length > 0 && <Button size="sm" variant="soft" onClick={() => onChange([])}>Untick all</Button>}
       </div>
       <ul className="grid max-h-72 gap-px overflow-y-auto rounded-lg border bg-border">
         {shown.map((t) => {
@@ -40,7 +40,7 @@ export function TablesPicker({ found, value, onChange }: { found: ServerTables; 
             <li key={t.name} className={cn('flex items-center gap-2.5 bg-card px-3 py-1.5', ticked.has(t.name) && 'bg-muted/50')}>
               <input id={id} type="checkbox" checked={ticked.has(t.name)} onChange={(e) => toggle(t.name, e.target.checked)} className="size-4 shrink-0 accent-[var(--primary)]" />
               <label htmlFor={id} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <code className="truncate font-mono text-[12px]">{t.name}</code>
+                <code className="truncate font-mono text-xs">{t.name}</code>
                 {logs.has(t.name) && <Badge>log</Badge>}
                 {personal.has(t.name) && <Badge tone="warning">personal data</Badge>}
               </label>
@@ -50,7 +50,7 @@ export function TablesPicker({ found, value, onChange }: { found: ServerTables; 
         })}
       </ul>
       {!all && shown.length < found.tables.length && (
-        <Button size="sm" variant="ghost" className="w-fit" onClick={() => setAll(true)}>Show all {found.tables.length} tables</Button>
+        <Button size="sm" variant="soft" className="w-fit" onClick={() => setAll(true)}>Show all {found.tables.length} tables</Button>
       )}
       <p className="text-xs text-muted-foreground">
         A ticked table comes empty, with its structure. Only whole tables: personal data in users, comments or options still comes, and the clean step handles those here.

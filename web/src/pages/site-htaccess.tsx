@@ -1,13 +1,14 @@
 import { HTACCESS_STATUS_LABEL, type HtaccessReport, type HtaccessRule, type HtaccessRuleStatus, type Site } from '@devmagic-panel/shared';
-import { Check, Copy, FileCode2, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Check, Copy, FileCode2, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
 import { Notice } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
+import { FilterChips } from '@/components/ui/filter-chips';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -15,6 +16,7 @@ import { useAsync } from '@/lib/use-async';
 import { onHtaccessChanged } from '@/lib/htaccess-notices';
 import { useQueryParam } from '@/lib/router';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 const TONE: Record<HtaccessRuleStatus, 'neutral' | 'success' | 'warning' | 'primary'> = {
   covered: 'neutral',
@@ -55,19 +57,12 @@ export function HtaccessReview({ report, skip, onSkip, applied }: { report: Htac
   if (report.rules.length === 0) return <p className="text-sm text-muted-foreground">No .htaccess rules here: nothing for nginx to miss.</p>;
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show rules">
-        {FILTERS.filter((f) => f === 'all' || counts[f] > 0).map((f) => (
-          <button
-            key={f}
-            type="button"
-            aria-pressed={filter === f}
-            onClick={() => setFilter(f)}
-            className={cn('rounded-full border px-2.5 py-0.5 text-xs', filter === f ? 'border-primary/50 bg-primary/10 text-primary' : 'text-muted-foreground hover:text-foreground')}
-          >
-            {f === 'all' ? `All ${report.rules.length}` : `${HTACCESS_STATUS_LABEL[f]} ${counts[f]}`}
-          </button>
-        ))}
-      </div>
+      <FilterChips
+        label="Show rules"
+        value={filter}
+        onChange={setFilter}
+        options={FILTERS.filter((f) => f === 'all' || counts[f] > 0).map((f) => ({ value: f, label: f === 'all' ? 'All' : HTACCESS_STATUS_LABEL[f], count: f === 'all' ? report.rules.length : counts[f] }))}
+      />
       {byFile.map(([file, rules]) => (
         <section key={file} className="grid gap-1.5">
           <h4 className="font-mono text-xs text-muted-foreground">{file === '/' ? '' : file}/.htaccess</h4>
@@ -93,9 +88,11 @@ function ScanLimits({ report }: { report: HtaccessReport }) {
   }
   if (!lines.length) lines.push('The panel read so many folders or rules that it stopped; some may be missing here.');
   return (
-    <div className="grid gap-1 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-xs text-warning">
-      {lines.map((l) => <p key={l}>{l}</p>)}
-    </div>
+    <Notice tone="warning" size="inline">
+      <div className="grid gap-1">
+        {lines.map((l) => <p key={l}>{l}</p>)}
+      </div>
+    </Notice>
   );
 }
 
@@ -204,12 +201,9 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>.htaccess rules</CardTitle>
-        <FileCode2 className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <div className="grid gap-3 p-5 text-sm">
-        {report.loading && !data && <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the .htaccess files</p>}
+      <CardHeader title=".htaccess rules" meta={<FileCode2 className="size-4 text-muted-foreground" />} />
+      <CardBody className="gap-3">
+        {report.loading && !data && <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Reading the .htaccess files</p>}
         {report.error && <p role="alert" className="text-danger">{report.error}</p>}
         {data && counts && (
           <>
@@ -218,7 +212,7 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
                 tone={data.dismissed ? 'info' : 'warning'}
                 action={
                   <>
-                    {!data.dismissed && <Button size="sm" variant="ghost" disabled={busy || putting} onClick={() => void notNow()}>Not now</Button>}
+                    {!data.dismissed && <Button size="sm" variant="soft" disabled={busy || putting} onClick={() => void notNow()}>Not now</Button>}
                     <Button size="sm" disabled={busy} onClick={review}>Review and apply</Button>
                   </>
                 }
@@ -259,7 +253,7 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
             {job.error && <p role="alert" className="text-danger">{job.error}</p>}
           </div>
         )}
-      </div>
+      </CardBody>
 
       <Dialog open={open} onClose={() => setOpen(false)} title={`Apply ${site.domain}'s .htaccess rules on nginx`} description="Untick a rule to leave it out. dmp-root checks every rule, nginx -t runs before the reload, the site is checked after, and Undo on the job puts the rules back as they were." size="lg">
         {data && (
@@ -267,7 +261,7 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
             <HtaccessReview report={data} skip={skip} onSkip={setSkip} applied={applied} />
             <p className="text-xs text-muted-foreground">On a host that runs nginx only, a change to .htaccess does nothing there either: add it to the host&apos;s own nginx rules (Copy nginx rules).</p>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="soft" onClick={() => setOpen(false)}>Cancel</Button>
               <Button onClick={apply}>{toApply ? `Apply ${toApply} rule${toApply === 1 ? '' : 's'}` : 'Apply with no rules'}</Button>
             </div>
           </div>

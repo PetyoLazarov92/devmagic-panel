@@ -9,14 +9,14 @@ import { describe, expect, it } from 'vitest';
  * then lowers it here too, so a copy that is gone stays gone. At 0 the rule holds everywhere.
  */
 const BASELINE: Record<keyof typeof PATTERNS, number> = {
-  rawButton: 97,
-  pxText: 198,
-  statusTint: 65,
-  handCard: 64,
-  handSpinner: 138,
-  handLink: 50,
-  reloadWord: 2,
-  rawDl: 22,
+  rawButton: 44,
+  pxText: 0,
+  statusTint: 11,
+  handCard: 3,
+  handSpinner: 0,
+  handLink: 6,
+  reloadWord: 0,
+  rawDl: 1,
 };
 
 const PATTERNS = {

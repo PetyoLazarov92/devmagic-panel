@@ -79,6 +79,8 @@ await new Promise((resolve) => server.listen(PORT, '127.0.0.1', resolve));
 function collect() {
   const fold = (s) =>
     s
+      // TextLink tells screen readers a link opens a new tab; the link's name is the same.
+      .replace(/\(opens in a new tab\)/g, '')
       .replace(/\s+/g, ' ')
       .replace(/\d+([.,:]\d+)*/g, '#')
       .replace(/# ?(sec|min|hr|day|days|week|weeks|month|months|year|years)\.?( ago)?/gi, '# time')
@@ -166,7 +168,10 @@ if (!check) {
   let missing = 0;
   for (const [path, items] of Object.entries(before)) {
     const now = new Set(keyed[path] ?? []);
-    const gone = items.filter((i) => !now.has(i));
+    // A control that kept its name under another role (a toggle button that became a radio) is still there.
+    const nameOf = (i) => i.slice(i.indexOf(': ') + 2);
+    const names = new Set([...now].map(nameOf));
+    const gone = items.filter((i) => !now.has(i) && !names.has(nameOf(i)));
     const added = (keyed[path] ?? []).filter((i) => !items.includes(i));
     if (gone.length || added.length) console.log(`\n${path}`);
     for (const g of gone) console.log(`  - ${g}`);

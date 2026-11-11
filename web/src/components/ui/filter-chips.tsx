@@ -31,6 +31,7 @@ export function FilterChips<T extends string>({ label, value, onChange, options,
             )}
           >
             {o.label}
+            {o.count !== undefined && ' '}
             {o.count !== undefined && (
               <span className={cn('tabular-nums', !on && o.tone === 'danger' && 'text-danger', !on && o.tone === 'warning' && 'text-warning', on && 'opacity-80')}>{o.count}</span>
             )}

@@ -1,25 +1,30 @@
 import type { ClaudeRun, OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, RepoTrustAnswer, Site, UseClaude } from '@devmagic-panel/shared';
 import { branchName, gitUrl, isShared, namespaceLabel, namespaceShortLabel, parseNamespaceRef, placementWarnings, REPO_KIND_LABELS, repoWeb, sameRepo } from '@devmagic-panel/shared';
-import { Check, CircleAlert, FolderGit2, FolderTree, LoaderCircle, Plus, RefreshCw, Search, ShieldAlert, Sparkles, Star, TriangleAlert, X } from 'lucide-react';
+import { Check, CircleAlert, FolderGit2, FolderTree, Plus, RefreshCw, Search, ShieldAlert, Sparkles, Star, TriangleAlert, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BranchPicker } from '@/components/branch-picker';
 import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS, ClaudeRunFields } from '@/components/claude-run-fields';
 import { PlacementFields, placementError } from '@/components/repo-placement';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Field, Select } from '@/components/ui/field';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
+import { KeyValue } from '@/components/ui/key-value';
+import { Notice } from '@/components/ui/notice';
 import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '@/components/ui/switch';
+import { TextLink } from '@/components/ui/text-link';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
-import { Link } from '@/lib/router';
 import { siteHref } from '@/lib/site-ref';
 import { pastedRepo } from '@/lib/org-repos';
 import { allRows, isPicked, makeMain, shownOrder, pickRepo, placementOf, planLines, type RepoRow, rowPlacement, rowsProblem, unpickRepo, updateRow } from '@/lib/project-repos';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './new-site';
 import { cliSignedIn, CliHints, OrgPicker, RepoLink } from './new-site-org';
+import { Spinner } from '@/components/ui/spinner';
 
 type SetState = (update: (s: WizardState) => WizardState) => void;
 
@@ -123,17 +128,19 @@ export function CodeStep({ state, setState, status, onRecheck, sites, mainExtras
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] xl:gap-10">
       <div className="grid min-w-0 gap-6">
-        <section aria-label="Add a repo" className="grid gap-3 rounded-xl border bg-card p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold">{rows.length === 0 ? 'Pick the repo' : 'Add a theme, plugin or other repo'}</h2>
-            <Segmented label="Where from" value={tab} onChange={setTab} options={[['list', 'Your repos'], ['paste', 'Paste a URL']]} />
-          </div>
-          {tab === 'list' ? (
-            <RepoList state={state} status={status} onRecheck={onRecheck} onPick={pick} onUnpick={unpick} />
-          ) : (
-            <PasteRepo onPick={(r) => pick(state.repoUrl.trim() ? { ...r, kind: 'other' } : r)} picked={(url) => isPicked(state, url)} />
-          )}
-        </section>
+        <Card role="region" aria-label="Add a repo">
+          <CardHeader
+            title={rows.length === 0 ? 'Pick the repo' : 'Add a theme, plugin or other repo'}
+            actions={<Segmented label="Where from" value={tab} onChange={setTab} options={[['list', 'Your repos'], ['paste', 'Paste a URL']]} />}
+          />
+          <CardBody className="gap-3">
+            {tab === 'list' ? (
+              <RepoList state={state} status={status} onRecheck={onRecheck} onPick={pick} onUnpick={unpick} />
+            ) : (
+              <PasteRepo onPick={(r) => pick(state.repoUrl.trim() ? { ...r, kind: 'other' } : r)} picked={(url) => isPicked(state, url)} />
+            )}
+          </CardBody>
+        </Card>
 
         <section aria-labelledby="picked-repos" className="grid gap-3">
           <h2 id="picked-repos" className="flex items-center gap-2 text-sm font-semibold">
@@ -194,28 +201,26 @@ function RepoCard({ row, main, state, setState, site, sites, onRemove, extras }:
   const setPlacement = (placement: RepoRow['placement']) => setState((s) => (main ? { ...s, placement } : updateRow(s, row.url, (r) => ({ ...r, placement }))));
   const id = `branch-${row.url.replace(/[^\w-]/g, '-')}`;
   return (
-    <div className={cn('grid gap-4 rounded-xl border bg-card p-4', main && 'border-primary/40')}>
+    <Card className={cn('grid gap-4 p-4', main && 'border-primary/40')}>
       <div className="flex flex-wrap items-start gap-2">
         <FolderGit2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="grid min-w-0 flex-1 gap-1">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[13px] font-medium break-all">{row.fullName ?? row.url}</span>
+            <span className="font-mono text-dense font-medium break-all">{row.fullName ?? row.url}</span>
             {main && <Badge tone="primary">Main</Badge>}
             {kind && kind !== 'other' && <Badge>{row.helpers?.themeIn ? `Theme, in the repo's ${row.helpers.themeIn} folder` : REPO_KIND_LABELS[kind]}</Badge>}
           </span>
-          {row.fullName && <span className="font-mono text-[12px] break-all text-muted-foreground">{row.url}</span>}
+          {row.fullName && <span className="font-mono text-xs break-all text-muted-foreground">{row.url}</span>}
         </div>
         <div className="flex items-center gap-1">
-          {web && <a href={web.repoUrl} target="_blank" rel="noopener noreferrer" className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:underline">Open on {web.name}</a>}
+          {web && <TextLink href={web.repoUrl} className="px-2 py-1 text-xs">Open on {web.name}</TextLink>}
           {!main && (
-            <Button size="sm" variant="ghost" title="Make this the project's repo: it names the install, Claude reads its docs and your answers are remembered under it. The main one now becomes an added repo; nothing moves in the list or in the folders." onClick={() => setState((s) => makeMain(s, row.url))}>
+            <Button size="sm" variant="soft" title="Make this the project's repo: it names the install, Claude reads its docs and your answers are remembered under it. The main one now becomes an added repo; nothing moves in the list or in the folders." onClick={() => setState((s) => makeMain(s, row.url))}>
               <Star />
               Make main
             </Button>
           )}
-          <Button size="sm" variant="ghost" aria-label={`Leave ${row.fullName ?? row.url} out`} onClick={onRemove}>
-            <X />
-          </Button>
+          <IconButton icon={X} size="icon-sm" label={`Leave ${row.fullName ?? row.url} out`} onClick={onRemove} />
         </div>
       </div>
 
@@ -230,7 +235,7 @@ function RepoCard({ row, main, state, setState, site, sites, onRemove, extras }:
           {row.branches && row.branches.length > 0 ? (
             <BranchPicker id={id} branches={row.branches.map((name) => ({ name, current: name === row.defaultBranch, remoteOnly: false }))} value={row.branch} onChange={setBranch} currentLabel="default" />
           ) : (
-            <Input id={id} value={row.branch} onChange={(e) => setBranch(e.target.value.trim())} disabled={row.branches === null} placeholder={row.branches === null ? 'Reading...' : 'main'} className="font-mono text-[13px]" spellCheck={false} />
+            <Input id={id} value={row.branch} onChange={(e) => setBranch(e.target.value.trim())} disabled={row.branches === null} placeholder={row.branches === null ? 'Reading...' : 'main'} className="font-mono text-dense" spellCheck={false} />
           )}
         </Field>
         <PlacementFields url={row.url} value={row.placement} onChange={setPlacement} site={site} sharedCore={state.coreMode === 'wpcore'} />
@@ -240,18 +245,17 @@ function RepoCard({ row, main, state, setState, site, sites, onRemove, extras }:
       {extras}
 
       {usedBy.length > 0 && (
-        <div role="status" className="rounded-lg border border-warning/40 bg-warning/8 px-3 py-2 text-xs">
-          <p className="flex items-center gap-2 font-medium">
-            <CircleAlert className="size-3.5 shrink-0 text-warning" />
+        <Notice tone="warning" size="inline">
+          <p className="flex flex-wrap items-center gap-x-2 font-medium">
             {usedBy.length === 1 ? 'A site on this machine already uses this repo:' : `${usedBy.length} sites on this machine already use this repo:`}
             {usedBy.map((u) => (
-              <Link key={`${u.domain}${u.path ?? ''}`} href={siteHref(u)} className="font-mono hover:underline">{u.domain}{u.path ?? ''}</Link>
+              <TextLink key={`${u.domain}${u.path ?? ''}`} href={siteHref(u)} tone="plain" className="font-mono">{u.domain}{u.path ?? ''}</TextLink>
             ))}
           </p>
           <p className="mt-1 text-muted-foreground">Open it instead, or go on to set up a second copy, for example to test another branch next to it.</p>
-        </div>
+        </Notice>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -269,7 +273,7 @@ export function sitesUsing(sites: Site[], url: string): Array<{ domain: string; 
 function LookupLine({ row }: { row: RepoRow }) {
   const h = row.helpers;
   if (!h) return null;
-  if (!h.list && !h.error) return <p className="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Looking into the branch for its builds and local helpers...</p>;
+  if (!h.list && !h.error) return <p className="flex items-center gap-2 text-xs text-muted-foreground"><Spinner className="size-3.5" />Looking into the branch for its builds and local helpers...</p>;
   if (h.error) return <p className="text-xs text-warning">Could not look into the branch: {h.error}</p>;
   const parts = [
     h.core ? `WordPress core${h.core.version ? ` ${h.core.version}` : ''}` : null,
@@ -303,20 +307,22 @@ function TrustCard({ url, trust, onTrusted }: { url: string; trust: RepoTrustAns
     }
   }
   return (
-    <div role="alert" className="grid gap-2 rounded-lg border border-warning/40 bg-warning/8 px-3 py-2.5 text-sm">
-      <p className="flex items-start gap-2 font-medium">
-        <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
-        {owner ? `${owner.owner} on ${owner.host} is not one of your organizations or groups` : `${url} names no owner`}
-      </p>
-      <p className="text-xs text-muted-foreground">Code from this repo runs on this computer: its PHP when the site loads, and its composer and npm builds as you. Only go on with a repo you trust. Trusted owners are listed in Settings, to take back.</p>
-      {owner && (
-        <Button size="sm" variant="outline" className="w-fit" disabled={busy} onClick={() => void go()}>
-          {busy && <LoaderCircle className="animate-spin" />}
-          Trust repos from {owner.owner} on {owner.host}
-        </Button>
-      )}
-      {error && <p className="text-xs text-danger">{error}</p>}
-    </div>
+    <Notice tone="warning" size="inline" icon={false} className="py-2.5">
+      <div className="grid gap-2">
+        <p className="flex items-start gap-2 text-sm font-medium">
+          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+          {owner ? `${owner.owner} on ${owner.host} is not one of your organizations or groups` : `${url} names no owner`}
+        </p>
+        <p className="text-xs text-muted-foreground">Code from this repo runs on this computer: its PHP when the site loads, and its composer and npm builds as you. Only go on with a repo you trust. Trusted owners are listed in Settings, to take back.</p>
+        {owner && (
+          <Button size="sm" variant="outline" className="w-fit" disabled={busy} onClick={() => void go()}>
+            {busy && <Spinner />}
+            Trust repos from {owner.owner} on {owner.host}
+          </Button>
+        )}
+        {error && <p className="text-xs text-danger">{error}</p>}
+      </div>
+    </Notice>
   );
 }
 
@@ -380,7 +386,7 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
     return repos.filter((r) => !isPicked(state, r.sshUrl) && fits(r) && (!q || `${r.fullName} ${r.description ?? ''}`.toLowerCase().includes(q)));
   }, [list, query, kind, rows.length]);
 
-  if (!status) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Checking the GitHub CLI and the GitLab CLI...</p>;
+  if (!status) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" />Checking the GitHub CLI and the GitLab CLI...</p>;
   if (!anySignedIn && selected.length === 0) {
     return (
       <div className="grid gap-2 text-sm">
@@ -396,7 +402,7 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
         <input type="checkbox" checked={on} onChange={(e) => (e.target.checked ? onPick(r) : onUnpick(r.sshUrl))} className="mt-0.5 accent-[var(--primary)]" />
         <span className="grid min-w-0 gap-0.5">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[13px] font-medium break-all">{ns && !isShared(ns) && r.fullName.toLowerCase().startsWith(`${ns.path.toLowerCase()}/`) ? r.fullName.slice(ns.path.length + 1) : r.fullName}</span>
+            <span className="font-mono text-dense font-medium break-all">{ns && !isShared(ns) && r.fullName.toLowerCase().startsWith(`${ns.path.toLowerCase()}/`) ? r.fullName.slice(ns.path.length + 1) : r.fullName}</span>
             <Badge>{REPO_KIND_LABELS[r.kind]}</Badge>
             {r.local?.installed?.map((i) => <Badge key={`${i.domain}${i.path ?? ''}`} tone="warning">installed as {i.domain}{i.path ?? ''}</Badge>)}
             {r.pushedAt && <span className="text-xs text-muted-foreground">pushed {timeAgo(r.pushedAt)}</span>}
@@ -417,7 +423,7 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
             {selected.map((o) => <option key={o} value={o}>{namespaceLabel(o)}</option>)}
           </Select>
         </Field>
-        {anySignedIn && <Button variant="ghost" size="sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Done' : 'Which to scan'}</Button>}
+        {anySignedIn && <Button variant="soft" size="sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Done' : 'Which to scan'}</Button>}
         <span className="flex-1" />
         {signedIn && current && (
           <Button variant="outline" size="sm" disabled={scanning !== null} onClick={() => void scan(current, 'check')}>
@@ -440,7 +446,7 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
       </div>
       {listError && <p role="alert" className="text-sm text-danger">{listError}</p>}
       {list?.problem && <p role="alert" className="text-sm text-warning">Could not read the host: {list.problem}</p>}
-      {scanning && !list?.listedAt && <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the repos of {namespaceShortLabel(current)}...</p>}
+      {scanning && !list?.listedAt && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" />Reading the repos of {namespaceShortLabel(current)}...</p>}
       <ul aria-label="Repos" className="grid max-h-[30rem] gap-2 overflow-y-auto overscroll-contain pr-1">
         {picked.length > 0 && (
           <li className="sticky top-0 z-10 grid gap-2 rounded-lg border bg-muted/90 p-2 backdrop-blur">
@@ -475,7 +481,7 @@ function PasteRepo({ onPick, picked }: { onPick: (r: OrgRepo) => void; picked: (
           onKeyDown={(e) => e.key === 'Enter' && add()}
           placeholder="git@github.com:wandworks/site.git"
           aria-label="Repo URL"
-          className="font-mono text-[13px]"
+          className="font-mono text-dense"
           spellCheck={false}
           aria-invalid={url.trim() !== '' && !repo ? true : undefined}
         />
@@ -520,22 +526,26 @@ export function SitePlan({ state, compact = false }: { state: WizardState; compa
     );
   }
   return (
-    <section aria-label="Site plan" className="grid gap-3 rounded-xl border bg-card p-4 text-sm">
-      <h2 className="flex items-center gap-2 font-semibold"><FolderTree className="size-4 text-muted-foreground" />Where everything goes</h2>
-      {lines.length === 0 ? <p className="text-xs text-muted-foreground">Pick a repo: its folder in the site shows here.</p> : <PlanTree site={site} lines={lines} />}
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t pt-3 text-xs">
-        <dt className="text-muted-foreground">Database</dt>
-        <dd className="truncate">{db}</dd>
-        <dt className="text-muted-foreground">Address</dt>
-        <dd className="truncate font-mono">{state.domains[0]?.local.trim() || 'from the dump, next'}</dd>
-      </dl>
-    </section>
+    <Card role="region" aria-label="Site plan">
+      <CardHeader title={<span className="flex items-center gap-2"><FolderTree className="size-4 text-muted-foreground" />Where everything goes</span>} />
+      <CardBody compact>
+        {lines.length === 0 ? <p className="text-xs text-muted-foreground">Pick a repo: its folder in the site shows here.</p> : <PlanTree site={site} lines={lines} />}
+        <KeyValue
+          dense
+          className="border-t pt-3"
+          rows={[
+            { label: 'Database', value: <span className="block truncate">{db}</span> },
+            { label: 'Address', value: <span className="block truncate font-mono">{state.domains[0]?.local.trim() || 'from the dump, next'}</span> },
+          ]}
+        />
+      </CardBody>
+    </Card>
   );
 }
 
 function PlanTree({ site, lines }: { site: string; lines: ReturnType<typeof planLines> }) {
   return (
-    <ul className="grid gap-1 font-mono text-[12px]">
+    <ul className="grid gap-1 font-mono text-xs">
       <li className="text-muted-foreground">{site}/</li>
       {lines.map((l) => {
         const warn = placementWarnings(l.path);
@@ -543,7 +553,7 @@ function PlanTree({ site, lines }: { site: string; lines: ReturnType<typeof plan
           <li key={l.url} style={{ paddingLeft: `${Math.min(l.depth, 6) * 0.75 + 0.75}rem` }} className="grid gap-0.5">
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="text-foreground">{l.path ? `${l.path}/` : './'}</span>
-              {l.main && <Badge tone="primary" className="px-1 py-0 text-[10px]">main</Badge>}
+              {l.main && <Badge tone="primary" className="px-1 py-0 text-2xs">main</Badge>}
               {warn.length > 0 && <span title={warn.join('; ')}><TriangleAlert className="size-3.5 text-warning" /></span>}
             </span>
             <span className="text-muted-foreground">{l.label} @ {l.branch || '...'}</span>
@@ -575,7 +585,7 @@ export function ClaudeSwitch({ status, on, onChange, preference, onPreference, r
 }) {
   const ready = Boolean(status?.claude.found && status.claude.signedIn);
   if (preference === 'never') {
-    return <p className="rounded-lg border bg-card px-4 py-3 text-xs text-muted-foreground">Claude Code is turned off for new installs in <Link href="/settings" className="text-primary hover:underline">Settings</Link>.</p>;
+    return <p className="rounded-lg border bg-card px-4 py-3 text-xs text-muted-foreground">Claude Code is turned off for new installs in <TextLink href="/settings">Settings</TextLink>.</p>;
   }
   if (!status) return null;
   if (!ready) {
@@ -584,7 +594,7 @@ export function ClaudeSwitch({ status, on, onChange, preference, onPreference, r
         <p className="flex items-center gap-1.5 font-medium text-foreground"><Sparkles className="size-3.5 text-primary" />Claude can read the repo for you</p>
         <p>
           {status.claude.found ? 'Claude Code is not signed in:' : 'Claude Code is not installed:'} run <code className="font-mono text-foreground">claude auth login</code>
-          {status.claude.found ? '' : ' once it is installed'}. Aura's <Link href="/aura/machine" className="text-primary hover:underline">Machine checks</Link> have the steps. You can go on without it.
+          {status.claude.found ? '' : ' once it is installed'}. Aura's <TextLink href="/aura/machine">Machine checks</TextLink> have the steps. You can go on without it.
         </p>
       </div>
     );
@@ -602,9 +612,9 @@ export function ClaudeSwitch({ status, on, onChange, preference, onPreference, r
           : 'Claude Code reads the docs (never wp-config.php or .env). Asana and Google links need a claude.ai sign-in.'}
       </p>
       {preference !== wanted && (
-        <button type="button" className="w-fit text-xs font-medium text-primary hover:underline" onClick={() => onPreference(wanted)}>
+        <Button size="xs" variant="soft" className="w-fit" onClick={() => onPreference(wanted)}>
           Make this the default
-        </button>
+        </Button>
       )}
       {on && run && onRun && (
         <details className="text-xs">
@@ -617,9 +627,9 @@ export function ClaudeSwitch({ status, on, onChange, preference, onPreference, r
             <p className="text-muted-foreground">
               One step reads the repo and checks its links; the cap is for both.{' '}
               {own ? (
-                <button type="button" className="font-medium text-primary hover:underline" onClick={() => onRun(undefined)}>Back to my defaults</button>
+                <Button size="xs" variant="soft" onClick={() => onRun(undefined)}>Back to my defaults</Button>
               ) : (
-                <>Your defaults, from <Link href="/settings" className="font-medium text-primary hover:underline">Settings</Link>: a change here is for this install only.</>
+                <>Your defaults, from <TextLink href="/settings">Settings</TextLink>: a change here is for this install only.</>
               )}
             </p>
           </div>

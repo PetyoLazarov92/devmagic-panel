@@ -1,5 +1,5 @@
 import type { CleanupInfo } from '@devmagic-panel/shared';
-import { History, LoaderCircle, RotateCcw } from 'lucide-react';
+import { History, RotateCcw } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { bytes, shortDate, timeAgo } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+import { Spinner } from '@/components/ui/spinner';
 
 const number = (n: number) => n.toLocaleString('en-US');
 
@@ -63,7 +64,7 @@ export function CleanupsCard({ database, site, refresh, onUndone }: { database: 
               </p>
             </div>
             <Button size="sm" variant="outline" disabled={undoing !== null} onClick={() => void undo(c)}>
-              {undoing === c.id ? <LoaderCircle className="animate-spin" /> : <RotateCcw />}Undo
+              {undoing === c.id ? <Spinner /> : <RotateCcw />}Undo
             </Button>
           </li>
         ))}

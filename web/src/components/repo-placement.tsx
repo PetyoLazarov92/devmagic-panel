@@ -2,8 +2,8 @@ import type { RepoPlacement } from '@devmagic-panel/shared';
 import { cloneFolder, PLACEMENT_DIRS, placementWarnings, repoBaseName, repoTarget, siteDir, throughCoreLink } from '@devmagic-panel/shared';
 import { CircleAlert, FolderTree, TriangleAlert } from 'lucide-react';
 import { useId, useState } from 'react';
+import { FilterChips } from '@/components/ui/filter-chips';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
 
 /** Why a placement cannot be used as typed, or null. */
 export function placementError(p: RepoPlacement): string | null {
@@ -44,29 +44,25 @@ export function PlacementFields({ url, value, onChange, site, sharedCore, proble
     // A repo moved out of the site root gets its own folder there, named after it.
     onChange({ dir, folder: value.folder || (dir === '' ? '' : name) });
   };
-  const chip = (on: boolean) =>
-    cn('rounded-md border px-2.5 py-1 text-xs whitespace-nowrap transition-colors hover:border-primary/50', on ? 'border-primary bg-primary/8 font-medium text-foreground' : 'bg-card text-muted-foreground');
+  // A quick pick is `dir:` and its folder, so the site root ('') has a value of its own.
+  const options = [...PLACEMENT_DIRS.map((d) => ({ value: `dir:${d.dir}`, label: d.label })), { value: 'other', label: 'Other folder' }];
   return (
     <div className="grid gap-3">
       <div className="grid gap-1.5">
-        <span id={`${id}-to`} className="text-sm font-medium">Install to</span>
-        <div role="radiogroup" aria-labelledby={`${id}-to`} className="flex flex-wrap gap-1.5">
-          {PLACEMENT_DIRS.map((d) => (
-            <button key={d.dir || 'root'} type="button" role="radio" aria-checked={!other && value.dir === d.dir} onClick={() => pick(d.dir)} className={chip(!other && value.dir === d.dir)}>
-              {d.label}
-            </button>
-          ))}
-          <button type="button" role="radio" aria-checked={other} onClick={() => setOther(true)} className={chip(other)}>
-            Other folder
-          </button>
-        </div>
+        <span className="text-sm font-medium">Install to</span>
+        <FilterChips
+          label="Install to"
+          value={other ? 'other' : `dir:${value.dir}`}
+          onChange={(v) => (v === 'other' ? setOther(true) : pick(v.slice('dir:'.length)))}
+          options={options}
+        />
         {other && (
           <Input
             aria-label="Folder of the site"
             value={value.dir}
             onChange={(e) => onChange({ ...value, dir: e.target.value.trim().replace(/^\/+|\/+$/g, '') })}
             placeholder="wp-content/client-plugins"
-            className="font-mono text-[13px]"
+            className="font-mono text-dense"
             spellCheck={false}
           />
         )}
@@ -78,7 +74,7 @@ export function PlacementFields({ url, value, onChange, site, sharedCore, proble
           value={value.folder}
           onChange={(e) => onChange({ ...value, folder: e.target.value.trim() })}
           placeholder={value.dir === '' ? 'Empty: the repo is the site root' : `Empty: right into ${value.dir}`}
-          className="font-mono text-[13px]"
+          className="font-mono text-dense"
           spellCheck={false}
         />
       </div>

@@ -1,4 +1,6 @@
-import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
 import { scrollToCard } from '@/lib/scroll-to';
 
 export interface Look {
@@ -19,22 +21,25 @@ export interface Look {
 export function NeedsALook({ items }: { items: Look[] }) {
   if (!items.length) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning/6 px-4 py-3 text-sm">
-      <span className="font-medium">{items.length === 1 ? '1 thing needs a look' : `${items.length} things need a look`}</span>
-      {items.map((f) => (
-        <button
-          key={f.key}
-          type="button"
-          onClick={() => {
-            f.before?.();
-            // After the filter it picks has drawn the list.
-            window.setTimeout(() => scrollToCard(f.card), 0);
-          }}
-          className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium hover:underline', f.tone === 'danger' ? 'bg-danger/12 text-danger' : 'bg-warning/15 text-warning')}
-        >
-          {f.text}
-        </button>
-      ))}
-    </div>
+    <Notice tone="warning">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">{items.length === 1 ? '1 thing needs a look' : `${items.length} things need a look`}</span>
+        {items.map((f) => (
+          <Button
+            key={f.key}
+            variant="ghost"
+            size="xs"
+            onClick={() => {
+              f.before?.();
+              // After the filter it picks has drawn the list.
+              window.setTimeout(() => scrollToCard(f.card), 0);
+            }}
+            className="group h-auto rounded-full p-0 hover:bg-transparent"
+          >
+            <Badge tone={f.tone} className="px-2.5 group-hover:underline">{f.text}</Badge>
+          </Button>
+        ))}
+      </div>
+    </Notice>
   );
 }

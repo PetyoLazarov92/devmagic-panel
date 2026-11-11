@@ -24,6 +24,60 @@ globs: ["web/**"]
   of pushing the card past its column.
 - Keyboard first: visible focus, Enter submits, actions reachable by Tab.
 
+## Components: one part for each job
+
+Every screen is made of the parts in `web/src/components/ui/`; the mockup's
+**Parts** page (`/mockup/parts`, `web/src/pages/ui-kit.tsx`) shows each one
+with its rule. A page never draws its own copy. `web/test/ui-ratchet.test.ts`
+counts the hand-made copies left (raw `<button>`, px text sizes, status
+tints, `rounded-xl border` cards, `LoaderCircle` spinners, hand-styled links,
+Reload words, raw `<dl>`) and fails when a count goes up; a change that
+lowers one lowers the baseline there too.
+
+- **Tokens.** Type: `text-2xl` page titles, `text-sm` body, `text-dense`
+  (13px) dense rows and code, `text-xs` captions, `text-2xs` (11px) only in
+  badges and counts; never a size in px. Corners: `rounded-xl` surfaces (cards,
+  dialogs), `rounded-lg` boxes inside a card (tiles, notices), `rounded-md`
+  controls, `rounded-full` badges and dots only. Icons `size-4`, `size-3.5`
+  in small text and badges, `size-8` in empty states. Gaps 2, 3, 4 or 6.
+  `cn()` knows the panel's text sizes (`lib/utils.ts`): add a new size there
+  too, or tailwind-merge drops it as a colour.
+- **Card**: `Card`, `CardHeader` (`title`, `description`, one `meta` on the
+  right: a `ScopeLabel`, a `StatusBadge` or a `CountBadge`, then `actions`; no
+  decorative icons), `CardBody` (`flush` for rows and tables, `compact`),
+  `CardSection` (a titled part inside), `CardFooter` (buttons on the left, the
+  way out in `end`: a `TextLink` with `arrow`). A job is the card's footer.
+- **Buttons**: one primary (solid) per page header or card, then `outline`,
+  then `soft` (a light fill) for the rest. `ghost` only for icon buttons and
+  toolbars: a worded button with no fill does not read as a button.
+  `danger` only inside a confirm. An icon-only button is `IconButton`, whose
+  label is required. Sizes `default`, `sm`, `xs`, `icon`, `icon-sm`.
+- **Links**: `TextLink` (`primary` in text, `muted` beside facts, `plain` for
+  a name that opens its page, `arrow` for a way out of a card). An http link
+  opens a new tab with its arrow-out icon. A link goes somewhere, a button
+  does something.
+- **Status**: `Badge` labels a thing, `StatusBadge` says how it stands (ok,
+  warn, fail, off, running; the same colour for the same state everywhere),
+  `CountBadge` is a number in a tab, menu or filter, `StatusDot` a site's
+  health. `Notice` is the only tinted box, one tone per box (danger, warning,
+  success, info), `size="inline"` inside a card. `Spinner` is the only
+  turning icon.
+- **Facts and rows**: `KeyValue` (`inline` with a label column, or `stacked`),
+  `StatTile` in `StatTiles` for a row of numbers that open the rest,
+  `RowList` and `ListRow` for rows in a card (start, name and a line under it,
+  badges, actions and a `Menu`).
+- **Navigation**: `Breadcrumbs` above every page below the menu's top level
+  (on a phone only the way back shows); `Tabs` for a page's views,
+  `Tabs size="sm"` for a tab's own views (level 2); a detail page's sections
+  in `SectionLayout` (a menu down the side from `lg`, tabs below it).
+  `Segmented` only switches how the same thing shows (Compact, Details).
+- **Lists**: `FilterBar` over a list (search, then `FilterChips` with counts,
+  then pickers and the view switch at its end).
+- **Forms**: `Field` (label over the control, hint under it), `SettingRow`
+  (title and hint left, the control right) for settings, `Checkbox`,
+  `Switch`, `Select`, `Input`, `SecretInput`, and `SaveBar` for a form with
+  several fields.
+
 ## One pattern on every page
 
 - **A job shows where it was started**: as the footer of the card whose
@@ -135,8 +189,10 @@ Every page is made of the pieces in `web/src/components/page.tsx` and
 - **List pages** (Sites and its Removed filter, Activity's Jobs and Run history, WP Cores, Mail,
   Aura): header, notices, a filter bar, then one card of rows. Loading is a
   list or table skeleton; nothing is an empty state.
-- **Detail pages** (a site, a job, a run): back link, title and facts,
-  actions, then tabs, Overview first. The page's whole width: their steps,
+- **Detail pages** (a site, a job, a run): breadcrumbs, title and facts,
+  one primary action and the rest in a menu, then its sections, Overview
+  first: a site's run down its side (`SectionLayout`), a tab's own views as
+  small tabs. The page's whole width: their steps,
   output and tables need it. A narrow column (`max-w-3xl`) is for forms and
   reading: the new-site wizard, Updates and its release notes.
 - **Status pages** (Aura's Machine checks, Developer options, Updates, Services and its

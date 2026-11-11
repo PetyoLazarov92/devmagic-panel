@@ -1,5 +1,6 @@
 import type { FileDiff } from '@devmagic-panel/shared';
 import { useMemo } from 'react';
+import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 /** The lines of a unified diff that only say which files it compares. */
@@ -16,11 +17,11 @@ export function DiffView({ diff, label, same }: { diff: FileDiff; label: string;
     if (all.at(-1) === '') all.pop();
     return all;
   }, [diff.diff]);
-  if (lines.length === 0) return <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground" role="status">{same}</p>;
+  if (lines.length === 0) return <Card className="px-4 py-3 text-sm text-muted-foreground" role="status">{same}</Card>;
   const added = lines.filter((l) => l.startsWith('+') && !l.startsWith('+++ ')).length;
   const taken = lines.filter((l) => l.startsWith('-') && !l.startsWith('--- ')).length;
   return (
-    <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+    <Card className="overflow-hidden">
       <p className="border-b bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
         {label}: <span className="font-medium text-success">{added} added</span>, <span className="font-medium text-danger">{taken} taken out</span>
         {diff.cut ? '. Too long to show whole: this is its start.' : '.'}
@@ -47,6 +48,6 @@ export function DiffView({ diff, label, same }: { diff: FileDiff; label: string;
           })}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

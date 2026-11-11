@@ -1,11 +1,14 @@
 import { PANEL_PASSWORD_MIN, panelPasswordProblem } from '@devmagic-panel/shared';
-import { Check, Copy, KeyRound, LoaderCircle } from 'lucide-react';
+import { Check, Copy, KeyRound } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
+import { IconButton } from '@/components/ui/icon-button';
 import { PasswordInput } from '@/components/ui/password-input';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 const RULE = `At least ${PANEL_PASSWORD_MIN} characters. A few unrelated words are easy to remember and hard to guess.`;
 
@@ -84,9 +87,9 @@ export function ChangePasswordDialog({ open, onClose, user, onChanged }: { open:
         <NewPassword id="pw" value={next} repeat={repeat} onValue={setNext} onRepeat={setRepeat} disabled={busy} {...(user ? { user } : {})} />
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={close} disabled={busy}>Cancel</Button>
+          <Button type="button" variant="soft" onClick={close} disabled={busy}>Cancel</Button>
           <Button type="submit" disabled={busy || !current || !newPasswordOk(next, repeat, user)}>
-            {busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
+            {busy ? <Spinner /> : <KeyRound />}
             Change password
           </Button>
         </div>
@@ -101,19 +104,17 @@ export function CopyCommand({ command }: { command: string }) {
   return (
     <div className="flex items-start gap-2 rounded-md bg-muted px-3 py-2">
       <code className="min-w-0 flex-1 font-mono text-xs break-all">{command}</code>
-      <button
-        type="button"
-        className="shrink-0 text-muted-foreground hover:text-foreground"
-        aria-label="Copy the command"
+      <IconButton
+        icon={copied ? Check : Copy}
+        label="Copy the command"
+        className={cn('-my-1 size-6 shrink-0 text-muted-foreground hover:bg-transparent hover:text-foreground', copied && 'text-success hover:text-success')}
         onClick={() => {
           void navigator.clipboard?.writeText(command).then(() => {
             setCopied(true);
             window.setTimeout(() => setCopied(false), 1500);
           });
         }}
-      >
-        {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
-      </button>
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import type { CleanCopyInfo, CleanPreview, KeptDatabaseInfo, Site, SnapshotInfo, UploadResult } from '@devmagic-panel/shared';
 import { isLocalName } from '@devmagic-panel/shared';
-import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, LoaderCircle, PackageCheck, RefreshCw, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, PackageCheck, RefreshCw, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation, rowsSeedState } from '@/components/db-browser';
 import { JobFooter } from '@/components/job-box';
@@ -9,12 +9,13 @@ import { SqlRunner, sqlSeed } from '@/components/sql-runner';
 import { WordpressDbView } from '@/components/wordpress-db';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
 import { cleanupFindings, CopyChoice, findings } from '@/components/copy-choice';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { KeyValue } from '@/components/ui/key-value';
 import { SecretInput } from '@/components/ui/secret-input';
 import { Segmented } from '@/components/ui/segmented';
 import { api, cleanCopyUrl, isMockup, snapshotUrl } from '@/lib/api';
@@ -63,7 +64,7 @@ export function DatabaseTab({ site }: { site: Site }) {
   const blogParam = Number(useQueryParam('blog'));
   const blog = Number.isInteger(blogParam) && blogParam > 1 ? blogParam : 1;
   if (!site.db) {
-    return <p className="rounded-xl border bg-card px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p>;
+    return <Card><p className="px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p></Card>;
   }
   const go = (next: DbView, location?: DbLocation, nextBlog = 1) => navigate(databaseHref(site, next, location, nextBlog), { scroll: false });
   // What needs a look first, then the rows, then SQL on them, then upkeep.
@@ -120,7 +121,7 @@ function DatabaseTools({ site }: { site: Site }) {
   }
 
   if (!site.db) {
-    return <p className="rounded-xl border bg-card px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p>;
+    return <Card><p className="px-5 py-4 text-sm text-muted-foreground">This site has no database in wp-config.php.</p></Card>;
   }
 
   // A job is the footer of the card that started it.
@@ -200,14 +201,14 @@ function SnapshotsCard({ footer, site, snapshots, loading, busy, start, onDelete
 
   return (
     <Card>
-      <CardHeader><CardTitle>Snapshots</CardTitle><Camera className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
+      <CardHeader title="Snapshots" meta={<Camera className="size-4 text-muted-foreground" />} />
+      <CardBody className="grid-cols-[minmax(0,1fr)]">
         <p className="text-xs text-muted-foreground">
           Database {site.db?.name} · {bytes(site.db?.sizeBytes ?? 0)}. Snapshots are gzipped exports in ~/devmagic-panel-backups/snapshots/{site.path ? `${site.domain}@${site.path.slice(1).replaceAll('/', '@')}` : site.domain}. Restore and replace take one first; an import goes into a side database and is swapped in, so the tables from before come back with Undo until it ends.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <Field className="min-w-40 flex-1" label="Label (optional)" htmlFor="snapshot-label" hint={labelValid ? undefined : <span className="text-danger">Lowercase letters, digits and dashes</span>}>
-            <Input id="snapshot-label" value={label} onChange={(e) => setLabel(e.target.value.toLowerCase())} placeholder="before-plugin-update" className="font-mono text-[13px]" spellCheck={false} />
+            <Input id="snapshot-label" value={label} onChange={(e) => setLabel(e.target.value.toLowerCase())} placeholder="before-plugin-update" className="font-mono text-dense" spellCheck={false} />
           </Field>
           <Button disabled={busy || !labelValid} onClick={() => start('snapshot', label ? { label } : {})}>
             <Camera />
@@ -251,7 +252,7 @@ function SnapshotsCard({ footer, site, snapshots, loading, busy, start, onDelete
             ))}
           </ul>
         )}
-      </div>
+      </CardBody>
 
       <ConfirmDialog
         open={restoring !== null}
@@ -267,7 +268,7 @@ function SnapshotsCard({ footer, site, snapshots, loading, busy, start, onDelete
       />
       <Dialog open={deleting !== null} onClose={() => setDeleting(null)} title="Delete this snapshot?" description={deleting ? `${deleting.name} (${bytes(deleting.sizeBytes)}) is deleted for good.` : ''}>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setDeleting(null)}>Cancel</Button>
           <Button variant="danger" onClick={() => deleting && void remove(deleting)}><Trash2 />Delete</Button>
         </div>
       </Dialog>
@@ -294,7 +295,7 @@ function ConfirmDialog({ open, title, description, domain, action, onClose, onCo
     <Dialog open={open} onClose={close} title={title} description={description}>
       <ConfirmField id="db-confirm" expected={domain} value={typed} onChange={setTyped} />
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={close}>Cancel</Button>
+        <Button variant="soft" onClick={close}>Cancel</Button>
         <Button
           variant="danger"
           disabled={typed !== domain}
@@ -331,17 +332,17 @@ function SearchReplaceCard({ footer, site, busy, start, preview }: { footer: Rea
 
   return (
     <Card>
-      <CardHeader><CardTitle>Search and replace</CardTitle><Replace className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
+      <CardHeader title="Search and replace" meta={<Replace className="size-4 text-muted-foreground" />} />
+      <CardBody className="grid-cols-[minmax(0,1fr)]">
         <p className="text-xs text-muted-foreground">
           Runs <code className="font-mono">wp search-replace</code> on every table of the site, serialized data included; guid columns are skipped. Preview first: it only counts.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Find" htmlFor="sr-from">
-            <Input id="sr-from" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="https://staging.example.com" className="font-mono text-[13px]" spellCheck={false} />
+            <Input id="sr-from" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="https://staging.example.com" className="font-mono text-dense" spellCheck={false} />
           </Field>
           <Field label="Replace with" htmlFor="sr-to">
-            <Input id="sr-to" value={to} onChange={(e) => setTo(e.target.value)} placeholder={`https://${siteName(site)}`} className="font-mono text-[13px]" spellCheck={false} />
+            <Input id="sr-to" value={to} onChange={(e) => setTo(e.target.value)} placeholder={`https://${siteName(site)}`} className="font-mono text-dense" spellCheck={false} />
           </Field>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -370,7 +371,7 @@ function SearchReplaceCard({ footer, site, busy, start, preview }: { footer: Rea
             {output && <pre className="max-h-64 overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre">{output}</pre>}
           </div>
         )}
-      </div>
+      </CardBody>
       <ConfirmDialog
         open={confirming}
         title={`Replace ${from}?`}
@@ -424,7 +425,7 @@ function DumpChooser({ dump, busy, site }: { dump: DumpUpload; busy: boolean; si
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <FileArchive className="size-4 text-success" />
         <span>{dump.upload.name} · {bytes(dump.upload.size)}</span>
-        <Button variant="ghost" size="sm" disabled={busy} onClick={dump.reset}>Pick another dump</Button>
+        <Button variant="soft" size="sm" disabled={busy} onClick={dump.reset}>Pick another dump</Button>
       </div>
     );
   }
@@ -438,7 +439,7 @@ function ReplacePairs({ dump }: { dump: DumpUpload }) {
       <p className="text-sm font-medium">Replace production domains</p>
       {dump.pairs.map((p, i) => (
         <div key={p.from} className="grid items-center gap-2 sm:grid-cols-[1fr_auto_1fr]">
-          <span className="truncate font-mono text-[13px]" title={p.from}>{p.from}</span>
+          <span className="truncate font-mono text-dense" title={p.from}>{p.from}</span>
           <span className="hidden text-muted-foreground sm:inline">to</span>
           <Select aria-label={`Local name for ${p.from}`} value={p.to} onChange={(e) => dump.setPairs((all) => all.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)))}>
             {dump.names.map((n) => <option key={n} value={n}>{n}</option>)}
@@ -476,8 +477,8 @@ function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: S
 
   return (
     <Card>
-      <CardHeader><CardTitle>Import a database</CardTitle><FileArchive className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
+      <CardHeader title="Import a database" meta={<FileArchive className="size-4 text-muted-foreground" />} />
+      <CardBody className="grid-cols-[minmax(0,1fr)]">
         <p className="text-xs text-muted-foreground">
           Replaces {db} with a copy from production or a dump, as it is or cleaned. The copy goes into a side database and is swapped in at once; production domains become this site&apos;s, and the tables from before are kept for 7 days.
         </p>
@@ -489,12 +490,13 @@ function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: S
 
           {upload && (
             <>
-              <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-sm">
-                <dt className="text-muted-foreground">Table prefix</dt>
-                <dd className="font-mono text-[13px]">{upload.facts.tablePrefix ?? 'unknown'}</dd>
-                <dt className="text-muted-foreground">Multisite</dt>
-                <dd>{upload.facts.multisite ? 'yes' : 'no'}</dd>
-              </dl>
+              <KeyValue
+                labelWidth="sm"
+                rows={[
+                  { label: 'Table prefix', value: <span className="font-mono text-dense">{upload.facts.tablePrefix ?? 'unknown'}</span> },
+                  { label: 'Multisite', value: upload.facts.multisite ? 'yes' : 'no' },
+                ]}
+              />
               <CopyChoice id="import-copy" clean={clean} onChange={(on) => setCopy(on ? 'clean' : 'whole')} removed={findings(upload)} />
               <ReplacePairs dump={dump} />
               {replace.length > 0 && (
@@ -519,7 +521,7 @@ function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: S
             </>
           )}
         </div>
-      </div>
+      </CardBody>
       <ConfirmDialog
         open={confirming}
         title={`Import ${upload?.name ?? 'the dump'}${clean ? ', cleaned' : ''}?`}
@@ -618,8 +620,8 @@ function CleanCurrentCard({ footer, site, preview, error, busy, start }: { foote
 
   return (
     <Card>
-      <CardHeader><CardTitle>Clean this database</CardTitle><Eraser className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
+      <CardHeader title="Clean this database" meta={<Eraser className="size-4 text-muted-foreground" />} />
+      <CardBody className="grid-cols-[minmax(0,1fr)]">
         <p className="text-xs text-muted-foreground">
           Cleans the database the site has now, like a production database you imported as it is, the way a cleaned import does. It is copied beside the site and cleaned there while the site keeps working, then swapped in; your current tables are kept for 7 days. Mail plugins are turned off and one administrator stays, the author of every post. Addresses are not replaced.
         </p>
@@ -642,7 +644,7 @@ function CleanCurrentCard({ footer, site, preview, error, busy, start }: { foote
             </Button>
           </>
         )}
-      </div>
+      </CardBody>
       <ConfirmDialog
         open={confirming}
         title={`Clean ${db}?`}
@@ -692,8 +694,8 @@ function CleanCopiesCard({ footer, site, copies, loading, busy, start, onDeleted
 
   return (
     <Card>
-      <CardHeader><CardTitle>Clean copies</CardTitle><PackageCheck className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
+      <CardHeader title="Clean copies" meta={<PackageCheck className="size-4 text-muted-foreground" />} />
+      <CardBody className="grid-cols-[minmax(0,1fr)]">
         <p className="text-xs text-muted-foreground">
           A gzipped export of this site's database to share with the team, in ~/devmagic-panel-backups/clean/{folderKey(site)}. Check the site and set up its test modes first. The export counts the email addresses left in it, so anything private a cleanup missed shows.
         </p>
@@ -759,10 +761,10 @@ function CleanCopiesCard({ footer, site, copies, loading, busy, start, onDeleted
             })}
           </ul>
         )}
-      </div>
+      </CardBody>
       <Dialog open={deleting !== null} onClose={() => setDeleting(null)} title="Delete this clean copy?" description={deleting ? `${deleting.name} (${bytes(deleting.sizeBytes)}) is deleted for good.` : ''}>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setDeleting(null)}>Cancel</Button>
           <Button variant="danger" onClick={() => deleting && void remove(deleting)}><Trash2 />Delete</Button>
         </div>
       </Dialog>
@@ -795,8 +797,8 @@ function KeptCard({ footer, site, kept, loading, busy, start, onDeleted }: { foo
 
   return (
     <Card>
-      <CardHeader><CardTitle>Kept databases</CardTitle><Archive className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 p-5">
+      <CardHeader title="Kept databases" meta={<Archive className="size-4 text-muted-foreground" />} />
+      <CardBody className="grid-cols-[minmax(0,1fr)]">
         <p className="text-xs text-muted-foreground">
           Your tables from before an import or a clean. Put back swaps them in at once, and what it takes out is kept the same way. Each goes 7 days after it was made.
         </p>
@@ -825,7 +827,7 @@ function KeptCard({ footer, site, kept, loading, busy, start, onDeleted }: { foo
             })}
           </ul>
         )}
-      </div>
+      </CardBody>
       <ConfirmDialog
         open={restoring !== null}
         title="Put back these tables?"
@@ -840,7 +842,7 @@ function KeptCard({ footer, site, kept, loading, busy, start, onDeleted }: { foo
       />
       <Dialog open={deleting !== null} onClose={() => setDeleting(null)} title="Drop this kept database?" description={deleting ? `${deleting.name}${deleting.sizeBytes !== undefined ? ` (${bytes(deleting.sizeBytes)})` : ''} is dropped for good.` : ''}>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setDeleting(null)}>Cancel</Button>
           <Button variant="danger" onClick={() => deleting && void remove(deleting)}><Trash2 />Drop</Button>
         </div>
       </Dialog>
@@ -914,20 +916,15 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
       )}
       {!editing && settings && (
         <>
-          <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1">
-            <dt className="text-muted-foreground">From</dt>
-            <dd className="truncate font-mono text-[13px]" title={`${settings.host}:${settings.folder}`}>{settings.host}:{settings.folder}</dd>
-            {settings.wpCli && (
-              <>
-                <dt className="text-muted-foreground">WP-CLI</dt>
-                <dd className="truncate font-mono text-[13px]">{settings.wpCli}</dd>
-              </>
-            )}
-            <dt className="text-muted-foreground">Rows left out</dt>
-            <dd>{settings.excludeRows.length ? `${settings.excludeRows.length} table${settings.excludeRows.length === 1 ? '' : 's'}` : 'none'}</dd>
-            <dt className="text-muted-foreground">The copy</dt>
-            <dd>{settings.clean ? 'cleaned' : 'as it is'}</dd>
-          </dl>
+          <KeyValue
+            labelWidth="sm"
+            rows={[
+              { label: 'From', value: <span className="block truncate font-mono text-dense" title={`${settings.host}:${settings.folder}`}>{settings.host}:{settings.folder}</span> },
+              ...(settings.wpCli ? [{ label: 'WP-CLI', value: <span className="block truncate font-mono text-dense">{settings.wpCli}</span> }] : []),
+              { label: 'Rows left out', value: settings.excludeRows.length ? `${settings.excludeRows.length} table${settings.excludeRows.length === 1 ? '' : 's'}` : 'none' },
+              { label: 'The copy', value: settings.clean ? 'cleaned' : 'as it is' },
+            ]}
+          />
           {/* The one user a cleaned copy keeps and its password, together, where the refresh starts. */}
           {settings.clean && (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -948,7 +945,7 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
               Refresh {db} now
             </Button>
             <Button variant="outline" disabled={busy} onClick={() => setEditing(true)}>Change</Button>
-            <Button variant="ghost" disabled={busy} title={`Forget ${settings.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, () => saved.reload())}>Forget</Button>
+            <Button variant="soft" disabled={busy} title={`Forget ${settings.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, () => saved.reload())}>Forget</Button>
           </div>
         </>
       )}

@@ -1,14 +1,18 @@
 import type { AddressInput, DumpPlugin, DumpTheme, InstallDraft, ServerFiles, RepoTrustAnswer, WporgPlugin, NginxState, NewSiteSource, SiteServer, RepoBuild, RepoInspection, RepoLookup, RepoPlacement, RepoPreset, Site, UploadResult } from '@devmagic-panel/shared';
 import { actions, addressSummary, presetPlacement, repoTarget, branchName, coreVersion as coreVersionSchema, databaseNameFor, DUMP_SCAN_GB, gitUrl, hostname, isLocalName, MEDIA_PLUGIN, mountFolder, mountPath, LOCAL_HELPER_PLUGINS, localDomainFor, type LocalHelperPlugin } from '@devmagic-panel/shared';
-import { ArrowLeft, ArrowRight, Check, ChevronRight, CircleAlert, CircleCheck, FolderGit2, Globe, LoaderCircle, Plus, RefreshCw, Search, Sparkles, TriangleAlert, Wand2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, FolderGit2, Globe, Plus, RefreshCw, Search, Sparkles, Wand2, X } from 'lucide-react';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {} from '@/components/branch-picker';
 import {} from '@/components/dump-facts';
 import { JobScreen } from '@/components/job-screen';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardBody } from '@/components/ui/card';
 import { Checkbox, Field, Select } from '@/components/ui/field';
+import { IconButton } from '@/components/ui/icon-button';
+import { KeyValue, type KeyValueRow } from '@/components/ui/key-value';
+import { Notice } from '@/components/ui/notice';
+import { TextLink } from '@/components/ui/text-link';
 import { installLabel } from '@/components/site-bits';
 import { newOrgState, type OrgState, ProjectReadStep, runFor } from './new-site-org';
 import { ClaudeSwitch, CodeStep, codeProblem, placedRows, SitePlan, useRepoLookups } from './new-site-code';
@@ -39,6 +43,7 @@ import { askWporg, defaultPick, defaultThemePick, missingPlugins, missingThemes,
 import { pastedRepo } from '@/lib/org-repos';
 import { asideUploads } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 type Step = WizardStep;
 
@@ -808,7 +813,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
           <>
             <Link href="/sites/new" className="shrink-0 hover:text-foreground">New site</Link>
             <ChevronRight className="size-3.5 shrink-0" />
-            <span aria-current="page" className={cn('truncate text-foreground', named && 'font-mono text-[13px]')}>{named ? title : 'Draft'}</span>
+            <span aria-current="page" className={cn('truncate text-foreground', named && 'font-mono text-dense')}>{named ? title : 'Draft'}</span>
           </>
         ) : (
           <span aria-current="page" className="text-foreground">New site</span>
@@ -844,7 +849,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
                   >
                     <span
                       className={cn(
-                        'inline-flex size-5 items-center justify-center rounded-full text-[11px] font-semibold',
+                        'inline-flex size-5 items-center justify-center rounded-full text-2xs font-semibold',
                         view.done ? 'bg-primary text-primary-foreground' : s === step ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
                       )}
                     >
@@ -863,13 +868,13 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
       )}
 
       <div className="mt-6">
-        {opened.status === 'loading' && <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" /> Opening the install...</p>}
+        {opened.status === 'loading' && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" /> Opening the install...</p>}
         {(opened.status === 'gone' || opened.status === 'error') && <DraftGone {...(opened.status === 'error' ? { error: opened.message } : {})} />}
         {opened.status === 'installing' && <DraftInstalling {...(opened.jobId ? { jobId: opened.jobId } : {})} />}
         {wizard && step === 'start' && (
           <>
             {switchTo && (
-              <div role="alert" className="mb-4 max-w-3xl rounded-xl border border-warning/30 bg-warning/6 p-4 text-sm">
+              <Notice tone="warning" className="mb-4 max-w-3xl">
                 <p className="font-medium">Switch this install to {KIND_LABEL[switchTo]}?</p>
                 <p className="mt-1 text-muted-foreground">
                   {state.org ? 'Its organization, repo read and dump answers are dropped. ' : ''}Answers both kinds use, like the domains, stay.
@@ -878,7 +883,7 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
                   <Button size="sm" onClick={() => applyKind(switchTo)}>Switch</Button>
                   <Button size="sm" variant="soft" onClick={() => setSwitchTo(null)}>Keep {KIND_LABEL[kind]}</Button>
                 </div>
-              </div>
+              </Notice>
             )}
             <StartStep value={state.source} claude={claudeReady && claudePreference !== 'never'} onChange={choose} />
           </>
@@ -984,11 +989,11 @@ function SavedLine({ saved, discarding, onDiscarding, onDiscard }: { saved: Save
       {discarding ? (
         <span role="group" aria-label="Discard this install" className="inline-flex flex-wrap items-center gap-x-2">
           Discard this install? Its answers and any dump it holds go.
-          <button type="button" disabled={discarding === 'busy'} onClick={onDiscard} className="font-medium text-danger hover:underline disabled:opacity-50">Discard</button>
-          <button type="button" disabled={discarding === 'busy'} onClick={() => onDiscarding(null)} className="font-medium text-foreground hover:underline disabled:opacity-50">Keep</button>
+          <Button size="xs" variant="danger" disabled={discarding === 'busy'} onClick={onDiscard}>Discard</Button>
+          <Button size="xs" variant="soft" disabled={discarding === 'busy'} onClick={() => onDiscarding(null)}>Keep</Button>
         </span>
       ) : (
-        <button type="button" onClick={() => onDiscarding('ask')} className="font-medium hover:text-foreground hover:underline">Discard</button>
+        <Button size="xs" variant="soft" onClick={() => onDiscarding('ask')}>Discard</Button>
       )}
     </p>
   );
@@ -1198,7 +1203,7 @@ function DomainsStep({ state, set, nginx, errors, sites, underError, underFolder
                     // A pasted URL keeps only its address: no scheme, path or trailing slash.
                     onBlur={() => update(i, { prod: cleanAddress(d.prod) })}
                     placeholder="www.example.com"
-                    className="font-mono text-[13px]"
+                    className="font-mono text-dense"
                     spellCheck={false}
                   />
                   {source && <p className="mt-1 truncate text-xs text-muted-foreground" title={source}>{source}</p>}
@@ -1206,7 +1211,7 @@ function DomainsStep({ state, set, nginx, errors, sites, underError, underFolder
               )}
               {fromDump && <ArrowRight className="mt-3 hidden size-4 text-muted-foreground sm:block" />}
               {under ? (
-                <p className="flex h-10 items-center rounded-md border border-teal-500/45 bg-teal-500/[0.04] px-3 font-mono text-[13px] text-muted-foreground dark:border-teal-400/40">
+                <p className="flex h-10 items-center rounded-md border border-teal-500/45 bg-teal-500/[0.04] px-3 font-mono text-dense text-muted-foreground dark:border-teal-400/40">
                   {under.domain || 'the site below'}{cleanPath(under.path)}
                 </p>
               ) : (
@@ -1221,7 +1226,7 @@ function DomainsStep({ state, set, nginx, errors, sites, underError, underFolder
                     placeholder="local.example.com"
                     spellCheck={false}
                     // The name this site gets here: tinted so it reads as the one being set; the primary badge keeps its room.
-                    className={cn('font-mono text-[13px]', i === 0 && d.local && 'pr-20', errors[i] ? 'border-danger' : 'border-teal-500/45 bg-teal-500/[0.04] focus-visible:border-teal-500 dark:border-teal-400/40 dark:bg-teal-400/[0.05]')}
+                    className={cn('font-mono text-dense', i === 0 && d.local && 'pr-20', errors[i] ? 'border-danger' : 'border-teal-500/45 bg-teal-500/[0.04] focus-visible:border-teal-500 dark:border-teal-400/40 dark:bg-teal-400/[0.05]')}
                   />
                   {i === 0 && d.local && <Badge className="absolute top-1/2 right-2 -translate-y-1/2">primary</Badge>}
                 </div>
@@ -1288,26 +1293,25 @@ function ServerChoice({ state, set, php }: { state: WizardState; set: Setter; ph
 /** The primary domain is a site already: installing again archives it first, once you tick it. */
 function ReinstallNote({ site, state, set }: { site: Site; state: WizardState; set: Setter }) {
   return (
-    <div role="status" className="grid gap-3 rounded-lg border border-warning/40 bg-warning/8 px-4 py-3 text-sm">
-      <p className="flex items-center gap-2 font-medium">
-        <CircleAlert className="size-4 shrink-0 text-warning" />
-        {site.domain} is installed already
-      </p>
-      <p className="text-muted-foreground">
-        {installLabel(site.install)}.{' '}
-        {site.removable
-          ? 'Installing again archives it first, with its folder, vhost, certificate and database. Restore it from Removed sites on the Sites page for 14 days, or with Undo on the install.'
-          : 'The panel cannot archive it first: its folder or vhost is not in the usual place. Remove it by hand, or pick another domain.'}
-      </p>
-      {site.removable && (
-        <Checkbox
-          id="replace-existing"
-          checked={state.replaceExisting}
-          onChange={(v) => set('replaceExisting', v)}
-          label={`Archive ${site.domain} and install it again`}
-        />
-      )}
-    </div>
+    <Notice tone="warning">
+      <div className="grid gap-3">
+        <p className="font-medium">{site.domain} is installed already</p>
+        <p className="text-muted-foreground">
+          {installLabel(site.install)}.{' '}
+          {site.removable
+            ? 'Installing again archives it first, with its folder, vhost, certificate and database. Restore it from Removed sites on the Sites page for 14 days, or with Undo on the install.'
+            : 'The panel cannot archive it first: its folder or vhost is not in the usual place. Remove it by hand, or pick another domain.'}
+        </p>
+        {site.removable && (
+          <Checkbox
+            id="replace-existing"
+            checked={state.replaceExisting}
+            onChange={(v) => set('replaceExisting', v)}
+            label={`Archive ${site.domain} and install it again`}
+          />
+        )}
+      </div>
+    </Notice>
   );
 }
 
@@ -1349,19 +1353,19 @@ function UnderPath({ state, set, sites, error, folder }: { state: WizardState; s
               onChange={(e) => set('under', { ...(state.under as { domain: string; path: string }), path: e.target.value })}
               onBlur={() => set('under', { ...(state.under as { domain: string; path: string }), path: cleanPath(state.under?.path ?? '') })}
               placeholder="/learn"
-              className="font-mono text-[13px]"
+              className="font-mono text-dense"
               spellCheck={false}
             />
           </Field>
           <p className={cn('text-xs sm:col-span-2', error ? 'text-danger' : 'text-muted-foreground')}>
             {error ?? (folder && parent ? `At https://${parent.domain}${cleanPath(state.under.path)}/, in /var/www/${folder}.` : 'Pick the site and the path.')}
-            {!error && parent && !parent.vhostManaged && <> Its vhost was made by hand, so the install shows the lines to add to it, unless you <Link href={takeoverHref(parent)} className="font-medium text-primary hover:underline">take it over</Link> first.</>}
+            {!error && parent && !parent.vhostManaged && <> Its vhost was made by hand, so the install shows the lines to add to it, unless you <TextLink href={takeoverHref(parent)}>take it over</TextLink> first.</>}
           </p>
           {dumpPath !== null && cleanPath(state.under.path) && dumpPath !== cleanPath(state.under.path) && (
-            <p role="status" className="rounded-md border border-warning/40 bg-warning/8 px-3 py-2 text-xs sm:col-span-2">
+            <Notice tone="warning" size="inline" className="sm:col-span-2">
               The database's site is at {dumpPath || '/'}, but this one goes under {cleanPath(state.under.path)}. Search and replace changes the domain only, so links
               would miss the path: use the same path as the site in the dump.
-            </p>
+            </Notice>
           )}
         </div>
       )}
@@ -1379,7 +1383,7 @@ function NetworkNote({ sites }: { sites: Array<{ domain: string; path: string }>
       A network: {sites.length} site{sites.length === 1 ? '' : 's'} on {domains.length} domain{domains.length === 1 ? '' : 's'}.
       {underPath.length > 0 && (
         <>
-          {' '}{underPath.length} {underPath.length === 1 ? 'is' : 'are'} under a path of <span className="font-mono text-[13px]">{hosts.join(', ')}</span> ({underPath.map((x) => x.path).join(', ')}) and need{underPath.length === 1 ? 's' : ''} no row of {underPath.length === 1 ? 'its' : 'their'} own.
+          {' '}{underPath.length} {underPath.length === 1 ? 'is' : 'are'} under a path of <span className="font-mono text-dense">{hosts.join(', ')}</span> ({underPath.map((x) => x.path).join(', ')}) and need{underPath.length === 1 ? 's' : ''} no row of {underPath.length === 1 ? 'its' : 'their'} own.
         </>
       )}
     </p>
@@ -1404,10 +1408,7 @@ function ReplaceOptions({ state, set, summary }: { state: WizardState; set: Sett
       {summary ? (
         <p className="text-xs text-muted-foreground">One step after the import: {summary.charAt(0).toLowerCase()}{summary.slice(1)}.</p>
       ) : (
-        <p role="status" className="flex items-start gap-2 rounded-lg border border-success/40 bg-success/8 px-3 py-2 text-sm">
-          <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" />
-          <span>Already set up for here: no search and replace. Every address in the dump answers here, on https.</span>
-        </p>
+        <Notice tone="success">Already set up for here: no search and replace. Every address in the dump answers here, on https.</Notice>
       )}
     </div>
   );
@@ -1464,10 +1465,9 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
       <section className="grid h-fit gap-4">
         <h2 className="text-sm font-semibold">Core</h2>
         {repoCore && (
-          <p className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-xs text-muted-foreground">
-            <TriangleAlert className="mt-px size-3.5 shrink-0 text-warning" />
-            <span>The repo holds WordPress core{repoCore.version ? ` (${repoCore.version})` : ''}, so the site uses it as it is. Keeping core in git is unusual, but fine when the repo patches it on purpose.</span>
-          </p>
+          <Notice tone="warning" size="inline">
+            The repo holds WordPress core{repoCore.version ? ` (${repoCore.version})` : ''}, so the site uses it as it is. Keeping core in git is unusual, but fine when the repo patches it on purpose.
+          </Notice>
         )}
         <div role="radiogroup" aria-label="Core" className="grid gap-2">
           {(repoCore
@@ -1521,7 +1521,7 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
               value={state.coreVersion}
               onChange={(e) => set('coreVersion', e.target.value.trim())}
               placeholder="An exact release, like 6.8.3"
-              className="font-mono text-[13px]"
+              className="font-mono text-dense"
               spellCheck={false}
               aria-invalid={state.coreVersion !== '' && !coreVersionSchema.safeParse(state.coreVersion).success ? true : undefined}
             />
@@ -1552,7 +1552,7 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
                     checked={!keptOn && state.deactivate.includes(slug)}
                     onChange={(v) => toggle(slug, v)}
                     disabled={Boolean(keptOn)}
-                    label={<code className="font-mono text-[13px]">{slug}</code>}
+                    label={<code className="font-mono text-dense">{slug}</code>}
                     hint={keptOn ?? (active && productionOnly.has(slug) ? 'Usually production only' : undefined)}
                   />
                 );
@@ -1589,14 +1589,14 @@ function WordPressStep({ state, set, cores, input, uploadsError }: { state: Wiza
                 onBlur={() => set('uploadsFrom', cleanAddress(state.uploadsFrom ?? uploadsDefault(state), false))}
                 placeholder="www.example.com"
                 aria-invalid={uploadsError ? true : undefined}
-                className={cn('font-mono text-[13px]', uploadsError && 'border-danger')}
+                className={cn('font-mono text-dense', uploadsError && 'border-danger')}
                 spellCheck={false}
               />
               {/* A dump that is already a local copy names no production domain; the docs may. */}
               {docsProduction && !(state.uploadsFrom ?? uploadsDefault(state)) && (
-                <button type="button" className="justify-self-start text-xs font-medium text-primary hover:underline" onClick={() => set('uploadsFrom', docsProduction)}>
+                <Button size="xs" variant="soft" className="justify-self-start" onClick={() => set('uploadsFrom', docsProduction)}>
                   Use <span className="font-mono">{docsProduction}</span>, from the repo's docs
-                </button>
+                </Button>
               )}
             </Field>
             {/* The files themselves, only when asked: the server the dump was exported from has them. */}
@@ -1715,7 +1715,7 @@ function AdminSection({ state, set, input, defaults }: { state: WizardState; set
       {found.length > 0 ? (
         <div className="grid gap-1.5 rounded-lg border bg-card p-3 text-sm">
           <p className="font-medium">{network ? 'Super admins in the dump' : 'Admin users in the dump'}</p>
-          <p className="flex flex-wrap gap-1.5">{found.map((login) => <Badge key={login} className="font-mono text-[12px]">{login}</Badge>)}</p>
+          <p className="flex flex-wrap gap-1.5">{found.map((login) => <Badge key={login} className="font-mono text-xs">{login}</Badge>)}</p>
           <p className="text-xs text-muted-foreground">Log in with one click signs you in as <code className="font-mono">{found[0]}</code>.</p>
         </div>
       ) : (
@@ -1730,9 +1730,9 @@ function AdminSection({ state, set, input, defaults }: { state: WizardState; set
       </div>
       {create && fields}
       {create && (taken ? (
-        <p role="status" className="rounded-lg border border-warning/40 bg-warning/8 px-3 py-2 text-sm">
+        <Notice tone="warning">
           <code className="font-mono">{user}</code> is in the dump: its password changes to this one and it stays an administrator.
-        </p>
+        </Notice>
       ) : (
         <p className="text-xs text-muted-foreground">A new administrator next to the ones in the dump.</p>
       ))}
@@ -1791,9 +1791,7 @@ function PluginSearch({ value, onChange, found, total, ticked }: { value: string
           className="pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
         />
         {value && (
-          <button type="button" aria-label="Clear the search" onClick={() => onChange('')} className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground hover:bg-foreground/8 hover:text-foreground">
-            <X className="size-3.5" />
-          </button>
+          <IconButton icon={X} label="Clear the search" onClick={() => onChange('')} className="absolute top-1/2 right-1.5 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground [&_svg]:size-3.5" />
         )}
       </div>
       <p className="text-xs text-muted-foreground" aria-live="polite">
@@ -1870,7 +1868,7 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
       <li key={t.name} className="grid gap-1.5 rounded-lg border px-3 py-2.5 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{wp?.name ?? t.name}</span>
-          <code className="font-mono text-[12px] text-muted-foreground">wp-content/themes/{t.name}</code>
+          <code className="font-mono text-xs text-muted-foreground">wp-content/themes/{t.name}</code>
           {t.parent ? <Badge>parent of the active theme</Badge> : <Badge tone="warning">active{t.sites !== undefined && t.sites > 1 ? ` on ${t.sites} sites` : ''}</Badge>}
         </div>
         <p className="text-xs text-muted-foreground">
@@ -1901,7 +1899,7 @@ function MissingPluginsSection({ state, set }: { state: WizardState; set: Setter
       <li key={p.file} className="grid gap-1.5 rounded-lg border px-3 py-2.5 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{wp?.name ?? slug}</span>
-          <code className="font-mono text-[12px] text-muted-foreground">{p.file}</code>
+          <code className="font-mono text-xs text-muted-foreground">{p.file}</code>
           {p.network && <Badge>network</Badge>}
           {p.sites !== undefined && p.sites > 1 && <Badge>{p.sites} sites</Badge>}
         </div>
@@ -1979,7 +1977,7 @@ function HelpersSection({ state, set, query }: { state: WizardState; set: Setter
   const onInDump = (slug: string) => (
     <p key={slug} className="flex items-start gap-2.5 text-sm">
       <Check className="mt-0.5 size-4 shrink-0 text-success" />
-      <span><code className="font-mono text-[13px]">{slug}</code><span className="block text-xs text-muted-foreground">{state.deactivate.includes(slug) ? 'On in the dump; set to deactivate above' : 'On in the dump: it stays on'}</span></span>
+      <span><code className="font-mono text-dense">{slug}</code><span className="block text-xs text-muted-foreground">{state.deactivate.includes(slug) ? 'On in the dump; set to deactivate above' : 'On in the dump: it stays on'}</span></span>
     </p>
   );
   const dumpHelpers = (Object.keys(LOCAL_HELPER_PLUGINS) as LocalHelperPlugin[]).filter((slug) => active.has(slug) && pluginMatches(slug, query));
@@ -2013,7 +2011,7 @@ function HelpersSection({ state, set, query }: { state: WizardState; set: Setter
                   checked={!state.deactivate.includes(slug) && state.activate.includes(slug)}
                   onChange={(v) => toggle(slug, v)}
                   disabled={state.deactivate.includes(slug)}
-                  label={<code className="font-mono text-[13px]">{slug}</code>}
+                  label={<code className="font-mono text-dense">{slug}</code>}
                   hint={state.deactivate.includes(slug) ? 'Set to deactivate above; untick it there to turn it on here' : LOCAL_HELPER_PLUGINS[slug]}
                 />
               ),
@@ -2108,12 +2106,12 @@ function BuildRows({ prefix, title, builds, picks, commands, docsFile, nodes, on
         <input id={id} type="checkbox" checked={choice.on} onChange={(e) => pick(build, { on: e.target.checked })} className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-input accent-[var(--primary)]" />
         <div className="grid min-w-0 flex-1 gap-1">
           <label htmlFor={id} className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1">
-            <code className="font-mono text-[13px]">{install}</code>
+            <code className="font-mono text-dense">{install}</code>
             {build.tool !== 'composer' && <span className="text-muted-foreground">then</span>}
             {choice.fromDocs && <Badge tone="primary">from {docsFile}</Badge>}
           </label>
           {build.tool !== 'composer' && (
-            <Select aria-label={`Script to run in ${build.dir || 'the repo root'}`} value={choice.script ?? ''} onChange={(e) => pick(build, { on: true, script: e.target.value })} className="h-8 font-mono text-[13px]" wrapClassName="max-w-64">
+            <Select aria-label={`Script to run in ${build.dir || 'the repo root'}`} value={choice.script ?? ''} onChange={(e) => pick(build, { on: true, script: e.target.value })} className="h-8 font-mono text-dense" wrapClassName="max-w-64">
               {!choice.script && <option value="">Pick a script</option>}
               {build.scripts.map((name) => (
                 <option key={name} value={name} disabled={Boolean(build.missingTasks?.[name])}>
@@ -2123,7 +2121,7 @@ function BuildRows({ prefix, title, builds, picks, commands, docsFile, nodes, on
             </Select>
           )}
           {build.tool !== 'composer' && nodes.length > 0 && (
-            <Select aria-label={`Node to build ${build.dir || 'the repo root'} with`} value={choice.node ?? ''} onChange={(e) => pickNode(build, e.target.value)} className="h-8 text-[13px]" wrapClassName="max-w-md">
+            <Select aria-label={`Node to build ${build.dir || 'the repo root'} with`} value={choice.node ?? ''} onChange={(e) => pickNode(build, e.target.value)} className="h-8 text-dense" wrapClassName="max-w-md">
               <option value="">{build.node ?? 'The Node the panel picks'}</option>
               {nodes.map((v) => <option key={v} value={v}>{`Node ${v}`}</option>)}
             </Select>
@@ -2208,7 +2206,7 @@ function ClaudeFill({ state, setState, cores }: { state: WizardState; setState: 
       />
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={busy || description.trim().length < 3} onClick={() => void fill()}>
-          {busy ? <LoaderCircle className="animate-spin" /> : <Sparkles />}
+          {busy ? <Spinner /> : <Sparkles />}
           {busy ? 'Claude is reading...' : 'Fill the wizard'}
         </Button>
         <span className="text-xs text-muted-foreground">Reads conventions.md, the repo's docs, your last install of it, the dump facts and your similar sites. You review every step before Install.</span>
@@ -2230,20 +2228,19 @@ function ProjectStatus({ inspection }: { inspection: Inspection }) {
       <div role="status" className="-mt-2 flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/6 px-3 py-2 text-sm">
         <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
         <span>
-          Filled by Claude on <span className="font-mono text-[13px]">{inspection.branch}</span>: {inspection.summary}. {inspection.notes} Check every step before you install.
+          Filled by Claude on <span className="font-mono text-dense">{inspection.branch}</span>: {inspection.summary}. {inspection.notes} Check every step before you install.
         </span>
       </div>
     );
   }
   if (inspection.status === 'reading') {
-    return <p className="-mt-2 flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Reading the repo...</p>;
+    return <p className="-mt-2 flex items-center gap-2 text-xs text-muted-foreground"><Spinner className="size-3.5" />Reading the repo...</p>;
   }
   if (inspection.status === 'found') {
     return (
-      <p role="status" className="-mt-2 flex items-start gap-2 rounded-lg border border-success/30 bg-success/8 px-3 py-2 text-sm">
-        <Check className="mt-0.5 size-4 shrink-0 text-success" />
-        <span>Filled from your last install of this repo, on <span className="font-mono text-[13px]">{inspection.branch}</span>: {inspection.summary}. Check the next steps, then install.</span>
-      </p>
+      <Notice tone="success" className="-mt-2">
+        Filled from your last install of this repo, on <span className="font-mono text-dense">{inspection.branch}</span>: {inspection.summary}. Check the next steps, then install.
+      </Notice>
     );
   }
   if (inspection.status === 'none') {
@@ -2262,72 +2259,20 @@ function ReviewStep({ state, set, input, dbName, cores }: { state: WizardState; 
   const summary = addressSummary(addresses, input.network?.layout);
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <dl className="grid h-fit gap-3 rounded-xl border bg-card p-5 text-sm">
-        {input.path ? (
-          <>
-            <ReviewRow label="Address"><span className="font-mono">https://{input.domain}{input.path}/</span></ReviewRow>
-            <ReviewRow label="Folder"><span className="font-mono">/var/www/{mountFolder(input.domain, input.path)}</span></ReviewRow>
-          </>
-        ) : (
-          <ReviewRow label="Primary domain"><span className="font-mono">{input.domain}</span></ReviewRow>
-        )}
-        {input.aliases.length > 0 && <ReviewRow label="Aliases">{input.aliases.map((a) => <span key={a} className="block font-mono">{a}</span>)}</ReviewRow>}
-        {input.repos.map((r, i) => (
-          <ReviewRow key={`${r.url}|${repoTarget(r)}`} label={input.repos.length > 1 ? (i === 0 ? 'Main repo' : 'Repo') : 'Repo'}>
-            <span className="font-mono break-all">{r.url}</span> <span className="text-muted-foreground">({r.branch}) into </span>
-            <span className="font-mono break-all">{repoTarget(r) || 'the site root'}</span>
-          </ReviewRow>
-        ))}
-        {state.upload && <ReviewRow label="Dump">{state.upload.name} <span className="text-muted-foreground">({bytes(state.upload.size)})</span></ReviewRow>}
-        {input.replace.length > 0 && (
-          <ReviewRow label="Replace">{input.replace.map((r) => <span key={r.from} className="block font-mono text-[13px]">{r.from} → {r.to}</span>)}</ReviewRow>
-        )}
-        {network && (
-          <ReviewRow label="Network">
-            {network.rows.length} sites, {network.layout === 'keep' ? 'each where the dump has it' : network.layout === 'subdirectory' ? `subdirectory network on ${input.domain}` : 'subdomain network'}
-            {network.moves.length === 0
-              ? <span className="text-muted-foreground">, nothing moves</span>
-              : network.moves.map((m) => {
-                  const name = network.rows.find((r) => r.site.id === m.id)?.site.name;
-                  return <span key={m.id} className="block font-mono text-[13px]" title={name}>{m.from.domain}{m.from.path} → {m.to.domain}{m.to.path}</span>;
-                })}
-          </ReviewRow>
-        )}
-        {state.upload && (
-          <ReviewRow label="Search and replace">
-            {summary ?? <span className="text-muted-foreground">skipped: every address in the dump already answers here on https</span>}
-          </ReviewRow>
-        )}
-        {input.core && <ReviewRow label="WordPress">{input.core.mode === 'repo' ? `the repo's own${input.core.version ? `, ${input.core.version}` : ''}` : `${input.core.version ?? ''} · ${input.core.mode === 'wpcore' ? 'shared core' : 'own copy'}`}</ReviewRow>}
-        {input.core && <ReviewRow label="Database"><span className="font-mono">{dbName}</span></ReviewRow>}
-        {input.admin && (
-          <ReviewRow label="Admin">
-            {input.source !== 'repo'
-              ? input.admin.user
-              : input.admin.ifExists === 'keep' && input.admin.ifMissing === 'skip'
-                ? <span className="text-muted-foreground">none added; the database's users stay</span>
-                : <>
-                    {input.admin.user}
-                    <span className="text-muted-foreground">
-                      {input.admin.ifExists === 'keep' ? ': left as it is when the database has it' : ': gets this password and the admin role when the database has it'}
-                      {input.admin.ifMissing === 'create' ? ', created when it does not' : ', not created when it does not'}
-                    </span>
-                  </>}
-          </ReviewRow>
-        )}
-        {input.uploadsFrom && <ReviewRow label="Uploads">missing files load from {input.uploadsFrom}</ReviewRow>}
-        {input.repos.length > 0 && state.inspection.status === 'found' && <ReviewRow label="Settings">from your last install of this repo</ReviewRow>}
-        {input.repos.length > 0 && state.inspection.status === 'claude' && <ReviewRow label="Settings">filled by Claude, reviewed by you</ReviewRow>}
-        {input.repos.length > 0 && (
-          <div className="border-t pt-3">
-            <span className="flex items-center gap-2.5 font-medium">
-              <Switch checked={state.remember} label="Remember these answers for this repo" onChange={(on) => set('remember', on)} />
-              Remember these answers for this repo
-            </span>
-            <p className="mt-1 text-xs text-muted-foreground">The next install of it fills itself from them. See or forget them in <Link href="/settings" className="text-primary hover:underline">Settings</Link>.</p>
-          </div>
-        )}
-      </dl>
+      <Card className="h-fit">
+        <CardBody className="gap-3 p-5">
+          <KeyValue labelWidth="sm" className="gap-y-3" rows={reviewRows(input, state, network, summary, dbName)} />
+          {input.repos.length > 0 && (
+            <div className="border-t pt-3">
+              <span className="flex items-center gap-2.5 font-medium">
+                <Switch checked={state.remember} label="Remember these answers for this repo" onChange={(on) => set('remember', on)} />
+                Remember these answers for this repo
+              </span>
+              <p className="mt-1 text-xs text-muted-foreground">The next install of it fills itself from them. See or forget them in <TextLink href="/settings">Settings</TextLink>.</p>
+            </div>
+          )}
+        </CardBody>
+      </Card>
       <div>
         <p className="text-sm font-medium">The panel will run {steps.length} steps</p>
         <ol className="mt-3 grid gap-1.5 text-sm">
@@ -2344,13 +2289,66 @@ function ReviewStep({ state, set, input, dbName, cores }: { state: WizardState; 
   );
 }
 
-function ReviewRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[8rem_1fr] gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0">{children}</dd>
-    </div>
-  );
+/** What the install is about to do, as label and value: the rows the answers call for. */
+function reviewRows(input: CreateSiteInput, state: WizardState, network: ReturnType<typeof networkFor>, summary: string | null | undefined, dbName: string): KeyValueRow[] {
+  const when = (on: unknown, label: string, value: ReactNode): KeyValueRow[] => (on ? [{ label, value }] : []);
+  return [
+    ...(input.path
+      ? [
+          { label: 'Address', value: <span className="font-mono">https://{input.domain}{input.path}/</span> },
+          { label: 'Folder', value: <span className="font-mono">/var/www/{mountFolder(input.domain, input.path)}</span> },
+        ]
+      : [{ label: 'Primary domain', value: <span className="font-mono">{input.domain}</span> }]),
+    ...when(input.aliases.length > 0, 'Aliases', input.aliases.map((a) => <span key={a} className="block font-mono">{a}</span>)),
+    ...input.repos.map((r, i) => ({
+      key: `${r.url}|${repoTarget(r)}`,
+      label: input.repos.length > 1 ? (i === 0 ? 'Main repo' : 'Repo') : 'Repo',
+      value: (
+        <>
+          <span className="font-mono break-all">{r.url}</span> <span className="text-muted-foreground">({r.branch}) into </span>
+          <span className="font-mono break-all">{repoTarget(r) || 'the site root'}</span>
+        </>
+      ),
+    })),
+    ...when(state.upload, 'Dump', state.upload && <>{state.upload.name} <span className="text-muted-foreground">({bytes(state.upload.size)})</span></>),
+    ...when(input.replace.length > 0, 'Replace', input.replace.map((r) => <span key={r.from} className="block font-mono text-dense">{r.from} → {r.to}</span>)),
+    ...when(
+      network,
+      'Network',
+      network && (
+        <>
+          {network.rows.length} sites, {network.layout === 'keep' ? 'each where the dump has it' : network.layout === 'subdirectory' ? `subdirectory network on ${input.domain}` : 'subdomain network'}
+          {network.moves.length === 0
+            ? <span className="text-muted-foreground">, nothing moves</span>
+            : network.moves.map((m) => {
+                const name = network.rows.find((r) => r.site.id === m.id)?.site.name;
+                return <span key={m.id} className="block font-mono text-dense" title={name}>{m.from.domain}{m.from.path} → {m.to.domain}{m.to.path}</span>;
+              })}
+        </>
+      ),
+    ),
+    ...when(state.upload, 'Search and replace', summary ?? <span className="text-muted-foreground">skipped: every address in the dump already answers here on https</span>),
+    ...when(input.core, 'WordPress', input.core && (input.core.mode === 'repo' ? `the repo's own${input.core.version ? `, ${input.core.version}` : ''}` : `${input.core.version ?? ''} · ${input.core.mode === 'wpcore' ? 'shared core' : 'own copy'}`)),
+    ...when(input.core, 'Database', <span className="font-mono">{dbName}</span>),
+    ...when(
+      input.admin,
+      'Admin',
+      input.admin && (input.source !== 'repo'
+        ? input.admin.user
+        : input.admin.ifExists === 'keep' && input.admin.ifMissing === 'skip'
+          ? <span className="text-muted-foreground">none added; the database's users stay</span>
+          : <>
+              {input.admin.user}
+              <span className="text-muted-foreground">
+                {input.admin.ifExists === 'keep' ? ': left as it is when the database has it' : ': gets this password and the admin role when the database has it'}
+                {input.admin.ifMissing === 'create' ? ', created when it does not' : ', not created when it does not'}
+              </span>
+            </>),
+    ),
+    ...when(input.uploadsFrom, 'Uploads', <>missing files load from {input.uploadsFrom}</>),
+    ...when(input.repos.length > 0 && state.inspection.status === 'found', 'Settings', 'from your last install of this repo'),
+    ...when(input.repos.length > 0 && state.inspection.status === 'claude', 'Settings', 'filled by Claude, reviewed by you'),
+  ];
 }
 
 // ── Install ──────────────────────────────────────────────────
@@ -2374,13 +2372,13 @@ function RunScreen({ input, onBack }: { input: CreateSiteInput; onBack: () => vo
 
   if (error) {
     return (
-      <div className="max-w-3xl rounded-xl border border-danger/30 bg-danger/6 p-4 text-sm">
-        <p className="font-medium text-danger">The install did not start</p>
-        <p className="mt-1">{error}</p>
-        <Button variant="outline" className="mt-3" onClick={onBack}>Back to the answers</Button>
-      </div>
+      <Notice tone="danger" className="max-w-3xl">
+        <p className="font-medium">The install did not start</p>
+        <p className="mt-1 text-foreground">{error}</p>
+        <Button variant="outline" className="mt-3 text-foreground" onClick={onBack}>Back to the answers</Button>
+      </Notice>
     );
   }
-  if (!jobId) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" /> Starting the install...</p>;
+  if (!jobId) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" /> Starting the install...</p>;
   return <JobScreen jobId={jobId} wordpress={input.source !== 'empty'} />;
 }

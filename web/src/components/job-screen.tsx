@@ -7,12 +7,13 @@ import { api } from '@/lib/api';
 import { draftHref } from '@/lib/drafts';
 import { stepsSkipped } from '@/lib/jobs';
 import { waitForRestart } from '@/lib/restart';
-import { Link, navigate } from '@/lib/router';
+import { navigate } from '@/lib/router';
 import { expectRestart } from '@/lib/session-watch';
 import { lastLine, openWpAdmin } from '@/lib/site-actions';
 import { loadThroughRestart } from '@/lib/startup';
 import { cn } from '@/lib/utils';
-import { Notice } from '@/components/page';
+import { Notice } from '@/components/ui/notice';
+import { TextLink } from '@/components/ui/text-link';
 import { Bar, ListSkeleton, Reading } from '@/components/skeletons';
 
 /** Jobs an install from an organization starts on its way: their target is the install draft. */
@@ -67,7 +68,7 @@ export function JobScreen({ jobId, wordpress, wide = false }: { jobId: string; w
     return error ? (
       <Notice tone={error === 'unknown job' ? 'info' : 'danger'}>
         {error === 'unknown job' ? (
-          <>The panel no longer holds this job: it restarted since, or the job is older than the last 20. Its output is in <Link href="/activity/runs" className="underline">Run history</Link>.</>
+          <>The panel no longer holds this job: it restarted since, or the job is older than the last 20. Its output is in <TextLink href="/activity/runs" tone="plain" className="underline">Run history</TextLink>.</>
         ) : (
           error
         )}
@@ -130,19 +131,21 @@ export function JobScreen({ jobId, wordpress, wide = false }: { jobId: string; w
       <StepList steps={steps} open={open} setOpen={setOpen} />
 
       {job.status === 'failed' && failed && !showUndo && (
-        <div className="rounded-xl border border-danger/30 bg-danger/6 p-4">
-          <p className="flex items-center gap-2 text-sm font-medium"><CircleX className="size-4 text-danger" />{failed.label} failed</p>
-          {failed.output && <pre className="mt-2 max-h-48 overflow-auto font-mono text-xs whitespace-pre-wrap text-danger">{lastLine(failed.output)}</pre>}
-          <p className="mt-2 text-sm text-muted-foreground">
-            Fix the cause, then retry. Steps already done are kept.
-            {job.undoable.length > 0 ? ` Undo everything takes back, newest first: ${job.undoable.join('; ')}.` : ' This job made nothing that can be taken back, so there is no undo.'}
-          </p>
-          {failed.skippable && (
-            <p className="mt-2 rounded-md border border-warning/40 bg-warning/8 px-3 py-2 text-sm">
-              <span className="font-medium">The site works without this step.</span> Skip it and the install goes on; the site's page keeps what is left to do: {failed.skippable}
+        <div className="grid gap-3">
+          <Notice tone="danger" icon={false}>
+            <p className="flex items-center gap-2 font-medium text-foreground"><CircleX className="size-4 text-danger" />{failed.label} failed</p>
+            {failed.output && <pre className="mt-2 max-h-48 overflow-auto font-mono text-xs whitespace-pre-wrap text-danger">{lastLine(failed.output)}</pre>}
+            <p className="mt-2 text-muted-foreground">
+              Fix the cause, then retry. Steps already done are kept.
+              {job.undoable.length > 0 ? ` Undo everything takes back, newest first: ${job.undoable.join('; ')}.` : ' This job made nothing that can be taken back, so there is no undo.'}
             </p>
+          </Notice>
+          {failed.skippable && (
+            <Notice tone="warning">
+              <span className="font-medium">The site works without this step.</span> Skip it and the install goes on; the site's page keeps what is left to do: {failed.skippable}
+            </Notice>
           )}
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button onClick={() => void act(api.retryJob)}><RotateCcw />Retry from this step</Button>
             {failed.skippable && <Button variant="outline" onClick={() => void act(api.skipJob)}><SkipForward />Skip and continue</Button>}
             {job.undoable.length > 0 && <Button variant="outline" onClick={() => void act(api.undoJob)}><Trash2 />Undo everything</Button>}
@@ -157,7 +160,7 @@ export function JobScreen({ jobId, wordpress, wide = false }: { jobId: string; w
           {job.status === 'undone' && install && (
             <p className="text-sm text-muted-foreground">
               Removed what this install created.{' '}
-              <button type="button" className="font-medium text-foreground hover:underline" onClick={() => window.location.assign('/sites/new')}>Start again</button>
+              <Button variant="soft" size="xs" className="ml-1" onClick={() => window.location.assign('/sites/new')}>Start again</Button>
             </p>
           )}
         </div>

@@ -21,6 +21,8 @@ interface Props<T extends string> {
   onChange: (value: T) => void;
   /** sm: the second level, the views inside a tab (a database's Tables, SQL). */
   size?: 'default' | 'sm';
+  /** What the tabs choose between, for screen readers ("Scanned versions"). */
+  label?: string;
   className?: string;
 }
 
@@ -31,7 +33,7 @@ const labelText = (item: TabItem<string>): string => (typeof item.label === 'str
  * that do not fit the row go under More, a menu at its end, instead of a
  * row that scrolls sideways.
  */
-export function Tabs<T extends string>({ items, value, onChange, size = 'default', className }: Props<T>) {
+export function Tabs<T extends string>({ items, value, onChange, size = 'default', label, className }: Props<T>) {
   const pad = size === 'sm' ? 'px-2.5 py-1.5 text-dense' : 'px-3 py-2 text-sm';
   const id = useId();
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -102,7 +104,7 @@ export function Tabs<T extends string>({ items, value, onChange, size = 'default
   const hiddenTone = hidden.some((i) => items[i]?.tone === 'danger') ? 'danger' : hidden.some((i) => items[i]?.tone === 'warning') ? 'warning' : undefined;
   return (
     <div className={cn('relative', className)}>
-      <div ref={row} role="tablist" className="flex gap-1 overflow-hidden border-b">
+      <div ref={row} role="tablist" aria-label={label} className="flex gap-1 overflow-hidden border-b">
         {visible.map((i, at) => tab(items[i] as TabItem<T>, i, at))}
         {hidden.length > 0 && (
           <div className="ml-auto flex shrink-0 items-center">

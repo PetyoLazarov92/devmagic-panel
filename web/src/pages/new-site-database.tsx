@@ -1,23 +1,26 @@
 import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerSignIn, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
 import { defaultLeftOut, isWpCliCommand, knownLeftOut, splitSshHost } from '@devmagic-panel/shared';
 import { TablesPicker } from '@/components/tables-picker';
-import { ChevronRight, CircleAlert, Cloud, ExternalLink, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, LoaderCircle, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
+import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { CopyChoice, findings } from '@/components/copy-choice';
 import { DumpFactsCard } from '@/components/dump-facts';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { FilterChips } from '@/components/ui/filter-chips';
 import { Input } from '@/components/ui/input';
 import { SecretInput } from '@/components/ui/secret-input';
 import { Segmented } from '@/components/ui/segmented';
 import { Checkbox, Select } from '@/components/ui/field';
+import { TextLink } from '@/components/ui/text-link';
 import { api, isMockup } from '@/lib/api';
 import { bytes, shortDate, timeAgo } from '@/lib/format';
-import { Link } from '@/lib/router';
 import { asideUploads } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './new-site';
 import { applyOrgAnswers, PrefillSummary } from './new-site-org';
+import { Spinner } from '@/components/ui/spinner';
 
 type SetState = (update: (s: WizardState) => WizardState) => void;
 
@@ -125,7 +128,7 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
             <p className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium">
               <FileArchive className="size-4 text-success" />
               {state.upload.name} ({bytes(state.upload.size)}) is in; the next steps are filled from it.
-              <Button variant="ghost" size="sm" onClick={another}>Pick another dump</Button>
+              <Button variant="soft" size="sm" onClick={another}>Pick another dump</Button>
             </p>
             <DumpFactsCard facts={state.upload.facts} />
           </>
@@ -169,7 +172,7 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
         ))}
       </div>
 
-      <div className="rounded-xl border bg-card p-4 text-sm">
+      <Card className="p-4 text-sm">
         {source === 'claude' && <ClaudeDumps found={found} status={status} working={working} onDownload={(d) => void start('dump.download', { fileId: d.fileId, name: d.name, ...(d.sizeBytes !== null ? { sizeBytes: d.sizeBytes } : {}) })} />}
         {source === 'upload' && <UploadDump onUpload={(up) => setState((s) => withDump(s, up, cores))} />}
         {source === 'downloads' && <FromDownloads working={working} onUse={(file) => void start('dump.useDownloaded', { file })} />}
@@ -195,7 +198,7 @@ export function DatabaseStep({ state, setState, status, cores, draftId, saveNow 
         )}
         {job.job && <div className="mt-4 border-t pt-3"><StepList steps={job.job.steps} open={openStep} setOpen={setOpenStep} /></div>}
         {(job.error || error) && <p role="alert" className="mt-3 text-danger">{job.error ?? error}</p>}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -215,7 +218,7 @@ function ClaudeDumps({ found, status, working, onDownload }: {
           <li key={d.fileId}>
             <button type="button" role="radio" aria-checked={chosen === d.fileId} onClick={() => setChosen(d.fileId)} className={cn('flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2.5 text-left', chosen === d.fileId && 'border-primary ring-3 ring-primary/15')}>
               <FileArchive className="size-4 text-muted-foreground" />
-              <span className="font-mono text-[13px]">{d.name}</span>
+              <span className="font-mono text-dense">{d.name}</span>
               <span className="text-xs text-muted-foreground">{[d.sizeBytes !== null ? bytes(d.sizeBytes) : null, d.modifiedAt ? shortDate(d.modifiedAt) : null, d.foundIn].filter(Boolean).join(' · ')}</span>
             </button>
           </li>
@@ -225,15 +228,13 @@ function ClaudeDumps({ found, status, working, onDownload }: {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {status?.rclone.remote ? (
             <Button disabled={working} onClick={() => onDownload(dump)}>
-              {working ? <LoaderCircle className="animate-spin" /> : <FileArchive />}
+              {working ? <Spinner /> : <FileArchive />}
               Download it with rclone
             </Button>
           ) : (
             <span className="text-muted-foreground">rclone has no Google Drive remote, so download it in the browser and pick it under Downloads folder.</span>
           )}
-          <a href={driveUrl(dump.fileId)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-            Open in Google Drive <ExternalLink className="size-3" />
-          </a>
+          <TextLink href={driveUrl(dump.fileId)}>Open in Google Drive</TextLink>
         </div>
       )}
     </div>
@@ -271,7 +272,7 @@ function UploadDump({ onUpload }: { onUpload: (up: UploadResult) => void }) {
       >
         {progress !== null ? (
           <>
-            <LoaderCircle className="size-6 animate-spin text-primary" />
+            <Spinner className="size-6 text-primary" />
             <span className="font-medium">{progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : 'Reading the dump...'}</span>
           </>
         ) : (
@@ -300,13 +301,13 @@ function FromDownloads({ working, onUse }: { working: boolean; onUse: (file: str
     <div className="grid gap-2">
       <p className="flex items-center gap-2 font-medium">
         Dumps from the last three days
-        <Button variant="ghost" size="sm" onClick={read}><RefreshCw className={cn(loading && 'animate-spin')} />Look again</Button>
+        <Button variant="soft" size="sm" onClick={read}><RefreshCw className={cn(loading && 'animate-spin')} />Look again</Button>
       </p>
       {list && list.length === 0 && <p className="text-muted-foreground">No .sql, .sql.gz or .zip there yet. Download one in the browser, then look again.</p>}
       <ul className="grid gap-1.5">
         {(list ?? []).map((d) => (
           <li key={d.file} className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[13px]">{d.name}</span>
+            <span className="font-mono text-dense">{d.name}</span>
             <span className="text-xs text-muted-foreground">{bytes(d.sizeBytes)} · {timeAgo(d.modifiedAt)}</span>
             <Button size="sm" variant="outline" disabled={working} onClick={() => onUse(d.file)}>Use this file</Button>
           </li>
@@ -338,7 +339,7 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
     api.remoteList(remote, path).then(setEntries, (err: Error) => setError(err.message));
   }, [remote, path]);
 
-  if (!remotes) return <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Asking rclone for its remotes...</p>;
+  if (!remotes) return <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Asking rclone for its remotes...</p>;
   if (!remotes.installed || remotes.remotes.length === 0) {
     return (
       <div className="grid gap-2">
@@ -346,7 +347,7 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
         <p className="text-muted-foreground">
           rclone reaches Google Drive, Dropbox, OneDrive, S3, SFTP, WebDAV and more, each with its own sign-in that the panel never reads.{' '}
           {remotes.installed ? <>Add one in a terminal with <code className="font-mono text-foreground">rclone config</code>, then come back.</> : <>Install it with <code className="font-mono text-foreground">sudo apt install rclone</code>, add a remote with <code className="font-mono text-foreground">rclone config</code>, then come back.</>}{' '}
-          Aura's <Link href="/aura/machine" className="text-primary hover:underline">Machine checks</Link> show where it stands. Until then, download the file in the browser and use Downloads folder.
+          Aura's <TextLink href="/aura/machine">Machine checks</TextLink> show where it stands. Until then, download the file in the browser and use Downloads folder.
         </p>
       </div>
     );
@@ -358,34 +359,35 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
       <div className="grid gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">Remote</span>
-          {remotes.remotes.map((r) => (
-            <button key={r.name} type="button" onClick={() => { setRemote(r.name); setPath(''); }} className={cn('rounded-md border px-2.5 py-1 text-xs', remote === r.name ? 'border-primary bg-primary/8 font-medium' : 'text-muted-foreground hover:border-primary/50')}>
-              {r.name} <span className="text-muted-foreground">({r.type})</span>
-            </button>
-          ))}
+          <FilterChips
+            label="Remote"
+            value={remote}
+            onChange={(name) => { setRemote(name); setPath(''); }}
+            options={remotes.remotes.map((r) => ({ value: r.name, label: `${r.name} (${r.type})` }))}
+          />
         </div>
         <nav aria-label="Folder" className="flex flex-wrap items-center gap-1 font-mono text-xs">
-          <button type="button" className="text-primary hover:underline" onClick={() => setPath('')}>{remote}:</button>
+          <Button variant="ghost" size="xs" className="h-6 px-1 text-primary" onClick={() => setPath('')}>{remote}:</Button>
           {parts.map((p, i) => (
             <span key={`${p}${i}`} className="flex items-center gap-1">
               <ChevronRight className="size-3 text-muted-foreground" />
-              <button type="button" className="text-primary hover:underline" onClick={() => setPath(parts.slice(0, i + 1).join('/'))}>{p}</button>
+              <Button variant="ghost" size="xs" className="h-6 px-1 text-primary" onClick={() => setPath(parts.slice(0, i + 1).join('/'))}>{p}</Button>
             </span>
           ))}
         </nav>
         {error && <p role="alert" className="text-danger">{error}</p>}
-        {!entries && !error && <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading the folder...</p>}
+        {!entries && !error && <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Reading the folder...</p>}
         {entries && (
           <ul className="grid max-h-80 gap-1 overflow-y-auto">
             {entries.length === 0 && <li className="text-muted-foreground">No folders or dumps here.</li>}
             {entries.map((e) => (
               <li key={e.path} className="flex flex-wrap items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/50">
                 {e.dir ? (
-                  <button type="button" className="flex items-center gap-2 font-medium hover:underline" onClick={() => setPath(e.path)}><FolderOpen className="size-4 text-muted-foreground" />{e.name}/</button>
+                  <Button variant="ghost" size="xs" className="-mx-2 gap-2 text-sm" onClick={() => setPath(e.path)}><FolderOpen className="text-muted-foreground" />{e.name}/</Button>
                 ) : (
                   <>
                     <FileArchive className="size-4 text-muted-foreground" />
-                    <span className="font-mono text-[13px]">{e.name}</span>
+                    <span className="font-mono text-dense">{e.name}</span>
                     <span className="text-xs text-muted-foreground">{[e.sizeBytes !== null ? bytes(e.sizeBytes) : null, e.modifiedAt ? shortDate(e.modifiedAt) : null].filter(Boolean).join(' · ')}</span>
                     <Button size="sm" variant="outline" disabled={working} onClick={() => onRemote(remote, e)}>Download</Button>
                   </>
@@ -398,7 +400,7 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
       <div className="grid gap-2 border-t pt-3">
         <label htmlFor="drive-link" className="font-medium">Or paste a link to a Google Drive file</label>
         <div className="flex gap-2">
-          <Input id="drive-link" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://drive.google.com/file/d/.../view" className="font-mono text-[13px]" spellCheck={false} disabled={!drive} />
+          <Input id="drive-link" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://drive.google.com/file/d/.../view" className="font-mono text-dense" spellCheck={false} disabled={!drive} />
           <Button variant="outline" disabled={!drive || working || !/^https:\/\/(drive|docs)\.google\.com\//.test(link.trim())} onClick={() => onDriveLink(link.trim())}>Download</Button>
         </div>
         <p className="text-xs text-muted-foreground">{drive ? `Through ${drive.name}, with your own Google sign-in in rclone; the file keeps its name.` : 'Needs an rclone remote of type drive: add one with rclone config.'}</p>
@@ -414,9 +416,9 @@ function FromUrl({ working, onFetch }: { working: boolean; onFetch: (url: string
     <div className="grid gap-3">
       <label htmlFor="dump-url" className="font-medium">The dump's address</label>
       <div className="flex gap-2">
-        <Input id="dump-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://files.spellbook.example/backups/spellbook.sql.gz" className="font-mono text-[13px]" spellCheck={false} aria-invalid={url.trim() !== '' && !ok ? true : undefined} />
+        <Input id="dump-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://files.spellbook.example/backups/spellbook.sql.gz" className="font-mono text-dense" spellCheck={false} aria-invalid={url.trim() !== '' && !ok ? true : undefined} />
         <Button disabled={!ok || working} onClick={() => onFetch(url.trim())}>
-          {working ? <LoaderCircle className="animate-spin" /> : <HardDriveDownload />}
+          {working ? <Spinner /> : <HardDriveDownload />}
           Download
         </Button>
       </div>
@@ -493,7 +495,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
       <div className="grid gap-3 @xl:grid-cols-2">
         <div className="grid content-start gap-1.5">
           <label htmlFor={`${uid}-host`} className="font-medium">Host</label>
-          <Input id={`${uid}-host`} value={host} onChange={(e) => setHost(e.target.value)} placeholder="staging-spellbook or alex@www.spellbook.example" className="font-mono text-[13px]" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
+          <Input id={`${uid}-host`} value={host} onChange={(e) => setHost(e.target.value)} placeholder="staging-spellbook or alex@www.spellbook.example" className="font-mono text-dense" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
           <p className="text-xs text-muted-foreground">An alias from your ~/.ssh/config, or user@host. Another port goes after it: user@host:2222.</p>
           <ServerPassword id={`${uid}-secret`} host={host.trim()} value={secret} onChange={setSecret} />
         </div>
@@ -505,13 +507,13 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
       <div className="grid gap-1.5">
         <label htmlFor={`${uid}-path`} className="font-medium">{mode === 'export' ? 'The WordPress folder on the server' : 'The dump on the server'}</label>
         {/* The path gets the whole width, as long ones are usual; its buttons sit under it. */}
-        <Input id={`${uid}-path`} value={path} onChange={(e) => setPath(e.target.value)} placeholder={mode === 'export' ? '/var/www/spellbook/public' : '/home/alex/backups/spellbook.sql.gz'} className="font-mono text-[13px]" spellCheck={false} aria-invalid={path.trim() !== '' && !pathOk ? true : undefined} />
+        <Input id={`${uid}-path`} value={path} onChange={(e) => setPath(e.target.value)} placeholder={mode === 'export' ? '/var/www/spellbook/public' : '/home/alex/backups/spellbook.sql.gz'} className="font-mono text-dense" spellCheck={false} aria-invalid={path.trim() !== '' && !pathOk ? true : undefined} />
         {mode === 'export' && (
           <details className="text-xs" open={wpCli !== '' ? true : undefined}>
             <summary className="cursor-pointer font-medium text-primary">WP-CLI has another name on the server?</summary>
             <div className="mt-2 grid gap-1.5">
               <label htmlFor={`${uid}-wpcli`} className="text-sm font-medium text-foreground">WP-CLI command</label>
-              <Input id={`${uid}-wpcli`} value={wpCli} onChange={(e) => setWpCli(e.target.value)} placeholder="wp" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={!wpCliOk ? true : undefined} />
+              <Input id={`${uid}-wpcli`} value={wpCli} onChange={(e) => setWpCli(e.target.value)} placeholder="wp" className="font-mono text-dense" autoComplete="off" spellCheck={false} aria-invalid={!wpCliOk ? true : undefined} />
               <p className={wpCliOk ? 'text-muted-foreground' : 'text-danger'}>
                 {wpCliOk ? 'Empty means wp. Some hosts name it wp-cli, or keep it at a path like ~/bin/wp.' : 'A program name or path only, like wp-cli or ~/bin/wp: no spaces or options.'}
               </p>
@@ -520,7 +522,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
         )}
         {mode === 'export' && (
           <Button variant="outline" className="justify-self-start" disabled={!hostOk || !pathOk || !wpCliOk || reading || working} onClick={() => void readTables()}>
-            {reading ? <LoaderCircle className="animate-spin" /> : <Table2 />}
+            {reading ? <Spinner /> : <Table2 />}
             {tables ? 'Read the tables again' : 'Choose tables to leave out'}
           </Button>
         )}
@@ -554,7 +556,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
       {/* The button that takes it comes last, once everything above is chosen. */}
       <div className="flex flex-wrap gap-2 border-t pt-3">
         <Button disabled={!hostOk || !pathOk || !wpCliOk || working || reading} onClick={() => onTake({ host: host.trim(), mode, path: path.trim(), excludeRows, ...(secret ? { password: secret } : {}), ...command })}>
-          {working ? <LoaderCircle className="animate-spin" /> : <Server />}
+          {working ? <Spinner /> : <Server />}
           {takeLabel ?? (mode === 'export' ? 'Export' : 'Copy')}
         </Button>
         {actions}
@@ -594,7 +596,7 @@ export function ServerPassword({ id, host, value, onChange }: { id: string; host
   }, [host]);
   if (!ok) return null;
   const known = answer?.host === host ? answer : null;
-  if (!known) return <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Checking how {host} signs you in...</p>;
+  if (!known) return <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Spinner className="size-3.5" />Checking how {host} signs you in...</p>;
   const how = known.signIn?.how;
   if (how === 'key') return <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><ShieldCheck className="size-3.5 shrink-0 text-success" />Your SSH key signs in to {host}: no password is needed.</p>;
   if (how === 'refused' || how === 'unknown') return <p role="alert" className="flex items-start gap-1.5 text-xs text-warning"><CircleAlert className="mt-px size-3.5 shrink-0" />{known.signIn?.problem}</p>;
@@ -659,13 +661,13 @@ function FromThisMachine({ working, onTake, exclude }: { working: boolean; onTak
           </Select>
           {view === 'site' && site?.db && (
             <Button variant="outline" disabled={working || reading} onClick={() => void readTables()}>
-              {reading ? <LoaderCircle className="animate-spin" /> : <Table2 />}
+              {reading ? <Spinner /> : <Table2 />}
               Choose tables
             </Button>
           )}
           {view === 'site' && (
             <Button disabled={!ref || working} onClick={() => ref && onTake({ kind: 'site', ...ref, excludeRows: tables ? leftOut : [] })}>
-              {working ? <LoaderCircle className="animate-spin" /> : <HardDrive />}
+              {working ? <Spinner /> : <HardDrive />}
               Export its database
             </Button>
           )}
@@ -680,7 +682,7 @@ function FromThisMachine({ working, onTake, exclude }: { working: boolean; onTak
           {(snapshots ?? []).map((snap) => (
             <li key={snap.name} className="flex flex-wrap items-center gap-2">
               <FileArchive className="size-4 text-muted-foreground" />
-              <span className="font-mono text-[13px]">{snap.label ?? snap.name}</span>
+              <span className="font-mono text-dense">{snap.label ?? snap.name}</span>
               <span className="text-xs text-muted-foreground">{bytes(snap.sizeBytes)} · {timeAgo(snap.createdAt)}</span>
               <Button size="sm" variant="outline" disabled={working || !ref} onClick={() => ref && onTake({ kind: 'snapshot', ...ref, snapshot: snap.name })}>Use it</Button>
             </li>
@@ -694,7 +696,7 @@ function FromThisMachine({ working, onTake, exclude }: { working: boolean; onTak
           {(trash ?? []).map((t) => (
             <li key={t.id} className="flex flex-wrap items-center gap-2">
               <FileArchive className="size-4 text-muted-foreground" />
-              <span className="font-mono text-[13px]">{t.domain}</span>
+              <span className="font-mono text-dense">{t.domain}</span>
               <span className="text-xs text-muted-foreground">{t.reason === 'deleted' ? 'deleted' : 'archived'} {timeAgo(t.deletedAt)}</span>
               <Button size="sm" variant="outline" disabled={working} onClick={() => onTake({ kind: 'archive', id: t.id })}>Use its dump</Button>
             </li>

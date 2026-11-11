@@ -2,6 +2,8 @@ import type { GitDetails, GitPullRequest as PullRequest } from '@devmagic-panel/
 import { fuzzyMatch } from '@devmagic-panel/shared';
 import { Check, ChevronDown, GitPullRequest, GitPullRequestDraft } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 type Branch = GitDetails['branches'][number];
@@ -31,17 +33,15 @@ export function PullBadge({ pull, withTitle = false }: { pull: PullRequest; with
       aria-label={`${label}, opens on ${merge ? 'GitLab' : 'GitHub'}`}
       // Opens the pull request without picking the branch in the list around it.
       onClick={(e) => e.stopPropagation()}
-      className={cn(
-        'inline-flex max-w-full min-w-0 shrink-0 items-center gap-1 rounded-full py-0.5 font-sans text-xs font-medium hover:underline',
-        withTitle ? 'px-2' : 'px-1.5',
-        pull.draft ? 'bg-muted text-muted-foreground' : 'bg-success/12 text-success',
-      )}
+      className="inline-flex max-w-full min-w-0 shrink-0 rounded-full font-sans hover:underline"
     >
-      <Icon className="size-3 shrink-0" />
-      <span className="shrink-0">{ref}</span>
-      {withTitle && <span className="truncate">{pull.title}</span>}
-      {/* In the branch list the draft icon and grey are the marker, to leave room for the name. */}
-      {pull.draft && withTitle && <span className="shrink-0 font-normal">draft</span>}
+      <Badge tone={pull.draft ? 'neutral' : 'success'} className={cn('max-w-full min-w-0', withTitle ? 'px-2' : 'px-1.5')}>
+        <Icon className="size-3 shrink-0" />
+        <span className="shrink-0">{ref}</span>
+        {withTitle && <span className="truncate">{pull.title}</span>}
+        {/* In the branch list the draft icon and grey are the marker, to leave room for the name. */}
+        {pull.draft && withTitle && <span className="shrink-0 font-normal">draft</span>}
+      </Badge>
     </a>
   );
 }
@@ -133,10 +133,11 @@ export function BranchPicker({ id, branches, pulls, value, onChange, disabled, c
         disabled={disabled}
         spellCheck={false}
         autoComplete="off"
-        className="h-10 w-full rounded-md border border-input bg-card pr-9 pl-3 font-mono text-[13px] shadow-xs focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 focus-visible:outline-none disabled:opacity-60"
+        className="h-10 w-full rounded-md border border-input bg-card pr-9 pl-3 font-mono text-dense shadow-xs focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 focus-visible:outline-none disabled:opacity-60"
       />
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon"
         tabIndex={-1}
         aria-label={open ? 'Close the branch list' : 'Open the branch list'}
         disabled={disabled}
@@ -151,10 +152,10 @@ export function BranchPicker({ id, branches, pulls, value, onChange, disabled, c
             document.getElementById(id)?.focus();
           }
         }}
-        className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground disabled:opacity-60"
+        className="absolute inset-y-0 right-0 h-auto w-9 rounded-l-none text-muted-foreground hover:bg-transparent disabled:opacity-60"
       >
         <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} />
-      </button>
+      </Button>
       {open && (
         <ul ref={list} id={listId} role="listbox" className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-md border bg-card py-1 text-sm shadow-lg">
           {shown.length === 0 && <li className="px-3 py-2 text-muted-foreground">No branch matches "{query}"</li>}
@@ -164,7 +165,7 @@ export function BranchPicker({ id, branches, pulls, value, onChange, disabled, c
             const pull = m.branch.current ? undefined : pulls?.get(m.branch.name);
             return (
               <li key={m.branch.name} role="presentation">
-                {groupStart && <p className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-muted-foreground uppercase">{m.branch.remoteOnly ? 'Only on origin' : 'Branches'}</p>}
+                {groupStart && <p className="px-3 pt-1.5 pb-1 text-2xs font-medium text-muted-foreground uppercase">{m.branch.remoteOnly ? 'Only on origin' : 'Branches'}</p>}
                 <div
                   id={`${listId}-${i}`}
                   role="option"
@@ -173,7 +174,7 @@ export function BranchPicker({ id, branches, pulls, value, onChange, disabled, c
                   onMouseDown={(e) => e.preventDefault()}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => pick(m.branch.name)}
-                  className={cn('flex cursor-pointer items-center gap-2 px-3 py-1.5 font-mono text-[13px]', i === active && 'bg-muted')}
+                  className={cn('flex cursor-pointer items-center gap-2 px-3 py-1.5 font-mono text-dense', i === active && 'bg-muted')}
                 >
                   <span className="min-w-0 flex-1 truncate" title={m.branch.name}><Highlight text={m.branch.name} positions={m.positions} /></span>
                   {pull && <PullBadge pull={pull} />}

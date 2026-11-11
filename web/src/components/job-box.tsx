@@ -1,10 +1,11 @@
 import type { JobView } from '@devmagic-panel/shared';
-import { LoaderCircle, RotateCcw, Square, Undo2 } from 'lucide-react';
+import { RotateCcw, Square, Undo2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { settled, StepList } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
 import { Link } from '@/lib/router';
 import { lastLine } from '@/lib/site-actions';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * A job where it was started: under the card whose button started it (or at
@@ -22,7 +23,7 @@ export function JobBox({ job, onRetry, onStop, stopNote }: { job: JobView; onRet
   }, [job.id]);
   return (
     <div ref={ref} className="grid scroll-mt-24 gap-2">
-      <p className="flex items-center gap-2 text-sm font-medium">{!settled(job) && <LoaderCircle className="size-4 animate-spin text-primary" />}{job.title}</p>
+      <p className="flex items-center gap-2 text-sm font-medium">{!settled(job) && <Spinner className="size-4 text-primary" />}{job.title}</p>
       <StepList steps={job.steps} open={open} setOpen={setOpen} />
       {job.stoppable && job.status === 'running' && onStop && (
         <div className="flex flex-wrap items-center gap-2">

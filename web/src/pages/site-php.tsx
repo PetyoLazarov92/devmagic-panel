@@ -8,7 +8,7 @@ import { InfoTables, inheritedValue, SettingField } from '@/components/php-bits'
 import { SaveBar } from '@/components/save-bar';
 import { ScopeLabel } from '@/components/scope-label';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
 import { api } from '@/lib/api';
 import { Link } from '@/lib/router';
@@ -79,8 +79,8 @@ function PhpForm({ site, php, runner, onChanged }: { site: Site; php: SitePhp; r
   return (
     <div className="grid gap-4">
       <Card>
-        <CardHeader><CardTitle>PHP for this site</CardTitle><ScopeLabel>this site</ScopeLabel></CardHeader>
-        <div className="grid gap-5 p-5 text-sm">
+        <CardHeader title="PHP for this site" meta={<ScopeLabel>this site</ScopeLabel>} />
+        <CardBody className="gap-5">
           {php.refused ? (
             <p className="text-muted-foreground">{php.refused}</p>
           ) : (
@@ -145,7 +145,7 @@ function PhpForm({ site, php, runner, onChanged }: { site: Site; php: SitePhp; r
               </p>
             </>
           )}
-        </div>
+        </CardBody>
         {(job || runner.error) && (
           <div className="grid gap-3 border-t px-5 py-4 text-sm">
             {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
@@ -180,17 +180,19 @@ function PhpForm({ site, php, runner, onChanged }: { site: Site; php: SitePhp; r
 function SiteInfo({ site, marked }: { site: Site; marked: Set<string> }) {
   const [open, setOpen] = useState(false);
   return (
-    <details className="group rounded-xl border bg-card" onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
-      <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
-        <span className="min-w-0 flex-1">
-          <span className="block font-medium">PHP info</span>
-          <span className="block text-xs text-muted-foreground">What phpinfo() shows for this site, asked from the PHP that serves it when opened.</span>
-        </span>
-        <Info className="size-4 text-muted-foreground" />
-      </summary>
-      {open && <div className="border-t px-5 py-4 text-sm"><SiteInfoView site={site} marked={marked} /></div>}
-    </details>
+    <Card>
+      <details className="group" onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">PHP info</span>
+            <span className="block text-xs text-muted-foreground">What phpinfo() shows for this site, asked from the PHP that serves it when opened.</span>
+          </span>
+          <Info className="size-4 text-muted-foreground" />
+        </summary>
+        {open && <div className="border-t px-5 py-4 text-sm"><SiteInfoView site={site} marked={marked} /></div>}
+      </details>
+    </Card>
   );
 }
 

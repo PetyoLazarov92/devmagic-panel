@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, CircleX, Layers, LoaderCircle, Undo2 } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleX, Layers, Undo2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { jobActive, jobState } from '@/lib/jobs';
 import { timeAgo } from '@/lib/format';
@@ -7,6 +7,9 @@ import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { TableSkeleton } from '@/components/skeletons';
 import { EmptyState, Notice, PageHeader } from '@/components/page';
+import { Spinner } from '@/components/ui/spinner';
+import { Card } from '@/components/ui/card';
+import { TextLink } from '@/components/ui/text-link';
 
 /** Every job since the panel started: running and queued first, then the newest. Bare: inside Activity, without its own header. */
 export function JobsPage({ bare = false }: { bare?: boolean }) {
@@ -14,11 +17,11 @@ export function JobsPage({ bare = false }: { bare?: boolean }) {
   return (
     <div className={bare ? '' : 'pt-4'}>
       {bare ? (
-        <p className="mt-5 text-sm text-muted-foreground">Installs, imports, restores and other long actions since the panel last started. Older ones are in <Link href="/activity/runs" className="text-primary hover:underline">Run history</Link>.</p>
+        <p className="mt-5 text-sm text-muted-foreground">Installs, imports, restores and other long actions since the panel last started. Older ones are in <TextLink href="/activity/runs">Run history</TextLink>.</p>
       ) : (
         <PageHeader
           title="Jobs"
-          intro={<>Installs, imports, restores and other long actions since the panel last started. Older ones are in <Link href="/activity/runs" className="text-primary hover:underline">Run history</Link>.</>}
+          intro={<>Installs, imports, restores and other long actions since the panel last started. Older ones are in <TextLink href="/activity/runs">Run history</TextLink>.</>}
         />
       )}
       {error && <Notice className="mt-6">{error}</Notice>}
@@ -30,7 +33,7 @@ export function JobsPage({ bare = false }: { bare?: boolean }) {
       {!jobs && loading && <TableSkeleton className="mt-6" columns={4} rows={5} />}
       {jobs && jobs.length > 0 && (
         // The same table as Run history, so the two tabs of Activity read alike.
-        <div className="mt-6 overflow-hidden rounded-xl border bg-card">
+        <Card className="mt-6 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>
@@ -49,7 +52,7 @@ export function JobsPage({ bare = false }: { bare?: boolean }) {
                   <tr key={j.id} className="relative hover:bg-muted/40">
                     <td className="px-4 py-2.5">
                       {jobActive(j) ? (
-                        <LoaderCircle className="size-4 animate-spin text-primary" aria-label="Running" />
+                        <Spinner className="size-4 text-primary" label="Running" />
                       ) : j.status === 'failed' ? (
                         <CircleX className="size-4 text-danger" aria-label="Failed" />
                       ) : j.status === 'undone' ? (
@@ -66,7 +69,7 @@ export function JobsPage({ bare = false }: { bare?: boolean }) {
                       <span className={cn('block text-xs', j.status === 'failed' ? 'text-danger' : j.status === 'done' && skipped ? 'text-warning' : 'text-muted-foreground')}>{jobState(j)}</span>
                     </td>
                     <td className="hidden px-3 py-2.5 sm:table-cell">
-                      {j.target && <Link href={`/sites/${encodeURIComponent(j.target)}`} className="relative z-10 font-mono text-[13px] hover:underline">{j.target}</Link>}
+                      {j.target && <Link href={`/sites/${encodeURIComponent(j.target)}`} className="relative z-10 font-mono text-dense hover:underline">{j.target}</Link>}
                     </td>
                     <td className="hidden px-3 py-2.5 text-right whitespace-nowrap text-muted-foreground tabular-nums sm:table-cell">
                       {jobActive(j) && j.status !== 'queued' ? `${Math.round(j.progress * 100)}%` : j.steps.length ? `${finished} of ${j.steps.length}` : ''}
@@ -77,7 +80,7 @@ export function JobsPage({ bare = false }: { bare?: boolean }) {
               })}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -1,7 +1,9 @@
 import type { LogLine } from '@devmagic-panel/shared';
 import { Pause, Play, Search, Trash2 } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { fileMentions, filesHref } from '@/lib/file-links';
 import { timeAgo } from '@/lib/format';
@@ -10,13 +12,13 @@ import { cn } from '@/lib/utils';
 
 const LEVELS: Array<LogLine['level']> = ['fatal', 'error', 'warning', 'notice', 'deprecated', 'info'];
 
-const levelTone: Record<LogLine['level'], string> = {
-  fatal: 'bg-danger/15 text-danger',
-  error: 'bg-danger/10 text-danger',
-  warning: 'bg-warning/15 text-warning',
-  notice: 'bg-primary/10 text-primary',
-  deprecated: 'bg-muted text-muted-foreground',
-  info: 'bg-muted text-muted-foreground',
+const levelTone: Record<LogLine['level'], 'danger' | 'warning' | 'primary' | 'neutral'> = {
+  fatal: 'danger',
+  error: 'danger',
+  warning: 'warning',
+  notice: 'primary',
+  deprecated: 'neutral',
+  info: 'neutral',
 };
 
 /** Where the files a log names open: the site and its folder on disk. */
@@ -71,34 +73,32 @@ export function LogView({ lines, onClear, files }: { lines: LogLine[]; onClear?:
   }
 
   return (
-    <div className="rounded-xl border bg-card">
+    <Card>
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Levels">
           {LEVELS.filter((l) => counts.get(l)).map((level) => (
-            <button
+            <Button
               key={level}
-              type="button"
+              size="xs"
+              variant="soft"
               aria-pressed={levels.has(level)}
               onClick={() => toggle(level)}
-              className={cn(
-                'rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize transition-colors',
-                levels.has(level) ? 'border-primary bg-primary/10 text-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
+              className={cn('h-6 gap-1 rounded-full px-2.5 capitalize', levels.has(level) ? 'border-primary bg-primary/10 text-foreground hover:border-primary hover:bg-primary/15' : 'text-muted-foreground hover:text-foreground')}
             >
               {level} <span className="tabular-nums opacity-70">{counts.get(level)}</span>
-            </button>
+            </Button>
           ))}
         </div>
         <div className="relative ml-auto w-full sm:w-56">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label="Search the log" className="h-8 pl-8 text-xs" />
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setFollow((f) => !f)} aria-pressed={follow}>
+        <Button size="sm" variant="soft" onClick={() => setFollow((f) => !f)} aria-pressed={follow}>
           {follow ? <Pause /> : <Play />}
           {follow ? 'Following' : 'Paused'}
         </Button>
         {onClear && (
-          <Button size="sm" variant="ghost" onClick={onClear}>
+          <Button size="sm" variant="soft" onClick={onClear}>
             <Trash2 />
             Clear log
           </Button>
@@ -110,12 +110,12 @@ export function LogView({ lines, onClear, files }: { lines: LogLine[]; onClear?:
             <time dateTime={line.time} className="whitespace-nowrap text-muted-foreground" title={new Date(line.time).toLocaleString()}>
               {timeAgo(line.time)}
             </time>
-            <span className={cn('h-fit w-fit rounded px-1.5 py-px text-[11px] font-semibold uppercase', levelTone[line.level])}>{line.level}</span>
+            <Badge tone={levelTone[line.level]} className={cn('h-fit w-fit rounded px-1.5 py-px text-2xs font-semibold uppercase', line.level === 'fatal' && 'ring-1 ring-danger/40')}>{line.level}</Badge>
             <p className="col-span-2 min-w-0 whitespace-pre-wrap text-foreground/90 [overflow-wrap:anywhere] sm:col-span-1"><Message text={line.message} files={files} /></p>
           </li>
         ))}
         {shown.length === 0 && <li className="px-4 py-8 text-center font-sans text-sm text-muted-foreground">Nothing logged{levels.size || query ? ' for this filter' : ''}.</li>}
       </ol>
-    </div>
+    </Card>
   );
 }

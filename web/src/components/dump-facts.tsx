@@ -1,6 +1,8 @@
 import type { DumpFacts } from '@devmagic-panel/shared';
 import { DUMP_SCAN_GB, networkType } from '@devmagic-panel/shared';
 import type { ReactNode } from 'react';
+import { Card, CardBody } from '@/components/ui/card';
+import { KeyValue, type KeyValueRow } from '@/components/ui/key-value';
 import { cn } from '@/lib/utils';
 
 /** A network in WordPress's words: how many sites, and subdirectory, subdomain or a mix. */
@@ -27,32 +29,30 @@ const someOf = (names: string[]) => (names.length <= 3 ? names.join(', ') : `${n
  */
 export function DumpFactsCard({ facts, className, children }: { facts: DumpFacts | null; className?: string; children?: ReactNode }) {
   const admins = facts ? (facts.multisite ? facts.superAdmins : facts.admins) : undefined;
+  const rows: KeyValueRow[] = facts
+    ? [
+        { label: 'Table prefix', value: <code className="font-mono">{facts.tablePrefix ?? 'not found'}</code> },
+        { label: 'Site URL', value: <code className="block truncate font-mono" title={facts.home ?? facts.siteUrl}>{facts.home ?? facts.siteUrl ?? 'not found'}</code> },
+        { label: 'Domains', value: facts.hosts.length },
+        { label: 'Multisite', value: networkSummary(facts) },
+        { label: facts.multisite ? 'Super admins' : 'Admins', key: 'admins', value: admins === undefined ? 'not read' : admins.length ? someOf(admins) : 'none' },
+        { label: 'DB version', value: facts.dbVersion ?? 'not found' },
+      ]
+    : [];
   return (
-    <aside className={cn('h-fit min-w-0 rounded-xl border bg-muted/40 p-4 text-sm', className)}>
-      <p className="font-medium">Found in the dump</p>
-      {facts ? (
-        <dl className="mt-3 grid grid-cols-1 gap-2">
-          <Fact label="Table prefix"><code className="font-mono">{facts.tablePrefix ?? 'not found'}</code></Fact>
-          <Fact label="Site URL" title={facts.home ?? facts.siteUrl}><code className="block truncate font-mono">{facts.home ?? facts.siteUrl ?? 'not found'}</code></Fact>
-          <Fact label="Domains">{facts.hosts.length}</Fact>
-          <Fact label="Multisite" wrap>{networkSummary(facts)}</Fact>
-          <Fact label={facts.multisite ? 'Super admins' : 'Admins'} wrap>{admins === undefined ? 'not read' : admins.length ? someOf(admins) : 'none'}</Fact>
-          <Fact label="DB version">{facts.dbVersion ?? 'not found'}</Fact>
-          {facts.partial && <p className="text-xs text-muted-foreground">Very large dump: only its first {DUMP_SCAN_GB} GB were read, so its admins are not known.</p>}
-        </dl>
-      ) : (
-        <p className="mt-2 text-muted-foreground">Add a dump and the panel reads its table prefix, addresses, network and WordPress version, then suggests the rest.</p>
-      )}
-      {children}
-    </aside>
-  );
-}
-
-function Fact({ label, title, wrap = false, children }: { label: string; title?: string | undefined; wrap?: boolean; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 justify-between gap-3">
-      <dt className="shrink-0 text-muted-foreground">{label}</dt>
-      <dd className={cn('min-w-0 text-right', wrap ? 'break-words' : 'truncate')} title={title}>{children}</dd>
-    </div>
+    <Card className={cn('h-fit min-w-0 bg-muted/40', className)}>
+      <CardBody compact>
+        <p className="font-medium">Found in the dump</p>
+        {facts ? (
+          <>
+            <KeyValue rows={rows} />
+            {facts.partial && <p className="text-xs text-muted-foreground">Very large dump: only its first {DUMP_SCAN_GB} GB were read, so its admins are not known.</p>}
+          </>
+        ) : (
+          <p className="text-muted-foreground">Add a dump and the panel reads its table prefix, addresses, network and WordPress version, then suggests the rest.</p>
+        )}
+        {children}
+      </CardBody>
+    </Card>
   );
 }

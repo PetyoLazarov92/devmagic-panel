@@ -1,6 +1,6 @@
 import type { SlowQuery, SlowQueryReport } from '@devmagic-panel/shared';
 import { readsTooMuch } from '@devmagic-panel/shared';
-import { ChevronDown, Gauge, LoaderCircle, RotateCcw, ScanSearch } from 'lucide-react';
+import { ChevronDown, Gauge, RotateCcw, ScanSearch } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EmptyState, Notice, ViewBar } from '@/components/page';
 import { ListSkeleton, Reading } from '@/components/skeletons';
@@ -15,6 +15,7 @@ import { loadSqlEditor } from '@/lib/sql-editor-load';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 const SOURCE: Record<SlowQueryReport['source'], string> = {
   statements: "From MySQL's statement statistics, which are always on: nothing to switch on, and the slow log is separate.",
@@ -76,7 +77,7 @@ export function SlowQueries({ database, onExplain, inCard = false }: { database?
         actions={
           data && data.source !== 'none' ? (
             <Button size="sm" variant="outline" disabled={resetting} onClick={() => void reset()}>
-              {resetting ? <LoaderCircle className="animate-spin" /> : <RotateCcw />}
+              {resetting ? <Spinner /> : <RotateCcw />}
               Start counting again
             </Button>
           ) : null
@@ -119,7 +120,7 @@ function QueryRow({ query: q, showDatabase, total, onExplain }: { query: SlowQue
   return (
     <div className="grid gap-2 px-5 py-3 text-sm">
       <button type="button" className="grid cursor-pointer gap-2 text-left" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <code className={cn('font-mono text-[12.5px] break-all', !open && 'line-clamp-2')}>{q.text}</code>
+        <code className={cn('font-mono text-dense break-all', !open && 'line-clamp-2')}>{q.text}</code>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {showDatabase && q.database && <span className="font-medium text-foreground">{q.database}</span>}
           <span>{count(q.count)} runs</span>

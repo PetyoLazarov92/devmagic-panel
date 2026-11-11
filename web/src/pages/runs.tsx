@@ -1,7 +1,8 @@
 import { RUN_KEEP_DAYS, RUN_KEEP_MAX, type RunSummary } from '@devmagic-panel/shared';
-import { ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleSlash, CircleX, History, LoaderCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleSlash, CircleX, History } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { duration, timeAgo } from '@/lib/format';
 import { stepsSkipped } from '@/lib/jobs';
@@ -9,6 +10,8 @@ import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { EmptyState, Notice, PageHeader } from '@/components/page';
 import { Reading, TableSkeleton } from '@/components/skeletons';
+import { Spinner } from '@/components/ui/spinner';
+import { TextLink } from '@/components/ui/text-link';
 
 /** The page in the address, so a page can be reloaded or linked: /runs?page=3. */
 function pageFromUrl(): number {
@@ -23,7 +26,7 @@ export function pageList(current: number, last: number): Array<number | null> {
 }
 
 export function RunStatus({ run }: { run: RunSummary }) {
-  if (run.ok === null) return <LoaderCircle className="size-4 animate-spin text-primary" aria-label="Running" />;
+  if (run.ok === null) return <Spinner className="size-4 text-primary" label="Running" />;
   if (run.interrupted) return <CircleSlash className="size-4 text-warning" aria-label="Interrupted" />;
   if (run.ok && run.skipped) return <CircleAlert className="size-4 text-warning" aria-label={`Succeeded, ${stepsSkipped(run.skipped)}`} />;
   return run.ok ? <CircleCheck className="size-4 text-success" aria-label="Succeeded" /> : <CircleX className="size-4 text-danger" aria-label="Failed" />;
@@ -72,18 +75,17 @@ export function RunsPage({ bare = false }: { bare?: boolean }) {
         </div>
       )}
       {data?.total === 0 && (
-        <EmptyState className="mt-6" icon={History} title="No runs yet" action={<Link href="/sites" className="text-sm font-medium text-primary hover:underline">Go to your sites</Link>}>
+        <EmptyState className="mt-6" icon={History} title="No runs yet" action={<TextLink href="/sites" className="text-sm">Go to your sites</TextLink>}>
           Every action you run here, like an install, a cache clear or a snapshot, shows up with its result and what it printed.
         </EmptyState>
       )}
       {data && data.total > 0 && runs.length === 0 && (
-        <p className="mt-6 rounded-lg border bg-card px-4 py-3 text-sm">
-          Page {page} is past the last one.{' '}
-          <button type="button" className="font-medium text-primary hover:underline" onClick={() => go(1)}>Go to the newest runs</button>
-        </p>
+        <Notice tone="info" className="mt-6" action={<Button size="sm" variant="outline" onClick={() => go(1)}>Go to the newest runs</Button>}>
+          Page {page} is past the last one.
+        </Notice>
       )}
       {runs.length > 0 && (
-        <div className="mt-6 overflow-hidden rounded-xl border bg-card">
+        <Card className="mt-6 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>
@@ -104,7 +106,7 @@ export function RunsPage({ bare = false }: { bare?: boolean }) {
                     <span className="block font-mono text-xs text-muted-foreground">{r.action}{r.interrupted ? ' · interrupted' : ''}{r.skipped ? <span className="text-warning">{` · ${stepsSkipped(r.skipped)}`}</span> : null}</span>
                   </td>
                   <td className="hidden px-3 py-2.5 sm:table-cell">
-                    {r.target && <Link href={`/sites/${encodeURIComponent(r.target)}`} className="relative z-10 font-mono text-[13px] hover:underline">{r.target}</Link>}
+                    {r.target && <Link href={`/sites/${encodeURIComponent(r.target)}`} className="relative z-10 font-mono text-dense hover:underline">{r.target}</Link>}
                   </td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap text-muted-foreground">{timeAgo(r.startedAt)}</td>
                   <td className="hidden px-4 py-2.5 text-right text-muted-foreground tabular-nums sm:table-cell">{r.durationMs !== undefined ? duration(r.durationMs) : ''}</td>
@@ -112,7 +114,7 @@ export function RunsPage({ bare = false }: { bare?: boolean }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
       {data && data.total > 0 && last === 1 && (
         <p className="mt-3 text-sm text-muted-foreground">{data.total === 1 ? '1 run' : `${data.total.toLocaleString()} runs`}</p>
@@ -132,7 +134,7 @@ export function RunsPage({ bare = false }: { bare?: boolean }) {
           <Button size="sm" variant="outline" disabled={page >= last || loading} onClick={() => go(page + 1)} aria-label="Older runs"><ChevronRight /></Button>
           <span className="ml-2 text-muted-foreground">
             {`${(page - 1) * data.pageSize + 1} to ${Math.min(page * data.pageSize, data.total)} of ${data.total.toLocaleString()}`}
-            {loading && <LoaderCircle className="ml-2 inline size-4 animate-spin" />}
+            {loading && <Spinner className="ml-2 inline size-4" />}
           </span>
         </nav>
       )}

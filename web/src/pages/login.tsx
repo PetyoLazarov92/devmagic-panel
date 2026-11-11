@@ -1,16 +1,18 @@
-import { ArrowLeft, ChevronRight, KeyRound, LoaderCircle, LockKeyhole, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, ChevronRight, KeyRound, LockKeyhole, TriangleAlert } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { LoginArt } from '@/components/login-art';
 import { Logo } from '@/components/logo';
 import { CopyCommand, NewPassword, newPasswordOk } from '@/components/panel-password';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
 import { PasswordInput } from '@/components/ui/password-input';
 import { SecretInput } from '@/components/ui/secret-input';
 import { api, ApiError } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { navigate, usePath } from '@/lib/router';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 interface Props {
   setupRequired: boolean;
@@ -86,7 +88,7 @@ export function LoginPage({ setupRequired, user, onLogin }: Props) {
             <>
               <h1 className="text-2xl font-semibold tracking-tight">{greeting()}{user ? `, ${user}` : ''}</h1>
               <p className="mt-1 text-sm text-muted-foreground">Log in to your local sites.</p>
-              {wasReset && <p role="status" className="mt-5 rounded-lg border border-success/30 bg-success/8 px-4 py-3 text-sm">Password reset. Log in with the new one.</p>}
+              {wasReset && <Notice tone="success" className="mt-5">Password reset. Log in with the new one.</Notice>}
               <LoginForm
                 className="mt-6"
                 {...(user ? { user } : {})}
@@ -163,7 +165,7 @@ function ResetPassword({ onDone, onBack }: { onDone: () => void; onBack: () => v
       </p>
 
       {loadError && <p role="alert" className="mt-5 text-danger">{loadError}</p>}
-      {!ways && !loadError && <p className="mt-5 flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Checking what this computer allows...</p>}
+      {!ways && !loadError && <p className="mt-5 flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Checking what this computer allows...</p>}
 
       {ways?.system && (
         <form className="mt-6 grid gap-4" onSubmit={(e) => void submit(e)} autoComplete="off">
@@ -176,7 +178,7 @@ function ResetPassword({ onDone, onBack }: { onDone: () => void; onBack: () => v
           {locked && <p role="alert" className="text-danger">Too many attempts: try again after {clock(locked)}, or use a terminal.</p>}
           {error && !locked && <p role="alert" className="text-danger">{error}</p>}
           <Button type="submit" className="w-full" disabled={busy || Boolean(locked) || !system || !newPasswordOk(next, repeat)}>
-            {busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
+            {busy ? <Spinner /> : <KeyRound />}
             Reset password
           </Button>
         </form>
@@ -311,7 +313,7 @@ export function LoginForm({ onLogin, className, user, onTyping, onForgot }: {
         </p>
       )}
       <Button type="submit" className="mt-4 w-full" disabled={busy || password.length === 0 || retryAt !== null}>
-        {busy ? <LoaderCircle className="animate-spin" /> : <LockKeyhole />}
+        {busy ? <Spinner /> : <LockKeyhole />}
         Log in
       </Button>
       {(onForgot || last) && (

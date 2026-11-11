@@ -1,21 +1,23 @@
 import type { ApacheModule, ApacheReport, ApacheVhost } from '@devmagic-panel/shared';
-import { FileCode2, Lock, LoaderCircle, Puzzle, RefreshCw, ScrollText, Server } from 'lucide-react';
+import { FileCode2, Lock, Puzzle, RefreshCw, ScrollText, Server } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { LogView } from '@/components/log-view';
 import { StatusDot } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
+import { FilterChips } from '@/components/ui/filter-chips';
+import { KeyValue } from '@/components/ui/key-value';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { shortDate, timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
-import { cn } from '@/lib/utils';
 import { runRestarting } from '@/lib/restarting';
 import { CardsSkeleton, LogSkeleton } from '@/components/skeletons';
 import { Notice } from '@/components/page';
+import { Spinner } from '@/components/ui/spinner';
 
 type VhostFilter = 'all' | 'enabled' | 'disabled' | 'managed';
 const FILTERS: Array<{ value: VhostFilter; label: string; test: (v: ApacheVhost) => boolean }> = [
@@ -55,8 +57,8 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader><CardTitle>Configuration</CardTitle><Server className="size-4 text-muted-foreground" /></CardHeader>
-        <div className="grid gap-3 p-5 text-sm">
+        <CardHeader title="Configuration" meta={<Server className="size-4 text-muted-foreground" />} />
+        <CardBody className="gap-3">
           <p className="flex items-center gap-2">
             <StatusDot status={test.ok === null ? 'warn' : test.ok ? 'ok' : 'fail'} />
             <span className="font-medium">{test.ok === null ? 'configtest could not run' : test.ok ? 'configtest passes' : 'configtest fails'}</span>
@@ -77,11 +79,11 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
                 });
               }}
             >
-              {reloading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+              {reloading ? <Spinner /> : <RefreshCw />}
               Reload Apache
             </Button>
           </div>
-        </div>
+        </CardBody>
       </Card>
 
       <GlanceCard report={data} />
@@ -89,20 +91,14 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
       <ModulesCard modules={data.modules} onChanged={report.reload} />
 
       <Card className="lg:col-span-2">
-        <CardHeader><CardTitle>Vhosts</CardTitle><FileCode2 className="size-4 text-muted-foreground" /></CardHeader>
-        <div className="flex flex-wrap gap-1.5 px-5 pt-4" role="group" aria-label="Show">
-          {FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              aria-pressed={filter === f.value}
-              onClick={() => setFilter(f.value)}
-              className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === f.value ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
-            >
-              {f.label} <span className="tabular-nums">{data.vhosts.filter(f.test).length}</span>
-            </button>
-          ))}
-        </div>
+        <CardHeader title="Vhosts" meta={<FileCode2 className="size-4 text-muted-foreground" />} />
+        <FilterChips
+          label="Show"
+          value={filter}
+          onChange={setFilter}
+          className="px-5 pt-4"
+          options={FILTERS.map((f) => ({ value: f.value, label: f.label, count: data.vhosts.filter(f.test).length }))}
+        />
         <ul className="mt-2 divide-y">
           {shown.map((v) => {
             const cert = v.certExpiresAt ? certNote(v.certExpiresAt) : null;
@@ -132,7 +128,7 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
       </Card>
 
       <Card className="lg:col-span-2">
-        <CardHeader><CardTitle>Error log</CardTitle><ScrollText className="size-4 text-muted-foreground" /></CardHeader>
+        <CardHeader title="Error log" meta={<ScrollText className="size-4 text-muted-foreground" />} />
         <div className="grid gap-3 p-5">
           <p className="font-mono text-xs break-all text-muted-foreground">{log.data?.file ?? data.errorLog}</p>
           {log.data && !log.data.exists && <p className="text-sm text-muted-foreground">The log file does not exist, or the panel cannot read it.</p>}
@@ -159,26 +155,28 @@ function GlanceCard({ report }: { report: ApacheReport }) {
   const enabled = report.vhosts.filter((v) => v.enabled).length;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Apache</CardTitle>
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <StatusDot status={server.state === 'running' ? 'ok' : server.state === 'stopped' ? 'fail' : 'warn'} />
-          {server.state === 'missing' ? 'not installed' : server.state}
-          {server.since && ` · ${upFor(server.since)}`}
-        </span>
-      </CardHeader>
-      <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-2 p-5 text-sm">
-        <dt className="text-muted-foreground">Version</dt>
-        <dd>{server.version ?? 'unknown'}</dd>
-        <dt className="text-muted-foreground">Workers</dt>
-        <dd>{server.mpm ? <><span className="font-mono text-[13px]">{server.mpm}</span>{server.php && server.mpm === 'mpm_prefork' && <span className="text-xs text-muted-foreground"> · mod_php needs it</span>}</> : 'unknown'}</dd>
-        <dt className="text-muted-foreground">PHP</dt>
-        <dd>{server.php ? `mod_php ${server.php}` : 'not loaded'}</dd>
-        <dt className="text-muted-foreground">Listens on</dt>
-        <dd>{server.ports.length ? server.ports.join(', ') : 'unknown'}</dd>
-        <dt className="text-muted-foreground">Sites</dt>
-        <dd>{report.vhosts.length} vhosts, {enabled} enabled</dd>
-      </dl>
+      <CardHeader
+        title="Apache"
+        meta={
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <StatusDot status={server.state === 'running' ? 'ok' : server.state === 'stopped' ? 'fail' : 'warn'} />
+            {server.state === 'missing' ? 'not installed' : server.state}
+            {server.since && ` · ${upFor(server.since)}`}
+          </span>
+        }
+      />
+      <CardBody>
+        <KeyValue
+          labelWidth="sm"
+          rows={[
+            { label: 'Version', value: server.version ?? 'unknown' },
+            { label: 'Workers', value: server.mpm ? <><span className="font-mono text-dense">{server.mpm}</span>{server.php && server.mpm === 'mpm_prefork' && <span className="text-xs text-muted-foreground"> · mod_php needs it</span>}</> : 'unknown' },
+            { label: 'PHP', value: server.php ? `mod_php ${server.php}` : 'not loaded' },
+            { label: 'Listens on', value: server.ports.length ? server.ports.join(', ') : 'unknown' },
+            { label: 'Sites', value: `${report.vhosts.length} vhosts, ${enabled} enabled` },
+          ]}
+        />
+      </CardBody>
     </Card>
   );
 }
@@ -204,11 +202,8 @@ function ModulesCard({ modules, onChanged }: { modules: ApacheModule[]; onChange
 
   return (
     <Card className="lg:col-span-2">
-      <CardHeader>
-        <CardTitle>Apache modules</CardTitle>
-        {modules.length > 0 ? <span className="text-xs text-muted-foreground">{on} of {modules.length} on</span> : <Puzzle className="size-4 text-muted-foreground" />}
-      </CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="Apache modules" meta={modules.length > 0 ? <span className="text-xs text-muted-foreground">{on} of {modules.length} on</span> : <Puzzle className="size-4 text-muted-foreground" />} />
+      <CardBody>
         {modules.length === 0 ? (
           <p className="text-muted-foreground">No modules found in mods-available.</p>
         ) : (
@@ -218,19 +213,12 @@ function ModulesCard({ modules, onChanged }: { modules: ApacheModule[]; onChange
                 Every module in mods-available. A switch runs <code className="font-mono">a2enmod</code> or <code className="font-mono">a2dismod</code> and a configtest; when the configtest fails the change is taken back. Then Apache restarts.
               </p>
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                <div className="flex gap-1.5" role="group" aria-label="Show">
-                  {(['all', 'on', 'off'] as const).map((f) => (
-                    <button
-                      key={f}
-                      type="button"
-                      aria-pressed={filter === f}
-                      onClick={() => setFilter(f)}
-                      className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === f ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
-                    >
-                      {f === 'all' ? 'All' : f === 'on' ? 'On' : 'Off'} <span className="tabular-nums">{count(f)}</span>
-                    </button>
-                  ))}
-                </div>
+                <FilterChips
+                  label="Show"
+                  value={filter}
+                  onChange={setFilter}
+                  options={(['all', 'on', 'off'] as const).map((f) => ({ value: f, label: f === 'all' ? 'All' : f === 'on' ? 'On' : 'Off', count: count(f) }))}
+                />
                 <Input aria-label="Filter modules" placeholder="Filter" value={query} onChange={(e) => setQuery(e.target.value)} className="w-full sm:w-44" />
               </div>
             </div>
@@ -241,7 +229,7 @@ function ModulesCard({ modules, onChanged }: { modules: ApacheModule[]; onChange
                 {shown.map((m) => (
                   <li key={m.name} className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
                     <div className="min-w-0">
-                      <code className="font-mono text-[13px]">{m.name}</code>
+                      <code className="font-mono text-dense">{m.name}</code>
                       {m.locked && (
                         <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
                           <Lock className="size-3 shrink-0" />
@@ -250,7 +238,7 @@ function ModulesCard({ modules, onChanged }: { modules: ApacheModule[]; onChange
                       )}
                     </div>
                     <span className="flex shrink-0 items-center gap-2">
-                      {busy === m.name && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+                      {busy === m.name && <Spinner className="size-4 text-muted-foreground" />}
                       <Switch
                         checked={m.enabled}
                         label={m.locked ? `${m.name} (${m.locked.toLowerCase()}, stays ${m.enabled ? 'on' : 'off'})` : m.name}
@@ -264,7 +252,7 @@ function ModulesCard({ modules, onChanged }: { modules: ApacheModule[]; onChange
             )}
           </>
         )}
-      </div>
+      </CardBody>
     </Card>
   );
 }

@@ -169,7 +169,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
           <p className="text-base font-semibold">{asking.label}?</p>
           <p className="text-sm text-muted-foreground">{asking.confirm}</p>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setAsking(null)}>Cancel</Button>
+            <Button variant="soft" onClick={() => setAsking(null)}>Cancel</Button>
             <Button autoFocus onClick={() => pick(asking)}>{asking.label}</Button>
           </div>
         </div>
@@ -194,7 +194,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
               aria-activedescendant={shown[active] ? `cmd-${shown[active].id}` : undefined}
               className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
-            <kbd className="rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">Esc</kbd>
+            <kbd className="rounded border bg-muted px-1.5 font-mono text-2xs text-muted-foreground">Esc</kbd>
           </div>
           <ul id="palette-list" role="listbox" className="max-h-80 overflow-auto p-1.5">
             {shown.map((c, i) => {
@@ -202,7 +202,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
               lastGroup = c.group;
               return (
                 <li key={c.id} role="presentation">
-                  {header && <p className="px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{header}</p>}
+                  {header && <p className="px-2.5 pt-2 pb-1 text-2xs font-medium tracking-wide text-muted-foreground uppercase">{header}</p>}
                   <div
                     id={`cmd-${c.id}`}
                     role="option"

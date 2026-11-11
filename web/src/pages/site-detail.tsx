@@ -4,7 +4,7 @@ import { WordPressSummary } from '@/components/wordpress-summary';
 import { GitTidyDialog } from '@/components/git-tidy';
 import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, sameRepo, SITE_SERVER_LABEL, siteRepos, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import {
-  ArrowDownToLine, ArrowLeft, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LoaderCircle, LogIn, Network, RefreshCw,
+  ArrowDownToLine, ArrowLeft, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LogIn, Network, RefreshCw,
   ShieldCheck, SkipForward, Sparkles, SquareTerminal, Trash2, Wrench, X,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -17,14 +17,21 @@ import { LogView } from '@/components/log-view';
 import { coreLabel, installLabel, IssueRow, NETWORK_TYPE_LABEL, NetworkBadge, siteSubtitle, siteUrl, StatusDot, vscodeUrl } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
+import { FilterChips } from '@/components/ui/filter-chips';
+import { KeyValue } from '@/components/ui/key-value';
 import { Menu } from '@/components/ui/menu';
+import { Notice } from '@/components/ui/notice';
+import { Segmented } from '@/components/ui/segmented';
+import { StatTile } from '@/components/ui/stat-tile';
 import { Switch } from '@/components/ui/switch';
 import { Tabs } from '@/components/ui/tabs';
+import { TextLink } from '@/components/ui/text-link';
+import { CheckAgain } from '@/components/page';
 import { lastLine, openWpAdmin, runWithToast } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { api } from '@/lib/api';
@@ -46,6 +53,7 @@ import { siteHref, siteName, siteTarget, takeoverHref } from '@/lib/site-ref';
 import { debugLabel, debugValues, siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
 import { filesHref } from '@/lib/file-links';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 /** A tab's address: the site's page with ?tab=, nothing for Overview. Not a path segment, which a site under that path would own. */
 const tabHref = (site: { domain: string; path?: string }, tab: Tab, extra = '') => `${siteHref(site)}${tab === 'overview' ? '' : `?tab=${tab}${extra}`}`;
@@ -93,9 +101,9 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         <Link href="/sites" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-4" /> Sites
         </Link>
-        <p className="rounded-lg border border-warning/40 bg-warning/8 px-4 py-3 text-sm">
-          {siteName(site)} is still being installed. Its actions open once the install finishes. <button type="button" className="font-medium hover:underline" onClick={reload}>Check again</button>
-        </p>
+        <Notice tone="warning" action={<CheckAgain size="sm" onClick={reload} />}>
+          {siteName(site)} is still being installed. Its actions open once the install finishes.
+        </Notice>
         <JobScreen jobId={site.installing} />
       </div>
     );
@@ -117,13 +125,15 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
       </Link>
 
       {site.busy && (
-        <p role="status" className="mt-3 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/8 px-4 py-3 text-sm">
-          <LoaderCircle className="size-4 shrink-0 animate-spin text-warning" />
-          <span>
-            Busy: {site.busy.title}. Its actions wait until that finishes.{' '}
-            {site.busy.jobId && <Link href={`/jobs/${encodeURIComponent(site.busy.jobId)}`} className="font-medium hover:underline">See progress</Link>}
+        <Notice tone="warning" icon={false} className="mt-3">
+          <span className="flex items-center gap-2">
+            <Spinner className="size-4 shrink-0 text-warning" />
+            <span>
+              Busy: {site.busy.title}. Its actions wait until that finishes.{' '}
+              {site.busy.jobId && <Link href={`/jobs/${encodeURIComponent(site.busy.jobId)}`} className="font-medium hover:underline">See progress</Link>}
+            </span>
           </span>
-        </p>
+        </Notice>
       )}
 
       <header className="mt-3 flex flex-wrap items-start justify-between gap-4">
@@ -142,7 +152,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
               {under.map((s, i) => (
                 <span key={s.path}>
                   {i > 0 && ', '}
-                  <Link href={siteHref(s)} className="font-mono text-[13px] text-foreground hover:underline">{s.path}</Link>
+                  <Link href={siteHref(s)} className="font-mono text-dense text-foreground hover:underline">{s.path}</Link>
                   {s.title && <> ({s.title})</>}
                 </span>
               ))}
@@ -150,7 +160,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
           )}
           {site.path && (
             <p className="mt-1 pl-5.5 text-sm text-muted-foreground">
-              Under <Link href={`/sites/${encodeURIComponent(site.domain)}`} className="font-mono text-[13px] text-foreground hover:underline">{site.domain}</Link>: its own folder, database and git; the vhost, certificate and hosts line are there.
+              Under <Link href={`/sites/${encodeURIComponent(site.domain)}`} className="font-mono text-dense text-foreground hover:underline">{site.domain}</Link>: its own folder, database and git; the vhost, certificate and hosts line are there.
             </p>
           )}
         </div>
@@ -180,11 +190,11 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
       </header>
 
       {site.issues.length > 0 && (
-        <div className={cn('mt-5 rounded-xl border px-4 py-3', site.health === 'fail' ? 'border-danger/30 bg-danger/6' : 'border-warning/30 bg-warning/6')}>
+        <Notice tone={site.health === 'fail' ? 'danger' : 'warning'} icon={false} className="mt-5 text-foreground">
           <div className="grid gap-1.5">
             {site.issues.map((issue) => <IssueRow key={issue.text} issue={issue} onFixed={reload} />)}
           </div>
-        </div>
+        </Notice>
       )}
 
       <Tabs
@@ -265,7 +275,7 @@ function DebugSettings({ site, onChanged }: { site: Site; onChanged: () => void 
           </p>
         </div>
         <span className="flex items-center gap-2">
-          {busy && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+          {busy && <Spinner className="size-4 text-muted-foreground" />}
           {DEBUG_PRESETS.map((p) => (
             <Button key={p.label} size="sm" variant="outline" disabled={busy || p.label === debugLabel(site)} onClick={() => void apply(p.constants)}>{p.label}</Button>
           ))}
@@ -281,7 +291,7 @@ function DebugSettings({ site, onChanged }: { site: Site; onChanged: () => void 
               id={`debug-${n}`}
               checked={wanted[n]}
               onChange={(v) => setWanted((w) => ({ ...w, [n]: v }))}
-              label={<code className="font-mono text-[13px]">{n}</code>}
+              label={<code className="font-mono text-dense">{n}</code>}
               hint={`${DEBUG_HINT[n]}${site.debug.constants[n] === null ? ' (default)' : ''}`}
             />
           ))}
@@ -289,7 +299,7 @@ function DebugSettings({ site, onChanged }: { site: Site; onChanged: () => void 
         {Object.keys(changed).length > 0 && (
           <div className="mt-3 flex gap-2">
             <Button size="sm" disabled={busy} onClick={() => void apply(changed)}>Apply</Button>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setWanted(current)}>Reset</Button>
+            <Button size="sm" variant="soft" disabled={busy} onClick={() => setWanted(current)}>Reset</Button>
           </div>
         )}
       </details>
@@ -305,24 +315,14 @@ function DebugSettings({ site, onChanged }: { site: Site; onChanged: () => void 
  */
 function Tile({ label, value, detail, tone, loading, onOpen }: { label: string; value?: string; detail?: string; tone?: 'warning' | 'danger'; loading?: 'value' | 'detail'; onOpen: () => void }) {
   return (
-    <button
-      type="button"
+    <StatTile
+      label={label}
+      value={loading === 'value' ? <Bar className="my-0.5 h-4 w-20" /> : value}
+      sub={loading ? <span className="flex h-4 items-center"><Bar className="h-2.5 w-24" /><span className="sr-only">Reading...</span></span> : detail}
+      tone={tone ?? 'neutral'}
       onClick={onOpen}
-      aria-busy={loading ? true : undefined}
-      className={cn(
-        'grid min-w-0 gap-0.5 rounded-xl border bg-card px-4 py-3 text-left transition-colors hover:bg-muted/60',
-        tone === 'danger' && 'border-danger/30',
-        tone === 'warning' && 'border-warning/40',
-      )}
-    >
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {loading === 'value' ? <Bar className="my-0.5 h-4 w-20" /> : <span className="truncate text-sm font-medium">{value}</span>}
-      {loading ? (
-        <span className="flex h-4 items-center"><Bar className="h-2.5 w-24" /><span className="sr-only">Reading...</span></span>
-      ) : (
-        detail && <span className={cn('truncate text-xs', tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-muted-foreground')}>{detail}</span>
-      )}
-    </button>
+      className="px-4 py-3"
+    />
   );
 }
 
@@ -439,7 +439,7 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
   return (
     <div className="grid gap-4">
       {site.install?.skipped && site.install.skipped.length > 0 && (
-        <div className="rounded-xl border border-warning/40 bg-warning/6 px-4 py-3 text-sm">
+        <Notice tone="warning" icon={false}>
           <p className="flex items-center gap-2 font-medium"><SkipForward className="size-4 text-warning" />Skipped when it was installed</p>
           <p className="mt-0.5 text-xs text-muted-foreground">Did one yourself? Mark it done to take it off this list. The job and Run history keep it as skipped.</p>
           <ul className="mt-2 grid gap-2">
@@ -449,13 +449,13 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
                   <span className="font-medium">{s.label}.</span> <span className="break-words text-muted-foreground">{s.todo}</span>
                 </span>
                 <Button size="sm" variant="outline" disabled={marking !== null} onClick={() => void markDone(s.label)} aria-label={`Mark ${s.label} done`}>
-                  {marking === s.label ? <LoaderCircle className="animate-spin" /> : <Check />}
+                  {marking === s.label ? <Spinner /> : <Check />}
                   Done
                 </Button>
               </li>
             ))}
           </ul>
-        </div>
+        </Notice>
       )}
 
       <SiteTiles site={site} cron={cron} logErrors={logErrors} onOpen={onOpen} />
@@ -463,13 +463,15 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {repos.length > 0 && (
           <Card>
-            <CardHeader>
-              <CardTitle>Git</CardTitle>
-              <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                {repos.length > 1 && `${repos.length} repos`}
-                <GitBranch className="size-4" />
-              </span>
-            </CardHeader>
+            <CardHeader
+              title="Git"
+              meta={
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {repos.length > 1 && `${repos.length} repos`}
+                  <GitBranch className="size-4" />
+                </span>
+              }
+            />
             <div className="divide-y">
               {repos.map((r) => (
                 <RepoSection
@@ -490,38 +492,38 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
 
         <div className="grid gap-4">
           <Card>
-            <CardHeader><CardTitle>Quick actions</CardTitle><Wrench className="size-4 text-muted-foreground" /></CardHeader>
-            <div className="grid gap-2 p-5 sm:grid-cols-2">
+            <CardHeader title="Quick actions" meta={<Wrench className="size-4 text-muted-foreground" />} />
+            <CardBody className="gap-2 sm:grid-cols-2">
               {([
                 { name: 'Clear all caches', icon: <Eraser />, id: 'site.clearCache' },
                 { name: 'Flush rewrite rules', icon: <RefreshCw />, id: 'site.flushRewrites' },
               ] as const).map(({ name, icon, id }) => (
                 <Button key={name} variant="outline" className="justify-start" disabled={busy !== null} onClick={() => void run(name, id, siteTarget(site))}>
-                  {busy === name ? <LoaderCircle className="animate-spin" /> : quickResult?.name === name && quickResult.ok ? <Check className="text-success" /> : icon}
+                  {busy === name ? <Spinner /> : quickResult?.name === name && quickResult.ok ? <Check className="text-success" /> : icon}
                   {name}
                 </Button>
               ))}
               {salts && (
                 <Button variant="outline" className="justify-start" disabled={busy !== null} onClick={() => setSalting(salts.bad.length > 0 ? 'missing' : 'all')}>
-                  {busy === saltsName ? <LoaderCircle className="animate-spin" /> : quickResult?.name === saltsName && quickResult.ok ? <Check className="text-success" /> : <KeyRound />}
+                  {busy === saltsName ? <Spinner /> : quickResult?.name === saltsName && quickResult.ok ? <Check className="text-success" /> : <KeyRound />}
                   {saltsName}
                 </Button>
               )}
               <Button variant="outline" className="justify-start" disabled={busy !== null} onClick={() => void run(terminalName, 'site.openTerminal', siteTarget(site))}>
-                {busy === terminalName ? <LoaderCircle className="animate-spin" /> : <SquareTerminal />}
+                {busy === terminalName ? <Spinner /> : <SquareTerminal />}
                 {terminalName}
               </Button>
               <p className="text-xs text-muted-foreground sm:col-span-2">
                 Clearing caches runs <code className="font-mono">wp cache flush</code>, deletes transients and reloads Apache to reset OPcache.
               </p>
               {quickResult && <div className="sm:col-span-2"><RunOutput result={quickResult} /></div>}
-            </div>
+            </CardBody>
           </Card>
 
           {site.core.kind !== 'none' && (
             <Card>
-              <CardHeader><CardTitle>WordPress</CardTitle><Layers className="size-4 text-muted-foreground" /></CardHeader>
-              <div className="grid gap-4 p-5">
+              <CardHeader title="WordPress" meta={<Layers className="size-4 text-muted-foreground" />} />
+              <CardBody>
                 <p className="text-sm">{coreLabel(site)}</p>
                 <WordPressSummary site={site} />
                 {site.core.kind === 'wpcore' ? (
@@ -537,7 +539,7 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
                       </div>
                       {core && core !== site.core.version && (
                         <Button variant="outline" className="h-10" disabled={busy !== null} onClick={() => void run('Switch core', 'core.switch', { ...siteTarget(site), version: core })}>
-                          {busy === 'Switch core' ? <LoaderCircle className="animate-spin" /> : <Layers />}
+                          {busy === 'Switch core' ? <Spinner /> : <Layers />}
                           Switch to {core}
                         </Button>
                       )}
@@ -549,7 +551,7 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
                   </p>
                 )}
                 {coreResult && <RunOutput result={coreResult} />}
-              </div>
+              </CardBody>
             </Card>
           )}
         </div>
@@ -563,20 +565,26 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
         {site.localMode && <UploadsCard site={site} onChanged={onChanged} />}
 
         <Card>
-          <CardHeader>
-            <CardTitle>Files</CardTitle>
-            <Link href={filesHref(site)} className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-              <FolderOpen className="size-4" />Open in Files
-            </Link>
-          </CardHeader>
-          <dl className="grid gap-3 p-5 text-sm">
-            <Row label="Installed">{installLabel(site.install)}</Row>
-            <Row label="Folder"><FolderLine path={site.docroot} files={filesHref(site)} /></Row>
-            {site.mounts?.map((m) => (
-              <Row key={m.path} label={m.path}><FolderLine path={m.docroot} files={filesHref({ domain: site.domain, path: m.path })} /></Row>
-            ))}
-            {site.prodUrl && <Row label="Production"><a href={site.prodUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{site.prodUrl}</a></Row>}
-          </dl>
+          <CardHeader
+            title="Files"
+            actions={
+              <TextLink href={filesHref(site)} className="gap-1.5 text-xs">
+                <FolderOpen className="size-4" />Open in Files
+              </TextLink>
+            }
+          />
+          <CardBody>
+            <KeyValue
+              labelWidth="sm"
+              className="gap-y-3"
+              rows={[
+                { label: 'Installed', value: installLabel(site.install) },
+                { label: 'Folder', value: <FolderLine path={site.docroot} files={filesHref(site)} /> },
+                ...(site.mounts ?? []).map((m) => ({ key: `mount:${m.path}`, label: m.path, value: <FolderLine path={m.docroot} files={filesHref({ domain: site.domain, path: m.path })} /> })),
+                ...(site.prodUrl ? [{ label: 'Production', value: <a href={site.prodUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{site.prodUrl}</a> }] : []),
+              ]}
+            />
+          </CardBody>
         </Card>
       </div>
     </div>
@@ -664,7 +672,7 @@ function RepoSection({ domain, mount, repo, label, folder, git, installedFrom = 
             title={git.dirty > 0 ? 'Commit or stash the uncommitted changes first' : undefined}
             onClick={() => void run('Switch', 'git.switch', { ...target, branch })}
           >
-            {busy === 'Switch' ? <LoaderCircle className="animate-spin" /> : <GitBranch />}
+            {busy === 'Switch' ? <Spinner /> : <GitBranch />}
             Switch
           </Button>
         )}
@@ -675,7 +683,7 @@ function RepoSection({ domain, mount, repo, label, folder, git, installedFrom = 
           title={git.upstream === null ? 'This branch has no remote branch to pull from' : 'Pull, fast-forward only'}
           onClick={() => void run('Pull', 'git.pull', target)}
         >
-          {busy === 'Pull' ? <LoaderCircle className="animate-spin" /> : <ArrowDownToLine />}
+          {busy === 'Pull' ? <Spinner /> : <ArrowDownToLine />}
           {git.behind > 0 ? `Pull ${git.behind}` : 'Pull'}
         </Button>
         <Button variant="outline" className="h-10" disabled={busy !== null} title="Fetch branches and commits from origin" onClick={() => void run('Fetch', 'git.fetch', target)}>
@@ -709,7 +717,7 @@ function RepoSection({ domain, mount, repo, label, folder, git, installedFrom = 
           <li key={c.hash}>
             <p className="font-medium break-words">
               {subjectLinks(git.remote, c.subject).map((part, i) =>
-                part.href ? <a key={i} href={part.href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{part.text}</a> : part.text,
+                part.href ? <TextLink key={i} href={part.href}>{part.text}</TextLink> : part.text,
               )}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -798,16 +806,18 @@ function NetworkCard({ site }: { site: Site }) {
   ];
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Network</CardTitle>
-        <span className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            {network.sites.length > 0 && `${network.sites.length} sites · `}
-            {NETWORK_TYPE_LABEL[type]}
+      <CardHeader
+        title="Network"
+        meta={
+          <span className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {network.sites.length > 0 && `${network.sites.length} sites · `}
+              {NETWORK_TYPE_LABEL[type]}
+            </span>
+            <Network className="size-4 text-muted-foreground" />
           </span>
-          <Network className="size-4 text-muted-foreground" />
-        </span>
-      </CardHeader>
+        }
+      />
       {network.sites.length === 0 && (
         <p className="px-5 py-4 text-sm text-muted-foreground">
           wp-config.php marks this as a network. Listing its sites needs the MySQL admin account: set it up under Aura, Machine checks.
@@ -815,20 +825,9 @@ function NetworkCard({ site }: { site: Site }) {
       )}
       {network.sites.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b px-5 py-3">
-          {(archived > 0 || deleted.length > 0) &&
-            filters
-              .filter((f) => f.value === 'all' || f.count > 0)
-              .map((f) => (
-                <button
-                  key={f.value}
-                  type="button"
-                  aria-pressed={filter === f.value}
-                  onClick={() => setFilter(f.value)}
-                  className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === f.value ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
-                >
-                  {f.label} <span className="tabular-nums opacity-70">{f.count}</span>
-                </button>
-              ))}
+          {(archived > 0 || deleted.length > 0) && (
+            <FilterChips label="Sites to show" value={filter} onChange={setFilter} options={filters.filter((f) => f.value === 'all' || f.count > 0)} />
+          )}
           <Button size="sm" variant="outline" className="ml-auto" onClick={() => setAdmins(true)}>
             <ShieldCheck />
             Super admins
@@ -865,7 +864,7 @@ function NetworkCard({ site }: { site: Site }) {
                   <ExternalLink />
                   Open
                 </ButtonLink>
-                <Button size="sm" variant="ghost" onClick={() => void openWpAdmin(site, { siteUrl: s.url })}>
+                <Button size="sm" variant="soft" onClick={() => void openWpAdmin(site, { siteUrl: s.url })}>
                   <LogIn />
                   wp-admin
                 </Button>
@@ -924,7 +923,7 @@ function SuperAdminsDialog({ site, open, onClose }: { site: Site; open: boolean;
                 </span>
                 {a.member < data.sites ? (
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void runner.follow(api.startJob('network.addAdmin', { ...siteTarget(site), user: a.login }))}>
-                    {busy && job?.title.includes(` ${a.login} `) ? <LoaderCircle className="animate-spin" /> : <ShieldCheck />}
+                    {busy && job?.title.includes(` ${a.login} `) ? <Spinner /> : <ShieldCheck />}
                     Make administrator on {data.sites - a.member} more
                   </Button>
                 ) : (
@@ -942,7 +941,7 @@ function SuperAdminsDialog({ site, open, onClose }: { site: Site; open: boolean;
         )}
         {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
         <div className="flex justify-end">
-          <Button variant="ghost" onClick={onClose}>Close</Button>
+          <Button variant="soft" onClick={onClose}>Close</Button>
         </div>
       </div>
     </Dialog>
@@ -979,8 +978,8 @@ function LocalModeCard({ site, localMode, onChanged }: { site: Site; localMode: 
 
   return (
     <Card>
-      <CardHeader><CardTitle>Local mode</CardTitle><ShieldCheck className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <CardHeader title="Local mode" meta={<ShieldCheck className="size-4 text-muted-foreground" />} />
+      <CardBody>
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium">Keep this copy away from real people</p>
@@ -991,7 +990,7 @@ function LocalModeCard({ site, localMode, onChanged }: { site: Site; localMode: 
             </p>
           </div>
           <span className="flex items-center gap-2">
-            {busy && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+            {busy && <Spinner className="size-4 text-muted-foreground" />}
             <Switch checked={enabled} onChange={(v) => void apply(v)} label="Local mode" disabled={busy} />
           </span>
         </div>
@@ -1000,19 +999,19 @@ function LocalModeCard({ site, localMode, onChanged }: { site: Site; localMode: 
           htmlFor="blocked-hosts"
           hint="One per line; a host also blocks its subdomains. WordPress requests to them fail instead of reaching the live service. Payment sandboxes stay reachable unless you add them."
         >
-          <Textarea id="blocked-hosts" className="font-mono text-[13px]" rows={5} value={hosts} onChange={(e) => setHosts(e.target.value)} disabled={busy} spellCheck={false} />
+          <Textarea id="blocked-hosts" className="font-mono text-dense" rows={5} value={hosts} onChange={(e) => setHosts(e.target.value)} disabled={busy} spellCheck={false} />
         </Field>
         {changed && (
           <div className="flex gap-2">
             <Button variant="outline" disabled={busy} onClick={() => void apply(true)}>Save blocked hosts</Button>
-            <Button variant="ghost" disabled={busy} onClick={() => setHosts(localMode.blockedHosts.join('\n'))}>Undo changes</Button>
+            <Button variant="soft" disabled={busy} onClick={() => setHosts(localMode.blockedHosts.join('\n'))}>Undo changes</Button>
           </div>
         )}
         <p className="text-xs text-muted-foreground">
           The plugin is <code className="font-mono">wp-content/mu-plugins/devmagic-panel-local.php</code>, kept out of git, and does nothing on a non-local address.
         </p>
         {result && <RunOutput result={result} />}
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -1053,13 +1052,13 @@ function UploadsCard({ site, onChanged }: { site: Site; onChanged: () => void })
 
   return (
     <Card>
-      <CardHeader><CardTitle>Uploads</CardTitle><ImageIcon className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-4 p-5">
+      <CardHeader title="Uploads" meta={<ImageIcon className="size-4 text-muted-foreground" />} />
+      <CardBody>
         <p className="text-sm text-muted-foreground">
           {site.uploadsFrom ? (
             <>
-              Missing uploads load from <span className="font-mono text-[13px] text-foreground">{site.uploadsFrom.host}</span>, through{' '}
-              {site.uploadsFrom.via === 'apache' ? 'the vhost' : site.uploadsFrom.via === 'plugin' ? <>BE Media from Production (<code className="font-mono text-[13px]">BE_MEDIA_FROM_PRODUCTION_URL</code> in wp-config.php)</> : 'Local mode'}.
+              Missing uploads load from <span className="font-mono text-dense text-foreground">{site.uploadsFrom.host}</span>, through{' '}
+              {site.uploadsFrom.via === 'apache' ? 'the vhost' : site.uploadsFrom.via === 'plugin' ? <>BE Media from Production (<code className="font-mono text-dense">BE_MEDIA_FROM_PRODUCTION_URL</code> in wp-config.php)</> : 'Local mode'}.
             </>
           ) : (
             'Missing uploads show as broken images. Name the production host to load them from there instead of copying them.'
@@ -1084,34 +1083,36 @@ function UploadsCard({ site, onChanged }: { site: Site; onChanged: () => void })
           htmlFor="uploads-host"
           hint={needsLocalMode ? 'This redirect needs Local mode: turn it on first, or use BE Media from Production.' : site.mediaPlugin ? undefined : redirectHint}
         >
-          <Input id="uploads-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="www.example.com" className="font-mono text-[13px]" spellCheck={false} disabled={busy || needsLocalMode} aria-invalid={!valid || undefined} />
+          <Input id="uploads-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="www.example.com" className="font-mono text-dense" spellCheck={false} disabled={busy || needsLocalMode} aria-invalid={!valid || undefined} />
         </Field>
         <div className="flex flex-wrap gap-2">
           {changed && (
             <Button variant="outline" disabled={busy || !valid || needsLocalMode} onClick={() => void apply(value, via)}>
-              {busy && <LoaderCircle className="animate-spin" />}
+              {busy && <Spinner />}
               {current ? (via !== currentVia ? (via === 'plugin' ? 'Use BE Media from Production' : 'Use the redirect') : 'Change host') : 'Load from this host'}
             </Button>
           )}
           {current && (
-            <Button variant="ghost" disabled={busy} onClick={() => void apply(null, currentVia)}>Stop loading from production</Button>
+            <Button variant="soft" disabled={busy} onClick={() => void apply(null, currentVia)}>Stop loading from production</Button>
           )}
         </div>
         {result && <RunOutput result={result} />}
-      </div>
+      </CardBody>
     </Card>
   );
 }
 
 function RunOutput({ result }: { result: { name: string; ok: boolean; output: string } }) {
   return (
-    <details className={cn('min-w-0 rounded-md border px-3 py-2 text-sm', result.ok ? 'border-success/30 bg-success/6' : 'border-danger/30 bg-danger/6')} open={!result.ok}>
-      <summary className="cursor-pointer">
-        {result.ok ? `${result.name}: done` : `${result.name} failed: ${lastLine(result.output)}`}
-      </summary>
-      {/* Long lines wrap anywhere, so output like a diff's +---- bars never widens the card. */}
-      <pre className="mt-2 max-h-48 overflow-auto font-mono text-xs whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">{result.output ? <AnsiText text={result.output} /> : 'No output.'}</pre>
-    </details>
+    <Notice tone={result.ok ? 'success' : 'danger'} size="inline" icon={false} className="min-w-0 text-sm">
+      <details open={!result.ok}>
+        <summary className="cursor-pointer">
+          {result.ok ? `${result.name}: done` : `${result.name} failed: ${lastLine(result.output)}`}
+        </summary>
+        {/* Long lines wrap anywhere, so output like a diff's +---- bars never widens the card. */}
+        <pre className="mt-2 max-h-48 overflow-auto font-mono text-xs whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">{result.output ? <AnsiText text={result.output} /> : 'No output.'}</pre>
+      </details>
+    </Notice>
   );
 }
 
@@ -1120,7 +1121,7 @@ function FolderLine({ path, files }: { path: string; files?: string }) {
   const link = 'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
   return (
     <span className="flex items-start justify-between gap-2">
-      <span className="font-mono text-[13px] break-all">{path}</span>
+      <span className="font-mono text-dense break-all">{path}</span>
       <span className="flex shrink-0 items-center">
         {files && <Link href={files} className={link} title={`Open ${path} in the Files tab`}><FolderOpen className="size-3.5" />Files</Link>}
         <a href={vscodeUrl(path)} className={link} title={`Open ${path} in VS Code`}>
@@ -1132,15 +1133,6 @@ function FolderLine({ path, files }: { path: string; files?: string }) {
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[6.5rem_1fr] gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0">{children}</dd>
-    </div>
-  );
-}
-
 function LogsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
   const source = useQueryParam('log') === 'apache' ? 'apache' : 'debug';
   const setSource = (next: 'debug' | 'apache') => navigate(tabHref(site, 'logs', next === 'apache' ? '&log=apache' : ''), { scroll: false });
@@ -1149,20 +1141,7 @@ function LogsTab({ site, onChanged }: { site: Site; onChanged: () => void }) {
     <div className="grid gap-3">
       {site.core.kind !== 'none' && <DebugSettings site={site} onChanged={onChanged} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="radiogroup" aria-label="Log" className="inline-flex rounded-lg border bg-muted p-0.5 text-sm">
-          {([['debug', 'debug.log'], ['apache', site.server === 'nginx' ? 'nginx errors' : 'Apache errors']] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={source === value}
-              onClick={() => setSource(value)}
-              className={cn('rounded-md px-3 py-1.5 text-muted-foreground hover:text-foreground', source === value && 'bg-card text-foreground shadow-xs ring-1 ring-border')}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Segmented label="Log" value={source} onChange={setSource} options={[['debug', 'debug.log'], ['apache', site.server === 'nginx' ? 'nginx errors' : 'Apache errors']]} />
         {log.data && <p className="font-mono text-xs break-all text-muted-foreground">{log.data.file}</p>}
       </div>
       {log.data?.shared && (
@@ -1198,10 +1177,14 @@ function ServerAndPhpTab({ site, onChanged }: { site: Site; onChanged: () => voi
   return (
     <div className="grid gap-4">
       {site.path ? (
-        <p className="rounded-xl border bg-card px-5 py-3.5 text-sm text-muted-foreground">
-          Runs on <span className="font-medium text-foreground">{SERVER_NAME[site.server]}</span> with {site.domain}, like every site under it.{' '}
-          <Link href={`${siteHref({ domain: site.domain })}?tab=php`} className="font-medium text-primary hover:underline">Change it on {site.domain}</Link>
-        </p>
+        <Card>
+          <CardBody className="py-3.5">
+            <p className="text-muted-foreground">
+              Runs on <span className="font-medium text-foreground">{SERVER_NAME[site.server]}</span> with {site.domain}, like every site under it.{' '}
+              <TextLink href={`${siteHref({ domain: site.domain })}?tab=php`}>Change it on {site.domain}</TextLink>
+            </p>
+          </CardBody>
+        </Card>
       ) : (
         <ServerCard site={site} onChanged={onChanged} />
       )}
@@ -1228,11 +1211,8 @@ function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) 
   return (
     <div className="grid gap-4">
       <Card>
-        <CardHeader>
-          <CardTitle>Certificate</CardTitle>
-          <ShieldCheck className="size-4 text-muted-foreground" />
-        </CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-4 p-5 text-sm">
+        <CardHeader title="Certificate" meta={<ShieldCheck className="size-4 text-muted-foreground" />} />
+        <CardBody className="flex flex-wrap items-center justify-between">
           <div className="grid gap-1">
             <p>
               {site.cert?.issuer === 'legacy' ? (
@@ -1247,13 +1227,13 @@ function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) 
             </p>
           </div>
           <Button variant={allCovered && site.cert?.issuer !== 'legacy' ? 'outline' : 'default'} disabled={reissuing} onClick={() => void reissue()}>
-            {reissuing ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+            {reissuing ? <Spinner /> : <RefreshCw />}
             Reissue certificate
           </Button>
-        </div>
+        </CardBody>
       </Card>
 
-      <div className="overflow-hidden rounded-xl border bg-card">
+      <Card className="overflow-hidden">
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
             <tr>
@@ -1265,7 +1245,7 @@ function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) 
           <tbody className="divide-y">
             {names.map((name, i) => (
               <tr key={name}>
-                <td className="px-5 py-2.5 font-mono text-[13px]">
+                <td className="px-5 py-2.5 font-mono text-dense">
                   {name}
                   {i === 0 && <Badge className="ml-2 font-sans">primary</Badge>}
                 </td>
@@ -1275,17 +1255,17 @@ function DomainsTab({ site, onChanged }: { site: Site; onChanged: () => void }) 
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
       {site.vhostManaged ? (
         <p className="text-xs text-muted-foreground">
           One certificate, one {site.server === 'nginx' ? 'nginx site' : 'vhost'} and one hosts line cover all of these names. Add or remove domains and the panel updates all three together.
         </p>
       ) : (
-        <p className="rounded-lg border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
-          This vhost was set up outside the panel, so the panel leaves <code className="font-mono text-[13px]">{site.domain}-ssl.conf</code> as it is.
+        <Notice tone="info" icon={false} className="py-2.5">
+          This vhost was set up outside the panel, so the panel leaves <code className="font-mono text-dense">{site.domain}-ssl.conf</code> as it is.
           It still reissues the certificate and keeps the hosts line in its block. To change the domains, edit the vhost by hand, or{' '}
-          <Link href={takeoverHref(site)} className="font-medium text-primary hover:underline">take it over</Link> and the panel manages them like its own sites'.
-        </p>
+          <TextLink href={takeoverHref(site)}>take it over</TextLink> and the panel manages them like its own sites'.
+        </Notice>
       )}
     </div>
   );
@@ -1389,11 +1369,11 @@ function RemoveDialog({ site, open, onClose }: { site: Site; open: boolean; onCl
           </p>
           {tight && <p role="alert" className="mt-2 text-sm text-danger">There may not be enough free disk space for the archive.</p>}
           {unsaved.length > 0 && (
-            <div className="mt-3 rounded-lg border border-warning/40 bg-warning/8 px-3 py-2 text-sm">
+            <Notice tone="warning" size="inline" icon={false} className="mt-3 text-sm">
               <p className="font-medium">Work that is only in this copy</p>
               <ul className="mt-1 list-disc pl-5 text-xs">{unsaved.map((u) => <li key={u}>{u}</li>)}</ul>
               <p className="mt-1 text-xs text-muted-foreground">It stays in the archive, but push it first if you can.</p>
-            </div>
+            </Notice>
           )}
           <ConfirmField className="mt-4" id="confirm-domain" expected={site.domain} value={typed} onChange={setTyped} />
         </>
@@ -1401,7 +1381,7 @@ function RemoveDialog({ site, open, onClose }: { site: Site; open: boolean; onCl
         <ol className="grid gap-1.5 text-sm">
           {job.steps.map((s) => (
             <li key={s.id} className="flex items-center gap-2">
-              {s.status === 'running' ? <LoaderCircle className="size-4 animate-spin text-primary" /> : s.status === 'done' ? <Check className="size-4 text-success" /> : s.status === 'failed' ? <X className="size-4 text-danger" /> : <span className="size-4 rounded-full border-2 border-muted-foreground/30" />}
+              {s.status === 'running' ? <Spinner className="size-4 text-primary" /> : s.status === 'done' ? <Check className="size-4 text-success" /> : s.status === 'failed' ? <X className="size-4 text-danger" /> : <span className="size-4 rounded-full border-2 border-muted-foreground/30" />}
               <span className={cn(s.status === 'pending' && 'text-muted-foreground', s.status === 'failed' && 'text-danger')}>{s.label}</span>
             </li>
           ))}
@@ -1411,7 +1391,7 @@ function RemoveDialog({ site, open, onClose }: { site: Site; open: boolean; onCl
       {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         {!running && (
-          <Button variant="ghost" onClick={() => { setTyped(''); setJob(null); onClose(); }}>
+          <Button variant="soft" onClick={() => { setTyped(''); setJob(null); onClose(); }}>
             {job ? 'Close' : 'Cancel'}
           </Button>
         )}

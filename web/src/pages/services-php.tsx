@@ -1,6 +1,6 @@
 import type { PhpFpmFinding, PhpIniDiff, PhpIniKey, PhpReport, PhpSettings, PhpVersion, PhpXdebug } from '@devmagic-panel/shared';
 import { PHP_INI_KEYS, PHP_INI_SETTINGS, phpIniValueError, XDEBUG_MODES, XDEBUG_STARTS } from '@devmagic-panel/shared';
-import { Bug, Check, ChevronRight, Code2, Copy, Download, FileDiff, Info, LoaderCircle, Plus, Puzzle, RefreshCw, Server, Settings2, ShieldCheck, SquareTerminal, Star, Trash2, TriangleAlert } from 'lucide-react';
+import { Bug, Check, ChevronRight, Code2, Copy, Download, FileDiff, Info, Plus, Puzzle, RefreshCw, Server, Settings2, ShieldCheck, SquareTerminal, Star, Trash2 } from 'lucide-react';
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
@@ -10,10 +10,11 @@ import { ScopeLabel } from '@/components/scope-label';
 import { StatusDot } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { KeyValue } from '@/components/ui/key-value';
 import { Switch } from '@/components/ui/switch';
 import { Tabs } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
@@ -27,6 +28,7 @@ import { SitesCompatCard } from '@/pages/php-compat-sites';
 import { CardsSkeleton, ReadingBlock } from '@/components/skeletons';
 import { Notice } from '@/components/page';
 import { scrollToCard } from '@/lib/scroll-to';
+import { Spinner } from '@/components/ui/spinner';
 
 const SAPI_LABEL = { apache2: 'Apache (mod_php)', fpm: 'PHP-FPM', cli: 'Command line' } as const;
 
@@ -153,7 +155,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
           onCli={() => void run('cli', 'php.setCli', { version: current.version }, `php on the command line is PHP ${current.version}`)}
           onMakeDefault={() => start('version', 'php.switchToFpm', { version: current.version })}
         />
-        {jobAt === 'version' && jobBox && <Card><div className="px-5 py-4">{jobBox}</div></Card>}
+        {jobAt === 'version' && jobBox && <Card><CardBody>{jobBox}</CardBody></Card>}
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
           <div id={sectionId('settings')} className="scroll-mt-20 lg:col-span-2">
             <SettingsCard key={`settings-${current.version}-${refresh}-${moved}`} version={current} />
@@ -235,8 +237,8 @@ function MachineCard({ report, picked, busy, cliBusy, tilesRef, onPick, onStart,
   const canAdd = report.available.length > 0 || !report.sources.php;
   return (
     <Card>
-      <CardHeader><CardTitle>PHP on this machine</CardTitle><ScopeLabel>all sites</ScopeLabel></CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="PHP on this machine" meta={<ScopeLabel>all sites</ScopeLabel>} />
+      <CardBody>
         <div className="flex flex-wrap items-center gap-3">
           <p className="min-w-0 flex-[1_1_22rem]">
             {report.defaultVersion ? <>Sites without their own PHP run on <strong className="font-medium">PHP {report.defaultVersion}</strong> {how}.</> : 'Apache runs no PHP for sites without their own.'}
@@ -285,7 +287,7 @@ function MachineCard({ report, picked, busy, cliBusy, tilesRef, onPick, onStart,
         </div>
         {adding && <AddVersion report={report} busy={busy} onInstall={(version) => onStart('php.install', { version })} />}
         {report.mode !== 'fpm' && <FpmCheckSection />}
-      </div>
+      </CardBody>
       {children}
     </Card>
   );
@@ -302,18 +304,18 @@ function CliMismatch({ report, busy, onCli }: { report: PhpReport; busy: boolean
   if (!cli || !web || cli.version === web.version || !web.sapis.includes('cli')) return null;
   const noMysqli = !cli.modules.some((m) => m.name === 'mysqli' && m.cli);
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/30 bg-warning/8 px-4 py-3">
-      <p className="flex min-w-0 flex-[1_1_22rem] gap-2 text-warning">
-        <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-        <span>
-          php on the command line is PHP {cli.version}, while sites run on PHP {web.version}: WP-CLI and Composer run on PHP {cli.version}
-          {noMysqli ? `, which has no mysqli, so WP-CLI cannot reach a database` : ''}. apt points php at the newest version it installs.
-        </span>
-      </p>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => onCli(web.version)}>
-        {busy ? <LoaderCircle className="animate-spin" /> : <SquareTerminal />}Use PHP {web.version} for the command line
-      </Button>
-    </div>
+    <Notice
+      tone="warning"
+      size="inline"
+      action={
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => onCli(web.version)}>
+          {busy ? <Spinner /> : <SquareTerminal />}Use PHP {web.version} for the command line
+        </Button>
+      }
+    >
+      php on the command line is PHP {cli.version}, while sites run on PHP {web.version}: WP-CLI and Composer run on PHP {cli.version}
+      {noMysqli ? `, which has no mysqli, so WP-CLI cannot reach a database` : ''}. apt points php at the newest version it installs.
+    </Notice>
   );
 }
 
@@ -347,15 +349,12 @@ function VersionHeader({ report, version: v, busy, onUpgrade, onRemove, onInstal
         {v.update && <Button size="sm" variant="outline" disabled={busy} onClick={onUpgrade}><RefreshCw />Update to {v.update.replace(/^a new build of /, '')}</Button>}
         {canDefault && <Button size="sm" variant="outline" disabled={busy} onClick={() => setDefaulting(true)}><Star />Make default</Button>}
         {v.sapis.includes('cli') && !v.cli && <Button size="sm" variant="outline" disabled={busy} onClick={onCli}><SquareTerminal />Use for the command line</Button>}
-        {removable && <Button size="sm" variant="ghost" className="text-danger" disabled={busy} onClick={() => setRemoving(true)}><Trash2 />Remove PHP {v.version}</Button>}
+        {removable && <Button size="sm" variant="soft" className="text-danger" disabled={busy} onClick={() => setRemoving(true)}><Trash2 />Remove PHP {v.version}</Button>}
       </div>
       {cliOnly && (
-        <div className="flex w-full flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          <p className="min-w-0 flex-[1_1_22rem] text-muted-foreground">
-            PHP {v.version} has only the command line: no PHP-FPM, so no site can run on it yet. apt adds a version like this when a package without a version (php-imagick, php-xdebug) follows the newest PHP your apt sources have.
-          </p>
-          <Button size="sm" variant="outline" disabled={busy} onClick={onInstallFpm}><Server />Install PHP-FPM {v.version}</Button>
-        </div>
+        <Notice tone="info" className="w-full" action={<Button size="sm" variant="outline" disabled={busy} onClick={onInstallFpm}><Server />Install PHP-FPM {v.version}</Button>}>
+          PHP {v.version} has only the command line: no PHP-FPM, so no site can run on it yet. apt adds a version like this when a package without a version (php-imagick, php-xdebug) follows the newest PHP your apt sources have.
+        </Notice>
       )}
       <Dialog
         open={defaulting}
@@ -374,7 +373,7 @@ function VersionHeader({ report, version: v, busy, onUpgrade, onRemove, onInstal
             {!v.cli && <li>php on the command line stays PHP {report.versions.find((x) => x.cli)?.version ?? 'as it is'}: click Use for the command line afterwards, so WP-CLI matches.</li>}
           </ul>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setDefaulting(false)}>Cancel</Button>
+            <Button variant="soft" onClick={() => setDefaulting(false)}>Cancel</Button>
             <Button
               onClick={() => {
                 setDefaulting(false);
@@ -388,7 +387,7 @@ function VersionHeader({ report, version: v, busy, onUpgrade, onRemove, onInstal
       </Dialog>
       <Dialog open={removing} onClose={() => setRemoving(false)} title={`Remove PHP ${v.version}?`} description={`Every package of PHP ${v.version} goes. Its settings stay in /etc/php/${v.version}, so a reinstall gets them back, and Undo on the job installs it again.`}>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setRemoving(false)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setRemoving(false)}>Cancel</Button>
           <Button
             variant="danger"
             onClick={() => {
@@ -410,15 +409,16 @@ function VersionStrip({ report, picked, shown, onPick }: { report: PhpReport; pi
     <div className={cn('sticky top-2 z-20 -mb-6 h-0 transition-opacity', shown ? 'opacity-100' : 'pointer-events-none opacity-0')} aria-hidden={!shown}>
       <nav aria-label="PHP versions and sections" className="flex flex-wrap items-center gap-2 rounded-xl border bg-card/95 px-3 py-2 text-sm shadow-md backdrop-blur">
         {report.versions.map((v) => (
-          <button
+          <Button
             key={v.version}
-            type="button"
+            size="xs"
+            variant="outline"
             tabIndex={shown ? 0 : -1}
             onClick={() => onPick(v.version)}
-            className={cn('rounded-md border px-2.5 py-1 font-medium transition-colors', v.version === picked ? 'border-primary bg-primary/8 text-primary' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground')}
+            className={cn(v.version === picked ? 'border-primary bg-primary/8 text-primary hover:bg-primary/12' : 'text-muted-foreground hover:text-foreground')}
           >
             PHP {v.version}
-          </button>
+          </Button>
         ))}
         <span className="ml-auto flex flex-wrap gap-3 text-xs">
           {PHP_SECTIONS.map((sec) => (
@@ -468,7 +468,7 @@ function ModeSwitch({ report, busy, onSwitch }: { report: PhpReport; busy: boole
           </label>
           {toFpm && <p className="text-xs text-muted-foreground">It is refused while Before sites move to PHP-FPM lists php_value lines, or while PHP-FPM {version} differs from Apache&apos;s PHP {version}.</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="soft" onClick={() => setOpen(false)}>Cancel</Button>
             <Button
               disabled={!version}
               onClick={() => {
@@ -555,11 +555,8 @@ function XdebugCard({ version, busy, applying, onApply }: {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Xdebug</CardTitle>
-        {xdebug.installed ? <Badge tone={xdebug.enabled ? 'success' : 'neutral'}>{xdebug.enabled ? 'on' : 'off'}</Badge> : <Bug className="size-4 text-muted-foreground" />}
-      </CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="Xdebug" meta={xdebug.installed ? <Badge tone={xdebug.enabled ? 'success' : 'neutral'}>{xdebug.enabled ? 'on' : 'off'}</Badge> : <Bug className="size-4 text-muted-foreground" />} />
+      <CardBody>
         {reason ? (
           <p className="text-muted-foreground">{reason}</p>
         ) : (
@@ -570,7 +567,7 @@ function XdebugCard({ version, busy, applying, onApply }: {
                 <p className="text-xs text-muted-foreground">Your IDE listens on port 9003. Each version has its own Xdebug; the command line keeps its own setting. {applies}</p>
               </div>
               <span className="flex items-center gap-2">
-                {applying && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+                {applying && <Spinner className="size-4 text-muted-foreground" />}
                 <Switch
                   checked={xdebug.enabled}
                   label="Xdebug"
@@ -583,7 +580,7 @@ function XdebugCard({ version, busy, applying, onApply }: {
               <legend className="mb-1 text-sm font-medium">Modes</legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {XDEBUG_MODES.map((m) => (
-                  <Checkbox key={m} id={`xdebug-${m}`} checked={modes.includes(m)} onChange={(on) => toggle(m, on)} label={<code className="font-mono text-[13px]">{m}</code>} hint={MODE_HINT[m]} />
+                  <Checkbox key={m} id={`xdebug-${m}`} checked={modes.includes(m)} onChange={(on) => toggle(m, on)} label={<code className="font-mono text-dense">{m}</code>} hint={MODE_HINT[m]} />
                 ))}
               </div>
               {chosen.length === 0 && <p className="text-xs text-danger">Pick at least one mode.</p>}
@@ -600,7 +597,7 @@ function XdebugCard({ version, busy, applying, onApply }: {
             )}
           </>
         )}
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -644,11 +641,8 @@ function PhpModulesCard({ version, busy, aptBusy, onSwitch, onPackage }: {
 
   return (
     <Card className="lg:col-span-2">
-      <CardHeader>
-        <CardTitle>Modules</CardTitle>
-        {version.modules.length > 0 ? <span className="text-xs text-muted-foreground">{on} of {version.modules.length} on</span> : <Puzzle className="size-4 text-muted-foreground" />}
-      </CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="Modules" meta={version.modules.length > 0 ? <span className="text-xs text-muted-foreground">{on} of {version.modules.length} on</span> : <Puzzle className="size-4 text-muted-foreground" />} />
+      <CardBody>
         {version.modules.length === 0 ? (
           <p className="text-muted-foreground">No modules found for PHP {version.version}.</p>
         ) : (
@@ -678,15 +672,15 @@ function PhpModulesCard({ version, busy, aptBusy, onSwitch, onPackage }: {
                     <li key={m.name} className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
                       <div className="min-w-0">
                         <p className="flex flex-wrap items-center gap-1.5">
-                          <code className="font-mono text-[13px]">{m.name}</code>
+                          <code className="font-mono text-dense">{m.name}</code>
                           {m.required && <Badge tone="neutral">WordPress needs it</Badge>}
                         </p>
                         {gone ? (
                           <p className="flex flex-wrap items-center gap-x-2 text-xs text-warning">
                             <span>Package not installed{isOn ? ': PHP warns on every start' : ''}</span>
-                            <button type="button" disabled={aptBusy} onClick={() => onPackage(m.name, 'install')} className="font-medium text-foreground hover:underline disabled:opacity-50">
+                            <Button size="xs" variant="soft" disabled={aptBusy} onClick={() => onPackage(m.name, 'install')} className="text-foreground">
                               Install php{version.version}-{m.name}
-                            </button>
+                            </Button>
                           </p>
                         ) : (differs || MODULE_HINT[m.name]) && (
                           <p className={cn('truncate text-xs', differs ? 'text-warning' : 'text-muted-foreground')}>
@@ -695,7 +689,7 @@ function PhpModulesCard({ version, busy, aptBusy, onSwitch, onPackage }: {
                         )}
                       </div>
                       <span className="flex shrink-0 items-center gap-2">
-                        {busy === key && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+                        {busy === key && <Spinner className="size-4 text-muted-foreground" />}
                         <Switch
                           checked={isOn}
                           label={locked ? `${m.name} (WordPress needs it, stays on)` : m.name}
@@ -711,7 +705,7 @@ function PhpModulesCard({ version, busy, aptBusy, onSwitch, onPackage }: {
           </>
         )}
         <PackagesSection version={version.version} busy={aptBusy} onPackage={onPackage} />
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -735,7 +729,7 @@ const CORE_PACKAGES = new Set(['common', 'cli', 'fpm', 'mysql', 'xml']);
 function PackagesList({ version, busy, onPackage }: { version: string; busy: boolean; onPackage: (name: string, how: 'install' | 'remove') => void }) {
   const { data, error, loading } = useAsync(() => api.phpPackages(version), [version, busy]);
   const [filter, setFilter] = useState('');
-  if (loading && !data) return <p className="flex items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Asking apt...</p>;
+  if (loading && !data) return <p className="flex items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground"><Spinner className="size-3.5" />Asking apt...</p>;
   if (error) return <div className="border-t p-3">{errorBox(error)}</div>;
   if (!data) return null;
   const shown = data.filter((p) => p.name.includes(filter.trim().toLowerCase()));
@@ -748,7 +742,7 @@ function PackagesList({ version, busy, onPackage }: { version: string; busy: boo
             <code className="font-mono">php{version}-{p.name}</code>
             {p.installed ? (
               CORE_PACKAGES.has(p.name) ? <span className="text-muted-foreground">needed</span> : (
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => onPackage(p.name, 'remove')}>Remove</Button>
+                <Button size="sm" variant="soft" disabled={busy} onClick={() => onPackage(p.name, 'remove')}>Remove</Button>
               )
             ) : (
               <Button size="sm" variant="outline" disabled={busy} onClick={() => onPackage(p.name, 'install')}>Install</Button>
@@ -783,8 +777,8 @@ function IniChangesCard({ version, onMoved }: { version: string; onMoved: () => 
 
   return (
     <Card className="lg:col-span-2">
-      <CardHeader><CardTitle>php.ini changes</CardTitle><FileDiff className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-5 p-5 text-sm">
+      <CardHeader title="php.ini changes" meta={<FileDiff className="size-4 text-muted-foreground" />} />
+      <CardBody className="gap-5">
         {loading && !data && <ReadingBlock lines={5}>Comparing with the packaged php.ini...</ReadingBlock>}
         {error && errorBox(error)}
         {data?.sapis.length === 0 && <p className="text-muted-foreground">PHP {version} has no php.ini to compare.</p>}
@@ -806,7 +800,7 @@ function IniChangesCard({ version, onMoved }: { version: string; onMoved: () => 
             {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
           </div>
         )}
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -824,8 +818,8 @@ function SettingsCard({ version }: { version: PhpVersion }) {
   const current = data?.scopes.find((x) => x.scope === scope) ?? data?.scopes[0];
   return (
     <Card className="lg:col-span-2">
-      <CardHeader><CardTitle>Settings</CardTitle><ScopeLabel>{`PHP ${version.version}`}</ScopeLabel></CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="Settings" meta={<ScopeLabel>{`PHP ${version.version}`}</ScopeLabel>} />
+      <CardBody>
         {loading && !data && <ReadingBlock fields={4}>Reading the settings...</ReadingBlock>}
         {error && errorBox(error)}
         {data && data.scopes.length === 0 && <p className="text-muted-foreground">PHP {version.version} has no part to set.</p>}
@@ -843,7 +837,7 @@ function SettingsCard({ version }: { version: PhpVersion }) {
             <SettingsForm key={`${version.version}-${current.scope}`} version={version} settings={current} onSaved={reload} />
           </>
         )}
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -941,8 +935,8 @@ function IniDiff({ diff }: { diff: PhpIniDiff }) {
 /** A section that loads only once opened, like the info pages: PHP runs for each. */
 function Section({ title, icon, hint, children, defaultOpen = false, compact = false }: { title: string; icon: ReactNode; hint: string; children: (open: boolean) => ReactNode; defaultOpen?: boolean; compact?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
-  return (
-    <details open={defaultOpen} className={cn('group', compact ? 'rounded-lg border' : 'rounded-xl border bg-card lg:col-span-2')} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+  const box = (
+    <details open={defaultOpen} className={cn('group', compact && 'rounded-lg border')} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary className={cn('flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden', compact ? 'px-4 py-3' : 'px-5 py-4')}>
         <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
         <span className="min-w-0 flex-1">
@@ -954,6 +948,8 @@ function Section({ title, icon, hint, children, defaultOpen = false, compact = f
       {open && <div className={cn('border-t text-sm', compact ? 'px-4 py-3' : 'px-5 py-4')}>{children(open)}</div>}
     </details>
   );
+  // A compact one sits inside a card; the others are cards of their own.
+  return compact ? box : <Card className="lg:col-span-2">{box}</Card>;
 }
 
 function SapiPicker({ value, onChange, cli }: { value: 'web' | 'cli'; onChange: (v: 'web' | 'cli') => void; cli: boolean }) {
@@ -1020,10 +1016,14 @@ function XdebugInfoView({ version }: { version: PhpVersion }) {
   const features = ['develop', 'coverage', 'debug', 'gcstats', 'profile', 'trace'];
   return (
     <div className="grid gap-4">
-      <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1.5 text-xs">
-        <dt className="text-muted-foreground">Xdebug</dt><dd>{data.xdebug.version}</dd>
-        <dt className="text-muted-foreground">Modes in effect</dt><dd>{data.xdebug.modes.length > 0 ? data.xdebug.modes.join(', ') : 'off'}</dd>
-      </dl>
+      <KeyValue
+        dense
+        labelWidth="md"
+        rows={[
+          { label: 'Xdebug', value: data.xdebug.version },
+          { label: 'Modes in effect', value: data.xdebug.modes.length > 0 ? data.xdebug.modes.join(', ') : 'off' },
+        ]}
+      />
       <ul className="grid gap-1 text-xs sm:grid-cols-3">
         {features.map((f) => (
           <li key={f} className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 import { RefreshCw } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
+import { Card, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 /** A gray bar standing in for text or a control while it loads, as the Plugins tab draws them. */
@@ -20,7 +21,7 @@ export function Reading({ children }: { children: ReactNode }) {
 /** One site card's shape: status dot, domain, subtitle, badge, the facts and the buttons. */
 function SiteCardSkeleton({ width }: { width: number }) {
   return (
-    <div className="flex flex-col rounded-xl border bg-card px-5 py-4 shadow-xs">
+    <Card className="flex flex-col px-5 py-4">
       <div className="flex items-start gap-3">
         <Bar className="mt-1 size-2.5 rounded-full" />
         <div className="grid flex-1 gap-2">
@@ -42,7 +43,7 @@ function SiteCardSkeleton({ width }: { width: number }) {
         <Bar className="h-8 w-20 rounded-md" />
         <Bar className="h-8 w-24 rounded-md" />
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -71,7 +72,9 @@ export function SitesSkeleton({ view, className }: { view: 'grid' | 'list'; clas
       {view === 'grid' ? (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">{[58, 46, 66, 40].map((w, i) => <SiteCardSkeleton key={i} width={w} />)}</div>
       ) : (
-        <ul className="divide-y rounded-xl border bg-card shadow-xs">{[42, 30, 50, 36, 46, 28, 40, 34].map((w, i) => <SiteRowSkeleton key={i} width={w} />)}</ul>
+        <Card>
+          <ul className="divide-y">{[42, 30, 50, 36, 46, 28, 40, 34].map((w, i) => <SiteRowSkeleton key={i} width={w} />)}</ul>
+        </Card>
       )}
     </div>
   );
@@ -95,12 +98,12 @@ export function SitePageSkeleton() {
       <Reading>Reading the site...</Reading>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
         {[64, 48, 56, 40].map((w, i) => (
-          <div key={i} className="grid gap-3 rounded-xl border bg-card p-5">
+          <Card key={i} className="grid gap-3 p-5">
             <Bar className="h-4 w-32" />
             <Bar className="h-3" style={{ width: `${w}%` }} />
             <Bar className="h-3" style={{ width: `${w * 0.75}%` }} />
             <Bar className="h-3" style={{ width: `${w * 0.5}%` }} />
-          </div>
+          </Card>
         ))}
       </div>
     </div>
@@ -128,20 +131,20 @@ export function CardLinesSkeleton({ lines = 3, values = true, className }: { lin
 /** A whole card while it reads: a title, an icon and a few lines. */
 export function CardSkeleton({ lines = 3, values = true, className, children }: { lines?: number; values?: boolean; className?: string; children?: ReactNode }) {
   return (
-    <div className={cn('rounded-xl border bg-card shadow-xs', className)} aria-hidden>
-      <div className="flex items-center justify-between border-b px-5 py-3.5">
+    <Card className={className} aria-hidden>
+      <CardHeader>
         <Bar className="h-4 w-36" />
         <Bar className="size-4 rounded" />
-      </div>
+      </CardHeader>
       {children ?? <CardLinesSkeleton lines={lines} values={values} />}
-    </div>
+    </Card>
   );
 }
 
 /** A table's shape: a header row and rows of cells. */
 export function TableSkeleton({ columns = 4, rows = 6, className }: { columns?: number; rows?: number; className?: string }) {
   return (
-    <div className={cn('overflow-hidden rounded-xl border bg-card shadow-xs', className)} aria-hidden>
+    <Card className={cn('overflow-hidden', className)} aria-hidden>
       <div className="flex gap-6 border-b bg-muted/40 px-4 py-3">
         {Array.from({ length: columns }, (_, c) => <Bar key={c} className={cn('h-3', c === 0 ? 'w-32' : 'w-16')} />)}
       </div>
@@ -152,16 +155,16 @@ export function TableSkeleton({ columns = 4, rows = 6, className }: { columns?: 
           ))}
         </div>
       ))}
-    </div>
+    </Card>
   );
 }
 
 /** A log while it is read: lines of monospace text of different lengths. */
 export function LogSkeleton({ lines = 10, className }: { lines?: number; className?: string }) {
   return (
-    <div className={cn('grid gap-2 rounded-xl border bg-card px-4 py-4', className)} aria-hidden>
+    <Card className={cn('grid gap-2 px-4 py-4', className)} aria-hidden>
       {Array.from({ length: lines }, (_, i) => <Bar key={i} className="h-2.5" style={{ width: width(i + 3) }} />)}
-    </div>
+    </Card>
   );
 }
 
@@ -186,18 +189,20 @@ export function CardsSkeleton({ reading, cards = [4, 3, 5, 3], columns = 2, clas
 /** A list of rows, each an icon, a line of text with a smaller one under it, and a value at the end: jobs, admins, sites. */
 export function ListSkeleton({ rows = 5, className }: { rows?: number; className?: string }) {
   return (
-    <ul className={cn('divide-y overflow-hidden rounded-xl border bg-card', className)} aria-hidden>
-      {Array.from({ length: rows }, (_, i) => (
-        <li key={i} className="flex items-center gap-3 px-4 py-3">
-          <Bar className="size-4 shrink-0 rounded-full" />
-          <div className="grid flex-1 gap-1.5">
-            <Bar className="h-3.5" style={{ width: width(i, 0.7) }} />
-            <Bar className="h-2.5" style={{ width: width(i + 2, 0.4) }} />
-          </div>
-          <Bar className="h-3 w-16 shrink-0" />
-        </li>
-      ))}
-    </ul>
+    <Card className={cn('overflow-hidden', className)} aria-hidden>
+      <ul className="divide-y">
+        {Array.from({ length: rows }, (_, i) => (
+          <li key={i} className="flex items-center gap-3 px-4 py-3">
+            <Bar className="size-4 shrink-0 rounded-full" />
+            <div className="grid flex-1 gap-1.5">
+              <Bar className="h-3.5" style={{ width: width(i, 0.7) }} />
+              <Bar className="h-2.5" style={{ width: width(i + 2, 0.4) }} />
+            </div>
+            <Bar className="h-3 w-16 shrink-0" />
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

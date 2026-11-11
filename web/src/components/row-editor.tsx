@@ -1,5 +1,5 @@
 import type { ActionId, DbCell, DbColumnHead, DbRow, RowChangeInfo } from '@devmagic-panel/shared';
-import { History, LoaderCircle, RotateCcw, TriangleAlert, Wand2 } from 'lucide-react';
+import { History, RotateCcw, TriangleAlert, Wand2 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useId, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { FieldsSkeleton } from '@/components/skeletons';
+import { Spinner } from '@/components/ui/spinner';
 
 // Loaded only when a value with control characters is edited.
 const ValueEditor = lazy(() => import('@/components/value-editor'));
@@ -185,7 +186,7 @@ export function RowEditor({ mode, database, table, columns, primaryKey, row, onC
           {error && <p role="alert" className="mr-auto text-sm text-danger">{error}</p>}
           {!error && keptOpen && changed && <p role="status" className="mr-auto text-sm text-muted-foreground">Not saved yet: Cancel discards what you typed.</p>}
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          {ready && <Button type="submit" form={formId} disabled={saving}>{saving && <LoaderCircle className="animate-spin" />}{mode === 'edit' ? 'Save the row' : 'Add the row'}</Button>}
+          {ready && <Button type="submit" form={formId} disabled={saving}>{saving && <Spinner />}{mode === 'edit' ? 'Save the row' : 'Add the row'}</Button>}
         </>
       }
     >
@@ -239,7 +240,7 @@ function FieldRow({ column, field, original, locked, mode, tall, onChange }: { c
         {mode === 'add' && !locked && !field.touched && <Badge>default</Badge>}
       </label>
       {locked ? (
-        <p className="rounded-md bg-muted/60 px-3 py-2 font-mono text-[13px] break-all text-muted-foreground">{original === null ? (mode === 'edit' ? 'NULL' : ' ') : original}</p>
+        <p className="rounded-md bg-muted/60 px-3 py-2 font-mono text-dense break-all text-muted-foreground">{original === null ? (mode === 'edit' ? 'NULL' : ' ') : original}</p>
       ) : (
         <div className="flex items-start gap-2">
           {exact && !field.isNull ? (
@@ -249,9 +250,9 @@ function FieldRow({ column, field, original, locked, mode, tall, onChange }: { c
               </Suspense>
             </EditorBoundary>
           ) : column.numeric ? (
-            <Input id={id} value={field.isNull ? '' : field.value} disabled={field.isNull} inputMode="decimal" onChange={(e) => onChange({ value: e.target.value })} className="font-mono text-[13px]" />
+            <Input id={id} value={field.isNull ? '' : field.value} disabled={field.isNull} inputMode="decimal" onChange={(e) => onChange({ value: e.target.value })} className="font-mono text-dense" />
           ) : (
-            <Textarea id={id} value={field.isNull ? '' : field.value} disabled={field.isNull} rows={lines} spellCheck={false} onChange={(e) => onChange({ value: e.target.value })} className="min-h-9 font-mono text-[13px]" />
+            <Textarea id={id} value={field.isNull ? '' : field.value} disabled={field.isNull} rows={lines} spellCheck={false} onChange={(e) => onChange({ value: e.target.value })} className="min-h-9 font-mono text-dense" />
           )}
           {column.nullable && (
             <label className="flex shrink-0 items-center gap-1.5 pt-2 text-xs text-muted-foreground">
@@ -303,7 +304,7 @@ export function DeleteRowsDialog({ count, table, onClose, onConfirm, busy }: { c
     <Dialog open onClose={onClose} title={count === 1 ? `Delete this row of ${table}?` : `Delete ${count} rows of ${table}?`} description={`${count === 1 ? 'The row is' : 'Each row is'} saved first, so Undo in the toast, or under Changes you can undo, puts ${count === 1 ? 'it' : 'them'} back for 14 days.`}>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button variant="danger" disabled={busy} onClick={onConfirm}>{busy && <LoaderCircle className="animate-spin" />}{count === 1 ? 'Delete the row' : `Delete ${count} rows`}</Button>
+        <Button variant="danger" disabled={busy} onClick={onConfirm}>{busy && <Spinner />}{count === 1 ? 'Delete the row' : `Delete ${count} rows`}</Button>
       </div>
     </Dialog>
   );
@@ -348,7 +349,7 @@ export function RowChangesCard({ database, table, refresh, onUndone }: { databas
             <span className="font-medium">{KIND[c.kind](c.rows)}</span>
             <span className="flex-1 text-xs text-muted-foreground">{timeAgo(c.savedAt)}, kept until {shortDate(c.purgeAt)}</span>
             <Button size="sm" variant="outline" disabled={undoing !== null} onClick={() => void undo(c.id)}>
-              {undoing === c.id ? <LoaderCircle className="animate-spin" /> : <RotateCcw />}Undo
+              {undoing === c.id ? <Spinner /> : <RotateCcw />}Undo
             </Button>
           </li>
         ))}

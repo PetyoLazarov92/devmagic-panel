@@ -1,13 +1,16 @@
 import type { ChatTurn, Proposal } from '@devmagic-panel/shared';
-import { Check, Eye, LoaderCircle, Play, SendHorizontal, Sparkles, X } from 'lucide-react';
+import { Check, Eye, Play, SendHorizontal, Sparkles, X } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { Textarea } from '@/components/ui/input';
+import { KeyValue } from '@/components/ui/key-value';
 import { api } from '@/lib/api';
 import { setAssistantOpen, useAssistantOpen } from '@/lib/assistant';
 import { lastLine } from '@/lib/site-actions';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 interface Message extends ChatTurn {
   proposals?: Proposal[];
@@ -55,14 +58,7 @@ export function ProposalCard({ proposal, onClose }: { proposal: Proposal; onClos
         {state === 'done' && !job.job && <Check className="size-4 shrink-0 text-success" aria-label="Done" />}
       </div>
       {entries.length > 0 && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-xs">
-          {entries.map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-muted-foreground">{k}</dt>
-              <dd className="break-all">{typeof v === 'string' ? v : JSON.stringify(v)}</dd>
-            </div>
-          ))}
-        </dl>
+        <KeyValue dense className="gap-x-3 gap-y-0.5 font-mono" rows={entries.map(([k, v]) => ({ key: k, label: k, value: typeof v === 'string' ? v : JSON.stringify(v) }))} />
       )}
       {job.job && <StepList steps={job.job.steps} open={openStep} setOpen={setOpenStep} />}
       {output && <p className={cn('text-xs', state === 'failed' ? 'text-danger' : 'text-muted-foreground')}>{output}</p>}
@@ -74,7 +70,7 @@ export function ProposalCard({ proposal, onClose }: { proposal: Proposal; onClos
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="soft"
             onClick={() => {
               setState('dismissed');
               onClose?.('dismissed');
@@ -84,7 +80,7 @@ export function ProposalCard({ proposal, onClose }: { proposal: Proposal; onClos
           </Button>
         </div>
       )}
-      {state === 'running' && <p className="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Running...</p>}
+      {state === 'running' && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Spinner className="size-3.5" />Running...</p>}
       {job.job && !settled(job.job) && <p className="text-xs text-muted-foreground">Running as a job; you can close this drawer.</p>}
     </div>
   );
@@ -149,11 +145,8 @@ export function AssistantDrawer() {
       <header className="flex items-center gap-2 border-b px-4 py-3">
         <Sparkles className="size-4 text-primary" />
         <h2 className="flex-1 font-semibold">Ask Claude</h2>
-        {messages.length > 0 && <Button size="sm" variant="ghost" onClick={() => setMessages([])} disabled={busy}>New chat</Button>}
-        <Button size="icon" variant="ghost" onClick={() => setAssistantOpen(false)} title="Close (Esc)">
-          <X />
-          <span className="sr-only">Close</span>
-        </Button>
+        {messages.length > 0 && <Button size="sm" variant="soft" onClick={() => setMessages([])} disabled={busy}>New chat</Button>}
+        <IconButton icon={X} label="Close" onClick={() => setAssistantOpen(false)} title="Close (Esc)" />
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -161,7 +154,7 @@ export function AssistantDrawer() {
           <div className="grid gap-3 text-sm">
             <p className="text-muted-foreground">Ask about your sites. Claude looks at the panel's own data; anything it wants to change comes back as a card you run yourself.</p>
             {EXAMPLES.map((q) => (
-              <button key={q} type="button" onClick={() => void send(q)} className="rounded-lg border px-3 py-2 text-left transition-colors hover:bg-muted">{q}</button>
+              <Button key={q} variant="outline" onClick={() => void send(q)} className="h-auto justify-start rounded-lg px-3 py-2 text-left font-normal whitespace-normal">{q}</Button>
             ))}
           </div>
         )}
@@ -179,7 +172,7 @@ export function AssistantDrawer() {
               </div>
             ),
           )}
-          {busy && <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Claude is looking...</p>}
+          {busy && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" />Claude is looking...</p>}
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           <div ref={end} />
         </div>
@@ -198,12 +191,9 @@ export function AssistantDrawer() {
             className="min-h-0 resize-none"
             disabled={busy}
           />
-          <Button size="icon" className="size-10 shrink-0" onClick={() => void send(draft)} disabled={busy || !draft.trim()} title="Send (Enter)">
-            <SendHorizontal />
-            <span className="sr-only">Send</span>
-          </Button>
+          <IconButton icon={SendHorizontal} label="Send" variant="default" className="size-10 shrink-0" onClick={() => void send(draft)} disabled={busy || !draft.trim()} title="Send (Enter)" />
         </div>
-        <p className="mt-1.5 text-[11px] text-muted-foreground">Sends your question and what Claude looks up, with secrets blanked out. Never database contents.</p>
+        <p className="mt-1.5 text-2xs text-muted-foreground">Sends your question and what Claude looks up, with secrets blanked out. Never database contents.</p>
       </footer>
     </aside>
   );

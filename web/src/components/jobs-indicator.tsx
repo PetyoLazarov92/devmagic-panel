@@ -1,14 +1,16 @@
 import type { JobView } from '@devmagic-panel/shared';
-import { CircleAlert, ListChecks, LoaderCircle } from 'lucide-react';
+import { CircleAlert, ListChecks } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { isFollowed } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
+import { TextLink } from '@/components/ui/text-link';
 import { api, JOB_STARTED } from '@/lib/api';
 import { jobActive, jobState } from '@/lib/jobs';
 import { Link, navigate, usePath } from '@/lib/router';
 import { onJobSeen, seenJobs } from '@/lib/seen-jobs';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 const SHOWN = 6;
 
@@ -95,7 +97,7 @@ export function JobsIndicator() {
         title="Jobs"
         className={cn(unseen > 0 && 'border-danger/40 text-danger hover:text-danger', running.length === 0 && unseen === 0 && 'text-muted-foreground')}
       >
-        {running.length > 0 ? <LoaderCircle className="animate-spin text-primary" /> : unseen > 0 ? <CircleAlert /> : <ListChecks />}
+        {running.length > 0 ? <Spinner className="text-primary" /> : unseen > 0 ? <CircleAlert /> : <ListChecks />}
         <span>
           {running.length > 0 && `${running.length - queued} running${queued ? `, ${queued} queued` : ''}`}
           {running.length > 0 && unseen > 0 && ', '}
@@ -127,9 +129,9 @@ export function JobsIndicator() {
               </li>
             ))}
           </ul>
-          <Link href="/activity" className="mt-1 block rounded-md border-t px-2.5 pt-2 pb-1.5 text-xs font-medium text-primary hover:underline" onClick={() => setOpen(false)}>
+          <TextLink href="/activity" className="mt-1 flex rounded-md border-t px-2.5 pt-2 pb-1.5 text-xs" onClick={() => setOpen(false)}>
             All jobs
-          </Link>
+          </TextLink>
         </div>
       )}
     </div>

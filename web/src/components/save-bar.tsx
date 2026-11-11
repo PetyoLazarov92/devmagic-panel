@@ -1,6 +1,7 @@
-import { LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * The bar a form with several fields shows while it has changes: it sticks
@@ -19,17 +20,17 @@ export function SaveBar({ changes, saving, label, error, note, onSave, onDiscard
   if (changes === 0 && !saving) return null;
   return (
     <div className="sticky bottom-4 z-20">
-      <div role="region" aria-label="Unsaved changes" className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/40 bg-card px-5 py-3 text-sm shadow-lg">
+      <Card role="region" aria-label="Unsaved changes" className="flex flex-wrap items-center gap-3 border-primary/40 px-5 py-3 text-sm shadow-lg">
         <div className="min-w-0 flex-[1_1_16rem]">
           <p className="font-medium">{saving ? 'Saving...' : `${changes} unsaved change${changes === 1 ? '' : 's'}`}</p>
           {error ? <p role="alert" className="text-xs text-danger">{error}</p> : note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
         </div>
-        <Button variant="ghost" disabled={saving} onClick={onDiscard}>Discard</Button>
+        <Button variant="soft" disabled={saving} onClick={onDiscard}>Discard</Button>
         <Button disabled={saving || Boolean(error)} onClick={onSave}>
-          {saving && <LoaderCircle className="animate-spin" />}
+          {saving && <Spinner />}
           {label}
         </Button>
-      </div>
+      </Card>
     </div>
   );
 }

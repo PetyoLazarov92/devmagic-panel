@@ -1,6 +1,6 @@
 import type { CoreSecurity, CoresReport } from '@devmagic-panel/shared';
 import { coreVersion } from '@devmagic-panel/shared';
-import { Download, Layers, LoaderCircle, Plus, Trash2 } from 'lucide-react';
+import { Download, Layers, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { CheckAgain, Notice, PageHeader } from '@/components/page';
 import { CardSkeleton, ListSkeleton, Reading } from '@/components/skeletons';
+import { Spinner } from '@/components/ui/spinner';
 
 const STATUS: Record<CoreSecurity, { label: string; tone: 'success' | 'warning' | 'danger' }> = {
   latest: { label: 'latest', tone: 'success' },
@@ -107,12 +108,12 @@ export function CoresPage() {
                   {report.cores.map((core) => (
                     <li key={core.version} className="grid gap-2 px-5 py-3.5 text-sm">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[15px] font-medium">{core.version}</span>
+                        <span className="font-mono text-base font-medium">{core.version}</span>
                         <StatusBadge status={core.status} />
                         <span className="text-xs text-muted-foreground">{core.sites.length === 0 ? 'no sites' : `${core.sites.length} site${core.sites.length === 1 ? '' : 's'}`}</span>
                         <span className="flex-1" />
                         {core.sites.length === 0 && (
-                          <Button size="sm" variant="ghost" onClick={() => setRemoving(core.version)} disabled={busy}>
+                          <Button size="sm" variant="soft" onClick={() => setRemoving(core.version)} disabled={busy}>
                             <Trash2 />
                             Remove
                           </Button>
@@ -122,10 +123,10 @@ export function CoresPage() {
                         <ul className="grid gap-1.5 pl-1">
                           {[...new Set(core.sites)].map((domain) => (
                             <li key={domain} className="flex flex-wrap items-center gap-2">
-                              <Link href={siteHref(domain)} className="font-mono text-[13px] hover:underline">{domain}</Link>
+                              <Link href={siteHref(domain)} className="font-mono text-dense hover:underline">{domain}</Link>
                               {best && best !== core.version && core.status !== 'latest' && (
                                 <Button size="sm" variant="outline" disabled={switching !== null} onClick={() => void switchSite(domain, best)}>
-                                  {switching === domain ? <LoaderCircle className="animate-spin" /> : <Layers />}
+                                  {switching === domain ? <Spinner /> : <Layers />}
                                   Switch to {best}
                                 </Button>
                               )}
@@ -145,8 +146,8 @@ export function CoresPage() {
                 <ul className="divide-y">
                   {report.standalone.filter((s, i, all) => all.findIndex((o) => o.domain === s.domain) === i).map((s) => (
                     <li key={s.domain} className="flex flex-wrap items-center gap-2 px-5 py-3 text-sm">
-                      <Link href={siteHref(s.domain)} className="font-mono text-[13px] hover:underline">{s.domain}</Link>
-                      <span className="font-mono text-[13px] text-muted-foreground">{s.version}</span>
+                      <Link href={siteHref(s.domain)} className="font-mono text-dense hover:underline">{s.domain}</Link>
+                      <span className="font-mono text-dense text-muted-foreground">{s.version}</span>
                       <StatusBadge status={s.status} />
                     </li>
                   ))}
@@ -213,7 +214,7 @@ function AddCard({ report, busy, onAdd }: { report: CoresReport; busy: boolean; 
         )}
         <div className="flex items-end gap-2 border-t pt-4">
           <Field className="flex-1" label="Other version" htmlFor="core-other" hint={<ReleaseListLink />}>
-            <Input id="core-other" value={other} onChange={(e) => setOther(e.target.value)} placeholder="6.8.11" className="font-mono text-[13px]" spellCheck={false} />
+            <Input id="core-other" value={other} onChange={(e) => setOther(e.target.value)} placeholder="6.8.11" className="font-mono text-dense" spellCheck={false} />
           </Field>
           <Button variant="outline" className="h-10" disabled={busy || !otherValid || !report.ready} onClick={() => onAdd(other.trim())}><Plus />Add</Button>
         </div>
@@ -250,7 +251,7 @@ function InsecureDialog({ version, onClose, onConfirm }: { version: string | nul
     >
       <ConfirmField id="core-insecure-confirm" expected={version ?? ''} value={typed} onChange={setTyped} />
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={close}>Cancel</Button>
+        <Button variant="soft" onClick={close}>Cancel</Button>
         <Button
           variant="danger"
           disabled={typed !== version}
@@ -286,9 +287,9 @@ function RemoveDialog({ version, onClose, onRemoved }: { version: string | null;
     <Dialog open={version !== null} onClose={close} title={`Remove WordPress ${version ?? ''}?`} description="No site uses this core. Its folder is deleted; you can add the release again any time.">
       <ConfirmField id="core-confirm" expected={version ?? ''} value={typed} onChange={setTyped} />
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={close}>Cancel</Button>
+        <Button variant="soft" onClick={close}>Cancel</Button>
         <Button variant="danger" disabled={typed !== version || running} onClick={() => void remove()}>
-          {running ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+          {running ? <Spinner /> : <Trash2 />}
           Remove
         </Button>
       </div>

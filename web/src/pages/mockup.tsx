@@ -1,7 +1,7 @@
 import { Ban, Check, FlaskConical, Link2, Shapes } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ButtonLink } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { navigate } from '@/lib/router';
 import { Notice, PageHeader } from '@/components/page';
 import { DEMO_HOME, isDemo } from '@/lib/api';
@@ -27,68 +27,68 @@ export function MockupPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Ban className="size-4 text-muted-foreground" />What it never touches</CardTitle>
-          </CardHeader>
-          <ul className="grid gap-2 px-5 pt-4 pb-5 text-sm">
-            <Item>Your sites, their files and their git repos</Item>
-            <Item>Apache, nginx, PHP, the certificates and <code className="font-mono text-[13px]">/etc/hosts</code></Item>
-            <Item>MySQL: no database is read, changed, exported or dropped</Item>
-            <Item>cron, Mailpit and the panel&apos;s own settings and run history</Item>
-            <Item>
-              <code className="font-mono text-[13px]">dmp-root</code> and sudo: nothing runs as root, and no password is asked for or sent
-            </Item>
-            <Item>Claude, GitHub and GitLab: no request leaves the browser, and no API key is used</Item>
-          </ul>
+          <CardHeader title={<span className="flex items-center gap-2"><Ban className="size-4 text-muted-foreground" />What it never touches</span>} />
+          <CardBody>
+            <ul className="grid gap-2">
+              <Item>Your sites, their files and their git repos</Item>
+              <Item>Apache, nginx, PHP, the certificates and <code className="font-mono text-dense">/etc/hosts</code></Item>
+              <Item>MySQL: no database is read, changed, exported or dropped</Item>
+              <Item>cron, Mailpit and the panel&apos;s own settings and run history</Item>
+              <Item>
+                <code className="font-mono text-dense">dmp-root</code> and sudo: nothing runs as root, and no password is asked for or sent
+              </Item>
+              <Item>Claude, GitHub and GitLab: no request leaves the browser, and no API key is used</Item>
+            </ul>
+          </CardBody>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><FlaskConical className="size-4 text-muted-foreground" />How it works</CardTitle>
-          </CardHeader>
-          <ul className="grid gap-2 px-5 pt-4 pb-5 text-sm">
-            <Item>
-              {isDemo ? (
-                <>This is only the panel&apos;s web app, built with its sample data. Every call the screens make is answered in this tab, from <code className="font-mono text-[13px]">web/src/mock/</code> instead of a panel server.</>
-              ) : (
-                <><code className="font-mono text-[13px]">npm run mockup</code> starts only the web app. Every call the screens make goes to <code className="font-mono text-[13px]">web/src/mock/</code> instead of the panel server.</>
-              )}
-            </Item>
-            <Item>The sites, databases, logs and jobs are made up, with names like local.wandworks.example that are not on this machine.</Item>
-            <Item>Actions answer as the panel would: a job runs its steps on a timer, a toast offers Undo, and the screen updates.</Item>
-            <Item>A link out of the panel (a site, wp-admin, GitHub, your editor) never leaves the mockup: a toast shows the address it would open. Downloads are left out.</Item>
-            <Item>
-              A reload starts over: changes live in this tab&apos;s memory. Only your preferences (theme, views) stay until the tab closes.
-            </Item>
-          </ul>
+          <CardHeader title={<span className="flex items-center gap-2"><FlaskConical className="size-4 text-muted-foreground" />How it works</span>} />
+          <CardBody>
+            <ul className="grid gap-2">
+              <Item>
+                {isDemo ? (
+                  <>This is only the panel&apos;s web app, built with its sample data. Every call the screens make is answered in this tab, from <code className="font-mono text-dense">web/src/mock/</code> instead of a panel server.</>
+                ) : (
+                  <><code className="font-mono text-dense">npm run mockup</code> starts only the web app. Every call the screens make goes to <code className="font-mono text-dense">web/src/mock/</code> instead of the panel server.</>
+                )}
+              </Item>
+              <Item>The sites, databases, logs and jobs are made up, with names like local.wandworks.example that are not on this machine.</Item>
+              <Item>Actions answer as the panel would: a job runs its steps on a timer, a toast offers Undo, and the screen updates.</Item>
+              <Item>A link out of the panel (a site, wp-admin, GitHub, your editor) never leaves the mockup: a toast shows the address it would open. Downloads are left out.</Item>
+              <Item>
+                A reload starts over: changes live in this tab&apos;s memory. Only your preferences (theme, views) stay until the tab closes.
+              </Item>
+            </ul>
+          </CardBody>
         </Card>
       </div>
 
       <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Link2 className="size-4 text-muted-foreground" />Other states, from the address</CardTitle>
-        </CardHeader>
-        <p className="px-5 pt-4 text-sm text-muted-foreground">Each opens its page as it looks when something is not as usual. A reload without it goes back to normal.</p>
-        <div className="mt-3 overflow-x-auto px-5 pb-5">
-          <table className="w-full text-sm">
-            <tbody className="divide-y">
-              {STATES.map(([query, page, what]) => (
-                <tr key={query}>
-                  <td className="py-2 pr-4 align-top whitespace-nowrap">
-                    {/* A full load, not the panel's own navigation: the mockup reads these as it starts. */}
-                    <a href={`${page}?${query}`} className="font-mono text-[13px] text-primary hover:underline">?{query}</a>
-                  </td>
-                  <td className="py-2 pr-4 align-top whitespace-nowrap text-muted-foreground">{PAGE_NAME[page]}</td>
-                  <td className="py-2 text-muted-foreground">{what}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4 text-muted-foreground" />Other states, from the address</span>} />
+        <CardBody className="gap-3">
+          <p className="text-muted-foreground">Each opens its page as it looks when something is not as usual. A reload without it goes back to normal.</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody className="divide-y">
+                {STATES.map(([query, page, what]) => (
+                  <tr key={query}>
+                    <td className="py-2 pr-4 align-top whitespace-nowrap">
+                      {/* A full load, not the panel's own navigation: the mockup reads these as it starts. */}
+                      <a href={`${page}?${query}`} className="font-mono text-dense text-primary hover:underline">?{query}</a>
+                    </td>
+                    <td className="py-2 pr-4 align-top whitespace-nowrap text-muted-foreground">{PAGE_NAME[page]}</td>
+                    <td className="py-2 text-muted-foreground">{what}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardBody>
       </Card>
 
       <p className="mt-6 text-sm text-muted-foreground">
-        The real panel runs at <span className="font-mono text-[13px]">https://local.devmagic</span> once it is installed, and it changes this machine for real, with Undo for each change.
+        The real panel runs at <span className="font-mono text-dense">https://local.devmagic</span> once it is installed, and it changes this machine for real, with Undo for each change.
         {isDemo && (
           <>
             {' '}

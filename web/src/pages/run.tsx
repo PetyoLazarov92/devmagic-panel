@@ -1,5 +1,6 @@
-import { ArrowLeft, ArrowRight } from 'lucide-react';
-import { Card } from '@/components/ui/card';
+import { ArrowLeft } from 'lucide-react';
+import { Card, CardBody } from '@/components/ui/card';
+import { TextLink } from '@/components/ui/text-link';
 import { api } from '@/lib/api';
 import { duration } from '@/lib/format';
 import { stepsSkipped } from '@/lib/jobs';
@@ -36,7 +37,7 @@ export function RunPage({ id }: { id: number }) {
               <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight"><RunStatus run={run} />{run.title}</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 <span className="font-mono text-xs">{run.action}</span>
-                {run.target && <> on <Link href={`/sites/${encodeURIComponent(run.target)}`} className="font-mono text-[13px] text-foreground hover:underline">{run.target}</Link></>}
+                {run.target && <> on <Link href={`/sites/${encodeURIComponent(run.target)}`} className="font-mono text-dense text-foreground hover:underline">{run.target}</Link></>}
                 {' · '}
                 {new Date(run.startedAt).toLocaleString()}
                 {run.durationMs !== undefined && ` · took ${duration(run.durationMs)}`}
@@ -46,19 +47,22 @@ export function RunPage({ id }: { id: number }) {
               </p>
             </div>
             {run.jobId && (
-              <Link href={`/jobs/${encodeURIComponent(run.jobId)}`} className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+              <TextLink href={`/jobs/${encodeURIComponent(run.jobId)}`} arrow className="text-sm">
                 Open the job{run.ok === false ? ' to retry or undo' : ''}
-                <ArrowRight className="size-4" />
-              </Link>
+              </TextLink>
             )}
           </div>
-          <Card className="grid gap-2 p-5">
-            <h2 className="text-sm font-semibold">Output</h2>
-            <pre className="max-h-[32rem] overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">{run.output || (run.ok === null ? 'Nothing yet.' : 'No output.')}</pre>
+          <Card>
+            <CardBody className="gap-2">
+              <h2 className="text-sm font-semibold">Output</h2>
+              <pre className="max-h-[32rem] overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">{run.output || (run.ok === null ? 'Nothing yet.' : 'No output.')}</pre>
+            </CardBody>
           </Card>
-          <Card className="grid gap-2 p-5">
-            <h2 className="text-sm font-semibold">Input</h2>
-            <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">{JSON.stringify(run.input, null, 2)}</pre>
+          <Card>
+            <CardBody className="gap-2">
+              <h2 className="text-sm font-semibold">Input</h2>
+              <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">{JSON.stringify(run.input, null, 2)}</pre>
+            </CardBody>
           </Card>
         </>
       )}

@@ -1,5 +1,5 @@
 import { type ActionId, type FileDiff, type FileEntry, type FileGitState, type FileGitStatus, type FileListing, type FileMatch, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, GitBranch, GitCompare, KeyRound, Link2, LoaderCircle, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, GitBranch, GitCompare, KeyRound, Link2, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
 import { type DragEvent, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { DiffView } from '@/components/diff-view';
 import { FilePlaces } from '@/components/file-places';
@@ -9,11 +9,13 @@ import { EmptyState, Notice, ViewBar } from '@/components/page';
 import { LogSkeleton, TableSkeleton } from '@/components/skeletons';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Menu, type MenuItem } from '@/components/ui/menu';
 import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { Segmented } from '@/components/ui/segmented';
 import { Switch } from '@/components/ui/switch';
+import { TextLink } from '@/components/ui/text-link';
 import { UploadsFromProduction } from '@/components/uploads-from-production';
 import { api, fileUrl, isMockup, zipUrl } from '@/lib/api';
 import { loadFileEditor } from '@/lib/file-editor-load';
@@ -24,6 +26,7 @@ import { lastLine } from '@/lib/output';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * A site's files: one folder at a time, or one file in the folder's place.
@@ -260,7 +263,7 @@ function FindResults({ site, dir, find }: { site: Site; dir: string; find: Find 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="text-sm" role="status">
           {loading && !result ? (
-            <span className="inline-flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" aria-hidden />Looking in {place}</span>
+            <span className="inline-flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Looking in {place}</span>
           ) : result ? (
             <>
               <span className="font-medium">{find.where === 'text' ? `${result.matches.length} ${result.matches.length === 1 ? 'line' : 'lines'} in ${groups.length} ${groups.length === 1 ? 'file' : 'files'}` : `${result.matches.length} ${result.matches.length === 1 ? 'name' : 'names'}`}</span>
@@ -269,7 +272,7 @@ function FindResults({ site, dir, find }: { site: Site; dir: string; find: Find 
           ) : null}
         </p>
         <span className="ml-auto flex gap-2">
-          {result && <Button size="sm" variant="ghost" disabled={loading} onClick={reload}>Look again</Button>}
+          {result && <Button size="sm" variant="soft" disabled={loading} onClick={reload}>Look again</Button>}
           <ButtonLink size="sm" variant="outline" href={filesHref(site, { dir })} onClick={(e) => (e.preventDefault(), navigate(filesHref(site, { dir }), { scroll: false }))}><X />Back to the folder</ButtonLink>
         </span>
       </div>
@@ -280,31 +283,33 @@ function FindResults({ site, dir, find }: { site: Site; dir: string; find: Find 
         </EmptyState>
       )}
       {result && result.matches.length > 0 && (
-        <ul className={cn('divide-y overflow-hidden rounded-xl border bg-card text-sm shadow-xs', loading && 'opacity-70')}>
-          {groups.map(([path, matches]) => {
-            const folder = matches[0]?.kind === 'dir';
-            return (
-              <li key={path} className="px-4 py-2">
-                <Link href={folder ? filesHref(site, { dir: path }) : filesHref(site, { file: path })} className="flex min-w-0 items-center gap-2.5 font-medium hover:text-primary hover:underline">
-                  {folder ? <Folder className="size-4 shrink-0 text-primary" aria-hidden /> : <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
-                  <span className="min-w-0 [overflow-wrap:anywhere]">{find.where === 'name' ? <Marked text={short(path)} q={find.q} /> : short(path)}</span>
-                </Link>
-                {find.where === 'text' && (
-                  <ul className="mt-1 grid gap-0.5 pl-6.5">
-                    {matches.map((m) => (
-                      <li key={m.line}>
-                        <Link href={filesHref(site, { file: path, ...(m.line ? { line: m.line } : {}) })} className="flex min-w-0 gap-3 rounded px-1 font-mono text-xs leading-5 hover:bg-muted">
-                          <span className="w-10 shrink-0 text-right text-muted-foreground tabular-nums">{m.line}</span>
-                          <span className="min-w-0 truncate"><Marked text={m.text ?? ''} q={find.q} /></span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <Card className={cn('overflow-hidden', loading && 'opacity-70')}>
+          <ul className="divide-y text-sm">
+            {groups.map(([path, matches]) => {
+              const folder = matches[0]?.kind === 'dir';
+              return (
+                <li key={path} className="px-4 py-2">
+                  <TextLink href={folder ? filesHref(site, { dir: path }) : filesHref(site, { file: path })} tone="plain" className="flex min-w-0 gap-2.5 font-medium">
+                    {folder ? <Folder className="size-4 shrink-0 text-primary" aria-hidden /> : <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+                    <span className="min-w-0 [overflow-wrap:anywhere]">{find.where === 'name' ? <Marked text={short(path)} q={find.q} /> : short(path)}</span>
+                  </TextLink>
+                  {find.where === 'text' && (
+                    <ul className="mt-1 grid gap-0.5 pl-6.5">
+                      {matches.map((m) => (
+                        <li key={m.line}>
+                          <Link href={filesHref(site, { file: path, ...(m.line ? { line: m.line } : {}) })} className="flex min-w-0 gap-3 rounded px-1 font-mono text-xs leading-5 hover:bg-muted">
+                            <span className="w-10 shrink-0 text-right text-muted-foreground tabular-nums">{m.line}</span>
+                            <span className="min-w-0 truncate"><Marked text={m.text ?? ''} q={find.q} /></span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       )}
     </section>
   );
@@ -606,7 +611,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
           <CloudDownload className="size-4 shrink-0" aria-hidden />
           Missing files that production has?
-          <Link href={uploadsHref(site)} className="font-medium text-primary hover:underline">Copy from the server</Link>
+          <TextLink href={uploadsHref(site)}>Copy from the server</TextLink>
         </p>
       )}
 
@@ -675,7 +680,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
         </EmptyState>
       )}
       {!find && pickedRows.length > 0 && (
-        <div role="region" aria-label="Selected entries" className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-primary/40 bg-card px-4 py-2 text-sm shadow-md">
+        <Card role="region" aria-label="Selected entries" className="sticky top-2 z-10 flex flex-wrap items-center gap-2 border-primary/40 px-4 py-2 text-sm shadow-md">
           <p className="mr-auto font-medium">{pickedRows.length} selected</p>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'move', paths: pickedRows.map(pathOf) })}><FolderInput />Move to</Button>
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'copy', paths: pickedRows.map(pathOf) })}><Copy />Copy to</Button>
@@ -684,10 +689,10 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
           <Button size="sm" variant="outline" disabled={busy} onClick={() => setAsking({ kind: 'chmod', paths: pickedRows.map(pathOf), folder: (listing?.entries ?? []).some((e) => e.kind === 'dir' && pickedRows.includes(e.name)) })}><KeyRound />Permissions</Button>
           <Button size="sm" variant="outline" disabled={busy} className="text-danger" onClick={() => askDelete(pickedRows)}><Trash2 />Delete</Button>
           <Button size="icon" variant="ghost" className="size-8" aria-label="Clear the selection" onClick={() => setPicked(new Set())}><X /></Button>
-        </div>
+        </Card>
       )}
       {!find && listing && rows.length > 0 && (
-        <div className={cn('overflow-hidden rounded-xl border bg-card shadow-xs', loading && 'opacity-70')}>
+        <Card className={cn('overflow-hidden', loading && 'opacity-70')}>
           <table className="w-full table-fixed text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>
@@ -742,7 +747,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
                       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
                         <EntryIcon entry={e} />
                         {href ? (
-                          <Link href={href} className="min-w-0 font-medium [overflow-wrap:anywhere] hover:text-primary hover:underline">{e.name}</Link>
+                          <TextLink href={href} tone="plain" className="inline min-w-0 font-medium [overflow-wrap:anywhere]">{e.name}</TextLink>
                         ) : (
                           <span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">{e.name}</span>
                         )}
@@ -756,7 +761,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
                       ) : e.kind !== 'dir' ? (
                         ''
                       ) : sizes[e.name] === 'busy' ? (
-                        <LoaderCircle className="ml-auto size-3.5 animate-spin" aria-label={`Measuring ${e.name}`} />
+                        <Spinner className="ml-auto size-3.5" label={`Measuring ${e.name}`} />
                       ) : sizes[e.name] !== undefined ? (
                         <span title="Everything below it counted">{bytes(sizes[e.name] as number)}</span>
                       ) : (
@@ -774,7 +779,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
             </tbody>
           </table>
           <ShowMore {...footer} noun={filter ? 'matches' : 'entries'} />
-        </div>
+        </Card>
       )}
 
       <FileTrashCard entries={trash.data ?? []} onRestore={(entry: FileTrashEntry) => restore(entry.id, entry.items.length === 1 ? nameOf(entry.items[0] ?? '') : `${entry.items.length} entries`)} />
@@ -960,7 +965,7 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
             {canEdit && !editing && <Button size="sm" onClick={() => setEdit(true)}><Pencil />Edit</Button>}
             {editing && (
               <>
-                <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>{saving ? <LoaderCircle className="animate-spin" /> : <Save />}Save</Button>
+                <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>{saving ? <Spinner /> : <Save />}Save</Button>
                 <Button size="sm" variant="outline" disabled={saving} onClick={cancel}>{dirty ? (sure ? 'Drop what you typed?' : 'Cancel') : 'Close'}</Button>
               </>
             )}
@@ -984,7 +989,7 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
           tone="warning"
           action={
             <span className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" disabled={saving || compared?.loading} onClick={() => void compare()}>{compared?.loading ? <LoaderCircle className="animate-spin" /> : <GitCompare />}See the difference</Button>
+              <Button size="sm" variant="outline" disabled={saving || compared?.loading} onClick={() => void compare()}>{compared?.loading ? <Spinner /> : <GitCompare />}See the difference</Button>
               <Button size="sm" variant="outline" disabled={saving} onClick={takeDisk}>Reload from disk</Button>
               <Button size="sm" variant="outline" disabled={saving} onClick={() => void save(true)}>Save anyway</Button>
             </span>
@@ -1013,13 +1018,13 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
       {!view && loading && <LogSkeleton lines={14} />}
       {view?.kind === 'text' && !editing && <TextView text={base?.text ?? view.text ?? ''} line={line} name={nameOf(file)} />}
       {view?.kind === 'text' && editing && base && (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-xs focus-within:border-primary/60">
+        <Card className="overflow-hidden focus-within:border-primary/60">
           <EditorBoundary fallback={plain}>
             <Suspense fallback={plain}>
               <FileEditor value={draft} onChange={setDraft} onSave={() => void save()} name={nameOf(file)} label={`${nameOf(file)}, editing`} line={line} />
             </Suspense>
           </EditorBoundary>
-        </div>
+        </Card>
       )}
       {editing && (
         <p className="text-xs text-muted-foreground" role="status">
@@ -1027,9 +1032,9 @@ function FileViewer({ site, file, line, edit }: { site: Site; file: string; line
         </p>
       )}
       {view?.kind === 'image' && (
-        <div className="grid place-items-center overflow-hidden rounded-xl border bg-[repeating-conic-gradient(var(--color-muted)_0_25%,transparent_0_50%)] bg-[length:20px_20px] p-4">
+        <Card className="grid place-items-center overflow-hidden bg-[repeating-conic-gradient(var(--color-muted)_0_25%,transparent_0_50%)] bg-[length:20px_20px] p-4">
           <img src={fileUrl(site.domain, file, site.path, true)} alt={nameOf(file)} className="max-h-[70vh] max-w-full rounded shadow-sm" />
-        </div>
+        </Card>
       )}
       {(view?.kind === 'binary' || view?.kind === 'large') && (
         <EmptyState
@@ -1066,7 +1071,7 @@ function TextView({ text, line, name }: { text: string; line: number | undefined
   }, [line, text]);
   const width = `${String(lines.length).length + 1}ch`;
   return (
-    <div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+    <Card className="overflow-hidden">
       <div role="region" aria-label={`${name}, read only`} tabIndex={0} className="max-h-[70vh] overflow-auto py-2 font-mono text-xs leading-5">
         <div className="w-max min-w-full">
           {lines.map((l, i) => {
@@ -1080,6 +1085,6 @@ function TextView({ text, line, name }: { text: string; line: number | undefined
           })}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

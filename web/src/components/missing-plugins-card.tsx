@@ -1,11 +1,12 @@
 import type { DumpPlugin, DumpTheme, MissingScanState, ProductionSettings, ServerFiles, Site, WporgPlugin } from '@devmagic-panel/shared';
 import { isWpCliCommand, splitSshHost } from '@devmagic-panel/shared';
-import { Check, ChevronDown, Download, LoaderCircle, PackageX, RefreshCw, Server } from 'lucide-react';
+import { Check, ChevronDown, Download, PackageX, RefreshCw, Server } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { JobFooter } from '@/components/job-box';
 import { useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { forgetProduction } from '@/lib/production';
@@ -14,6 +15,7 @@ import { askWporg, onServer, pluginItem, pluginSlug } from '@/lib/missing-plugin
 import { siteTarget } from '@/lib/site-ref';
 import { cn } from '@/lib/utils';
 import { ServerPassword } from '@/pages/new-site-database';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * Plugins the site's database names that its files lack, after a database
@@ -122,31 +124,31 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
     </Button>
   );
 
-  const row = 'flex min-h-11 items-center gap-2.5 rounded-xl border bg-card px-4 py-2 text-sm';
+  const row = 'flex min-h-11 items-center gap-2.5 px-4 py-2 text-sm';
   if (missing === null) {
     const r = state?.running;
     return (
-      <p className={cn(row, 'text-muted-foreground')} role="status" aria-busy="true">
-        <LoaderCircle className="size-4 shrink-0 animate-spin" />
+      <Card className={cn(row, 'text-muted-foreground')} role="status" aria-busy="true">
+        <Spinner className="size-4 shrink-0" />
         <span className="min-w-0 flex-1">
           Checking the database for {show} the files lack{r && r.step !== 'Starting' ? `: ${r.step.charAt(0).toLowerCase()}${r.step.slice(1)}${r.total > 1 ? ` (${r.done} of ${r.total})` : ''}` : ''}...
           <span className="block text-xs">It goes on while you look elsewhere; the result is kept for half an hour.</span>
         </span>
-      </p>
+      </Card>
     );
   }
   const running = install.job?.status === 'running' || copy.job?.status === 'running';
   const total = missing.length + themes.length;
   if (total === 0 && !install.job && !copy.job) {
     return (
-      <p className={cn(row, 'text-muted-foreground')}>
+      <Card className={cn(row, 'text-muted-foreground')}>
         {failed ? <PackageX className="size-4 shrink-0" /> : <Check className="size-4 shrink-0 text-success" />}
         <span className="min-w-0 flex-1">
           {failed ? `Could not check the database for missing ${show}${state?.error ? `: ${state.error}` : '.'}` : show === 'plugins' ? 'No plugin is missing: the files have every plugin the database names.' : 'No theme is missing: the files have the theme of every site, and its parent.'}
         </span>
         {checked}
         {again}
-      </p>
+      </Card>
     );
   }
 
@@ -205,7 +207,7 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
   };
   const active = missing.filter((p) => p.active).length;
   return (
-    <section className="overflow-hidden rounded-xl border bg-card text-sm" aria-label={`Missing ${show}`}>
+    <Card role="region" className="overflow-hidden text-sm" aria-label={`Missing ${show}`}>
       <div className="flex items-center gap-2 pr-2">
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 px-4 py-2 text-left hover:bg-muted/50">
         <PackageX className={cn('size-4 shrink-0', total > 0 ? 'text-warning' : 'text-muted-foreground')} />
@@ -213,7 +215,7 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
           <span className="font-medium">{total === 0 ? 'Nothing is missing any more' : `${[missing.length ? `${missing.length} plugin${missing.length === 1 ? '' : 's'}` : '', themes.length ? `${themes.length} theme${themes.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')} ${total === 1 ? 'is' : 'are'} missing`}</span>
           {total > 0 && <span className="text-muted-foreground">: in the database, not in the files{active > 0 ? `, ${active} plugin${active === 1 ? '' : 's'} active` : ''}</span>}
         </span>
-        {running && <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" />}
+        {running && <Spinner className="size-4 shrink-0 text-muted-foreground" />}
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">{open ? 'Hide' : 'Review'}<ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} /></span>
       </button>
       <span className="hidden sm:inline">{checked}</span>
@@ -240,7 +242,7 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
                   <label htmlFor={id} className="grid min-w-0 gap-0.5">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{wp?.name ?? slug}</span>
-                      <code className="font-mono text-[12px] text-muted-foreground">{p.file}</code>
+                      <code className="font-mono text-xs text-muted-foreground">{p.file}</code>
                       {p.active ? <Badge tone="warning">active{p.network ? ', network' : p.sites && p.sites > 1 ? ` on ${p.sites} sites` : ''}</Badge> : <Badge>installed on production</Badge>}
                     </span>
                     <span className="text-xs text-muted-foreground">
@@ -270,7 +272,7 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
                     <label htmlFor={id} className="grid min-w-0 gap-0.5">
                       <span className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{wp?.name ?? t.name}</span>
-                        <code className="font-mono text-[12px] text-muted-foreground">wp-content/themes/{t.name}</code>
+                        <code className="font-mono text-xs text-muted-foreground">wp-content/themes/{t.name}</code>
                         <Badge tone="primary">theme</Badge>
                         {t.parent ? <Badge>parent of the active theme</Badge> : <Badge tone="warning">active{t.sites && t.sites > 1 ? ` on ${t.sites} sites` : ''}</Badge>}
                       </span>
@@ -296,9 +298,9 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
                 <span className="font-medium">The site's server</span>
                 {production && !showForm && (
                   <>
-                    <code className="font-mono text-[12px] text-muted-foreground">{production.host}:{production.folder}</code>
-                    <Button size="sm" variant="ghost" className="ml-auto" onClick={edit}>Change</Button>
-                    <Button size="sm" variant="ghost" title={`Forget ${production.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, (now) => { setProduction(now); setServer(null); setSecret(''); })}>Forget</Button>
+                    <code className="font-mono text-xs text-muted-foreground">{production.host}:{production.folder}</code>
+                    <Button size="sm" variant="soft" className="ml-auto" onClick={edit}>Change</Button>
+                    <Button size="sm" variant="soft" title={`Forget ${production.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, (now) => { setProduction(now); setServer(null); setSecret(''); })}>Forget</Button>
                   </>
                 )}
               </div>
@@ -309,28 +311,28 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
                 <div className="grid gap-2.5">
                   <div className="grid gap-1.5">
                     <label htmlFor="missing-server-host" className="text-xs font-medium">SSH host</label>
-                    <Input id="missing-server-host" value={hostField} onChange={(e) => setHostField(e.target.value)} placeholder="deploy@www.spellbook.example, or an alias from ~/.ssh/config" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={hostField.trim() !== '' && !hostOk ? true : undefined} />
+                    <Input id="missing-server-host" value={hostField} onChange={(e) => setHostField(e.target.value)} placeholder="deploy@www.spellbook.example, or an alias from ~/.ssh/config" className="font-mono text-dense" autoComplete="off" spellCheck={false} aria-invalid={hostField.trim() !== '' && !hostOk ? true : undefined} />
                   </div>
                   <div className="grid gap-1.5">
                     <label htmlFor="missing-server-folder" className="text-xs font-medium">WordPress folder on the server</label>
-                    <Input id="missing-server-folder" value={folderField} onChange={(e) => setFolderField(e.target.value)} placeholder="/var/www/spellbook" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={folderField.trim() !== '' && !folderOk ? true : undefined} />
+                    <Input id="missing-server-folder" value={folderField} onChange={(e) => setFolderField(e.target.value)} placeholder="/var/www/spellbook" className="font-mono text-dense" autoComplete="off" spellCheck={false} aria-invalid={folderField.trim() !== '' && !folderOk ? true : undefined} />
                   </div>
                   <details className="text-xs">
                     <summary className="cursor-pointer font-medium text-primary">WP-CLI has another name on the server?</summary>
-                    <Input aria-label="WP-CLI command on the server" value={wpCliField} onChange={(e) => setWpCliField(e.target.value)} placeholder="wp" className="mt-2 font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={!wpCliOk ? true : undefined} />
+                    <Input aria-label="WP-CLI command on the server" value={wpCliField} onChange={(e) => setWpCliField(e.target.value)} placeholder="wp" className="mt-2 font-mono text-dense" autoComplete="off" spellCheck={false} aria-invalid={!wpCliOk ? true : undefined} />
                   </details>
                   <p className="text-xs text-muted-foreground">Saved for this site, with no password. Refresh from production on the Database tab uses the same server and folder.</p>
                   {saveError && <p role="alert" className="text-xs text-danger">{saveError}</p>}
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" disabled={!hostOk || !folderOk || !wpCliOk || saving} onClick={save}>{saving && <LoaderCircle className="animate-spin" />}Save the server</Button>
-                    {production && <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
+                    <Button variant="outline" disabled={!hostOk || !folderOk || !wpCliOk || saving} onClick={save}>{saving && <Spinner />}Save the server</Button>
+                    {production && <Button variant="soft" onClick={() => setEditing(false)}>Cancel</Button>}
                   </div>
                 </div>
               ) : production && (
                 <>
                   <ServerPassword id="missing-server-secret" host={production.host} value={secret} onChange={setSecret} />
                   <Button variant="outline" className="w-fit" disabled={asking} onClick={ask}>
-                    {asking ? <LoaderCircle className="animate-spin" /> : <Server />}
+                    {asking ? <Spinner /> : <Server />}
                     {server ? `Ask ${production.host} again` : `See what ${production.host} has`}
                   </Button>
                   {serverError && <p role="alert" className="text-xs text-danger">{serverError}</p>}
@@ -347,7 +349,7 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
                 themes: themesFromWporg.map((t) => ({ slug: t.name, ...(t.version ? { version: t.version } : {}) })),
               }))}
             >
-              {install.job?.status === 'running' ? <LoaderCircle className="animate-spin" /> : <Download />}
+              {install.job?.status === 'running' ? <Spinner /> : <Download />}
               Install {fromWporg.length + themesFromWporg.length || ''} from WordPress.org
             </Button>
             {server && production && !showForm && (
@@ -364,7 +366,7 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
                   ...(secret ? { password: secret } : {}),
                 }))}
               >
-                {copy.job?.status === 'running' ? <LoaderCircle className="animate-spin" /> : <Server />}
+                {copy.job?.status === 'running' ? <Spinner /> : <Server />}
                 Copy {fromServer.length + themesFromServer.length || ''} from {production.host}
               </Button>
             )}
@@ -373,6 +375,6 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
       )}
       <JobFooter job={install.job} error={install.error} onRetry={() => void install.retry()} />
       <JobFooter job={copy.job} error={copy.error} onRetry={() => void copy.retry()} />
-    </section>
+    </Card>
   );
 }

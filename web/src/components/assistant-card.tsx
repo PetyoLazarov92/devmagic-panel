@@ -1,18 +1,22 @@
 import type { AssistantSettings } from '@devmagic-panel/shared';
 import { ASSISTANT_MODELS } from '@devmagic-panel/shared';
-import { BookText, Check, Copy, ExternalLink, KeyRound, LoaderCircle, Sparkles, Terminal } from 'lucide-react';
+import { BookText, Check, Copy, KeyRound, Sparkles, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Field, Select } from '@/components/ui/field';
 import { Dialog } from '@/components/ui/dialog';
 import { Input, Textarea } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
 import { SecretInput } from '@/components/ui/secret-input';
+import { SettingRow } from '@/components/ui/setting-row';
 import { Switch } from '@/components/ui/switch';
+import { TextLink } from '@/components/ui/text-link';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+import { Spinner } from '@/components/ui/spinner';
 
 /** Where to create a Console API key, and Anthropic's page on what it is. */
 const CONSOLE_KEYS_URL = 'https://platform.claude.com/settings/keys';
@@ -56,18 +60,13 @@ export function AssistantCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>AI assistant</CardTitle>
-        <Badge tone={current.enabled ? 'success' : 'neutral'}>{current.enabled ? 'on' : 'off'}</Badge>
-      </CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="flex items-center gap-1.5 font-medium"><Sparkles className="size-4 text-primary" />Claude briefing at login</p>
-            <p className="text-xs text-muted-foreground">Turns the Aura findings into a short summary with their fix buttons on the Sites page. Optional: the panel works the same without it.</p>
-          </div>
-          <Switch checked={current.enabled} label="AI assistant" disabled={busy !== null} onChange={(enabled) => void save('enabled', () => api.saveAssistant({ enabled }))} />
-        </div>
+      <CardHeader title="AI assistant" meta={<Badge tone={current.enabled ? 'success' : 'neutral'}>{current.enabled ? 'on' : 'off'}</Badge>} />
+      <CardBody>
+        <SettingRow
+          title={<span className="flex items-center gap-1.5"><Sparkles className="size-4 text-primary" />Claude briefing at login</span>}
+          description="Turns the Aura findings into a short summary with their fix buttons on the Sites page. Optional: the panel works the same without it."
+          control={<Switch checked={current.enabled} label="AI assistant" disabled={busy !== null} onChange={(enabled) => void save('enabled', () => api.saveAssistant({ enabled }))} />}
+        />
 
         <Field label="Model" htmlFor="assistant-model">
           <Select id="assistant-model" value={current.model} disabled={busy !== null} onChange={(e) => void save('model', () => api.saveAssistant({ model: e.target.value as AssistantSettings['model'] }))}>
@@ -77,20 +76,16 @@ export function AssistantCard() {
 
         <div className="grid gap-2 border-t pt-4">
           <p className="flex items-center gap-1.5 font-medium"><KeyRound className="size-4 text-muted-foreground" />Anthropic API key</p>
-          <div className="rounded-md border border-primary/25 bg-primary/6 px-3 py-2 text-xs text-muted-foreground">
+          <Notice tone="info" size="inline" icon={false}>
             <p>
               An API key from the Claude Console, starting <code className="font-mono text-foreground">sk-ant-api03-</code> and billed per use, apart from a Claude plan. A token from{' '}
               <code className="font-mono text-foreground">claude setup-token</code> (<code className="font-mono text-foreground">sk-ant-oat01-</code>) signs in Claude Code only, and Claude refuses it here.
             </p>
             <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-              <a href={CONSOLE_KEYS_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-                Create a key <ExternalLink className="size-3" />
-              </a>
-              <a href={API_DOCS_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-                How API keys work <ExternalLink className="size-3" />
-              </a>
+              <TextLink href={CONSOLE_KEYS_URL}>Create a key</TextLink>
+              <TextLink href={API_DOCS_URL}>How API keys work</TextLink>
             </p>
-          </div>
+          </Notice>
           <p className="text-xs text-muted-foreground">
             {SOURCE[current.keySource]}{current.keyHint ? ` (ends in ${current.keyHint})` : ''}. A saved key stays in ~/.config/devmagic-panel/secrets.json, readable only by you, and never comes back to the browser.
           </p>
@@ -101,7 +96,7 @@ export function AssistantCard() {
                 onChange={(e) => setKey(e.target.value)}
                 placeholder={current.keySource === 'panel' ? 'Replace the saved key: sk-ant-api03-...' : 'sk-ant-api03-...'}
                 aria-label="Anthropic API key"
-                className="font-mono text-[13px]"
+                className="font-mono text-dense"
               />
             </div>
             <Button
@@ -110,30 +105,29 @@ export function AssistantCard() {
               disabled={busy !== null || !key.startsWith('sk-ant-')}
               onClick={() => void save('key', () => api.saveAssistantKey(key), 'Key saved').then(() => setKey(''))}
             >
-              {busy === 'key' ? <LoaderCircle className="animate-spin" /> : <Check />}
+              {busy === 'key' ? <Spinner /> : <Check />}
               Save key
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void test()}>
-              {busy === 'test' && <LoaderCircle className="animate-spin" />}
+              {busy === 'test' && <Spinner />}
               Test connection
             </Button>
             {current.keySource === 'panel' && (
-              <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void save('remove', () => api.removeAssistantKey(), 'Key removed')}>
+              <Button size="sm" variant="soft" disabled={busy !== null} onClick={() => void save('remove', () => api.removeAssistantKey(), 'Key removed')}>
                 Remove saved key
               </Button>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-4 border-t pt-4">
-          <div>
-            <p className="flex items-center gap-1.5 font-medium"><BookText className="size-4 text-muted-foreground" />Conventions</p>
-            <p className="text-xs text-muted-foreground">How sites are named and set up here. Claude reads it before it fills in the new site wizard; share it with your team.</p>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Edit</Button>
-        </div>
+        <SettingRow
+          className="border-t pt-4"
+          title={<span className="flex items-center gap-1.5"><BookText className="size-4 text-muted-foreground" />Conventions</span>}
+          description="How sites are named and set up here. Claude reads it before it fills in the new site wizard; share it with your team."
+          control={<Button size="sm" variant="outline" onClick={() => setEditing(true)}>Edit</Button>}
+        />
         {editing && <ConventionsEditor onClose={() => setEditing(false)} />}
 
         <McpSection />
@@ -141,7 +135,7 @@ export function AssistantCard() {
         <p className="border-t pt-4 text-xs text-muted-foreground">
           What Claude gets: site names and the panel's findings, with anything secret-looking blanked out. Never database contents, passwords or keys. Each briefing shows exactly what was sent.
         </p>
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -173,11 +167,11 @@ function ConventionsEditor({ onClose }: { onClose: () => void }) {
       title="conventions.md"
       description={data ? `${data.saved ? 'Saved in' : 'Not saved yet; this is the default for this machine. Saving writes'} ${data.path}.` : 'Loading...'}
     >
-      <Textarea aria-label="conventions.md" className="min-h-96 font-mono text-[13px]" value={value} onChange={(e) => setText(e.target.value)} spellCheck={false} />
+      <Textarea aria-label="conventions.md" className="min-h-96 font-mono text-dense" value={value} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="soft" onClick={onClose}>Cancel</Button>
         <Button disabled={saving || !data} onClick={() => void save()}>
-          {saving && <LoaderCircle className="animate-spin" />}
+          {saving && <Spinner />}
           Save
         </Button>
       </div>

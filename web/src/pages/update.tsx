@@ -1,11 +1,12 @@
 import type { ChangelogSection, InstalledRelease, UpdateStatus, UpdateWay } from '@devmagic-panel/shared';
 import { UPDATE_WAY_LABELS, UPDATE_WAYS } from '@devmagic-panel/shared';
-import { Check, ChevronRight, CircleArrowUp, Copy, History, Info, LoaderCircle, X } from 'lucide-react';
+import { Check, ChevronRight, CircleArrowUp, Copy, History, X } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
+import { IconButton } from '@/components/ui/icon-button';
 import { shareUpdate } from '@/components/update-indicator';
 import { api } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
@@ -15,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { InstallForm, InstallProgress, LastInstall } from '@/pages/update-install';
 import { CheckAgain, Notice, PageHeader } from '@/components/page';
 import { CardsSkeleton } from '@/components/skeletons';
+import { Spinner } from '@/components/ui/spinner';
 
 /** The installer's command, for a terminal instead of the password field: folded, as the way most people never need. */
 function TerminalWay({ command }: { command: string }) {
@@ -33,7 +35,7 @@ function TerminalWay({ command }: { command: string }) {
 function inline(text: string): ReactNode[] {
   return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) =>
     part.startsWith('**') && part.endsWith('**') ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
-    : part.startsWith('`') && part.endsWith('`') ? <code key={i} className="font-mono text-[13px]">{part.slice(1, -1)}</code>
+    : part.startsWith('`') && part.endsWith('`') ? <code key={i} className="font-mono text-dense">{part.slice(1, -1)}</code>
     : part,
   );
 }
@@ -43,16 +45,8 @@ function Command({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-start gap-2 rounded-md bg-muted p-3">
-      <code className="min-w-0 flex-1 font-mono text-[13px] break-all">{command}</code>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="size-7 shrink-0"
-        aria-label="Copy the command"
-        onClick={() => void navigator.clipboard?.writeText(command).then(() => setCopied(true))}
-      >
-        {copied ? <Check /> : <Copy />}
-      </Button>
+      <code className="min-w-0 flex-1 font-mono text-dense break-all">{command}</code>
+      <IconButton icon={copied ? Check : Copy} label="Copy the command" className="size-7 shrink-0" onClick={() => void navigator.clipboard?.writeText(command).then(() => setCopied(true))} />
     </div>
   );
 }
@@ -124,11 +118,11 @@ export function UpdatePage() {
         >
           {status.installerChanged && (
             <p className="text-sm">
-              Afterwards, run <code className="font-mono text-[13px] break-all">{status.command}</code> in a terminal for the installer's part.
+              Afterwards, run <code className="font-mono text-dense break-all">{status.command}</code> in a terminal for the installer's part.
             </p>
           )}
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
+            <Button variant="soft" onClick={() => setConfirming(false)}>Cancel</Button>
             <Button
               disabled={starting}
               onClick={() => {
@@ -158,7 +152,7 @@ export function UpdatePage() {
           </div>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setSwitching(null)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setSwitching(null)}>Cancel</Button>
           <Button
             disabled={starting}
             onClick={() => {
@@ -198,25 +192,16 @@ export function UpdatePage() {
           {!installing && status.install && <LastInstall install={status.install} onAgain={setAsking} onRefresh={() => setTick((n) => n + 1)} />}
           {status.error && <Notice>{status.error}</Notice>}
           {status.notice && (
-            <p className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/8 px-4 py-3 text-sm">
-              <Info className="size-4 shrink-0 text-warning" />
-              {status.notice}
-            </p>
+            <Notice tone="warning">{status.notice}</Notice>
           )}
           {!status.available && !status.error && (
-            <p className="flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm">
-              <Check className="size-4 shrink-0 text-success" />
-              {status.reason ?? 'You have the latest version.'}
-            </p>
+            <Notice tone="success">{status.reason ?? 'You have the latest version.'}</Notice>
           )}
 
           {status.available && status.latest && (
             <Card>
-              <CardHeader>
-                <CardTitle>{status.latest} is out</CardTitle>
-                <CircleArrowUp className="size-4 text-primary" />
-              </CardHeader>
-              <div className="grid gap-3 p-5 text-sm">
+              <CardHeader title={<>{status.latest} is out</>} meta={<CircleArrowUp className="size-4 text-primary" />} />
+              <CardBody className="gap-3">
                 {status.mode === 'panel' && (
                   <>
                     <p className="text-muted-foreground">
@@ -224,13 +209,13 @@ export function UpdatePage() {
                       to the installed releases, switches to it and restarts. Nothing is built here. The page reconnects by itself.
                     </p>
                     {status.installerChanged && (
-                      <p className="rounded-md border border-warning/40 bg-warning/8 px-3 py-2">
+                      <Notice tone="warning" size="inline">
                         This release changes the installer too. The panel works after the update as it is; for the installer's own part, run{' '}
-                        <code className="font-mono text-[13px] break-all">{status.command}</code> in a terminal afterwards (it asks for your password).
-                      </p>
+                        <code className="font-mono text-dense break-all">{status.command}</code> in a terminal afterwards (it asks for your password).
+                      </Notice>
                     )}
                     <Button className="justify-self-start" disabled={starting} onClick={() => setConfirming(true)}>
-                      {starting ? <LoaderCircle className="animate-spin" /> : <CircleArrowUp />}
+                      {starting ? <Spinner /> : <CircleArrowUp />}
                       Update to {status.latest}
                     </Button>
                   </>
@@ -269,7 +254,7 @@ export function UpdatePage() {
                 )}
                 {status.mode === 'blocked' && <p className="text-warning">{status.reason}</p>}
                 {startError && <p role="alert" className="text-danger">{startError}</p>}
-              </div>
+              </CardBody>
             </Card>
           )}
 
@@ -277,27 +262,19 @@ export function UpdatePage() {
 
           {status.releases.length > 0 && (
             <Card>
-              <CardHeader>
-                <CardTitle>Installed releases</CardTitle>
-                <History className="size-4 text-muted-foreground" />
-              </CardHeader>
+              <CardHeader title="Installed releases" meta={<History className="size-4 text-muted-foreground" />} />
               <ul className="divide-y">
                 {status.releases.map((r) => (
                   <li key={r.name} className="text-sm">
                   <div className="flex flex-wrap items-center gap-2 px-5 py-3">
-                    <span className="font-mono text-[13px] font-medium">{r.name}</span>
+                    <span className="font-mono text-dense font-medium">{r.name}</span>
                     {r.current && <Badge tone="success">running</Badge>}
                     <span className="text-xs text-muted-foreground">installed {timeAgo(r.installedAt)}</span>
                     {r.changes && (
-                      <button
-                        type="button"
-                        aria-expanded={opened === r.name}
-                        onClick={() => setOpened(opened === r.name ? null : r.name)}
-                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <ChevronRight className={cn('size-3.5 transition-transform', opened === r.name && 'rotate-90')} />
+                      <Button size="xs" variant="soft" aria-expanded={opened === r.name} onClick={() => setOpened(opened === r.name ? null : r.name)} className="text-muted-foreground hover:text-foreground">
+                        <ChevronRight className={cn('transition-transform', opened === r.name && 'rotate-90')} />
                         {changesLabel(r.changes)}
-                      </button>
+                      </Button>
                     )}
                     <span className="flex-1" />
                     {!r.current && r.mode === 'panel' && (
@@ -314,7 +291,7 @@ export function UpdatePage() {
                             Switch to it
                           </Button>
                         )}
-                        <Button size="sm" variant={r.fromPanel ? 'ghost' : 'outline'} aria-expanded={howTo === r.name} onClick={() => setHowTo(howTo === r.name ? null : r.name)}>
+                        <Button size="sm" variant={r.fromPanel ? 'soft' : 'outline'} aria-expanded={howTo === r.name} onClick={() => setHowTo(howTo === r.name ? null : r.name)}>
                           {r.fromPanel ? 'In a terminal' : 'How to switch'}
                         </Button>
                       </>
@@ -367,23 +344,23 @@ function WhatIsNew({ current, changelog }: { current: string; changelog: UpdateS
   const several = changelog.length > 1;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>What is new since v{current.replace(/^v/, '')}</CardTitle>
-        {several && (
-          <div className="flex items-center gap-1">
-            <span className="text-xs whitespace-nowrap text-muted-foreground">{changelog.length} releases</span>
-            <Button size="sm" variant="ghost" onClick={() => setOpen(open.size === changelog.length ? new Set() : new Set(changelog.map((c) => c.version)))}>
+      <CardHeader
+        title={`What is new since v${current.replace(/^v/, '')}`}
+        meta={several && <span className="text-xs whitespace-nowrap text-muted-foreground">{changelog.length} releases</span>}
+        actions={
+          several && (
+            <Button size="sm" variant="soft" onClick={() => setOpen(open.size === changelog.length ? new Set() : new Set(changelog.map((c) => c.version)))}>
               {open.size === changelog.length ? 'Collapse all' : 'Expand all'}
             </Button>
-          </div>
-        )}
-      </CardHeader>
+          )
+        }
+      />
       <ul className="divide-y">
         {changelog.map((section) => {
           const isOpen = open.has(section.version);
           const heading = (
             <>
-              <span className="font-mono text-[13px] font-medium group-hover:text-primary">{section.version}</span>
+              <span className="font-mono text-dense font-medium group-hover:text-primary">{section.version}</span>
               {section.date && <span className="text-xs text-muted-foreground">{section.date}</span>}
               {!isOpen && <span className="ml-auto text-xs text-muted-foreground">{section.items.length === 1 ? '1 change' : `${section.items.length} changes`}</span>}
             </>
@@ -425,7 +402,7 @@ function Sections({ sections }: { sections: readonly ChangelogSection[] }) {
       {sections.map((section) => (
         <li key={section.version} className="px-5 py-3">
           <p className="flex items-center gap-2">
-            <span className="font-mono text-[13px] font-medium">{section.version}</span>
+            <span className="font-mono text-dense font-medium">{section.version}</span>
             {section.date && <span className="text-xs text-muted-foreground">{section.date}</span>}
           </p>
           <ul className="mt-1.5 grid list-disc gap-1.5 pl-5 text-sm">
@@ -450,10 +427,7 @@ function AccessCard({ status }: { status: UpdateStatus }) {
   if (!status.source && !status.access) return null;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>How updates arrive</CardTitle>
-        <Badge tone={status.source ? 'success' : 'danger'}>{status.source ? UPDATE_WAY_LABELS[status.source] : 'no access'}</Badge>
-      </CardHeader>
+      <CardHeader title="How updates arrive" meta={<Badge tone={status.source ? 'success' : 'danger'}>{status.source ? UPDATE_WAY_LABELS[status.source] : 'no access'}</Badge>} />
       <ul className="divide-y">
         {UPDATE_WAYS.map((way) => {
           const problem = status.access?.find((a) => a.way === way)?.problem;

@@ -1,5 +1,4 @@
 import type { SessionInfo } from '@devmagic-panel/shared';
-import { LoaderCircle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { CommandPalette } from '@/components/command-palette';
@@ -29,6 +28,7 @@ import { SettingsPage } from '@/pages/settings';
 import { SiteDetailPage } from '@/pages/site-detail';
 import { SitesPage } from '@/pages/sites';
 import { UpdatePage } from '@/pages/update';
+import { Spinner } from '@/components/ui/spinner';
 
 type Session = SessionInfo & { setupRequired: boolean };
 
@@ -154,7 +154,7 @@ export function App() {
   if (!session) {
     return (
       <div className="flex min-h-svh items-center justify-center text-muted-foreground">
-        <LoaderCircle className="size-5 animate-spin" aria-label="Loading" />
+        <Spinner className="size-5" label="Loading" />
       </div>
     );
   }

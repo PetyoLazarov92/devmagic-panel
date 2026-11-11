@@ -1,9 +1,10 @@
-import { Download, LoaderCircle, Play } from 'lucide-react';
+import { Download, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { lastLine } from '@/lib/site-actions';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * Installs Mailpit (the pinned release, checksum checked, as a user service)
@@ -22,7 +23,7 @@ export function MailpitInstall({ offer, onDone, size = 'sm' }: { offer: 'install
   return (
     <div className="grid gap-2">
       <Button size={size} className="justify-self-start" disabled={running} onClick={() => void job.follow(api.startJob('mailpit.install', {}))}>
-        {running ? <LoaderCircle className="animate-spin" /> : offer === 'install' ? <Download /> : <Play />}
+        {running ? <Spinner /> : offer === 'install' ? <Download /> : <Play />}
         {offer === 'install' ? 'Install Mailpit' : 'Start Mailpit'}
       </Button>
       {job.job && running && <StepList steps={job.job.steps} open={open} setOpen={setOpen} />}

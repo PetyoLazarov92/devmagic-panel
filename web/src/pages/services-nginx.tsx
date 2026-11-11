@@ -1,6 +1,6 @@
 import type { NginxConfig, NginxReport, Site, SiteServer } from '@devmagic-panel/shared';
 import { SITE_SERVER_LABEL, SITE_SERVERS } from '@devmagic-panel/shared';
-import { ArrowRightLeft, Check, Copy, FileCode2, LoaderCircle, Power, RefreshCw, ScrollText, Server, Split, TriangleAlert } from 'lucide-react';
+import { ArrowRightLeft, Check, Copy, FileCode2, Power, RefreshCw, ScrollText, Server, Split } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
@@ -8,18 +8,20 @@ import { LogView } from '@/components/log-view';
 import { StatusDot } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/field';
+import { FilterChips } from '@/components/ui/filter-chips';
+import { KeyValue } from '@/components/ui/key-value';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { runRestarting } from '@/lib/restarting';
 import { toast } from '@/lib/toast';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import { useAsync } from '@/lib/use-async';
-import { cn } from '@/lib/utils';
 import { CardsSkeleton, LogSkeleton } from '@/components/skeletons';
 import { Notice } from '@/components/page';
+import { Spinner } from '@/components/ui/spinner';
 
 type ConfigFilter = 'all' | 'enabled' | 'managed';
 const FILTERS: Array<{ value: ConfigFilter; label: string; test: (c: NginxConfig) => boolean }> = [
@@ -77,7 +79,7 @@ export function NginxTab({ refresh, onLoading }: { refresh: number; onLoading: (
           <GlanceCard report={data} />
           <ConfigsCard report={data} />
           <Card className="lg:col-span-2">
-            <CardHeader><CardTitle>Error log</CardTitle><ScrollText className="size-4 text-muted-foreground" /></CardHeader>
+            <CardHeader title="Error log" meta={<ScrollText className="size-4 text-muted-foreground" />} />
             <div className="grid gap-3 p-5">
               <p className="font-mono text-xs break-all text-muted-foreground">{log.data?.file ?? data.errorLog}</p>
               {log.data && !log.data.exists && <p className="text-sm text-muted-foreground">The log file does not exist, or the panel cannot read it.</p>}
@@ -99,11 +101,8 @@ function SetupCard({ report, busy, onStart, children }: { report: NginxReport; b
   const conflicts = report.configs.filter((c) => c.conflict);
   return (
     <Card className="lg:col-span-2">
-      <CardHeader>
-        <CardTitle>nginx next to Apache</CardTitle>
-        {report.setUp ? <Badge tone="success">Set up</Badge> : report.installed ? <Badge tone="warning">Not set up</Badge> : <Split className="size-4 text-muted-foreground" />}
-      </CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="nginx next to Apache" meta={report.setUp ? <Badge tone="success">Set up</Badge> : report.installed ? <Badge tone="warning">Not set up</Badge> : <Split className="size-4 text-muted-foreground" />} />
+      <CardBody>
         {!report.installed && (
           <>
             <p>
@@ -138,26 +137,23 @@ function SetupCard({ report, busy, onStart, children }: { report: NginxReport; b
         )}
 
         {conflicts.length > 0 && (
-          <div className="flex gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-warning">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-            <p>
-              {conflicts.map((c) => `${c.file} ${c.conflict}`).join('; ')}. Make {conflicts.length === 1 ? 'it' : 'them'} listen on <code className="font-mono">{nginx}</code>, or turn {conflicts.length === 1 ? 'it' : 'them'} off, before nginx can run next to Apache.
-            </p>
-          </div>
+          <Notice tone="warning" size="inline">
+            {conflicts.map((c) => `${c.file} ${c.conflict}`).join('; ')}. Make {conflicts.length === 1 ? 'it' : 'them'} listen on <code className="font-mono">{nginx}</code>, or turn {conflicts.length === 1 ? 'it' : 'them'} off, before nginx can run next to Apache.
+          </Notice>
         )}
 
         {report.installed && (
           <div className="flex flex-wrap gap-2">
             {!report.setUp && (
               <Button disabled={busy || conflicts.length > 0} onClick={() => setConfirm('nginx.setup')}>
-                {busy ? <LoaderCircle className="animate-spin" /> : <Power />}
+                {busy ? <Spinner /> : <Power />}
                 Set up nginx
               </Button>
             )}
             {report.setUp && (
               <>
                 <Button variant="outline" disabled={busy} onClick={() => onStart('nginx.setup')} title="Writes the panel's nginx settings again, as after an update">
-                  {busy ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+                  {busy ? <Spinner /> : <RefreshCw />}
                   Write settings again
                 </Button>
                 <Button variant="outline" disabled={busy} onClick={() => setConfirm('nginx.teardown')}>
@@ -169,7 +165,7 @@ function SetupCard({ report, busy, onStart, children }: { report: NginxReport; b
           </div>
         )}
         {children}
-      </div>
+      </CardBody>
 
       <Dialog
         open={confirm !== null}
@@ -182,7 +178,7 @@ function SetupCard({ report, busy, onStart, children }: { report: NginxReport; b
         }
       >
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setConfirm(null)}>Cancel</Button>
           <Button
             onClick={() => {
               const id = confirm;
@@ -203,8 +199,8 @@ function ConfigtestCard({ report, onReloaded }: { report: NginxReport; onReloade
   const test = report.configtest;
   return (
     <Card>
-      <CardHeader><CardTitle>Configuration</CardTitle><Server className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-3 p-5 text-sm">
+      <CardHeader title="Configuration" meta={<Server className="size-4 text-muted-foreground" />} />
+      <CardBody className="gap-3">
         <p className="flex items-center gap-2">
           <StatusDot status={test.ok === null ? 'warn' : test.ok ? 'ok' : 'fail'} />
           <span className="font-medium">{test.ok === null ? 'nginx -t could not run' : test.ok ? 'nginx -t passes' : 'nginx -t fails'}</span>
@@ -226,11 +222,11 @@ function ConfigtestCard({ report, onReloaded }: { report: NginxReport; onReloade
               });
             }}
           >
-            {reloading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+            {reloading ? <Spinner /> : <RefreshCw />}
             Reload nginx
           </Button>
         </div>
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -249,26 +245,28 @@ function GlanceCard({ report }: { report: NginxReport }) {
   const enabled = report.configs.filter((c) => c.enabled).length;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>nginx</CardTitle>
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <StatusDot status={server.state === 'running' ? 'ok' : report.setUp ? 'fail' : 'warn'} />
-          {server.state === 'missing' ? 'not installed' : server.state}
-          {server.since && ` · ${upFor(server.since)}`}
-        </span>
-      </CardHeader>
-      <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-2 p-5 text-sm">
-        <dt className="text-muted-foreground">Version</dt>
-        <dd>{server.version ?? 'unknown'}</dd>
-        <dt className="text-muted-foreground">nginx on</dt>
-        <dd>{report.setUp ? <code className="font-mono text-[13px]">{report.addresses.nginx}:80, :443</code> : 'not set up'}</dd>
-        <dt className="text-muted-foreground">Apache on</dt>
-        <dd>{report.setUp ? <code className="font-mono text-[13px]">{report.addresses.apache}:80, :443</code> : 'every address'}</dd>
-        <dt className="text-muted-foreground">PHP</dt>
-        <dd>through PHP-FPM only</dd>
-        <dt className="text-muted-foreground">Configs</dt>
-        <dd>{report.configs.length} in sites-available, {enabled} enabled</dd>
-      </dl>
+      <CardHeader
+        title="nginx"
+        meta={
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <StatusDot status={server.state === 'running' ? 'ok' : report.setUp ? 'fail' : 'warn'} />
+            {server.state === 'missing' ? 'not installed' : server.state}
+            {server.since && ` · ${upFor(server.since)}`}
+          </span>
+        }
+      />
+      <CardBody>
+        <KeyValue
+          labelWidth="sm"
+          rows={[
+            { label: 'Version', value: server.version ?? 'unknown' },
+            { label: 'nginx on', value: report.setUp ? <code className="font-mono text-dense">{report.addresses.nginx}:80, :443</code> : 'not set up' },
+            { label: 'Apache on', value: report.setUp ? <code className="font-mono text-dense">{report.addresses.apache}:80, :443</code> : 'every address' },
+            { label: 'PHP', value: 'through PHP-FPM only' },
+            { label: 'Configs', value: `${report.configs.length} in sites-available, ${enabled} enabled` },
+          ]}
+        />
+      </CardBody>
     </Card>
   );
 }
@@ -278,20 +276,14 @@ function ConfigsCard({ report }: { report: NginxReport }) {
   const shown = report.configs.filter(FILTERS.find((f) => f.value === filter)?.test ?? (() => true));
   return (
     <Card className="lg:col-span-2">
-      <CardHeader><CardTitle>Configs</CardTitle><FileCode2 className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="flex flex-wrap gap-1.5 px-5 pt-4" role="group" aria-label="Show">
-        {FILTERS.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            aria-pressed={filter === f.value}
-            onClick={() => setFilter(f.value)}
-            className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === f.value ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
-          >
-            {f.label} <span className="tabular-nums">{report.configs.filter(f.test).length}</span>
-          </button>
-        ))}
-      </div>
+      <CardHeader title="Configs" meta={<FileCode2 className="size-4 text-muted-foreground" />} />
+      <FilterChips
+        label="Show"
+        value={filter}
+        onChange={setFilter}
+        className="px-5 pt-4"
+        options={FILTERS.map((f) => ({ value: f.value, label: f.label, count: report.configs.filter(f.test).length }))}
+      />
       <ul className="mt-2 divide-y">
         {shown.map((c) => (
           <li key={c.file} className="grid gap-1 px-5 py-3 text-sm">
@@ -341,11 +333,8 @@ function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: SiteSer
 
   return (
     <Card className="lg:col-span-2">
-      <CardHeader>
-        <CardTitle>Sites</CardTitle>
-        <span className="text-xs text-muted-foreground">{sites.data ? counts : 'reading'}</span>
-      </CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="Sites" meta={<span className="text-xs text-muted-foreground">{sites.data ? counts : 'reading'}</span>} />
+      <CardBody>
         <fieldset className="grid gap-2">
           <legend className="mb-1 font-medium">New sites</legend>
           <div className="flex flex-wrap gap-4">
@@ -370,7 +359,7 @@ function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: SiteSer
           })}
         </div>
         <p className="text-xs text-muted-foreground">One site moves at a time, on its Server and PHP tab.</p>
-      </div>
+      </CardBody>
 
       <Dialog
         open={confirm !== null}
@@ -382,10 +371,12 @@ function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: SiteSer
           <div className="grid gap-3 text-sm">
             {current.move.length > 0 && <p>Moving: {current.move.map((s) => s.domain).join(', ')}</p>}
             {current.ignored.length > 0 && (
-              <div className="grid gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2">
-                <p className="text-warning">nginx would not read the .htaccess rules of {current.ignored.map((s) => `${s.domain} (${s.move?.ignored.join(', ')})`).join('; ')}.</p>
-                <Checkbox id="move-all-accept" checked={accepted} onChange={setAccepted} label="Move these too; I know those rules do nothing on nginx" />
-              </div>
+              <Notice tone="warning" size="inline">
+                <div className="grid gap-2">
+                  <p>nginx would not read the .htaccess rules of {current.ignored.map((s) => `${s.domain} (${s.move?.ignored.join(', ')})`).join('; ')}.</p>
+                  <Checkbox id="move-all-accept" checked={accepted} onChange={setAccepted} label="Move these too; I know those rules do nothing on nginx" />
+                </div>
+              </Notice>
             )}
             {current.stay.length > 0 && (
               <div className="grid gap-1 text-muted-foreground">
@@ -396,7 +387,7 @@ function SitesCard({ busy, onStart }: { busy: boolean; onStart: (server: SiteSer
               </div>
             )}
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button>
+              <Button variant="soft" onClick={() => setConfirm(null)}>Cancel</Button>
               <Button
                 disabled={moving === 0}
                 onClick={() => {

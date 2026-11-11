@@ -1,5 +1,5 @@
 import type { ActionId, MysqlBackup, MysqlProcess, UploadResult, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
-import { Archive, ArrowLeft, Database, Gauge, KeyRound, LoaderCircle, OctagonX, RotateCcw, Table2, Trash2, Upload, Users, Wand2 } from 'lucide-react';
+import { Archive, ArrowLeft, Database, Gauge, KeyRound, OctagonX, RotateCcw, Table2, Trash2, Upload, Users, Wand2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/components/db-browser';
 import { MysqlSettingsCard } from '@/components/mysql-settings';
@@ -10,9 +10,11 @@ import { Segmented } from '@/components/ui/segmented';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
 import { Field, Select } from '@/components/ui/field';
+import { FilterChips } from '@/components/ui/filter-chips';
+import { KeyValue } from '@/components/ui/key-value';
 import { Input } from '@/components/ui/input';
 import { JobBox } from '@/components/job-box';
 import { Dialog } from '@/components/ui/dialog';
@@ -27,6 +29,7 @@ import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { CardSkeleton, Reading, TableSkeleton } from '@/components/skeletons';
 import { CheckAgain, Notice } from '@/components/page';
+import { Spinner } from '@/components/ui/spinner';
 
 const DB_KIND: Record<MysqlDatabaseKind, { label: string; tone: 'neutral' | 'primary' | 'success' | 'warning' }> = {
   site: { label: 'Site', tone: 'success' },
@@ -213,11 +216,8 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
       {(runner.job || runner.error) && (
         <div ref={jobCard} className="scroll-mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle>{runner.job?.title ?? 'Job'}</CardTitle>
-              {busy && <LoaderCircle className="size-4 animate-spin text-primary" />}
-            </CardHeader>
-            <div className="grid gap-3 p-5">
+            <CardHeader title={runner.job?.title ?? 'Job'} meta={busy && <Spinner className="size-4 text-primary" />} />
+            <CardBody className="gap-3">
               {runner.job && <JobSteps steps={runner.job.steps} />}
               {runner.job?.status === 'failed' && (
                 <div className="flex flex-wrap items-center gap-2">
@@ -231,7 +231,7 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
                 </p>
               )}
               {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
-            </div>
+            </CardBody>
           </Card>
         </div>
       )}
@@ -239,27 +239,23 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
       <NeedsALook items={looks} />
 
       <Card>
-        <CardHeader><CardTitle>{data.server.product} server</CardTitle><Database className="size-4 text-muted-foreground" /></CardHeader>
-        <div className="flex flex-wrap items-end gap-4 p-5">
-          <dl className="grid flex-1 grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
-            <dt className="text-muted-foreground">Version</dt>
-            <dd className="break-all">{data.server.version}</dd>
-            <dt className="text-muted-foreground">Signed in as</dt>
-            <dd className="font-mono text-[13px] break-all">{data.server.account}</dd>
-            {data.server.datadir && (
-              <>
-                <dt className="text-muted-foreground">Data folder</dt>
-                <dd className="font-mono text-[13px] break-all">{data.server.datadir}</dd>
-              </>
-            )}
-            <dt className="text-muted-foreground">Size</dt>
-            <dd>{bytes(data.server.totalBytes)} in {data.databases.length} databases, read {timeAgo(data.checkedAt)}</dd>
-          </dl>
+        <CardHeader title={<>{data.server.product} server</>} meta={<Database className="size-4 text-muted-foreground" />} />
+        <CardBody className="flex flex-wrap items-end">
+          <KeyValue
+            className="flex-1"
+            labelWidth="sm"
+            rows={[
+              { label: 'Version', value: data.server.version },
+              { label: 'Signed in as', value: <span className="font-mono text-dense">{data.server.account}</span> },
+              ...(data.server.datadir ? [{ label: 'Data folder', value: <span className="font-mono text-dense">{data.server.datadir}</span> }] : []),
+              { label: 'Size', value: `${bytes(data.server.totalBytes)} in ${data.databases.length} databases, read ${timeAgo(data.checkedAt)}` },
+            ]}
+          />
           <Button variant="outline" disabled={analyzing !== null} onClick={() => void analyze()} title="ANALYZE TABLE on every table, so sizes and row counts are current">
-            {analyzing === '*' ? <LoaderCircle className="animate-spin" /> : <Gauge />}
+            {analyzing === '*' ? <Spinner /> : <Gauge />}
             Analyze all
           </Button>
-        </div>
+        </CardBody>
       </Card>
 
       <MysqlSettingsCard />
@@ -267,33 +263,27 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
       <ProcessesCard refresh={refresh} />
 
       <Card>
-        <CardHeader><CardTitle>Top queries</CardTitle><Gauge className="size-4 text-muted-foreground" /></CardHeader>
-        <div className="p-5">
+        <CardHeader title="Top queries" meta={<Gauge className="size-4 text-muted-foreground" />} />
+        <CardBody>
           <SlowQueries inCard onExplain={(sql, database) => database && navigate(mysqlDatabaseHref(database, undefined, true), { state: sqlSeedState(sql, true) })} />
-        </div>
+        </CardBody>
       </Card>
 
       <Card id="mysql-databases" className="scroll-mt-4">
-        <CardHeader><CardTitle>Databases</CardTitle><Database className="size-4 text-muted-foreground" /></CardHeader>
-        <div className="flex flex-wrap gap-1.5 px-5 pt-4" role="group" aria-label="Show">
-          {DB_FILTERS.filter((f) => f.value === 'all' || count(f.value) > 0).map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              aria-pressed={filter === f.value}
-              onClick={() => setFilter(f.value)}
-              className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === f.value ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
-            >
-              {f.label} <span className="tabular-nums">{count(f.value)}</span>
-            </button>
-          ))}
-        </div>
+        <CardHeader title="Databases" meta={<Database className="size-4 text-muted-foreground" />} />
+        <FilterChips
+          label="Show"
+          value={filter}
+          onChange={setFilter}
+          className="px-5 pt-4"
+          options={DB_FILTERS.filter((f) => f.value === 'all' || count(f.value) > 0).map((f) => ({ value: f.value, label: f.label, count: count(f.value) }))}
+        />
         <ul className="mt-2 divide-y">
           {databases.map((d) => (
             <li key={d.name} className="flex items-center gap-3 px-5 py-3 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2">
-                  <Link href={browseHref(d)} className="font-mono text-[13px] break-all hover:underline">{d.name}</Link>
+                  <Link href={browseHref(d)} className="font-mono text-dense break-all hover:underline">{d.name}</Link>
                   <Badge tone={DB_KIND[d.kind].tone}>{DB_KIND[d.kind].label}</Badge>
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -301,7 +291,7 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
                   {d.sites?.length ? <>{' · '}<SiteLinks sites={d.sites} tab="database" /></> : null}
                 </p>
               </div>
-              {analyzing === d.name && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+              {analyzing === d.name && <Spinner className="size-4 text-muted-foreground" />}
               {dbMenu(d).length > 0 && <Menu items={dbMenu(d)} label={`Actions for ${d.name}`} />}
             </li>
           ))}
@@ -312,25 +302,29 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
       <ImportDumpCard databases={data.databases} onDone={report.reload} />
 
       <Card id="mysql-users" className="scroll-mt-4">
-        <CardHeader><CardTitle>Users</CardTitle><Users className="size-4 text-muted-foreground" /></CardHeader>
+        <CardHeader title="Users" meta={<Users className="size-4 text-muted-foreground" />} />
         {data.usersError && <p role="alert" className="mx-5 mt-4 text-sm text-danger">{data.usersError}</p>}
         {leftovers.length > 0 && (
-          <div className="mx-5 mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-warning/30 bg-warning/6 px-4 py-3 text-sm">
-            <p className="min-w-0 flex-[1_1_18rem]">
-              {leftovers.length === 1 ? '1 user has' : `${leftovers.length} users have`} access to no database that exists, like a site&apos;s user left after its database went. A new install that needs the name takes the next free one.
-            </p>
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => setDroppingUsers(leftovers)}>
-              <Trash2 />
-              Delete {leftovers.length === 1 ? 'it' : `all ${leftovers.length}`}
-            </Button>
-          </div>
+          <Notice
+            tone="warning"
+            size="inline"
+            className="mx-5 mt-4"
+            action={
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => setDroppingUsers(leftovers)}>
+                <Trash2 />
+                Delete {leftovers.length === 1 ? 'it' : `all ${leftovers.length}`}
+              </Button>
+            }
+          >
+            {leftovers.length === 1 ? '1 user has' : `${leftovers.length} users have`} access to no database that exists, like a site&apos;s user left after its database went. A new install that needs the name takes the next free one.
+          </Notice>
         )}
         <ul className="mt-2 divide-y">
           {data.users.map((u) => (
             <li key={account(u)} className="flex items-center gap-3 px-5 py-3 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[13px] break-all">{account(u)}</span>
+                  <span className="font-mono text-dense break-all">{account(u)}</span>
                   <Badge tone={USER_KIND[u.kind].tone}>{USER_KIND[u.kind].label}</Badge>
                 </p>
                 <p className="mt-0.5 text-xs break-words text-muted-foreground">
@@ -371,7 +365,7 @@ function BackupsCard({ backups, dir, onDeleted }: { backups: MysqlBackup[]; dir:
 
   return (
     <Card>
-      <CardHeader><CardTitle>Saved copies</CardTitle><Archive className="size-4 text-muted-foreground" /></CardHeader>
+      <CardHeader title="Saved copies" meta={<Archive className="size-4 text-muted-foreground" />} />
       <p className="px-5 pt-4 text-xs text-muted-foreground">
         What deleted databases and users left for Undo, in <span className="font-mono break-all">{dir}</span>. Each goes 14 days after it was saved{backups.length > 0 ? `; ${bytes(total)} now` : ''}.
       </p>
@@ -383,14 +377,14 @@ function BackupsCard({ backups, dir, onDeleted }: { backups: MysqlBackup[]; dir:
             <li key={b.name} className="flex items-center gap-3 px-5 py-3 text-sm">
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[13px] break-all">{b.subject}</span>
+                  <span className="font-mono text-dense break-all">{b.subject}</span>
                   <Badge>{b.kind === 'database' ? 'Database' : b.subject.includes(',') ? 'Users' : 'User'}</Badge>
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {bytes(b.sizeBytes)} · saved {timeAgo(b.savedAt)} · goes {shortDate(b.purgeAt)} · <span className="font-mono break-all">{b.name}</span>
                 </p>
               </div>
-              <Button size="sm" variant="ghost" aria-label={`Delete the saved copy ${b.name}`} disabled={busy} onClick={() => setDeleting(b)}>
+              <Button size="sm" variant="soft" aria-label={`Delete the saved copy ${b.name}`} disabled={busy} onClick={() => setDeleting(b)}>
                 <Trash2 />
                 Delete
               </Button>
@@ -405,9 +399,9 @@ function BackupsCard({ backups, dir, onDeleted }: { backups: MysqlBackup[]; dir:
         description={`${deleting?.name ?? ''} goes now instead of on ${deleting ? shortDate(deleting.purgeAt) : ''}. Undo on the job that deleted ${deleting?.kind === 'database' ? 'the database' : 'the users'} cannot put ${deleting?.kind === 'database' ? 'it' : 'them'} back afterwards.`}
       >
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setDeleting(null)}>Cancel</Button>
           <Button variant="danger" disabled={busy} onClick={() => deleting && void remove(deleting)}>
-            {busy ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+            {busy ? <Spinner /> : <Trash2 />}
             Delete for good
           </Button>
         </div>
@@ -436,7 +430,7 @@ function DropDatabaseDialog({ database, onClose, onConfirm }: { database: MysqlD
     >
       <ConfirmField id="mysql-drop-confirm" expected={database?.name ?? ''} value={typed} onChange={setTyped} />
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={close}>Cancel</Button>
+        <Button variant="soft" onClick={close}>Cancel</Button>
         <Button
           variant="danger"
           disabled={typed !== database?.name}
@@ -462,7 +456,7 @@ function OptimizeDialog({ database, onClose, onConfirm }: { database: MysqlDatab
       description={`Rebuilds each of its ${database?.tables ?? 0} tables, which gives the space of deleted rows back to the disk, as after cleared logs. On ${bytes(database?.sizeBytes ?? 0)} this can take a while, and each table is busy while it is rebuilt.`}
     >
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="soft" onClick={onClose}>Cancel</Button>
         <Button
           onClick={() => {
             if (database) onConfirm(database);
@@ -487,12 +481,12 @@ function DropUsersDialog({ users, onClose, onConfirm }: { users: MysqlUser[] | n
       description="No site on this machine signs in with them. Each account and its rights are saved to the panel's MySQL backups first and kept 14 days, so Undo on the job makes them again."
     >
       {list.length > 1 && (
-        <ul className="mt-3 max-h-48 overflow-y-auto rounded-lg border bg-muted/40 px-3 py-2 font-mono text-[13px]">
+        <ul className="mt-3 max-h-48 overflow-y-auto rounded-lg border bg-muted/40 px-3 py-2 font-mono text-dense">
           {list.map((u) => <li key={account(u)}>{account(u)}</li>)}
         </ul>
       )}
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="soft" onClick={onClose}>Cancel</Button>
         <Button
           variant="danger"
           onClick={() => {
@@ -529,9 +523,9 @@ function ResetUserDialog({ user, onClose, onDone }: { user: MysqlUser | null; on
       description={`${user?.user ?? ''} gets a new password, written to the wp-config.php of ${site ? siteName(site) : 'its site'} first. Anything else that signs in as ${user?.user ?? 'it'} with the old one stops working.`}
     >
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="soft" onClick={onClose}>Cancel</Button>
         <Button disabled={busy} onClick={() => void reset()}>
-          {busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
+          {busy ? <Spinner /> : <KeyRound />}
           Reset password
         </Button>
       </div>
@@ -562,12 +556,7 @@ function ProcessesCard({ refresh }: { refresh: number }) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Processes</CardTitle>
-        <div className="flex items-center gap-1">
-          <CheckAgain size="sm" onClick={() => setTick((n) => n + 1)} loading={list.loading} />
-        </div>
-      </CardHeader>
+      <CardHeader title="Processes" actions={<CheckAgain size="sm" onClick={() => setTick((n) => n + 1)} loading={list.loading} />} />
       {list.error && <p role="alert" className="mx-5 mt-4 text-sm text-danger">{list.error}</p>}
       <div className="flex flex-wrap items-center gap-3 px-5 pt-3 text-xs text-muted-foreground">
         <span className="flex-1">{shown.length ? 'What MySQL runs now, the longest first.' : 'MySQL runs no statement now.'}</span>
@@ -584,7 +573,7 @@ function ProcessesCard({ refresh }: { refresh: number }) {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="font-mono text-xs text-muted-foreground">{p.id}</span>
               <span className="font-medium">{p.user}</span>
-              {p.db && <span className="font-mono text-[13px] text-muted-foreground">{p.db}</span>}
+              {p.db && <span className="font-mono text-dense text-muted-foreground">{p.db}</span>}
               <Badge tone={p.command === 'Query' && p.seconds >= 10 ? 'warning' : 'neutral'}>{p.command} · {p.seconds >= 60 ? `${Math.floor(p.seconds / 60)} min ${p.seconds % 60} s` : `${p.seconds} s`}</Badge>
               {p.state && <span className="text-xs text-muted-foreground">{p.state}</span>}
               {p.command === 'Query' && !own(p) && (
@@ -659,7 +648,7 @@ function ImportDumpCard({ databases, onDone }: { databases: MysqlDatabase[]; onD
   return (
     <>
       <Card>
-        <CardHeader><CardTitle>Import a dump</CardTitle><Upload className="size-4 text-muted-foreground" /></CardHeader>
+        <CardHeader title="Import a dump" meta={<Upload className="size-4 text-muted-foreground" />} />
         <div className="grid gap-4 p-5">
           <p className="text-sm text-muted-foreground">
             A .sql, .sql.gz or .zip into a new database, or into one no site uses. Its own CREATE DATABASE and USE lines are left out, so it changes no other database. For a site, use Import a database on the site&apos;s Database tab, which also replaces production addresses.
@@ -667,7 +656,7 @@ function ImportDumpCard({ databases, onDone }: { databases: MysqlDatabase[]; onD
           <input ref={fileInput} id="mysql-import-file" type="file" accept=".sql,.gz,.zip" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" disabled={busy || progress !== null} onClick={() => fileInput.current?.click()}>
-              {progress !== null ? <LoaderCircle className="animate-spin" /> : <Upload />}
+              {progress !== null ? <Spinner /> : <Upload />}
               {progress !== null ? `Uploading ${Math.round(progress * 100)}%` : upload ? 'Choose another dump' : 'Choose a dump'}
             </Button>
             {upload && <span className="text-sm">{upload.name} · {bytes(upload.size)}</span>}
@@ -695,7 +684,7 @@ function ImportDumpCard({ databases, onDone }: { databases: MysqlDatabase[]; onD
               )}
               <div>
                 <Button disabled={!ready} onClick={start}>
-                  {busy ? <LoaderCircle className="animate-spin" /> : <Upload />}
+                  {busy ? <Spinner /> : <Upload />}
                   {mode === 'replace' ? `Save ${target || 'it'} and import` : `Import into ${database || 'the new database'}`}
                 </Button>
               </div>

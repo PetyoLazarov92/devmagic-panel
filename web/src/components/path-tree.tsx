@@ -70,7 +70,7 @@ export function PathTree({ listed, badge }: { listed: ListedPath[]; badge?: (l: 
       const name = (
         <>
           <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <span className="font-mono text-[13px] break-all">{node.name}</span>
+          <span className="font-mono text-dense break-all">{node.name}</span>
         </>
       );
       const out: ReactNode[] = [
@@ -107,8 +107,8 @@ export function PathTree({ listed, badge }: { listed: ListedPath[]; badge?: (l: 
   return (
     <>
       <div className="flex justify-end gap-1 border-b px-3 py-1.5">
-        <Button size="sm" variant="ghost" onClick={expandAll}>Expand all</Button>
-        <Button size="sm" variant="ghost" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</Button>
+        <Button size="sm" variant="soft" onClick={expandAll}>Expand all</Button>
+        <Button size="sm" variant="soft" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</Button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

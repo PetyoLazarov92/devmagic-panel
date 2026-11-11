@@ -1,9 +1,10 @@
 import type { JobView, UpdateStatus } from '@devmagic-panel/shared';
-import { CircleAlert, CircleCheck, KeyRound, LoaderCircle, TriangleAlert } from 'lucide-react';
+import { CircleAlert, CircleCheck, KeyRound } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { settled, StepList } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
+import { Notice } from '@/components/ui/notice';
 import { SecretInput } from '@/components/ui/secret-input';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
@@ -11,6 +12,7 @@ import { Link } from '@/lib/router';
 import { waitForRestart } from '@/lib/restart';
 import { expectRestart } from '@/lib/session-watch';
 import { lastLine } from '@/lib/site-actions';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * The sudo password for one install from the Updates page: sent once with
@@ -51,10 +53,10 @@ export function InstallForm({ release, verb, onStarted, onCancel }: { release: s
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={busy}>
-          {busy ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
+          {busy ? <Spinner /> : <KeyRound />}
           {verb}
         </Button>
-        {onCancel && <Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>Cancel</Button>}
+        {onCancel && <Button type="button" variant="soft" disabled={busy} onClick={onCancel}>Cancel</Button>}
       </div>
     </form>
   );
@@ -90,13 +92,10 @@ export function InstallProgress({ jobId, release, onAgain }: { jobId: string; re
   const failedStep = job?.steps.find((s) => s.status === 'failed');
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Installing {release}</CardTitle>
-        {job?.status === 'failed' ? <CircleAlert className="size-4 text-danger" /> : job?.status === 'done' ? <CircleCheck className="size-4 text-success" /> : <LoaderCircle className="size-4 animate-spin text-primary" />}
-      </CardHeader>
-      <div className="grid gap-3 p-5 text-sm">
+      <CardHeader title={<>Installing {release}</>} meta={job?.status === 'failed' ? <CircleAlert className="size-4 text-danger" /> : job?.status === 'done' ? <CircleCheck className="size-4 text-success" /> : <Spinner className="size-4 text-primary" />} />
+      <CardBody className="gap-3">
         {restarting ? (
-          <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />The panel is restarting on {release}; this page reloads once it answers and shows how the install ended.</p>
+          <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />The panel is restarting on {release}; this page reloads once it answers and shows how the install ended.</p>
         ) : (
           <>
             <p className="text-muted-foreground">{job?.steps.some((s) => s.id === 'download') && `The panel downloads ${release} and checks it first. `}install.sh keeps the root scripts, config.env and sudoers rule, puts the new root scripts in place, restarts the panel and checks it answers. If a step fails, it puts everything back. Other changes wait until it ends.</p>
@@ -110,7 +109,7 @@ export function InstallProgress({ jobId, release, onAgain }: { jobId: string; re
             <Button className="justify-self-start" variant="outline" onClick={onAgain}><KeyRound />Try again</Button>
           </div>
         )}
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -133,26 +132,24 @@ export function LastInstall({ install, onAgain, onRefresh }: { install: NonNulla
   if (running) {
     return (
       <p className="flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm">
-        <LoaderCircle className="size-4 shrink-0 animate-spin text-primary" />
+        <Spinner className="size-4 shrink-0 text-primary" />
         {install.release} is still installing ({install.step}).
       </p>
     );
   }
   if (install.interrupted) {
     return (
-      <div className="flex gap-2 rounded-lg border border-warning/40 bg-warning/8 px-4 py-3 text-sm">
-        <TriangleAlert className="size-4 shrink-0 text-warning" />
+      <Notice tone="warning">
         <div className="grid gap-2">
           <p>The install of {install.release} was interrupted at <b>{install.step}</b> (a restart of this computer, say). Every step is safe to repeat. Its log: <code className="font-mono text-xs break-all">{install.log}</code></p>
           <Button className="justify-self-start" variant="outline" size="sm" onClick={() => onAgain(install.release)}><KeyRound />Run it again</Button>
         </div>
-      </div>
+      </Notice>
     );
   }
   if (install.state === 'failed') {
     return (
-      <div className="flex gap-2 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm">
-        <CircleAlert className="size-4 shrink-0 text-danger" />
+      <Notice tone="danger">
         <div className="grid gap-1">
           <p className="font-medium">The install of {install.release} failed at {install.step}{install.finished ? `, ${timeAgo(install.finished)}` : ''}.</p>
           <p>{install.message}.</p>
@@ -160,16 +157,13 @@ export function LastInstall({ install, onAgain, onRefresh }: { install: NonNulla
             {install.rolledBack ? `Everything it changed was put back: ${install.previous || 'the release before'} runs as before.` : 'Not everything could be put back.'} Its log: <code className="font-mono text-xs break-all">{install.log}</code>
           </p>
         </div>
-      </div>
+      </Notice>
     );
   }
   if (!install.finished || Date.now() - Date.parse(install.finished) > DAY_MS) return null;
   return (
-    <p className="flex gap-2 rounded-lg border bg-card px-4 py-3 text-sm">
-      <CircleCheck className="size-4 shrink-0 text-success" />
-      <span>
-        Installed {install.release}{install.previous ? `, replacing ${install.previous}` : ''}, {timeAgo(install.finished)}. Anything it recommends but did not install shows in Aura's <Link href="/aura/machine" className="font-medium hover:underline">Machine checks</Link>.
-      </span>
-    </p>
+    <Notice tone="success">
+      Installed {install.release}{install.previous ? `, replacing ${install.previous}` : ''}, {timeAgo(install.finished)}. Anything it recommends but did not install shows in Aura's <Link href="/aura/machine" className="font-medium hover:underline">Machine checks</Link>.
+    </Notice>
   );
 }

@@ -1,19 +1,21 @@
 import type { RememberedRepo, RepoPreset } from '@devmagic-panel/shared';
 import { coreVersion, hostname, placementProblems, presetPlacement, repoPreset, repoTarget } from '@devmagic-panel/shared';
-import { FolderGit2, LoaderCircle, Pencil, Trash2, X } from 'lucide-react';
+import { FolderGit2, Pencil, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { PlacementFields } from '@/components/repo-placement';
 import { ScopeLabel } from '@/components/scope-label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+import { Spinner } from '@/components/ui/spinner';
 
 const urlOf = (r: RememberedRepo) => r.key;
 
@@ -60,16 +62,13 @@ export function RememberedCard() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-        <CardTitle>Remembered for new installs</CardTitle>
-        <ScopeLabel>new installs of these repos</ScopeLabel>
-      </CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="Remembered for new installs" meta={<ScopeLabel>new installs of these repos</ScopeLabel>} />
+      <CardBody>
         <p className="text-xs text-muted-foreground">
           The wizard fills itself from your last install of a repo: where each repo goes, the core, the plugins it turned off and where missing uploads load from. They live in the panel's database, never in the repo. Domains always come from the dump.
         </p>
-        {list.error && <p role="alert" className="text-danger">{list.error}</p>}
-        {list.loading && !list.data && <p className="flex items-center gap-2 text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading what the panel remembers...</p>}
+        {list.error && <Notice tone="danger" size="inline">{list.error}</Notice>}
+        {list.loading && !list.data && <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Reading what the panel remembers...</p>}
         {list.data && list.data.length === 0 && <p className="text-muted-foreground">Nothing yet. A repo's answers are remembered once a site is installed from it.</p>}
         {list.data && list.data.length > 0 && (
           <ul className="grid divide-y rounded-lg border">
@@ -78,7 +77,7 @@ export function RememberedCard() {
                 <FolderGit2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <div className="grid min-w-0 flex-1 gap-1">
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[13px] font-medium break-all">{r.name}</span>
+                    <span className="font-mono text-dense font-medium break-all">{r.name}</span>
                     <span className="text-xs text-muted-foreground">last used {timeAgo(r.updatedAt)}</span>
                   </span>
                   <span className="flex flex-wrap gap-1.5">
@@ -87,12 +86,12 @@ export function RememberedCard() {
                 </div>
                 <div className="flex gap-1">
                   {r.preset && (
-                    <Button size="sm" variant="ghost" onClick={() => setEditing(r)}>
+                    <Button size="sm" variant="soft" onClick={() => setEditing(r)}>
                       <Pencil />
                       Edit
                     </Button>
                   )}
-                  <Button size="sm" variant="ghost" onClick={() => setForgetting(r)}>
+                  <Button size="sm" variant="soft" onClick={() => setForgetting(r)}>
                     <Trash2 />
                     Forget
                   </Button>
@@ -101,7 +100,7 @@ export function RememberedCard() {
             ))}
           </ul>
         )}
-      </div>
+      </CardBody>
       {editing?.preset && <EditDialog repo={editing} preset={editing.preset} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); list.reload(); }} />}
       <Dialog
         open={forgetting !== null}
@@ -112,7 +111,7 @@ export function RememberedCard() {
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setForgetting(null)}>Cancel</Button>
           <Button variant="danger" disabled={busy} onClick={() => forgetting && void forget(forgetting)}>
-            {busy && <LoaderCircle className="animate-spin" />}
+            {busy && <Spinner />}
             Forget
           </Button>
         </div>
@@ -162,7 +161,7 @@ function EditDialog({ repo, preset, onClose, onSaved }: { repo: RememberedRepo; 
         <>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button disabled={busy || Boolean(clash) || uploadsBad || Boolean(versionBad)} onClick={() => void save()}>
-            {busy && <LoaderCircle className="animate-spin" />}
+            {busy && <Spinner />}
             Save
           </Button>
         </>
@@ -179,8 +178,8 @@ function EditDialog({ repo, preset, onClose, onSaved }: { repo: RememberedRepo; 
             {draft.extra.map((r, i) => (
               <div key={`${r.url}|${i}`} className="grid gap-3 rounded-lg border p-3">
                 <div className="flex items-start gap-2">
-                  <span className="min-w-0 flex-1 font-mono text-[13px] break-all">{r.url}</span>
-                  <Button size="sm" variant="ghost" aria-label={`Leave ${r.url} out`} onClick={() => setDraft((d) => ({ ...d, extra: d.extra.filter((_, j) => j !== i) }))}>
+                  <span className="min-w-0 flex-1 font-mono text-dense break-all">{r.url}</span>
+                  <Button size="sm" variant="soft" aria-label={`Leave ${r.url} out`} onClick={() => setDraft((d) => ({ ...d, extra: d.extra.filter((_, j) => j !== i) }))}>
                     <X />
                     Leave out
                   </Button>
@@ -211,12 +210,12 @@ function EditDialog({ repo, preset, onClose, onSaved }: { repo: RememberedRepo; 
           </Field>
           {draft.core && draft.core.mode !== 'repo' && (
             <Field label="Version" htmlFor="remembered-version" hint={versionBad ? <span className="text-danger">A version like 7.1.3</span> : undefined}>
-              <Input id="remembered-version" value={draft.core.version ?? ''} onChange={(e) => setDraft((d) => ({ ...d, core: { mode: d.core?.mode ?? 'wpcore', version: e.target.value.trim() } }))} className="font-mono text-[13px]" />
+              <Input id="remembered-version" value={draft.core.version ?? ''} onChange={(e) => setDraft((d) => ({ ...d, core: { mode: d.core?.mode ?? 'wpcore', version: e.target.value.trim() } }))} className="font-mono text-dense" />
             </Field>
           )}
         </section>
         <Field label="Missing uploads load from" htmlFor="remembered-uploads" hint={uploadsBad ? <span className="text-danger">A host like www.spellbook.example</span> : 'Empty: none.'}>
-          <Input id="remembered-uploads" value={draft.uploadsFrom ?? ''} onChange={(e) => setDraft((d) => ({ ...d, uploadsFrom: e.target.value.trim() }))} placeholder="www.spellbook.example" className="font-mono text-[13px]" />
+          <Input id="remembered-uploads" value={draft.uploadsFrom ?? ''} onChange={(e) => setDraft((d) => ({ ...d, uploadsFrom: e.target.value.trim() }))} placeholder="www.spellbook.example" className="font-mono text-dense" />
         </Field>
         <section className="grid gap-2">
           <h3 className="font-semibold">Plugins turned off after the import</h3>
@@ -226,10 +225,10 @@ function EditDialog({ repo, preset, onClose, onSaved }: { repo: RememberedRepo; 
             <ul className="flex flex-wrap gap-1.5">
               {draft.deactivate.map((slug) => (
                 <li key={slug}>
-                  <button type="button" onClick={() => setDraft((d) => ({ ...d, deactivate: d.deactivate.filter((s) => s !== slug) }))} className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-xs hover:border-danger/50" aria-label={`Keep ${slug} on`}>
+                  <Button variant="outline" size="xs" onClick={() => setDraft((d) => ({ ...d, deactivate: d.deactivate.filter((s) => s !== slug) }))} className="h-auto gap-1 px-2 py-0.5 font-mono font-normal hover:border-danger/50 hover:bg-card [&_svg]:size-3" aria-label={`Keep ${slug} on`}>
                     {slug}
-                    <X className="size-3" />
-                  </button>
+                    <X />
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -262,22 +261,19 @@ export function TrustedOwnersCard() {
   }
   return (
     <Card>
-      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-        <CardTitle>Trusted repo owners</CardTitle>
-        <ScopeLabel>new installs</ScopeLabel>
-      </CardHeader>
-      <div className="grid gap-3 p-5 text-sm">
+      <CardHeader title="Trusted repo owners" meta={<ScopeLabel>new installs</ScopeLabel>} />
+      <CardBody className="gap-3">
         <p className="text-xs text-muted-foreground">
           Code from a repo runs on this computer: its PHP when the site loads, its composer and npm builds as you. Repos of the organizations and groups you scan, and ones your signed-in GitHub or GitLab CLI lists, may run; any other needs its owner trusted here once, from the wizard.
         </p>
-        {list.error && <p role="alert" className="text-danger">{list.error}</p>}
+        {list.error && <Notice tone="danger" size="inline">{list.error}</Notice>}
         {list.data && list.data.length === 0 && <p className="text-muted-foreground">None. A pasted repo from another owner asks you first.</p>}
         {list.data && list.data.length > 0 && (
           <ul className="grid divide-y rounded-lg border">
             {list.data.map((t) => (
               <li key={`${t.host}/${t.owner}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-                <span className="min-w-0 flex-1"><span className="font-mono text-[13px] font-medium">{t.owner}</span> <span className="text-muted-foreground">on {t.host}, trusted {timeAgo(t.at)}</span></span>
-                <Button size="sm" variant="ghost" disabled={busy === `${t.host}/${t.owner}`} onClick={() => void remove(t.host, t.owner)}>
+                <span className="min-w-0 flex-1"><span className="font-mono text-dense font-medium">{t.owner}</span> <span className="text-muted-foreground">on {t.host}, trusted {timeAgo(t.at)}</span></span>
+                <Button size="sm" variant="soft" disabled={busy === `${t.host}/${t.owner}`} onClick={() => void remove(t.host, t.owner)}>
                   <X />
                   Stop trusting
                 </Button>
@@ -285,7 +281,7 @@ export function TrustedOwnersCard() {
             ))}
           </ul>
         )}
-      </div>
+      </CardBody>
     </Card>
   );
 }

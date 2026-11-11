@@ -1,17 +1,23 @@
+import { CheckAgain } from '@/components/page';
 import type { Site, SitePlugin, SitePlugins, SiteThemes, VulnerabilityState } from '@devmagic-panel/shared';
 import { MissingPluginsCard } from '@/components/missing-plugins-card';
-import { ExternalLink, Lock, Palette, Plug, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
+import { Lock, Palette, Plug, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
+import { FilterChips } from '@/components/ui/filter-chips';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
+import { EmptyState, Notice } from '@/components/ui/notice';
 import { Segmented } from '@/components/ui/segmented';
 import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { pluginFolderHref, themeFolderHref } from '@/lib/file-links';
-import { Link, navigate, useQueryParam } from '@/lib/router';
+import { navigate, useQueryParam } from '@/lib/router';
 import { siteHref } from '@/lib/site-ref';
 import { Switch } from '@/components/ui/switch';
+import { TextLink } from '@/components/ui/text-link';
 import { api } from '@/lib/api';
 import { pluginMatches } from '@/lib/plugin-search';
 import { lastLine } from '@/lib/site-actions';
@@ -50,17 +56,19 @@ function PluginsSkeleton() {
         {[14, 12, 12].map((w, i) => <div key={i} className={cn(bar, 'h-7 rounded-full')} style={{ width: `${w * 4}px` }} />)}
       </div>
       <div className={cn(bar, 'h-11 rounded-xl')} />
-      <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-        {[56, 40, 64, 48, 36, 52].map((w, i) => (
-          <li key={i} className="flex items-center gap-3 px-4 py-3">
-            <div className={cn(bar, 'h-5 w-9 rounded-full')} />
-            <div className="grid flex-1 gap-1.5">
-              <div className={bar} style={{ width: `${w}%`, height: '0.875rem' }} />
-              <div className={bar} style={{ width: `${w / 2}%`, height: '0.75rem' }} />
-            </div>
-          </li>
-        ))}
-      </ul>
+      <Card className="overflow-hidden">
+        <ul className="divide-y">
+          {[56, 40, 64, 48, 36, 52].map((w, i) => (
+            <li key={i} className="flex items-center gap-3 px-4 py-3">
+              <div className={cn(bar, 'h-5 w-9 rounded-full')} />
+              <div className="grid flex-1 gap-1.5">
+                <div className={bar} style={{ width: `${w}%`, height: '0.875rem' }} />
+                <div className={bar} style={{ width: `${w / 2}%`, height: '0.75rem' }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Card>
     </div>
   );
 }
@@ -93,10 +101,7 @@ function ThemesView({ site }: { site: Site }) {
   const vulnerable = useVulnerabilities(site);
   if (error && !data) {
     return (
-      <div className="rounded-xl border bg-card px-5 py-4 text-sm">
-        <p role="alert" className="text-danger">{error}</p>
-        <Button size="sm" variant="outline" className="mt-3" onClick={reload}><RefreshCw />Try again</Button>
-      </div>
+      <Notice action={<Button size="sm" variant="outline" onClick={reload}><RefreshCw />Try again</Button>}>{error}</Notice>
     );
   }
   const bar = 'animate-pulse rounded bg-muted';
@@ -105,9 +110,11 @@ function ThemesView({ site }: { site: Site }) {
       <div className="grid gap-3" aria-busy="true">
         <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><RefreshCw className="size-3.5 animate-spin" />Reading the themes with WP-CLI...</p>
         <div className={cn(bar, 'h-11 rounded-xl')} />
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-          {[40, 56, 48].map((w, i) => <li key={i} className="grid gap-2 px-4 py-3"><div className={cn(bar, 'h-4')} style={{ width: `${w * 4}px` }} /><div className={cn(bar, 'h-3 w-64 max-w-full')} /></li>)}
-        </ul>
+        <Card className="overflow-hidden">
+          <ul className="divide-y">
+            {[40, 56, 48].map((w, i) => <li key={i} className="grid gap-2 px-4 py-3"><div className={cn(bar, 'h-4')} style={{ width: `${w * 4}px` }} /><div className={cn(bar, 'h-3 w-64 max-w-full')} /></li>)}
+          </ul>
+        </Card>
       </div>
     );
   }
@@ -120,42 +127,41 @@ function ThemesView({ site }: { site: Site }) {
           {active ? <>, <span className="font-medium text-foreground">{active.title}</span> is on</> : ', none of them is on'}
           {data.network && ' on the main site; each site of a network has its own'}
         </p>
-        <Button size="sm" variant="ghost" onClick={reload} disabled={loading}><RefreshCw className={cn(loading && 'animate-spin')} />Reload</Button>
+        <CheckAgain size="sm" onClick={reload} loading={loading} />
       </div>
       <MissingPluginsCard site={site} show="themes" onChanged={reload} />
       {data.themes.length === 0 ? (
-        <div className="grid justify-items-center gap-2 rounded-xl border border-dashed bg-card px-6 py-10 text-center text-sm">
-          <Palette className="size-6 text-muted-foreground" />
-          <p className="text-muted-foreground">This site has no themes.</p>
-        </div>
+        <EmptyState icon={Palette} title="This site has no themes." className="py-10" />
       ) : (
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-          {data.themes.map((t) => (
-            <li key={t.folder} className="px-4 py-2.5">
-              <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium', t.status === 'inactive' && 'text-muted-foreground')}>
-                <span className="break-words">{t.title}</span>
-                {t.status === 'active' && <Badge tone="success">On</Badge>}
-                {t.status === 'parent' && <Badge tone="primary">Parent of the theme that is on</Badge>}
-                {t.inRepo && <Badge>In its repo</Badge>}
-                <VulnerableBadge hit={t.wporg ? vulnerable.get(`theme:${t.wporg}`) : undefined} />
-              </p>
-              <p className="mt-0.5 text-xs break-words text-muted-foreground">
-                <span className="font-mono">{t.folder}</span>
-                {t.version && <> · {t.version}</>}
-                {t.update && <span className="text-warning"> · {t.update} available</span>}
-                {t.inRepo && ' · found through Local mode'}
-                {' · '}<Link href={themeFolderHref(site, t)} className="font-medium text-primary hover:underline" aria-label={`Open the folder of ${t.title}`}>Open folder</Link>
-              </p>
-              {(t.description || t.author || t.themeUri || t.wporg) && (
-                <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
-                  {t.description}
-                  {t.author && <span className="text-muted-foreground/80">{t.description ? ' ' : ''}By <OutLink href={t.authorUri}>{t.author}</OutLink>.</span>}
-                  <OutLinks site={t.themeUri} siteLabel="Theme site" wporg={t.wporg && `https://wordpress.org/themes/${t.wporg}/`} />
+        <Card className="overflow-hidden">
+          <ul className="divide-y">
+            {data.themes.map((t) => (
+              <li key={t.folder} className="px-4 py-2.5">
+                <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium', t.status === 'inactive' && 'text-muted-foreground')}>
+                  <span className="break-words">{t.title}</span>
+                  {t.status === 'active' && <Badge tone="success">On</Badge>}
+                  {t.status === 'parent' && <Badge tone="primary">Parent of the theme that is on</Badge>}
+                  {t.inRepo && <Badge>In its repo</Badge>}
+                  <VulnerableBadge hit={t.wporg ? vulnerable.get(`theme:${t.wporg}`) : undefined} />
                 </p>
-              )}
-            </li>
-          ))}
-        </ul>
+                <p className="mt-0.5 text-xs break-words text-muted-foreground">
+                  <span className="font-mono">{t.folder}</span>
+                  {t.version && <> · {t.version}</>}
+                  {t.update && <span className="text-warning"> · {t.update} available</span>}
+                  {t.inRepo && ' · found through Local mode'}
+                  {' · '}<TextLink href={themeFolderHref(site, t)} aria-label={`Open the folder of ${t.title}`}>Open folder</TextLink>
+                </p>
+                {(t.description || t.author || t.themeUri || t.wporg) && (
+                  <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
+                    {t.description}
+                    {t.author && <span className="text-muted-foreground/80">{t.description ? ' ' : ''}By <OutLink href={t.authorUri}>{t.author}</OutLink>.</span>}
+                    <OutLinks site={t.themeUri} siteLabel="Theme site" wporg={t.wporg && `https://wordpress.org/themes/${t.wporg}/`} />
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
       <p className="text-xs text-muted-foreground">The theme is switched in wp-admin, under Appearance: the panel only lists them.</p>
     </div>
@@ -213,10 +219,7 @@ function PluginsView({ site }: { site: Site }) {
 
   if (error && !data) {
     return (
-      <div className="rounded-xl border bg-card px-5 py-4 text-sm">
-        <p role="alert" className="text-danger">{error}</p>
-        <Button size="sm" variant="outline" className="mt-3" onClick={reload}><RefreshCw />Try again</Button>
-      </div>
+      <Notice action={<Button size="sm" variant="outline" onClick={reload}><RefreshCw />Try again</Button>}>{error}</Notice>
     );
   }
   if (!data) return <PluginsSkeleton />;
@@ -232,7 +235,7 @@ function PluginsView({ site }: { site: Site }) {
         </p>
         <div className="flex items-center gap-2">
           <Segmented label="How much each plugin shows" className="text-xs" value={details ? 'details' : 'compact'} onChange={(v) => setDetails(v === 'details')} options={[['compact', 'Compact'], ['details', 'Details']]} />
-          <Button size="sm" variant="ghost" onClick={reload} disabled={loading}><RefreshCw className={cn(loading && 'animate-spin')} />Reload</Button>
+          <CheckAgain size="sm" onClick={reload} loading={loading} />
         </div>
       </div>
 
@@ -256,39 +259,29 @@ function PluginsView({ site }: { site: Site }) {
             className="pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
           />
           {query && (
-            <button type="button" aria-label="Clear the search" onClick={() => setQuery('')} className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-md p-1.5 text-muted-foreground hover:bg-foreground/8 hover:text-foreground">
-              <X className="size-3.5" />
-            </button>
+            <IconButton icon={X} label="Clear the search" onClick={() => setQuery('')} className="absolute top-1/2 right-1 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground [&_svg]:size-3.5" />
           )}
         </div>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show">
-          {FILTERS.filter((f) => f.value === 'all' || count(f) > 0).map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              aria-pressed={filter === f.value}
-              onClick={() => setFilter(f.value)}
-              className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === f.value ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
-            >
-              {f.label} <span className="tabular-nums">{count(f)}</span>
-            </button>
-          ))}
-        </div>
+        <FilterChips
+          label="Show"
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS.filter((f) => f.value === 'all' || count(f) > 0).map((f) => ({ value: f.value, label: f.label, count: count(f) }))}
+        />
       </div>
 
       {/* Under the search and filters, one row that keeps its height while it checks: the list below never moves. */}
       <MissingPluginsCard site={site} show="plugins" onChanged={reload} />
 
       {shown.length === 0 ? (
-        <div className="grid justify-items-center gap-2 rounded-xl border border-dashed bg-card px-6 py-10 text-center text-sm">
-          <Plug className="size-6 text-muted-foreground" />
-          <p className="text-muted-foreground">{plugins.length === 0 ? 'This site has no plugins.' : 'No plugin matches.'}</p>
-          {(query || filter !== 'all') && plugins.length > 0 && (
-            <button type="button" className="font-medium text-primary hover:underline" onClick={() => { setQuery(''); setFilter('all'); }}>Show every plugin</button>
-          )}
-        </div>
+        <EmptyState
+          icon={Plug}
+          title={plugins.length === 0 ? 'This site has no plugins.' : 'No plugin matches.'}
+          className="py-10"
+          action={(query || filter !== 'all') && plugins.length > 0 ? <Button size="sm" variant="outline" onClick={() => { setQuery(''); setFilter('all'); }}>Show every plugin</Button> : undefined}
+        />
       ) : (
-        <div className="overflow-hidden rounded-xl border bg-card">
+        <Card className="overflow-hidden">
           <ul className="divide-y">
             {more.shown.map((p) => (
               <li key={`${p.status}-${p.name}`} className="flex items-center gap-3 px-4 py-2.5">
@@ -316,7 +309,7 @@ function PluginsView({ site }: { site: Site }) {
                     {p.status === 'dropin' && ' · drop-in, always on'}
                     {p.requires && <> · needs {p.requires.join(', ')}</>}
                     {p.requiredBy && <> · needed by {p.requiredBy.join(', ')}</>}
-                    {p.path && <> · <Link href={pluginFolderHref(site, p)} className="font-medium text-primary hover:underline" aria-label={p.oneFile ? `Open the file of ${p.title}` : `Open the folder of ${p.title}`}>{p.oneFile ? 'Open file' : 'Open folder'}</Link></>}
+                    {p.path && <> · <TextLink href={pluginFolderHref(site, p)} aria-label={p.oneFile ? `Open the file of ${p.title}` : `Open the folder of ${p.title}`}>{p.oneFile ? 'Open file' : 'Open folder'}</TextLink></>}
                   </p>
                   {details && (p.description || p.author || p.pluginUri || p.wporg) && (
                     <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
@@ -330,7 +323,7 @@ function PluginsView({ site }: { site: Site }) {
             ))}
           </ul>
           <ShowMore {...more.footer} noun="plugins" />
-        </div>
+        </Card>
       )}
 
       <Dialog
@@ -340,7 +333,7 @@ function PluginsView({ site }: { site: Site }) {
         description={asking ? `${asking.requiredBy?.join(', ')} ${asking.requiredBy?.length === 1 ? 'needs' : 'need'} it, and may stop working or show errors while it is off.` : undefined}
       >
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setAsking(null)}>Keep it on</Button>
+          <Button variant="soft" onClick={() => setAsking(null)}>Keep it on</Button>
           <Button
             variant="danger"
             onClick={() => {
@@ -360,7 +353,7 @@ function PluginsView({ site }: { site: Site }) {
 /** A link out of the panel, in a new tab without the panel as referrer; plain text when there is no address. */
 function OutLink({ href, children, className }: { href?: string | undefined; children: ReactNode; className?: string }) {
   if (!href) return <>{children}</>;
-  return <a href={href} target="_blank" rel="noopener noreferrer" className={cn('font-medium text-primary hover:underline', className)}>{children}</a>;
+  return <TextLink href={href} {...(className ? { className } : {})}>{children}</TextLink>;
 }
 
 /** A plugin's or theme's own site and its page on WordPress.org, after its description. */
@@ -370,8 +363,8 @@ function OutLinks({ site, siteLabel, wporg }: { site?: string | undefined; siteL
   if (!own && !wporg) return null;
   return (
     <span className="ml-1 inline-flex flex-wrap items-center gap-x-2.5 align-baseline">
-      {own && <OutLink href={own} className="inline-flex items-center gap-1">{siteLabel}<ExternalLink className="size-3" aria-hidden /></OutLink>}
-      {wporg && <OutLink href={wporg} className="inline-flex items-center gap-1">WordPress.org<ExternalLink className="size-3" aria-hidden /></OutLink>}
+      {own && <OutLink href={own}>{siteLabel}</OutLink>}
+      {wporg && <OutLink href={wporg}>WordPress.org</OutLink>}
     </span>
   );
 }

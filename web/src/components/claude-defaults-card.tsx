@@ -1,5 +1,5 @@
 import type { OrgSettings } from '@devmagic-panel/shared';
-import { Check, CircleAlert, CircleCheck, LoaderCircle, Plug, Sparkles, X } from 'lucide-react';
+import { Check, CircleAlert, CircleCheck, Plug, Sparkles, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ClaudeRunFields } from '@/components/claude-run-fields';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import type { UseClaude } from '@devmagic-panel/shared';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * The panel's defaults for the Claude Code step of an install from a
@@ -70,11 +71,11 @@ export function ClaudeDefaultsCard() {
           <p className="flex items-center gap-1.5 font-medium"><Sparkles className="size-4 text-primary" />Defaults for the Claude Code step</p>
           <p className="text-xs text-muted-foreground">Claude Code runs with your own sign-in, never an API key. One model, effort and spending cap for the step that reads a repo and checks its links, saved as you change them. They apply to every install, unless that install changed its own on its Code step.</p>
           <p className="mt-1 flex min-h-4 items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
-            {saved === 'saving' && <><LoaderCircle className="size-3.5 animate-spin" />Saving...</>}
+            {saved === 'saving' && <><Spinner className="size-3.5" />Saving...</>}
             {saved === 'saved' && <><Check className="size-3.5 text-success" />Saved as your defaults</>}
           </p>
         </div>
-        {status.loading && !status.data && <p className="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Checking Claude Code...</p>}
+        {status.loading && !status.data && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Spinner className="size-3.5" />Checking Claude Code...</p>}
         {claude && (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             {claude.claudeAi ? <CircleCheck className="size-3.5 text-success" /> : <CircleAlert className="size-3.5 text-warning" />}
@@ -95,7 +96,7 @@ export function ClaudeDefaultsCard() {
         <div className="grid gap-2 border-t pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" disabled={probing || !claude?.signedIn} onClick={() => void checkConnectors()}>
-              {probing ? <LoaderCircle className="animate-spin" /> : <Plug />}
+              {probing ? <Spinner /> : <Plug />}
               Check connectors
             </Button>
             <span className="text-xs text-muted-foreground">One small Haiku run, at most $0.10.</span>

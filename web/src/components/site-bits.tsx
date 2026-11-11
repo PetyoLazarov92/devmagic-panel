@@ -1,11 +1,12 @@
 import type { CheckStatus, Site, SiteInstall, SiteIssue } from '@devmagic-panel/shared';
 import { INSTALL_HOW_LABELS, namespaceLabel, repoWeb } from '@devmagic-panel/shared';
-import { CircleAlert, CircleX, LoaderCircle, Network, Wrench } from 'lucide-react';
+import { CircleAlert, CircleX, Network, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { shortDate } from '@/lib/format';
 import { runWithToast } from '@/lib/site-actions';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 const dotTone: Record<CheckStatus, string> = {
   ok: 'bg-success',
@@ -55,7 +56,7 @@ export function IssueRow({ issue, domain, onFixed }: { issue: SiteIssue; domain?
       </div>
       {fix && (
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void runFix()}>
-          {busy ? <LoaderCircle className="animate-spin" /> : <Wrench />}
+          {busy ? <Spinner /> : <Wrench />}
           {fix.label}
         </Button>
       )}

@@ -3,10 +3,10 @@ import { MAILPIT_WEB, textLinks } from '@devmagic-panel/shared';
 import { ExternalLink, Mail, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { MailpitInstall } from '@/components/mailpit-install';
-import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardBody } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
+import { Segmented } from '@/components/ui/segmented';
 import { api } from '@/lib/api';
 import { mailRead } from '@/lib/mail-unread';
 import { timeAgo } from '@/lib/format';
@@ -83,11 +83,13 @@ export function MailPage() {
       />
 
       {error && (
-        <Card className="mt-6 grid gap-3 p-5 text-sm">
-          <p className="font-medium">Mailpit is not running</p>
-          <p className="text-muted-foreground">Until it runs, mail from sites in Local mode goes nowhere. {offer === 'install' ? 'The panel installs it for you: a pinned release, checked against its checksum, running as your user on 127.0.0.1.' : ''}</p>
-          {offer && <MailpitInstall offer={offer} size="default" onDone={() => { services.reload(); load(); }} />}
-          {!offer && <p className="text-xs text-muted-foreground">{error}</p>}
+        <Card className="mt-6">
+          <CardBody className="gap-3">
+            <p className="font-medium">Mailpit is not running</p>
+            <p className="text-muted-foreground">Until it runs, mail from sites in Local mode goes nowhere. {offer === 'install' ? 'The panel installs it for you: a pinned release, checked against its checksum, running as your user on 127.0.0.1.' : ''}</p>
+            {offer && <MailpitInstall offer={offer} size="default" onDone={() => { services.reload(); load(); }} />}
+            {!offer && <p className="text-xs text-muted-foreground">{error}</p>}
+          </CardBody>
         </Card>
       )}
 
@@ -123,7 +125,7 @@ export function MailPage() {
             )}
             {page.total > page.messages.length && <p className="border-t px-4 py-2 text-xs text-muted-foreground">Showing the newest {page.messages.length} of {page.total}. Open Mailpit for the rest.</p>}
           </Card>
-          {selected ? <MessageView id={selected} /> : <Card className="hidden h-fit p-5 text-sm text-muted-foreground lg:block">Pick a message to read it.</Card>}
+          {selected ? <MessageView id={selected} /> : <Card className="hidden h-fit lg:block"><CardBody className="text-muted-foreground">Pick a message to read it.</CardBody></Card>}
         </div>
       )}
     </div>
@@ -135,34 +137,33 @@ function MessageView({ id }: { id: string }) {
   const { data: message, error, loading } = useAsync<MailMessage>(() => api.mailMessage(id).then((m) => (mailRead(), m)), [id]);
   const [plain, setPlain] = useState(false);
   if (loading && !message) return <CardSkeleton lines={8} values={false} className="h-fit" />;
-  if (error || !message) return <Card className="h-fit p-5 text-sm text-danger">{error ?? 'Message not found'}</Card>;
+  if (error || !message) return <Card className="h-fit"><CardBody className="text-danger">{error ?? 'Message not found'}</CardBody></Card>;
   const html = message.html && !plain;
   return (
-    <Card className="grid h-fit gap-3 p-5 text-sm">
-      <div className="grid gap-1">
-        <h2 className="text-base font-semibold">{message.subject || '(no subject)'}</h2>
-        <p className="text-muted-foreground">From {message.from || 'unknown'} to {message.to.join(', ') || 'nobody'}</p>
-        <p className="text-xs text-muted-foreground">{message.date ? new Date(message.date).toLocaleString() : ''}</p>
-      </div>
-      {!message.html && <p className="text-xs text-muted-foreground">Plain text email: it has no HTML version to show.</p>}
-      {message.html && message.text && (
-        <div className="flex gap-2">
-          <Badge tone={html ? 'success' : 'neutral'}><button type="button" onClick={() => setPlain(false)}>HTML</button></Badge>
-          <Badge tone={!html ? 'success' : 'neutral'}><button type="button" onClick={() => setPlain(true)}>Text</button></Badge>
+    <Card className="h-fit">
+      <CardBody className="gap-3">
+        <div className="grid gap-1">
+          <h2 className="text-base font-semibold">{message.subject || '(no subject)'}</h2>
+          <p className="text-muted-foreground">From {message.from || 'unknown'} to {message.to.join(', ') || 'nobody'}</p>
+          <p className="text-xs text-muted-foreground">{message.date ? new Date(message.date).toLocaleString() : ''}</p>
         </div>
-      )}
-      {html ? (
-        // No scripts, no forms, no same-origin access: the mail is shown, never run.
-        <iframe title={message.subject} sandbox="" srcDoc={message.html} className="h-[60vh] w-full rounded-md border bg-white" />
-      ) : (
-        <pre className="max-h-[60vh] overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {message.text
-            ? textLinks(message.text).map((part, i) =>
-                part.href ? <a key={i} href={part.href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">{part.text}</a> : part.text,
-              )
-            : '(empty)'}
-        </pre>
-      )}
+        {!message.html && <p className="text-xs text-muted-foreground">Plain text email: it has no HTML version to show.</p>}
+        {message.html && message.text && (
+          <Segmented label="Show as" value={plain ? 'text' : 'html'} onChange={(v) => setPlain(v === 'text')} options={[['html', 'HTML'], ['text', 'Text']]} className="justify-self-start text-xs" />
+        )}
+        {html ? (
+          // No scripts, no forms, no same-origin access: the mail is shown, never run.
+          <iframe title={message.subject} sandbox="" srcDoc={message.html} className="h-[60vh] w-full rounded-md border bg-white" />
+        ) : (
+          <pre className="max-h-[60vh] overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
+            {message.text
+              ? textLinks(message.text).map((part, i) =>
+                  part.href ? <a key={i} href={part.href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">{part.text}</a> : part.text,
+                )
+              : '(empty)'}
+          </pre>
+        )}
+      </CardBody>
     </Card>
   );
 }

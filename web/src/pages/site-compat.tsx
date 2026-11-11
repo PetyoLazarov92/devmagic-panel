@@ -7,8 +7,9 @@ import { settled, useJob } from '@/components/job-steps';
 import { ScopeLabel } from '@/components/scope-label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Checkbox, Select } from '@/components/ui/field';
+import { Tabs } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
@@ -132,8 +133,8 @@ function CompatView({ site, compat, current, ask, onChanged }: { site: Site; com
   return (
     <div ref={card} className="scroll-mt-24">
     <Card>
-      <CardHeader><CardTitle>Compatibility</CardTitle><ScopeLabel>this site</ScopeLabel></CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader title="Compatibility" meta={<ScopeLabel>this site</ScopeLabel>} />
+      <CardBody>
         <p className="text-xs text-muted-foreground">
           Scans the code of the site&apos;s themes and plugins for what a PHP version removed (errors) or deprecated (warnings), before you switch. It is a hint: the scanner is an alpha with some false alarms, and it cannot see code that only runs at run time. It never stops a switch.
         </p>
@@ -166,17 +167,11 @@ function CompatView({ site, compat, current, ask, onChanged }: { site: Site; com
             {runner.error && <Notice>{runner.error}</Notice>}
           </div>
         )}
-      </div>
+      </CardBody>
       {scan && (
         <div className="grid gap-3 border-t px-5 py-4 text-sm">
           {compat.scans.length > 1 && (
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Scanned versions">
-              {compat.scans.map((s) => (
-                <button key={s.version} type="button" role="tab" aria-selected={s.version === scan.version} onClick={() => setShown(s.version)} className={`rounded-full border px-3 py-1 text-xs font-medium ${s.version === scan.version ? 'border-primary bg-primary/12 text-primary' : 'hover:bg-muted'}`}>
-                  PHP {s.version}{s.errors ? ` · ${plural(s.errors, 'error')}` : ''}
-                </button>
-              ))}
-            </div>
+            <Tabs size="sm" label="Scanned versions" value={scan.version} onChange={setShown} items={compat.scans.map((s) => ({ value: s.version, label: `PHP ${s.version}${s.errors ? ` · ${plural(s.errors, 'error')}` : ''}` }))} />
           )}
           <ScanView scan={scan} commit={compat.commit} busy={busy} onDelete={(all) => void remove(all ? undefined : scan.version)} />
         </div>
@@ -207,8 +202,8 @@ function ScanView({ scan, commit, busy, onDelete }: { scan: CompatScan; commit: 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{scan.tool}</p>
         <span className="flex gap-1">
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => onDelete(false)}><Trash2 />Delete this scan</Button>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => onDelete(true)}>Delete all of this site&apos;s</Button>
+          <Button variant="soft" size="sm" disabled={busy} onClick={() => onDelete(false)}><Trash2 />Delete this scan</Button>
+          <Button variant="soft" size="sm" disabled={busy} onClick={() => onDelete(true)}>Delete all of this site&apos;s</Button>
         </span>
       </div>
     </div>

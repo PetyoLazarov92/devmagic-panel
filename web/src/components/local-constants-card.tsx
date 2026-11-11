@@ -1,6 +1,6 @@
 import type { ConstantValue, LocalConstant } from '@devmagic-panel/shared';
 import { localConstants } from '@devmagic-panel/shared';
-import { Check, LoaderCircle, Plus, Trash2 } from 'lucide-react';
+import { Check, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+import { Spinner } from '@/components/ui/spinner';
 
 type Kind = 'boolean' | 'number' | 'text';
 interface Row {
@@ -68,7 +69,7 @@ export function LocalConstantsCard() {
           <ul className="grid gap-2">
             {rows.map((row, i) => (
               <li key={i} className="flex flex-wrap items-center gap-2">
-                <Input value={row.name} onChange={(e) => update(i, { name: e.target.value.trim() })} placeholder="WANDWORKS_DEV" aria-label="Constant name" className="h-8 w-56 font-mono text-[13px]" />
+                <Input value={row.name} onChange={(e) => update(i, { name: e.target.value.trim() })} placeholder="WANDWORKS_DEV" aria-label="Constant name" className="h-8 w-56 font-mono text-dense" />
                 <Select value={row.kind} onChange={(e) => { const kind = e.target.value as Kind; update(i, { kind, text: kind === 'boolean' ? 'true' : '' }); }} aria-label="Kind" className="h-8">
                   <option value="boolean">true or false</option>
                   <option value="number">number</option>
@@ -80,7 +81,7 @@ export function LocalConstantsCard() {
                     <option value="false">false</option>
                   </Select>
                 ) : (
-                  <Input value={row.text} onChange={(e) => update(i, { text: e.target.value })} placeholder={row.kind === 'number' ? '256' : 'local'} aria-label="Value" className="h-8 w-48 font-mono text-[13px]" />
+                  <Input value={row.text} onChange={(e) => update(i, { text: e.target.value })} placeholder={row.kind === 'number' ? '256' : 'local'} aria-label="Value" className="h-8 w-48 font-mono text-dense" />
                 )}
                 <Button size="icon" variant="ghost" className="size-8" aria-label={`Remove ${row.name || 'this constant'}`} onClick={() => setRows((rs) => (rs ?? []).filter((_, j) => j !== i))}>
                   <Trash2 />
@@ -96,7 +97,7 @@ export function LocalConstantsCard() {
           </Button>
           {changed && (
             <Button size="sm" disabled={problem !== null || state === 'saving'} onClick={() => void save()}>
-              {state === 'saving' ? <LoaderCircle className="animate-spin" /> : <Check />}
+              {state === 'saving' ? <Spinner /> : <Check />}
               Save
             </Button>
           )}

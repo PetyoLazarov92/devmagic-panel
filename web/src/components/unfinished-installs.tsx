@@ -3,7 +3,7 @@ import { History } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardFooter, CardHeader } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { draftHref, draftProgress, KIND_LABEL, keptUntil } from '@/lib/drafts';
 import { timeAgo } from '@/lib/format';
@@ -36,10 +36,7 @@ export function UnfinishedInstalls({ drafts, onChanged, className }: { drafts: I
   const shown = all ? drafts : drafts.slice(0, FIRST);
   return (
     <Card id="unfinished-installs" className={cn('scroll-mt-6', className)}>
-      <CardHeader>
-        <CardTitle>Unfinished installs</CardTitle>
-        <History className="size-4 text-muted-foreground" />
-      </CardHeader>
+      <CardHeader title="Unfinished installs" meta={<History className="size-4 text-muted-foreground" />} />
       <ul className="divide-y">
         {shown.map((d) => {
           const p = draftProgress(d);
@@ -47,7 +44,7 @@ export function UnfinishedInstalls({ drafts, onChanged, className }: { drafts: I
             <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 text-sm">
               <div className="min-w-0 basis-full sm:flex-1 sm:basis-auto">
                 <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="max-w-full truncate font-mono text-[13px] font-medium">{d.title || 'New site'}</span>
+                  <span className="max-w-full truncate font-mono text-dense font-medium">{d.title || 'New site'}</span>
                   <Badge className="shrink-0">{KIND_LABEL[p.kind]}</Badge>
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -73,7 +70,7 @@ export function UnfinishedInstalls({ drafts, onChanged, className }: { drafts: I
               ) : (
                 <div className="flex gap-1">
                   <Button size="sm" onClick={() => navigate(draftHref(d.id, p.step))}>Continue</Button>
-                  <Button size="sm" variant="ghost" disabled={busy === d.id} onClick={() => void discard(d)}>Discard</Button>
+                  <Button size="sm" variant="soft" disabled={busy === d.id} onClick={() => void discard(d)}>Discard</Button>
                 </div>
               )}
             </li>
@@ -81,11 +78,11 @@ export function UnfinishedInstalls({ drafts, onChanged, className }: { drafts: I
         })}
       </ul>
       {drafts.length > FIRST && (
-        <div className="border-t px-5 py-2.5">
-          <button type="button" className="text-sm font-medium text-primary hover:underline" onClick={() => setAll((v) => !v)}>
+        <CardFooter>
+          <Button size="sm" variant="soft" onClick={() => setAll((v) => !v)}>
             {all ? 'Show fewer' : `Show all ${drafts.length}`}
-          </button>
-        </div>
+          </Button>
+        </CardFooter>
       )}
     </Card>
   );

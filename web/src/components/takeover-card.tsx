@@ -1,18 +1,22 @@
 import type { Site, TakeoverPreview } from '@devmagic-panel/shared';
-import { CircleAlert, FileCode2, Hand, LoaderCircle, ShieldCheck, Undo2 } from 'lucide-react';
+import { FileCode2, Hand, ShieldCheck, Undo2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { JobFooter } from '@/components/job-box';
 import { useJob } from '@/components/job-steps';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/field';
+import { KeyValue } from '@/components/ui/key-value';
+import { Notice } from '@/components/ui/notice';
+import { TextLink } from '@/components/ui/text-link';
 import { api } from '@/lib/api';
 import { shortDate } from '@/lib/format';
-import { Link, useQueryParam } from '@/lib/router';
+import { useQueryParam } from '@/lib/router';
 import { siteHref } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * A site made by hand: the panel leaves its vhost as it is, so domains,
@@ -32,8 +36,8 @@ export function TakeoverCard({ site, onChanged }: { site: Site; onChanged: () =>
   if (site.path || (site.vhostManaged && !takenOver)) return null;
   return (
     <Card id="takeover">
-      <CardHeader><CardTitle>{takenOver ? 'Taken over' : 'Made by hand'}</CardTitle><Hand className="size-4 text-muted-foreground" /></CardHeader>
-      <div className="grid gap-3 p-5 text-sm">
+      <CardHeader title={takenOver ? 'Taken over' : 'Made by hand'} meta={<Hand className="size-4 text-muted-foreground" />} />
+      <CardBody className="gap-3">
         {takenOver ? (
           <>
             <p>
@@ -46,7 +50,7 @@ export function TakeoverCard({ site, onChanged }: { site: Site; onChanged: () =>
                 <Button variant="outline" className="w-fit" disabled><Undo2 />Give back</Button>
                 <p className="text-xs text-muted-foreground">
                   It runs on {site.server === 'nginx' ? 'nginx' : 'nginx in front of Apache'}, and its own vhost is for Apache alone: move it back to Apache on{' '}
-                  <Link href={`${siteHref(site)}?tab=php`} className="font-medium text-primary hover:underline">Server and PHP</Link> first, then give it back.
+                  <TextLink href={`${siteHref(site)}?tab=php`}>Server and PHP</TextLink> first, then give it back.
                 </p>
               </>
             ) : (
@@ -60,7 +64,7 @@ export function TakeoverCard({ site, onChanged }: { site: Site; onChanged: () =>
             <Button className="w-fit" onClick={() => setOpen('take')}><ShieldCheck />Take over...</Button>
           </>
         )}
-      </div>
+      </CardBody>
       <JobFooter job={job.job} error={job.error} onRetry={() => void job.retry()} />
       {open === 'take' && <TakeOverDialog site={site} onClose={() => setOpen(null)} onStart={(input) => { setOpen(null); void job.follow(api.startJob('site.takeOver', input)); }} />}
       {open === 'give' && <GiveBackDialog site={site} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onChanged(); }} />}
@@ -93,50 +97,52 @@ function TakeOverDialog({ site, onClose, onStart }: { site: Site; onClose: () =>
       }
     >
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {!preview && !error && <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Reading its vhost...</p>}
+      {!preview && !error && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" />Reading its vhost...</p>}
       {preview && (
         <div className="grid gap-4 text-sm">
           {preview.problems.length > 0 && (
-            <div role="alert" className="grid gap-1 rounded-lg border border-danger/40 bg-danger/6 px-3 py-2.5">
-              <p className="flex items-center gap-2 font-medium text-danger"><CircleAlert className="size-4" />It cannot be taken over now</p>
-              <ul className="list-disc pl-5 text-muted-foreground">{preview.problems.map((p) => <li key={p}>{p}</li>)}</ul>
-            </div>
+            <Notice tone="danger" size="inline" className="text-sm">
+              <div className="grid gap-1">
+                <p className="font-medium">It cannot be taken over now</p>
+                <ul className="list-disc pl-5 text-muted-foreground">{preview.problems.map((p) => <li key={p}>{p}</li>)}</ul>
+              </div>
+            </Notice>
           )}
-          <dl className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-2">
-            <dt className="text-muted-foreground">Its vhost files</dt>
-            <dd className="font-mono text-[13px] break-all">{preview.files.join(', ') || 'none'}</dd>
-            <dt className="text-muted-foreground">Names</dt>
-            <dd className="font-mono text-[13px] break-all">{preview.names.join(' ') || 'none'}</dd>
-            <dt className="text-muted-foreground">Folder</dt>
-            <dd className="font-mono text-[13px] break-all">{preview.docroot ?? 'not usable'}<span className="font-sans text-xs text-muted-foreground"> (stays where it is)</span></dd>
-            {preview.mounts.length > 0 && (
-              <>
-                <dt className="text-muted-foreground">Sites under a path</dt>
-                <dd className="font-mono text-[13px] break-all">{preview.mounts.map((m) => m.replace('=', ' from ')).join(', ')}</dd>
-              </>
-            )}
-          </dl>
+          <KeyValue
+            labelWidth="md"
+            className="gap-y-2"
+            rows={[
+              { label: 'Its vhost files', value: <span className="font-mono text-dense">{preview.files.join(', ') || 'none'}</span> },
+              { label: 'Names', value: <span className="font-mono text-dense">{preview.names.join(' ') || 'none'}</span> },
+              { label: 'Folder', value: <span className="font-mono text-dense">{preview.docroot ?? 'not usable'}<span className="font-sans text-xs text-muted-foreground"> (stays where it is)</span></span> },
+              ...(preview.mounts.length > 0 ? [{ label: 'Sites under a path', value: <span className="font-mono text-dense">{preview.mounts.map((m) => m.replace('=', ' from ')).join(', ')}</span> }] : []),
+            ]}
+          />
           {preview.extra.length > 0 && (
-            <div className="grid gap-2 rounded-lg border border-warning/40 bg-warning/6 px-3 py-2.5">
-              <p className="flex items-center gap-2 font-medium"><FileCode2 className="size-4 text-warning" />Lines the panel's vhost does not have ({preview.extra.length})</p>
-              <pre className="max-h-48 overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">{preview.extra.join('\n')}</pre>
-              <p className="text-xs text-muted-foreground">PHP settings (php_value) can go into the site's own PHP settings on its PHP tab afterwards; rewrite rules into its .htaccess.</p>
-              <Checkbox id="drop-lines" checked={drop} onChange={setDrop} label="Leave these lines out; they stay in the kept files" />
-            </div>
+            <Notice tone="warning" size="inline" icon={false} className="py-2.5 text-sm">
+              <div className="grid gap-2">
+                <p className="flex items-center gap-2 font-medium"><FileCode2 className="size-4 text-warning" />Lines the panel's vhost does not have ({preview.extra.length})</p>
+                <pre className="max-h-48 overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap">{preview.extra.join('\n')}</pre>
+                <p className="text-xs text-muted-foreground">PHP settings (php_value) can go into the site's own PHP settings on its PHP tab afterwards; rewrite rules into its .htaccess.</p>
+                <Checkbox id="drop-lines" checked={drop} onChange={setDrop} label="Leave these lines out; they stay in the kept files" />
+              </div>
+            </Notice>
           )}
           {preview.hostsLines.length > 0 && (
             <div className="grid gap-1.5 rounded-lg border px-3 py-2.5">
               <p className="font-medium">Its line{preview.hostsLines.length === 1 ? '' : 's'} in /etc/hosts</p>
-              <pre className="overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">{preview.hostsLines.join('\n')}</pre>
+              <pre className="overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap">{preview.hostsLines.join('\n')}</pre>
               <p className="text-xs text-muted-foreground">Written by hand outside the panel's block: {preview.hostsLines.length === 1 ? 'it moves' : 'they move'} into the takeover record, so the panel's line decides where the site goes and it can move to nginx. Give back puts {preview.hostsLines.length === 1 ? 'it' : 'them'} back where {preview.hostsLines.length === 1 ? 'it was' : 'they were'}.</p>
             </div>
           )}
           {preview.hostsShared.length > 0 && (
-            <div className="grid gap-1.5 rounded-lg border border-warning/40 bg-warning/6 px-3 py-2.5">
-              <p className="font-medium">A line in /etc/hosts it shares</p>
-              <pre className="overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-[12px] whitespace-pre-wrap">{preview.hostsShared.join('\n')}</pre>
-              <p className="text-xs text-muted-foreground">It names other hosts too, so it stays as it is, and the site stays on Apache until you take {site.domain} off it by hand.</p>
-            </div>
+            <Notice tone="warning" size="inline" icon={false} className="py-2.5 text-sm">
+              <div className="grid gap-1.5">
+                <p className="font-medium">A line in /etc/hosts it shares</p>
+                <pre className="overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap">{preview.hostsShared.join('\n')}</pre>
+                <p className="text-xs text-muted-foreground">It names other hosts too, so it stays as it is, and the site stays on Apache until you take {site.domain} off it by hand.</p>
+              </div>
+            </Notice>
           )}
           {preview.problems.length === 0 && <ConfirmField id="takeover-confirm" expected={site.domain} value={confirm} onChange={setConfirm} />}
         </div>
@@ -171,7 +177,7 @@ function GiveBackDialog({ site, onClose, onDone }: { site: Site; onClose: () => 
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button disabled={busy || confirm !== site.domain} onClick={() => void go()}>
-            {busy && <LoaderCircle className="animate-spin" />}
+            {busy && <Spinner />}
             Give back
           </Button>
         </div>

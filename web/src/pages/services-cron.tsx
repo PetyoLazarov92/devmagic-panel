@@ -1,6 +1,6 @@
 import type { ActionId, CronReport, CronRunView, CronTask, CronTaskKind, CronTaskView, Site } from '@devmagic-panel/shared';
 import { cronSchedule, cronTask, CRON_PRESETS, describeSchedule, nextRuns, WP_CLI_SCHEDULED } from '@devmagic-panel/shared';
-import { CalendarClock, ChevronRight, History, LoaderCircle, Pencil, Play, Plus, Server, Trash2 } from 'lucide-react';
+import { CalendarClock, ChevronRight, History, Pencil, Play, Plus, Server, Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { AnsiText } from '@/components/ansi-text';
 import { JobBox } from '@/components/job-box';
@@ -10,7 +10,7 @@ import { ScopeLabel } from '@/components/scope-label';
 import { StatusDot } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Select } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { CardsSkeleton } from '@/components/skeletons';
 import { Notice } from '@/components/page';
+import { Spinner } from '@/components/ui/spinner';
 
 /** What Undo runs for a change: by default the crontab as it was, from the copy saved before it. */
 export type UndoOf = (backup: string | undefined) => { id: ActionId; input: Record<string, unknown> } | null;
@@ -158,7 +159,7 @@ function RunHistory({ id }: { id: string }) {
   const runs = useAsync(() => api.cronRuns(id), [id]);
   const [open, setOpen] = useState<number | null>(null);
   const output = useAsync(() => (open === null ? Promise.resolve(null) : api.cronRun(open)), [open]);
-  if (runs.loading && !runs.data) return <p className="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Reading the runs...</p>;
+  if (runs.loading && !runs.data) return <p className="flex items-center gap-2 text-xs text-muted-foreground"><Spinner className="size-3.5" />Reading the runs...</p>;
   if (runs.error) return <p role="alert" className="text-xs text-danger">{runs.error}</p>;
   const list = runs.data ?? [];
   if (list.length === 0) return <p className="text-xs text-muted-foreground">No runs kept yet. The panel keeps the last 100, and failed ones for 14 days.</p>;
@@ -193,7 +194,7 @@ function RunHistory({ id }: { id: string }) {
       <div>
         <Button
           size="sm"
-          variant="ghost"
+          variant="soft"
           onClick={() => void runCronChange('cron.clearRuns', { id }, 'History cleared', runs.reload, () => null)}
         >
           Clear this history
@@ -323,9 +324,9 @@ export function TaskForm({ task, site, onClose, onSaved }: { task: CronTaskView 
               <span className="flex flex-wrap items-center gap-1.5">
                 One of these, or a command of the site&apos;s own (a plugin&apos;s or the theme&apos;s):
                 {WP_CLI_SCHEDULED.map((c) => (
-                  <button key={c.join(' ')} type="button" className="rounded-full border px-2 py-0.5 font-mono hover:bg-muted" onClick={() => set('command', `${c.join(' ')}${c[0] === 'cron' ? ' wandworks_hook' : c[0] === 'transient' ? ' --expired' : ''}`)}>
+                  <Button key={c.join(' ')} size="xs" variant="outline" className="h-6 rounded-full font-mono" onClick={() => set('command', `${c.join(' ')}${c[0] === 'cron' ? ' wandworks_hook' : c[0] === 'transient' ? ' --expired' : ''}`)}>
                     {c.join(' ')}
-                  </button>
+                  </Button>
                 ))}
               </span>
             }
@@ -400,7 +401,7 @@ function RemoveTask({ task, onClose, onRemoved }: { task: CronTaskView | null; o
   return (
     <Dialog open={task !== null} onClose={onClose} title={`Remove the task ${task?.title ?? ''}?`} description="It leaves the panel's block of your crontab and stops running. Its run history stays 14 days. Undo in the notice puts it back.">
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="soft" onClick={onClose}>Cancel</Button>
         <Button
           variant="danger"
           disabled={busy}
@@ -412,7 +413,7 @@ function RemoveTask({ task, onClose, onRemoved }: { task: CronTaskView | null; o
             onClose();
           }}
         >
-          {busy && <LoaderCircle className="animate-spin" />}
+          {busy && <Spinner />}
           Remove task
         </Button>
       </div>
@@ -490,17 +491,17 @@ export function CronTab({ refresh, onLoading }: { refresh: number; onLoading: (l
   return (
     <div className="grid gap-4">
       <Card>
-        <CardHeader><CardTitle>Cron</CardTitle><ScopeLabel>this computer</ScopeLabel></CardHeader>
-        <div className="grid gap-2 p-5 text-sm">
+        <CardHeader title="Cron" meta={<ScopeLabel>this computer</ScopeLabel>} />
+        <CardBody className="gap-2">
           <p className="flex items-center gap-2"><StatusDot status={daemon.status} />{daemon.text}</p>
           <p className="text-muted-foreground">Schedules run in the time zone {data.timeZone}. Tasks of the panel run as you, through its runner: no shell, one run at a time, output kept.</p>
-          {data.problems.map((p) => <p key={p} role="alert" className="rounded-lg border border-warning/40 bg-warning/8 px-3 py-2 text-warning">{p}</p>)}
-        </div>
+          {data.problems.map((p) => <Notice key={p} tone="warning" size="inline">{p}</Notice>)}
+        </CardBody>
       </Card>
 
       {data.allowed && (
         <Card>
-          <CardHeader><CardTitle>The panel&apos;s tasks</CardTitle><ScopeLabel>your crontab</ScopeLabel></CardHeader>
+          <CardHeader title={<>The panel&apos;s tasks</>} meta={<ScopeLabel>your crontab</ScopeLabel>} />
           <TaskList tasks={data.tasks} onChanged={report.reload} empty="No tasks yet. Add one, or turn on Run WP-Cron from cron on a site's Cron tab." />
         </Card>
       )}
@@ -538,7 +539,7 @@ export function CronTab({ refresh, onLoading }: { refresh: number; onLoading: (l
 function ReadOnlyCard({ title, scope, note, children }: { title: string; scope: string; note: string; children: ReactNode }) {
   return (
     <Card>
-      <CardHeader><CardTitle>{title}</CardTitle><ScopeLabel>{scope}</ScopeLabel></CardHeader>
+      <CardHeader title={title} meta={<ScopeLabel>{scope}</ScopeLabel>} />
       <p className="px-5 pt-3 text-xs text-muted-foreground">{note}</p>
       <div className="mt-2">{children}</div>
     </Card>

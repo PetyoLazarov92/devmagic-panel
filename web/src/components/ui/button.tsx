@@ -10,6 +10,7 @@ const buttonVariants = cva(
         default: 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         outline: 'border border-input bg-card hover:bg-muted',
+        // Only for icon buttons and toolbars: the icon shows it can be clicked. A worded third action is soft.
         ghost: 'hover:bg-muted',
         // A light fill and border at rest, so its edge lines up with the page; denser on hover.
         soft: 'border border-foreground/10 bg-foreground/4 hover:border-foreground/20 hover:bg-foreground/10',

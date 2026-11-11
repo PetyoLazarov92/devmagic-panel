@@ -75,7 +75,7 @@ export function SitesCompatCard({ version }: { version: string }) {
             </Button>
             <Checkbox id={`compat-all-${version}`} checked={all} onChange={setAll} disabled={busy} label="Include inactive plugins and themes" />
             {rows.some((r) => r.scan) && (
-              <Button variant="ghost" size="sm" className="ml-auto" disabled={busy || deleting} onClick={() => void removeAll()}><Trash2 />Delete all scans of PHP {version}</Button>
+              <Button variant="soft" size="sm" className="ml-auto" disabled={busy || deleting} onClick={() => void removeAll()}><Trash2 />Delete all scans of PHP {version}</Button>
             )}
           </div>
         )}

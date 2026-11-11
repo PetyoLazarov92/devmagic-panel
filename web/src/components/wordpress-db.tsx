@@ -9,8 +9,9 @@ import { settled, useJob, useResumeJob } from '@/components/job-steps';
 import { toastRowChange } from '@/components/row-editor';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
+import { KeyValue } from '@/components/ui/key-value';
 import { Bar, CardLinesSkeleton, CardSkeleton, Reading } from '@/components/skeletons';
 import { api } from '@/lib/api';
 import { bytes } from '@/lib/format';
@@ -257,13 +258,15 @@ interface View {
 /** A card's header: its title, and its icon, turning while the card reads again. */
 function Header({ title, icon: Icon, reading, badge }: { title: string; icon: LucideIcon; reading: boolean; badge?: ReactNode }) {
   return (
-    <CardHeader>
-      <CardTitle>{title}</CardTitle>
-      <span className="flex items-center gap-2">
-        {badge}
-        {reading ? <RefreshCw className="size-4 animate-spin text-muted-foreground" aria-label="Reading" /> : <Icon className="size-4 text-muted-foreground" />}
-      </span>
-    </CardHeader>
+    <CardHeader
+      title={title}
+      meta={
+        <span className="flex items-center gap-2">
+          {badge}
+          {reading ? <RefreshCw className="size-4 animate-spin text-muted-foreground" aria-label="Reading" /> : <Icon className="size-4 text-muted-foreground" />}
+        </span>
+      }
+    />
   );
 }
 
@@ -395,17 +398,9 @@ function CountLink({ n, title, onOpen }: { n: number; title: string; onOpen: () 
 
 const eq = (column: string, value: string) => ({ filters: [{ column, op: 'eq' as const, value }] });
 
+/** Counts as label and number, the numbers lined up on the right. */
 function Facts({ rows }: { rows: Array<[ReactNode, ReactNode]> }) {
-  return (
-    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 px-5 py-4 text-sm">
-      {rows.map(([label, value], i) => (
-        <div key={i} className="contents">
-          <dt className="text-muted-foreground">{label}</dt>
-          <dd className="text-right tabular-nums">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+  return <KeyValue rows={rows.map(([label, value], i) => ({ key: String(i), label, value }))} className="grid-cols-[minmax(0,1fr)_auto] px-5 py-4 [&_dd]:text-right [&_dd]:tabular-nums" />;
 }
 
 function AutoloadCard({ view, onTable, onAutoloadOff }: { view: View; onTable: OnTable; onAutoloadOff: (option: string) => void }) {
@@ -440,10 +435,10 @@ function AutoloadCard({ view, onTable, onAutoloadOff }: { view: View; onTable: O
               <p className="px-5 pt-4 text-xs font-medium text-muted-foreground">The biggest</p>
               <ul className="mt-1 grid gap-1 px-5 pb-2">
                 {shown.map((o) => (
-                  <li key={o.name} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 text-[13px]">
+                  <li key={o.name} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 text-dense">
                     <NameLink name={o.name} title={`See ${o.name} in ${options}`} onOpen={() => onTable(options, eq('option_name', o.name))} />
                     <span className="text-right text-xs text-muted-foreground tabular-nums">{bytes(o.bytes)}</span>
-                    <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={() => onAutoloadOff(o.name)} aria-label={`Stop loading ${o.name} on every page`} title="Load it only when a plugin asks for it">
+                    <Button size="sm" variant="outline" className="h-6 px-2 text-2xs" onClick={() => onAutoloadOff(o.name)} aria-label={`Stop loading ${o.name} on every page`} title="Load it only when a plugin asks for it">
                       Turn off
                     </Button>
                     <span className="col-span-3 h-1 rounded-full bg-muted" aria-hidden>
@@ -638,7 +633,7 @@ function HealthTableRow({ row: r, busy, onFixTable, onFixOne }: { row: HealthRow
         <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
           <Icon className={cn('size-4 shrink-0', r.danger ? 'text-danger' : r.fixes ? 'text-warning' : 'text-muted-foreground')} aria-hidden />
           <span className="grid min-w-0 flex-1 gap-1">
-            <span className="font-mono text-[13px] font-medium break-all">{r.table}</span>
+            <span className="font-mono text-dense font-medium break-all">{r.table}</span>
             <span className="flex flex-wrap gap-1">
               {r.issues.map((i) => (
                 <Badge key={i.problem} tone={i.fix && !i.blocked ? (KEYS.has(i.problem) ? 'danger' : 'warning') : 'neutral'}>
@@ -657,15 +652,16 @@ function HealthTableRow({ row: r, busy, onFixTable, onFixOne }: { row: HealthRow
           <span className="shrink-0 text-xs text-muted-foreground">For a person</span>
         )}
         {/* Last, in a column of its own, so every row's chevron lines up at the edge. */}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           aria-expanded={open}
           aria-label={open ? `Hide the problems of ${r.table}` : `Show the problems of ${r.table}`}
           onClick={() => setOpen((o) => !o)}
-          className="-mr-1.5 grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="-mr-1.5 size-7 shrink-0 text-muted-foreground hover:text-foreground"
         >
           <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} aria-hidden />
-        </button>
+        </Button>
       </div>
       {open && (
         <div className="mx-5 mb-3 grid gap-3 rounded-md bg-muted/50 p-3">
@@ -709,7 +705,7 @@ function GrowthCard({ view, onTable }: { view: View; onTable: OnTable }) {
           <p className="px-5 pt-3 text-xs text-muted-foreground">Since {g.since}, {g.days === 1 ? 'a day' : `${g.days} days`} ago.</p>
           <ul className="mt-1 divide-y">
             {g.tables.map((t) => (
-              <li key={t.table} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 px-5 py-2 text-[13px]">
+              <li key={t.table} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 px-5 py-2 text-dense">
                 <button type="button" className="truncate text-left font-mono hover:underline" title={t.table} onClick={() => onTable(t.table)}>{t.table}</button>
                 <span className="text-xs text-warning tabular-nums">+{bytes(t.grewBytes)}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">{bytes(t.bytes)}</span>
@@ -782,13 +778,12 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
                   <span className="font-medium">{g.plugin}</span>
                   <Badge tone={PLUGIN_STATE[g.state].tone}>{PLUGIN_STATE[g.state].label}</Badge>
                   <span className="text-xs text-muted-foreground">{number(g.count)} {g.count === 1 ? 'option' : 'options'}, {bytes(g.bytes)}</span>
-                  <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" aria-expanded={open === g.plugin} onClick={() => setOpen(open === g.plugin ? null : g.plugin)}>
+                  <Button size="xs" variant="soft" className="ml-auto" aria-expanded={open === g.plugin} onClick={() => setOpen(open === g.plugin ? null : g.plugin)}>
                     {open === g.plugin ? 'Hide' : 'Which'}
                   </Button>
                   <Button
-                    size="sm"
+                    size="xs"
                     variant="outline"
-                    className="h-7 px-2 text-xs"
                     disabled={busy}
                     onClick={() =>
                       onAsk({
@@ -820,7 +815,7 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
           <p className="px-5 pt-3 text-xs text-muted-foreground">Tables that are not WordPress's own, with the plugin or theme each likely belongs to: by its name, or found in the site's code.</p>
           <ul className="mt-1 divide-y">
             {tables.shown.map((t) => (
-              <li key={t.table} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-2 text-[13px]">
+              <li key={t.table} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-2 text-dense">
                 <span className="min-w-0">
                   <span className="block truncate font-mono" title={t.table}>{t.table}</span>
                   <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -830,12 +825,12 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
                   </span>
                 </span>
                 <span className="flex gap-1">
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => onTable(t.table)}>Browse</Button>
+                  <Button size="xs" variant="soft" onClick={() => onTable(t.table)}>Browse</Button>
                   {t.state !== 'active' && (
                     <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs text-danger hover:text-danger"
+                      size="xs"
+                      variant="soft"
+                      className="text-danger hover:text-danger"
                       disabled={busy}
                       onClick={() =>
                         onAsk({
@@ -872,7 +867,7 @@ function PluginsCard({ view, busy, onTable, onAsk, footer }: { view: View; busy:
           <p className="text-xs font-medium text-muted-foreground">Posts of types nothing registers now</p>
           <ul className="grid gap-1">
             {types.shown.map((t) => (
-              <li key={t.type} className="flex items-center justify-between gap-3 text-[13px]">
+              <li key={t.type} className="flex items-center justify-between gap-3 text-dense">
                 <NameLink name={t.type} title={`See the ${t.type} posts in ${posts}`} onOpen={() => onTable(posts, eq('post_type', t.type))} />
                 <span className="tabular-nums text-muted-foreground">{number(t.count)}</span>
               </li>
@@ -1078,7 +1073,7 @@ function CleanupCard({ view, target, busy, onClean, onScan, onTable, footer }: {
                   Repeated post meta
                   <span className="block text-xs text-muted-foreground/80">Reads every value of postmeta, with up to two minutes</span>
                 </span>
-                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={scanning} onClick={onScan}>
+                <Button size="xs" variant="outline" disabled={scanning} onClick={onScan}>
                   {scanning ? <RefreshCw className="animate-spin" /> : <Search />}
                   {scanning ? 'Looking...' : 'Look for them'}
                 </Button>
@@ -1156,7 +1151,7 @@ function MetaKeysCard({ view, onTable, onSizes }: { view: View; onTable: OnTable
       {m && m.keys.length > 0 && (
         <ul className="mt-2 divide-y">
           {shown.map((k) => (
-            <li key={k.key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-5 py-2 text-[13px]">
+            <li key={k.key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-5 py-2 text-dense">
               <NameLink name={k.key || <span className="text-muted-foreground italic">empty key</span>} title={`See the rows of ${k.key || 'the empty key'} in ${postmeta}`} onOpen={() => onTable(postmeta, eq('meta_key', k.key))} />
               <span className="text-right text-xs text-muted-foreground tabular-nums">{k.bytes === undefined ? `${number(k.count)} rows` : `${bytes(k.bytes)} in ${number(k.count)} rows`}</span>
             </li>

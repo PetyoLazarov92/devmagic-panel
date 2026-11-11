@@ -4,6 +4,8 @@ import { Logo } from '@/components/logo';
 import { ChangePasswordDialog } from '@/components/panel-password';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
+import { Notice } from '@/components/ui/notice';
 import { AssistantDrawer } from '@/components/assistant-drawer';
 import { JobsIndicator } from '@/components/jobs-indicator';
 import { UpdateIndicator, updateDot, useUpdateStatus } from '@/components/update-indicator';
@@ -116,28 +118,27 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
       <div className="flex min-w-0 flex-1 flex-col">
         {/* The public demo says on every page what it is, since a link can open any of them first. */}
         {isDemo && (
-          <p className="border-b bg-warning/12 px-6 py-2 text-center text-sm text-warning md:px-10">
+          <Notice tone="warning" icon={false} className="rounded-none border-x-0 border-t-0 px-6 py-2 text-center md:px-10">
             A demo on made-up sample data: nothing you do here runs anywhere.{' '}
             <a href={DEMO_HOME} data-mockup-exit className="font-medium whitespace-nowrap underline underline-offset-2">
               Get devmagic-panel
             </a>
-          </p>
+          </Notice>
         )}
         {/* Lined up with the page below: the search centered over it while the indicators on the right leave room, else just left of them. */}
         <header className="mx-auto flex w-full max-w-7xl items-center gap-2 px-4 pt-4 sm:px-6 md:px-10">
-          <Button variant="ghost" size="icon" onClick={() => setMenuOpen(true)} className="shrink-0 md:hidden" aria-label="Open the menu" aria-expanded={menuOpen}>
-            <Menu />
-          </Button>
+          <IconButton icon={Menu} label="Open the menu" onClick={() => setMenuOpen(true)} className="shrink-0 md:hidden" aria-expanded={menuOpen} />
           <div className="hidden min-w-0 flex-1 basis-0 md:block" />
-          <button
-            type="button"
+          {/* Drawn like a search field: it opens the command palette. */}
+          <Button
+            variant="outline"
             onClick={openPalette}
-            className="inline-flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border bg-card px-3 text-sm text-muted-foreground shadow-xs transition-colors hover:text-foreground sm:flex-[0_1_28rem]"
+            className="min-w-0 flex-1 justify-start px-3 font-normal text-muted-foreground shadow-xs hover:bg-card hover:text-foreground sm:flex-[0_1_28rem]"
           >
-            <Search className="size-4 shrink-0" />
+            <Search />
             <span className="flex-1 truncate text-left">Search sites and actions</span>
-            <kbd className="hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">Ctrl K</kbd>
-          </button>
+            <kbd className="hidden rounded border bg-muted px-1.5 font-mono text-2xs sm:inline">Ctrl K</kbd>
+          </Button>
           <div className="flex shrink-0 items-center justify-end gap-2 md:flex-1 md:basis-0">
             {/* On a phone the menu has these: the bar keeps what changes while you work. */}
             <div className="hidden items-center gap-2 md:flex">
@@ -224,14 +225,14 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
           >
             <FlaskConical className="size-4 shrink-0" />
             <span className={cn(rail && 'sr-only')}>{isDemo ? 'Demo' : 'Mockup'}</span>
-            {!rail && <span className="ml-auto pl-2 text-[11px] font-normal">sample data</span>}
+            {!rail && <span className="ml-auto pl-2 text-2xs font-normal">sample data</span>}
           </Link>
         </div>
       )}
       <nav className={cn('flex flex-col overflow-y-auto', rail ? 'px-2' : 'px-3')} aria-label="Main">
         {groups.map(({ group, items }) => (
           <div key={group} role="group" aria-label={group} className="flex flex-col gap-0.5">
-            {rail ? <div className="mx-2 mt-3 mb-1 border-t" aria-hidden /> : <p className="px-2.5 pt-3 pb-1 text-[11px] font-medium text-muted-foreground/80">{group}</p>}
+            {rail ? <div className="mx-2 mt-3 mb-1 border-t" aria-hidden /> : <p className="px-2.5 pt-3 pb-1 text-2xs font-medium text-muted-foreground/80">{group}</p>}
             {items.map((item) => {
               const { label, href, icon: Icon } = item;
               const active = navActive(item, path);
@@ -251,7 +252,7 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
                 >
                   <Icon className="size-4 shrink-0" />
                   <span className={cn(rail && 'sr-only')}>{label}</span>
-                  {!rail && hint && <span className={cn('ml-auto truncate pl-2 text-[11px] font-normal', live[href] && dot ? 'text-primary' : 'text-muted-foreground/80')}>{hint}</span>}
+                  {!rail && hint && <span className={cn('ml-auto truncate pl-2 text-2xs font-normal', live[href] && dot ? 'text-primary' : 'text-muted-foreground/80')}>{hint}</span>}
                   {!rail && !hint && dot && <span className={cn('ml-auto size-2 shrink-0 rounded-full', dot.tone)} title={dot.title} aria-label={dot.title} />}
                   {rail && dot && <span className={cn('absolute top-1 right-1.5 size-2 rounded-full ring-2 ring-card', dot.tone)} aria-label={dot.title} />}
                 </Link>
@@ -269,19 +270,10 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
           </div>
         )}
         <div className={cn('flex shrink-0', rail && 'flex-col items-center gap-1')}>
-          <Button variant="ghost" size="icon" onClick={onPassword} title="Change the panel password">
-            <KeyRound />
-            <span className="sr-only">Change the panel password</span>
-          </Button>
-          <Button variant="ghost" size="icon" onClick={onLogout} title="Log out">
-            <LogOut />
-            <span className="sr-only">Log out</span>
-          </Button>
+          <IconButton icon={KeyRound} label="Change the panel password" onClick={onPassword} />
+          <IconButton icon={LogOut} label="Log out" onClick={onLogout} />
           {/* Folding is for the sidebar beside the page; the drawer on a phone has no rail. */}
-          <Button variant="ghost" size="icon" onClick={() => toggleSidebar(mode)} title={`${fold} (Ctrl+B)`} className="hidden md:inline-flex">
-            <FoldIcon />
-            <span className="sr-only">{fold}</span>
-          </Button>
+          <IconButton icon={FoldIcon} label={fold} onClick={() => toggleSidebar(mode)} title={`${fold} (Ctrl+B)`} className="hidden md:inline-flex" />
         </div>
       </div>
     </>
@@ -312,9 +304,7 @@ function MobileNav({ open, onClose, children }: { open: boolean; onClose: () => 
     >
       {open && (
         <div className="relative flex h-full flex-col">
-          <Button variant="ghost" size="icon" onClick={onClose} className="absolute top-3 right-3" aria-label="Close the menu">
-            <X />
-          </Button>
+          <IconButton icon={X} label="Close the menu" onClick={onClose} className="absolute top-3 right-3" />
           {children}
           <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
             <ThemeToggle />

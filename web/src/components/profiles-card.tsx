@@ -1,6 +1,6 @@
 import type { PhpXdebug, ProfileInfo, Site } from '@devmagic-panel/shared';
 import { PROFILE_KEEP_DAYS } from '@devmagic-panel/shared';
-import { ChevronDown, Download, ExternalLink, Flame, Gauge, LoaderCircle, Trash2 } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, Flame, Gauge, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { EmptyState, Notice, ViewBar } from '@/components/page';
 import { ScopeLabel } from '@/components/scope-label';
@@ -9,17 +9,18 @@ import { ReadingBlock } from '@/components/skeletons';
 import { ms } from '@/components/slow-queries';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { TextLink } from '@/components/ui/text-link';
 import { api, profileUrl } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { runRestarting } from '@/lib/restarting';
-import { Link } from '@/lib/router';
 import { lastLine } from '@/lib/site-actions';
 import { siteTarget } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * Xdebug's profiles of one site: turn profiling on for the PHP version the
@@ -92,14 +93,16 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Profiles</CardTitle>
-        <span className="flex items-center gap-2">
-          <ScopeLabel>{on || !version ? 'this site' : `PHP ${version}`}</ScopeLabel>
-          <Flame className="size-4 text-muted-foreground" />
-        </span>
-      </CardHeader>
-      <div className="grid gap-4 p-5 text-sm">
+      <CardHeader
+        title="Profiles"
+        meta={
+          <span className="flex items-center gap-2">
+            <ScopeLabel>{on || !version ? 'this site' : `PHP ${version}`}</ScopeLabel>
+            <Flame className="size-4 text-muted-foreground" />
+          </span>
+        }
+      />
+      <CardBody>
         {/* Check again in the bar at the top, as Top queries has it: there before the first profile too. */}
         <ViewBar onCheck={list.reload} loading={list.loading || waiting}>
           <p className="min-w-0 flex-1 text-muted-foreground">
@@ -108,7 +111,7 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
         </ViewBar>
         {list.error && <Notice>{list.error}</Notice>}
         {!version ? null : !xdebug?.installed ? (
-          <Notice tone="warning" action={<Link href={`/services/php/${version}`} className="font-medium text-primary hover:underline">PHP {version}</Link>}>
+          <Notice tone="warning" action={<TextLink href={`/services/php/${version}`}>PHP {version}</TextLink>}>
             Xdebug is not installed for PHP {version}. {xdebug?.reason ?? ''}
           </Notice>
         ) : !on ? (
@@ -123,9 +126,9 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
                 <p className="font-medium">Turn on profiling for PHP {version}?</p>
                 <p className="text-muted-foreground">Apache or PHP-FPM restarts, so sites stop answering for a moment. Turn it off again on PHP {version}&apos;s page.</p>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
+                  <Button size="sm" variant="soft" onClick={() => setAsking(false)}>Cancel</Button>
                   <Button size="sm" disabled={turning} onClick={() => void turnOn()}>
-                    {turning && <LoaderCircle className="animate-spin" />}
+                    {turning && <Spinner />}
                     Turn on profiling
                   </Button>
                 </div>
@@ -141,7 +144,7 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
           <div className="grid gap-2">
             <label htmlFor={`profile-page-${site.domain}`} className="font-medium">Profile a page</label>
             <div className="flex flex-wrap gap-2">
-              <Input id={`profile-page-${site.domain}`} value={page} onChange={(e) => setPage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && profilePage()} className="min-w-48 flex-1 font-mono text-[13px]" placeholder="/shop/" />
+              <Input id={`profile-page-${site.domain}`} value={page} onChange={(e) => setPage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && profilePage()} className="min-w-48 flex-1 font-mono text-dense" placeholder="/shop/" />
               <Button variant="outline" className="h-10" onClick={profilePage}>
                 <ExternalLink />
                 Open and profile
@@ -161,8 +164,8 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium">{profiles.length} profile{profiles.length === 1 ? '' : 's'}</p>
-              <Button size="sm" variant="ghost" className="ml-auto" disabled={deleting} onClick={() => void remove(profiles)}>
-                {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+              <Button size="sm" variant="soft" className="ml-auto" disabled={deleting} onClick={() => void remove(profiles)}>
+                {deleting ? <Spinner /> : <Trash2 />}
                 Delete all
               </Button>
             </div>
@@ -173,7 +176,7 @@ export function ProfilesCard({ site, version, xdebug, onXdebug }: { site: Site; 
             </div>
           </div>
         )}
-      </div>
+      </CardBody>
     </Card>
   );
 }
@@ -188,7 +191,7 @@ function ProfileRow({ profile: p, open, onToggle, onDelete, busy }: { profile: P
   return (
     <div className="grid">
       <button type="button" className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-left" aria-expanded={open} onClick={onToggle}>
-        <code className="min-w-0 flex-1 truncate font-mono text-[12.5px]" title={p.request || '/'}>{shownRequest(p.request)}</code>
+        <code className="min-w-0 flex-1 truncate font-mono text-dense" title={p.request || '/'}>{shownRequest(p.request)}</code>
         {p.totalMs !== undefined && <Badge tone={p.totalMs >= 1000 ? 'warning' : 'neutral'}>{ms(p.totalMs)}</Badge>}
         <span className="text-xs text-muted-foreground">{timeAgo(p.at)}, {bytes(p.bytes)}</span>
         <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-180')} aria-hidden />
@@ -201,7 +204,7 @@ function ProfileRow({ profile: p, open, onToggle, onDelete, busy }: { profile: P
               <Download />
               Download for KCachegrind or your IDE
             </ButtonLink>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={onDelete}>
+            <Button size="sm" variant="soft" disabled={busy} onClick={onDelete}>
               <Trash2 />
               Delete
             </Button>
@@ -236,7 +239,7 @@ function ProfileView({ profile }: { profile: ProfileInfo }) {
             <span className="text-right tabular-nums">{ms(g.selfMs)}</span>
           </div>
         ))}
-        <p className="text-[11px] text-muted-foreground">PHP&apos;s built-in functions count with the code that calls them most.</p>
+        <p className="text-2xs text-muted-foreground">PHP&apos;s built-in functions count with the code that calls them most.</p>
       </div>
       <div className="grid gap-1">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Slowest functions, by their own time</p>
@@ -276,7 +279,7 @@ function FunctionRow({ fn: f, open, onToggle }: { fn: { name: string; file: stri
       {open && (
         <tr>
           <td colSpan={5} className="pb-2">
-            <div className="grid gap-1 rounded-md bg-muted/60 p-2 text-[11px]">
+            <div className="grid gap-1 rounded-md bg-muted/60 p-2 text-2xs">
               <code className="font-mono break-all text-muted-foreground">{f.file}</code>
               {f.callers.length > 0 && (
                 <p>

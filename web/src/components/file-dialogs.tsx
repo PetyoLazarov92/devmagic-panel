@@ -1,13 +1,14 @@
 import { type FileListing, type FileMode, type FileTrashEntry, type Site, FILE_MODES, FILE_MODE_WORDS, FILE_TRASH_DAYS, FOLDER_MODES, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
-import { ChevronRight, Folder, FolderOpen, LoaderCircle, Undo2 } from 'lucide-react';
+import { ChevronRight, Folder, FolderOpen, Undo2 } from 'lucide-react';
 import { type FormEvent, Fragment, useEffect, useId, useState } from 'react';
 import { Notice } from '@/components/page';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardFooter, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogList } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { bytes, dateTime, timeAgo } from '@/lib/format';
+import { Spinner } from '@/components/ui/spinner';
 
 type SiteId = Pick<Site, 'domain' | 'path'>;
 
@@ -73,8 +74,8 @@ export function NameDialog({ open, title, description, label, initial, action, t
           {problem && <p id={`${id}-problem`} role="alert" className="text-xs text-danger">{problem}</p>}
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" disabled={!ready}>{busy && <LoaderCircle className="animate-spin" />}{action}</Button>
+          <Button variant="soft" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" disabled={!ready}>{busy && <Spinner />}{action}</Button>
         </div>
       </form>
     </Dialog>
@@ -146,8 +147,8 @@ export function FolderPicker({ site, open, title, verb, start, moving, sameFolde
       description={moving.length === 1 ? nameOf(moving[0] ?? '') : `${moving.length} entries`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button onClick={() => void pick()} disabled={!here || Boolean(reason) || busy}>{busy && <LoaderCircle className="animate-spin" />}{verb}</Button>
+          <Button variant="soft" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={() => void pick()} disabled={!here || Boolean(reason) || busy}>{busy && <Spinner />}{verb}</Button>
         </>
       }
     >
@@ -248,8 +249,8 @@ export function PermissionsDialog({ open, items, folder, current, onSubmit, onCl
         </fieldset>
         <p className="text-xs text-pretty text-muted-foreground">{folder ? 'Only the folder changes, not what is in it.' : 'Nothing here lets everyone write.'}</p>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" disabled={!mode || mode === current || busy}>{busy && <LoaderCircle className="animate-spin" />}Set</Button>
+          <Button variant="soft" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" disabled={!mode || mode === current || busy}>{busy && <Spinner />}Set</Button>
         </div>
       </form>
     </Dialog>
@@ -271,8 +272,8 @@ export function DeleteDialog({ open, items, why, onDelete, onClose }: { open: bo
         <p>{why}</p>
         <p className="text-muted-foreground">It is kept for {FILE_TRASH_DAYS} days, and Undo puts it back.</p>
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="danger" onClick={() => void run()} disabled={busy}>{busy && <LoaderCircle className="animate-spin" />}Delete</Button>
+          <Button variant="soft" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="danger" onClick={() => void run()} disabled={busy}>{busy && <Spinner />}Delete</Button>
         </div>
       </div>
     </Dialog>
@@ -287,10 +288,7 @@ export function FileTrashCard({ entries, onRestore }: { entries: readonly FileTr
   const shown = all ? entries : entries.slice(0, 5);
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Changes you can undo</CardTitle>
-        <span className="text-xs text-muted-foreground">Kept for {FILE_TRASH_DAYS} days</span>
-      </CardHeader>
+      <CardHeader title="Changes you can undo" meta={<span className="text-xs text-muted-foreground">Kept for {FILE_TRASH_DAYS} days</span>} />
       <ul className="divide-y text-sm">
         {shown.map((entry) => {
           const [first, ...rest] = entry.items;
@@ -314,16 +312,16 @@ export function FileTrashCard({ entries, onRestore }: { entries: readonly FileTr
                   void onRestore(entry).finally(() => setBusy(undefined));
                 }}
               >
-                {busy === entry.id ? <LoaderCircle className="animate-spin" /> : <Undo2 />}Put back
+                {busy === entry.id ? <Spinner /> : <Undo2 />}Put back
               </Button>
             </li>
           );
         })}
       </ul>
       {entries.length > shown.length && (
-        <div className="border-t px-5 py-2.5">
-          <Button size="sm" variant="ghost" onClick={() => setAll(true)}>Show all {entries.length}</Button>
-        </div>
+        <CardFooter className="py-2.5">
+          <Button size="sm" variant="soft" onClick={() => setAll(true)}>Show all {entries.length}</Button>
+        </CardFooter>
       )}
     </Card>
   );

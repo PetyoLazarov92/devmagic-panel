@@ -1,20 +1,21 @@
 import type { Site, WpCronEvent, WpCronReport } from '@devmagic-panel/shared';
-import { CalendarClock, LoaderCircle, Play, Search, Stethoscope, Trash2 } from 'lucide-react';
+import { CalendarClock, Play, Search, Stethoscope, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ScopeLabel } from '@/components/scope-label';
 import { StatusDot } from '@/components/site-bits';
 import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/field';
+import { FilterBar, FilterChips } from '@/components/ui/filter-chips';
 import { Input } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
 import { Switch } from '@/components/ui/switch';
+import { TextLink } from '@/components/ui/text-link';
 import { api } from '@/lib/api';
 import { dateTime, timeAgo } from '@/lib/format';
-import { Link } from '@/lib/router';
 import { runWithToast } from '@/lib/site-actions';
 import { siteName, siteTarget } from '@/lib/site-ref';
 import { useAsync } from '@/lib/use-async';
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { runCronChange, TaskList, type UndoOf } from '@/pages/services-cron';
 import { CardsSkeleton } from '@/components/skeletons';
 import { Notice } from '@/components/page';
+import { Spinner } from '@/components/ui/spinner';
 
 type EventFilter = 'all' | 'site' | 'core';
 const FILTERS: Array<{ value: EventFilter; label: string; test: (e: WpCronEvent) => boolean }> = [
@@ -76,42 +78,34 @@ export function CronTab({ site, report, onReload }: { site: Site; report: { data
       <HowItRuns site={site} data={data} url={url} onChanged={() => onReload(url)} />
 
       <Card>
-        <CardHeader><CardTitle>Scheduled events</CardTitle><ScopeLabel>{url ?? 'this site'}</ScopeLabel></CardHeader>
-        <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
-          <div className="relative min-w-0 flex-[1_1_14rem]">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input aria-label="Search events" className="pl-9" placeholder="Search hooks and arguments" value={query} onChange={(e) => setQuery(e.target.value)} />
-          </div>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Show">
-            {FILTERS.map((f) => (
-              <button
-                key={f.value}
-                type="button"
-                aria-pressed={filter === f.value}
-                onClick={() => setFilter(f.value)}
-                className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === f.value ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
-              >
-                {f.label} <span className="tabular-nums">{data.events.filter(f.test).length}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        <CardHeader title="Scheduled events" meta={<ScopeLabel>{url ?? 'this site'}</ScopeLabel>} />
+        <FilterBar
+          className="px-5 pt-4"
+          search={
+            <div className="relative min-w-0">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input aria-label="Search events" className="pl-9" placeholder="Search hooks and arguments" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
+          }
+        >
+          <FilterChips label="Show" value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ value: f.value, label: f.label, count: data.events.filter(f.test).length }))} />
+        </FilterBar>
         {data.overdue > 0 && (
-          <p className="mx-5 mt-3 rounded-lg border border-warning/40 bg-warning/8 px-3 py-2 text-sm">
+          <Notice tone="warning" size="inline" className="mx-5 mt-3">
             {data.overdue} event{data.overdue === 1 ? ' is' : 's are'} more than 10 minutes late.{' '}
             {data.task?.enabled
               ? 'The cron task that runs WP-Cron here may be failing or late: its last run above says more.'
               : data.disabled
                 ? 'DISABLE_WP_CRON is true and nothing of the panel runs WP-Cron: turn on Run WP-Cron from cron above.'
                 : 'Page loads start WP-Cron, so a site nobody opened falls behind; if it is open, Check WP-Cron above says why it does not start.'}
-          </p>
+          </Notice>
         )}
         <ul className="mt-3 divide-y border-t">
           {shown.map((e) => (
             <li key={`${e.time}-${e.hook}-${e.sig}`} className="flex flex-wrap items-start gap-3 px-5 py-3 text-sm">
               <div className="grid min-w-0 flex-[1_1_18rem] gap-1">
                 <p className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[13px] font-medium break-all">{e.hook}</span>
+                  <span className="font-mono text-dense font-medium break-all">{e.hook}</span>
                   {e.core && <Badge>WordPress</Badge>}
                 </p>
                 <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -138,15 +132,15 @@ export function CronTab({ site, report, onReload }: { site: Site; report: { data
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>The panel&apos;s cron tasks for this site</CardTitle><ScopeLabel>your crontab</ScopeLabel></CardHeader>
+        <CardHeader title="The panel's cron tasks for this site" meta={<ScopeLabel>your crontab</ScopeLabel>} />
         <p className="px-5 pt-3 text-xs text-muted-foreground">
-          Commands cron runs for {siteName(site)}, besides WP-Cron. <Link href="/services/cron" className="font-medium text-foreground hover:underline">Services, Cron</Link> lists every task.
+          Commands cron runs for {siteName(site)}, besides WP-Cron. <TextLink href="/services/cron" tone="plain" className="font-medium text-foreground">Services, Cron</TextLink> lists every task.
         </p>
         <TaskList tasks={data.tasks} site={siteTarget(site)} onChanged={() => onReload(url)} empty="None. Add a WP-CLI command (like action-scheduler run) or a PHP file of the site." />
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Intervals</CardTitle><ScopeLabel>this site</ScopeLabel></CardHeader>
+        <CardHeader title="Intervals" meta={<ScopeLabel>this site</ScopeLabel>} />
         <p className="px-5 pt-3 text-xs text-muted-foreground">The recurrences WordPress and the site&apos;s plugins define. Read only.</p>
         <ul className="mt-2 grid gap-x-6 px-5 pb-4 text-sm sm:grid-cols-2">
           {data.schedules.map((s) => (
@@ -165,7 +159,7 @@ export function CronTab({ site, report, onReload }: { site: Site; report: { data
         description={`Only this one, ${deleting ? (deleting.overdue ? 'late' : `next ${timeAgo(at(deleting.time))}`) : ''}${deleting?.args.length ? `, with ${argsText(deleting.args)}` : ''}. A plugin that schedules it may schedule it again. Undo in the notice puts it back.`}
       >
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setDeleting(null)}>Cancel</Button>
           <Button
             variant="danger"
             onClick={() => {
@@ -190,7 +184,7 @@ function ArgsLine({ args }: { args: unknown[] }) {
     <p className="font-mono text-xs break-all text-muted-foreground">
       {open || !long ? text : `${text.slice(0, 90)}...`}
       {long && (
-        <button type="button" className="ml-2 font-sans font-medium text-foreground hover:underline" onClick={() => setOpen((o) => !o)}>{open ? 'Less' : 'All of it'}</button>
+        <Button size="xs" variant="soft" className="ml-2 h-5 px-1.5 align-baseline font-sans text-foreground" onClick={() => setOpen((o) => !o)}>{open ? 'Less' : 'All of it'}</Button>
       )}
     </p>
   );
@@ -221,12 +215,12 @@ function HowItRuns({ site, data, url, onChanged }: { site: Site; data: WpCronRep
 
   return (
     <Card>
-      <CardHeader><CardTitle>How WP-Cron runs here</CardTitle><ScopeLabel>this site</ScopeLabel></CardHeader>
-      <div className="grid gap-3 p-5 text-sm">
+      <CardHeader title="How WP-Cron runs here" meta={<ScopeLabel>this site</ScopeLabel>} />
+      <CardBody className="gap-3">
         <p className="flex items-center gap-2"><StatusDot status={state.status} />{state.text}</p>
         {last && (
           <p className="text-xs text-muted-foreground">
-            Last run from cron {timeAgo(last.startedAt)}: {last.status === 'ok' ? 'ran well' : last.status}. <Link href="/services/cron" className="font-medium text-foreground hover:underline">History</Link>
+            Last run from cron {timeAgo(last.startedAt)}: {last.status === 'ok' ? 'ran well' : last.status}. <TextLink href="/services/cron" tone="plain" className="font-medium text-foreground">History</TextLink>
           </p>
         )}
         <div className="flex flex-wrap items-start gap-3 rounded-lg border px-4 py-3">
@@ -238,7 +232,7 @@ function HowItRuns({ site, data, url, onChanged }: { site: Site; data: WpCronRep
             </p>
             {data.configTracked && <p className="text-xs text-warning">wp-config.php is tracked by git here: the change to DISABLE_WP_CRON shows in git status.</p>}
           </div>
-          {busy && <LoaderCircle className="size-4 animate-spin text-muted-foreground" />}
+          {busy && <Spinner className="size-4 text-muted-foreground" />}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -255,13 +249,13 @@ function HowItRuns({ site, data, url, onChanged }: { site: Site; data: WpCronRep
               setTesting(false);
             }}
           >
-            {testing ? <LoaderCircle className="animate-spin" /> : <Stethoscope />}
+            {testing ? <Spinner /> : <Stethoscope />}
             Check WP-Cron
           </Button>
           <span className="text-xs text-muted-foreground">Whether WordPress can start WP-Cron by itself, through its loopback request.</span>
         </div>
-        {test && <p className={cn('rounded-lg border px-3 py-2 font-mono text-xs whitespace-pre-wrap', test.ok ? 'border-success/30 bg-success/8' : 'border-danger/30 bg-danger/8 text-danger')} role={test.ok ? 'status' : 'alert'}>{test.output || (test.ok ? 'WP-Cron can start.' : 'WP-Cron cannot start.')}</p>}
-      </div>
+        {test && <Notice tone={test.ok ? 'success' : 'danger'} size="inline"><p className="font-mono whitespace-pre-wrap">{test.output || (test.ok ? 'WP-Cron can start.' : 'WP-Cron cannot start.')}</p></Notice>}
+      </CardBody>
       <Dialog
         open={confirming !== null}
         onClose={() => setConfirming(null)}
@@ -273,7 +267,7 @@ function HowItRuns({ site, data, url, onChanged }: { site: Site; data: WpCronRep
         }
       >
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setConfirming(null)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setConfirming(null)}>Cancel</Button>
           <Button
             onClick={() => {
               const on = confirming === true;

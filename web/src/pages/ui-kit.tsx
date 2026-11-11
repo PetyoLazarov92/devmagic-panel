@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { KeyValue } from '@/components/ui/key-value';
 import { ListRow, RowList } from '@/components/ui/list-row';
 import { EmptyState, Notice } from '@/components/ui/notice';
+import { SectionLayout } from '@/components/ui/section-nav';
 import { Segmented } from '@/components/ui/segmented';
 import { SettingRow } from '@/components/ui/setting-row';
 import { Spinner } from '@/components/ui/spinner';
@@ -58,13 +59,13 @@ export function UiKitPage() {
         </Card>
       </Section>
 
-      <Section title="Buttons and links" rule="One primary (solid) button per page header or card. Then outline, then ghost. Danger only inside a confirm. A link goes somewhere, a button does something.">
+      <Section title="Buttons and links" rule="One primary (solid) button per page header or card, then outline, then soft (a light fill) for the rest. Ghost only for icon buttons and toolbars. Danger only inside a confirm. A link goes somewhere, a button does something.">
         <Card>
           <CardBody>
             <div className="flex flex-wrap items-center gap-2">
               <Button>Main action</Button>
               <Button variant="outline">Second action</Button>
-              <Button variant="ghost">Third action</Button>
+              <Button variant="soft">Third action</Button>
               <Button variant="danger"><Trash2 />Delete, in a confirm</Button>
               <Button size="sm" variant="outline"><Download />Small</Button>
               <Button size="xs" variant="outline">Extra small</Button>
@@ -92,6 +93,21 @@ export function UiKitPage() {
             <Segmented label="How plugins show" value={mode} onChange={setMode} options={[['compact', 'Compact'], ['details', 'Details']]} className="justify-self-start" />
           </CardBody>
         </Card>
+        <SectionLayout
+          label="Site sections"
+          items={[
+            { value: 'overview', label: 'Overview' },
+            { value: 'logs', label: 'Logs', count: 4, tone: 'danger' },
+            { value: 'files', label: 'Files' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        >
+          <Card>
+            <CardHeader title="The section's content" meta={<ScopeLabel>this site</ScopeLabel>} />
+            <CardBody>A detail page's sections run down its side on a wide screen and turn into tabs on a narrow one.</CardBody>
+          </Card>
+        </SectionLayout>
       </Section>
 
       <Section title="Lists and filters" rule="A list is one card of rows over a FilterBar: search first, counted filters, then pickers at its end. Rows: something at the start, name and a line under it, badges, actions and a menu.">

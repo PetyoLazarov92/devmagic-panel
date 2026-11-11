@@ -1,15 +1,14 @@
+import { StatusBadge } from '@/components/ui/badge';
 import type { ServicesReport } from '@devmagic-panel/shared';
-import { ArrowRight, LoaderCircle, RefreshCw, RotateCcw } from 'lucide-react';
+import { RefreshCw, RotateCcw } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
-import { StatusDot } from '@/components/site-bits';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card';
 import { MailpitInstall } from '@/components/mailpit-install';
 import { Tabs } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
 import { runRestarting } from '@/lib/restarting';
-import { Link, navigate } from '@/lib/router';
+import { navigate } from '@/lib/router';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
@@ -20,6 +19,8 @@ import { NginxTab } from '@/pages/services-nginx';
 import { PHP_SECTIONS, type PhpSection, PhpTab } from '@/pages/services-php';
 import { CheckAgain, Notice, PageHeader } from '@/components/page';
 import { CardsSkeleton } from '@/components/skeletons';
+import { Spinner } from '@/components/ui/spinner';
+import { TextLink } from '@/components/ui/text-link';
 
 const STATE_DOT = { running: 'ok', stopped: 'fail', missing: 'warn' } as const;
 
@@ -102,14 +103,14 @@ function ServicesOverview({ refresh, onLoading }: { refresh: number; onLoading: 
                   <>
                     {s.id === 'apache' && (
                       <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run('apache.reload', 'apache.reload', {}, 'Apache reloaded')}>
-                        {busy === 'apache.reload' ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+                        {busy === 'apache.reload' ? <Spinner /> : <RefreshCw />}
                         Reload
                       </Button>
                     )}
                     {s.offer && <MailpitInstall offer={s.offer} onDone={reload} />}
                     {s.canRestart && (
                       <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run(s.id, 'service.restart', { service: s.id }, `${s.label} restarted`)}>
-                        {busy === s.id ? <LoaderCircle className="animate-spin" /> : <RotateCcw />}
+                        {busy === s.id ? <Spinner /> : <RotateCcw />}
                         Restart
                       </Button>
                     )}
@@ -143,20 +144,16 @@ function ServiceCard({ title, status, state, facts, actions, link }: {
 }) {
   return (
     <Card className="flex flex-col">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><StatusDot status={status} />{title}</CardTitle>
-        <span className="text-xs text-muted-foreground">{state}</span>
-      </CardHeader>
-      <div className="grid flex-1 content-start gap-1 px-5 py-4 text-sm">
+      <CardHeader
+        title={title}
+        meta={<StatusBadge status={status}>{state.charAt(0).toUpperCase() + state.slice(1)}</StatusBadge>}
+      />
+      <CardBody className="flex-1 content-start gap-1">
         {facts.map((f) => <p key={f} className="truncate text-muted-foreground" title={f}>{f}</p>)}
-      </div>
-      <div className="flex flex-wrap items-center gap-2 border-t px-5 py-3">
+      </CardBody>
+      <CardFooter end={<TextLink href={link.href} arrow>{link.label}</TextLink>}>
         {actions}
-        <Link href={link.href} className="ml-auto inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          {link.label}
-          <ArrowRight className="size-3.5" />
-        </Link>
-      </div>
+      </CardFooter>
     </Card>
   );
 }

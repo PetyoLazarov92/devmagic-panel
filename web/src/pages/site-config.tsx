@@ -51,9 +51,9 @@ export function LocalConstants({ site, list, busy, onSet }: { site: Site; list: 
         const same = now?.value === c.value;
         return (
           <li key={c.name} className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)_auto] items-center gap-3 text-sm">
-            <code className="truncate font-mono text-[13px]" title={c.name}>{c.name}</code>
+            <code className="truncate font-mono text-dense" title={c.name}>{c.name}</code>
             <span className="grid min-w-0 text-xs">
-              {now === undefined ? <span className="text-muted-foreground">not set</span> : now.value !== undefined ? <code className="truncate font-mono text-[13px]">{shownValue(now.value)}</code> : <span className="text-muted-foreground">set by code</span>}
+              {now === undefined ? <span className="text-muted-foreground">not set</span> : now.value !== undefined ? <code className="truncate font-mono text-dense">{shownValue(now.value)}</code> : <span className="text-muted-foreground">set by code</span>}
               {!same && <span className="text-warning">Settings asks for {shownValue(c.value)}</span>}
             </span>
             {typeof c.value === 'boolean' ? (
@@ -82,24 +82,24 @@ function ConstantRow({ constant, busy, onSet }: { constant: SiteConstant; busy: 
 
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5 text-sm">
-      <code className="min-w-0 basis-56 truncate font-mono lg:basis-72 text-[13px] font-medium" title={name}>{name}</code>
+      <code className="min-w-0 basis-56 truncate font-mono lg:basis-72 text-dense font-medium" title={name}>{name}</code>
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {constant.hidden ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Lock className="size-3.5 shrink-0" />hidden: edit wp-config.php by hand</span>
         ) : constant.code !== undefined ? (
           <span className="flex min-w-0 items-center gap-2">
-            <code className="truncate font-mono text-[13px] text-muted-foreground" title={constant.code}>{constant.code}</code>
+            <code className="truncate font-mono text-dense text-muted-foreground" title={constant.code}>{constant.code}</code>
             <Badge>code</Badge>
           </span>
         ) : !editable ? (
           <span className="flex min-w-0 items-center gap-1.5" title="Left to the install">
             <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="Left to the install" />
-            <code className="truncate font-mono text-[13px]">{shownValue(value as ConstantValue)}</code>
+            <code className="truncate font-mono text-dense">{shownValue(value as ConstantValue)}</code>
           </span>
         ) : kind === 'boolean' ? (
           <span className="flex items-center gap-2">
             <Switch checked={value === true} onChange={(v) => void onSet(name, v)} label={name} disabled={busy} />
-            <code className="font-mono text-[13px] text-muted-foreground">{String(value)}</code>
+            <code className="font-mono text-dense text-muted-foreground">{String(value)}</code>
           </span>
         ) : (
           <form
@@ -109,7 +109,7 @@ function ConstantRow({ constant, busy, onSet }: { constant: SiteConstant; busy: 
               if ('value' in next && changed) void onSet(name, next.value);
             }}
           >
-            <Input value={text} onChange={(e) => setText(e.target.value)} aria-label={name} className="h-8 min-w-0 max-w-md font-mono text-[13px]" inputMode={kind === 'number' ? 'numeric' : undefined} />
+            <Input value={text} onChange={(e) => setText(e.target.value)} aria-label={name} className="h-8 min-w-0 max-w-md font-mono text-dense" inputMode={kind === 'number' ? 'numeric' : undefined} />
             {changed && <Button size="sm" type="submit" disabled={busy}>Save</Button>}
             {'error' in next && <span className="text-xs text-danger">{next.error}</span>}
           </form>
@@ -145,7 +145,7 @@ function AddConstant({ site, busy, onSet }: { site: Site; busy: boolean; onSet: 
         }
       }}
     >
-      <Input value={name} onChange={(e) => setName(e.target.value.trim())} placeholder="NEW_CONSTANT" aria-label="Constant name" className="h-8 w-56 font-mono text-[13px]" />
+      <Input value={name} onChange={(e) => setName(e.target.value.trim())} placeholder="NEW_CONSTANT" aria-label="Constant name" className="h-8 w-56 font-mono text-dense" />
       <Select value={kind} onChange={(e) => { const k = e.target.value as Kind; setKind(k); setText(k === 'boolean' ? 'true' : ''); }} aria-label="Kind" className="h-8">
         <option value="boolean">true or false</option>
         <option value="number">number</option>
@@ -157,7 +157,7 @@ function AddConstant({ site, busy, onSet }: { site: Site; busy: boolean; onSet: 
           <option value="false">false</option>
         </Select>
       ) : (
-        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === 'number' ? '256' : 'value'} aria-label="Value" className="h-8 w-48 font-mono text-[13px]" />
+        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === 'number' ? '256' : 'value'} aria-label="Value" className="h-8 w-48 font-mono text-dense" />
       )}
       <Button size="sm" type="submit" disabled={busy || !name || problem !== null || 'error' in next}>
         <Plus />
@@ -190,7 +190,7 @@ export function SaltsConfirm({ mode, onClose, onConfirm }: { mode: 'missing' | '
       }
     >
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="soft" onClick={onClose}>Cancel</Button>
         <Button
           onClick={() => {
             if (mode) onConfirm(mode);
@@ -223,14 +223,14 @@ function SaltKeys({ salts, busy, onRun, onRemoveLegacy }: { salts: SiteSalts; bu
           {problems.length > 0 && <span className="block text-xs text-warning">{problems.join(' · ')}</span>}
         </span>
         {bad.length > 0 && <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirming('missing')}>{fixLabel}</Button>}
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirming('all')}>Make all new</Button>
+        <Button size="sm" variant="soft" disabled={busy} onClick={() => setConfirming('all')}>Make all new</Button>
       </div>
       {salts.legacy.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-7 text-xs text-muted-foreground">
           <span className="flex-1">
             Legacy <code className="font-mono">{salts.legacy.join(', ')}</code>: {bad.length > 0 ? 'WordPress still reads them until the keys above are fixed' : 'unused now that every key is set'}
           </span>
-          {bad.length === 0 && <Button size="sm" variant="ghost" disabled={busy} onClick={onRemoveLegacy}>Remove</Button>}
+          {bad.length === 0 && <Button size="sm" variant="soft" disabled={busy} onClick={onRemoveLegacy}>Remove</Button>}
         </div>
       )}
       <SaltsConfirm mode={confirming} onClose={() => setConfirming(null)} onConfirm={onRun} />

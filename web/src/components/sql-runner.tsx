@@ -1,5 +1,5 @@
 import type { DbQueryResult, WriteCheck } from '@devmagic-panel/shared';
-import { Download, History, KeyRound, LoaderCircle, Play, ScanSearch, ShieldCheck, Trash2 } from 'lucide-react';
+import { Download, History, KeyRound, Play, ScanSearch, ShieldCheck, Trash2 } from 'lucide-react';
 import { type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { ValueView } from '@/components/db-browser';
@@ -9,9 +9,10 @@ import { settled, useJob } from '@/components/job-steps';
 import { Segmented } from '@/components/ui/segmented';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog, useFullScreen } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
 import { api, ApiError } from '@/lib/api';
 import { runWithToast } from '@/lib/site-actions';
 import { loadSqlEditor } from '@/lib/sql-editor-load';
@@ -20,6 +21,7 @@ import { bytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 const SqlEditor = lazy(loadSqlEditor);
 
@@ -143,7 +145,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
       onKeyDown={onKey}
       spellCheck={false}
       placeholder={hint}
-      className="h-full min-h-0 resize-none rounded-none border-0 font-mono text-[13px] leading-relaxed shadow-none focus-visible:ring-0"
+      className="h-full min-h-0 resize-none rounded-none border-0 font-mono text-dense leading-relaxed shadow-none focus-visible:ring-0"
     />
   );
 
@@ -217,17 +219,15 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <Card>
-        <CardHeader>
-          <CardTitle className="flex min-w-0 items-center gap-2">
-            <span className="truncate">SQL on <span className="font-mono text-[13px]">{database}</span></span>
-          </CardTitle>
-          {canWrite ? (
+        <CardHeader
+          title={<span className="block truncate">SQL on <span className="font-mono text-dense">{database}</span></span>}
+          meta={canWrite ? (
             <Segmented label="Mode" value={mode} onChange={(m) => (setMode(m), setError(null))} options={[['read', 'Read only'], ['write', 'Can write']]} />
           ) : (
             <Badge tone="success" className="shrink-0"><ShieldCheck className="size-3" />Read only</Badge>
           )}
-        </CardHeader>
-        <div className="grid gap-3 p-5">
+        />
+        <CardBody className="gap-3">
           <label htmlFor={`sql-${database}`} className="sr-only">Statement</label>
           {/* The editor loads with this view; the plain text area stands in until it has, and if it cannot load. */}
           {/* One box for both, so nothing moves when the editor takes over; drag its corner to resize it. */}
@@ -239,23 +239,23 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
             </EditorBoundary>
           </ResizableBox>
           {writing && (
-            <p className="rounded-lg border border-warning/30 bg-warning/8 px-4 py-2.5 text-sm">
+            <Notice tone="warning" size="inline">
               One statement that changes rows (INSERT, UPDATE, DELETE, REPLACE) or a table, an index or a view (ALTER, CREATE, DROP, RENAME, TRUNCATE). The panel shows what it would change first, saves the tables it names, and Undo puts them back for 14 days.
-            </p>
+            </Notice>
           )}
           {/* relative: the history list opens across this row, as wide as the editor. */}
           <div className="relative flex flex-wrap items-center gap-2">
             {writing ? (
               <Button onClick={() => void check()} disabled={!sql.trim() || checking || (job !== null && !settled(job))}>
-                {checking ? <LoaderCircle className="animate-spin" /> : <Play />}Check and run...
+                {checking ? <Spinner /> : <Play />}Check and run...
               </Button>
             ) : (
               <>
                 <Button onClick={() => void run()} disabled={!sql.trim() || running !== null}>
-                  {running === 'run' ? <LoaderCircle className="animate-spin" /> : <Play />}Run
+                  {running === 'run' ? <Spinner /> : <Play />}Run
                 </Button>
                 <Button variant="outline" onClick={() => void run(true)} disabled={!sql.trim() || running !== null} title="How MySQL would run it: the indexes it uses and the rows it reads">
-                  {running === 'explain' ? <LoaderCircle className="animate-spin" /> : <ScanSearch />}Explain
+                  {running === 'explain' ? <Spinner /> : <ScanSearch />}Explain
                 </Button>
               </>
             )}
@@ -265,17 +265,19 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
             </span>
           </div>
           {error && (
-            <div role="alert" className="grid gap-2 rounded-lg border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">
-              <p className="font-mono text-[13px] break-words">{error}</p>
-              {needsAccount && (
-                <div className="flex flex-wrap items-center gap-2 text-foreground">
-                  <p className="flex-1 text-muted-foreground">It can read every database and change none: MySQL refuses anything else it would try.</p>
-                  <Button size="sm" onClick={() => void makeAccount()}><KeyRound />Make the read-only account</Button>
-                </div>
-              )}
-            </div>
+            <Notice tone="danger" size="inline">
+              <div className="grid gap-2">
+                <p className="font-mono text-dense break-words">{error}</p>
+                {needsAccount && (
+                  <div className="flex flex-wrap items-center gap-2 text-foreground">
+                    <p className="flex-1 text-muted-foreground">It can read every database and change none: MySQL refuses anything else it would try.</p>
+                    <Button size="sm" onClick={() => void makeAccount()}><KeyRound />Make the read-only account</Button>
+                  </div>
+                )}
+              </div>
+            </Notice>
           )}
-        </div>
+        </CardBody>
         <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} />
       </Card>
       {result && <ResultCard result={result} onOpen={setOpen} onCsv={download} />}
@@ -332,16 +334,14 @@ function ResultCard({ result, onOpen, onCsv }: { result: DbQueryResult; onOpen: 
   const n = result.rows.length;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{result.explain ? 'How MySQL would run it' : 'Result'}</CardTitle>
-        {n > 0 && (
-          <Button size="sm" variant="outline" onClick={onCsv}><Download />CSV</Button>
-        )}
-      </CardHeader>
+      <CardHeader
+        title={result.explain ? 'How MySQL would run it' : 'Result'}
+        actions={n > 0 && <Button size="sm" variant="outline" onClick={onCsv}><Download />CSV</Button>}
+      />
       {result.explained && (
         <div className="grid gap-1 px-5 pt-3 text-xs text-muted-foreground">
           <p>MySQL explains a {result.statement} only to an account that may run it, so this is the plan of the SELECT that finds the same rows: what makes the {result.statement} slow.</p>
-          <code className="font-mono text-[12px] break-all whitespace-pre-wrap text-foreground">{result.explained}</code>
+          <code className="font-mono text-xs break-all whitespace-pre-wrap text-foreground">{result.explained}</code>
         </div>
       )}
       {result.note ? (
@@ -355,7 +355,7 @@ function ResultCard({ result, onOpen, onCsv }: { result: DbQueryResult; onOpen: 
       )}
       {n > 0 && (
         <div className="mt-2 overflow-x-auto">
-          <table className="w-full border-collapse text-left text-[13px]">
+          <table className="w-full border-collapse text-left text-dense">
             <thead>
               <tr className="border-y bg-muted/50">
                 {result.columns.map((c, i) => <th key={i} scope="col" className="px-3 py-2 font-mono font-medium whitespace-nowrap">{c}</th>)}
@@ -416,7 +416,7 @@ function HistoryMenu({ history, onPick, onClear }: { history: string[]; onPick: 
   };
   return (
     <div ref={root}>
-      <Button variant="ghost" aria-haspopup="menu" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)} className="text-muted-foreground hover:text-foreground">
+      <Button variant="soft" aria-haspopup="menu" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)} className="text-muted-foreground hover:text-foreground">
         <History />History<span className="text-xs tabular-nums">{history.length}</span>
       </Button>
       {open && (

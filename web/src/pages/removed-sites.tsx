@@ -1,11 +1,11 @@
 import type { ArchiveReason, TrashEntry } from '@devmagic-panel/shared';
-import { Archive, ArchiveRestore, LoaderCircle, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { installLabel } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
 import { Dialog } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
@@ -17,6 +17,7 @@ import { useReloadWhileBusy } from '@/lib/jobs';
 import { cn } from '@/lib/utils';
 import { CheckAgain, EmptyState, Notice } from '@/components/page';
 import { CardSkeleton, Reading } from '@/components/skeletons';
+import { Spinner } from '@/components/ui/spinner';
 
 const daysLeft = (e: TrashEntry) => Math.max(0, Math.ceil((new Date(e.purgeAt).getTime() - Date.now()) / 86_400_000));
 
@@ -68,15 +69,15 @@ export function RemovedSites({ entries, error, loading, reload, query }: { entri
         </EmptyState>
       )}
       {entries && entries.length > 0 && groups.length === 0 && (
-        <p className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center text-sm text-muted-foreground">No removed site matches {query.trim()}.</p>
+        <EmptyState className="mt-4" icon={Archive} title={`No removed site matches ${query.trim()}.`} />
       )}
       <div className="mt-4 grid gap-4">
         {groups.map((list) => (
           <Card key={list[0]?.domain}>
-            <CardHeader>
-              <CardTitle className="truncate font-mono" title={list[0]?.domain}>{list[0]?.domain}</CardTitle>
-              <Badge>{list.length === 1 ? '1 copy' : `${list.length} copies`}</Badge>
-            </CardHeader>
+            <CardHeader
+              title={<span className="block truncate font-mono" title={list[0]?.domain}>{list[0]?.domain}</span>}
+              meta={<Badge>{list.length === 1 ? '1 copy' : `${list.length} copies`}</Badge>}
+            />
             <div className="divide-y">
               {list.map((e) => <TrashRow key={e.id} entry={e} onDelete={() => setDeleting(e)} onRestored={reload} />)}
             </div>
@@ -144,10 +145,10 @@ function TrashRow({ entry, onDelete, onRestored }: { entry: TrashEntry; onDelete
           </Link>
         )}
         <Button size="sm" disabled={running} onClick={() => (entry.replaces ? setConfirming(true) : void restore(false))}>
-          {running ? <LoaderCircle className="animate-spin" /> : <ArchiveRestore />}
+          {running ? <Spinner /> : <ArchiveRestore />}
           Restore
         </Button>
-        <Button size="sm" variant="ghost" disabled={running} onClick={onDelete}><Trash2 />Delete now</Button>
+        <Button size="sm" variant="soft" disabled={running} onClick={onDelete}><Trash2 />Delete now</Button>
       </div>
       {job.job && (running || failed) && <StepList steps={job.job.steps} open={open} setOpen={setOpen} />}
       {failed?.output && <p className="text-xs text-danger">{lastLine(failed.output)}</p>}
@@ -164,7 +165,7 @@ function TrashRow({ entry, onDelete, onRestored }: { entry: TrashEntry; onDelete
         }
       >
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
+          <Button variant="soft" onClick={() => setConfirming(false)}>Cancel</Button>
           <Button disabled={Boolean(entry.replaces?.refusal)} onClick={() => void restore(true)}>
             <ArchiveRestore />
             Archive it and restore
@@ -199,9 +200,9 @@ function DeleteDialog({ entry, onClose, onDeleted }: { entry: TrashEntry | null;
     >
       <ConfirmField id="trash-confirm" expected={entry?.domain ?? ''} value={typed} onChange={setTyped} />
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={close}>Cancel</Button>
+        <Button variant="soft" onClick={close}>Cancel</Button>
         <Button variant="danger" disabled={typed !== entry?.domain || busy} onClick={() => void remove()}>
-          {busy ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+          {busy ? <Spinner /> : <Trash2 />}
           Delete for good
         </Button>
       </div>

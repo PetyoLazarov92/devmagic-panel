@@ -31,7 +31,7 @@ export function FilePlaces({ site, places, dir }: { site: SiteId; places: FileSh
           const fact = placeFact(p);
           return (
             <li key={p.path} className="min-w-0">
-              <Link href={href(p)} className="group flex h-full min-w-0 items-center gap-3 rounded-xl border bg-card px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-primary/5">
+              <Link href={href(p)} className="group flex h-full min-w-0 items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-primary/5">
                 <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary', fact?.warn && 'bg-warning/12 text-warning')}>
                   <Icon className="size-4" aria-hidden />
                 </span>

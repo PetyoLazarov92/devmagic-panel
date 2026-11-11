@@ -1,5 +1,6 @@
 import type { DumpFacts } from '@devmagic-panel/shared';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { networkSummary } from '@/components/dump-facts';
 import { Input } from '@/components/ui/input';
 import type { NetworkAnswers, NetworkChoice, NetworkPlan, NetworkRow } from '@/lib/network';
@@ -58,7 +59,7 @@ export function NetworkSection({ facts, plan, main, answers, errors, onChange, n
   const type = (id: number, value: string) =>
     onChange(plan.layout === 'subdomain' ? { ...answers, domains: { ...answers.domains, [id]: value } } : { ...answers, paths: { ...answers.paths, [id]: value } });
   return (
-    <section className="grid gap-5 rounded-xl border bg-card p-5" aria-label="The network">
+    <Card role="region" className="grid gap-5 p-5" aria-label="The network">
       <div>
         <p className="text-sm font-medium">A multisite network of {plan.rows.length} sites</p>
         <p className="text-xs text-muted-foreground">In the dump: {networkSummary(facts)}. Pick its type here; each site's address follows.</p>
@@ -105,13 +106,13 @@ export function NetworkSection({ facts, plan, main, answers, errors, onChange, n
                     {/* On a phone the change sits beside the name; on wider screens it has a column of its own. */}
                     <Badge className="shrink-0 md:hidden" tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
                   </div>
-                  <p className="min-w-0 truncate font-mono text-[13px] text-muted-foreground" title={`${r.dump.domain}${r.dump.path}`}>
+                  <p className="min-w-0 truncate font-mono text-dense text-muted-foreground" title={`${r.dump.domain}${r.dump.path}`}>
                     <span className="font-sans text-xs md:hidden">In the dump: </span>
                     {r.dump.domain}{r.dump.path}
                   </p>
                   <div className="min-w-0">
                     {r.main || plan.layout === 'keep' ? (
-                      <p className="truncate font-mono text-[13px]" title={`${r.here.domain}${r.here.path}`}>{r.here.domain}{r.here.path}</p>
+                      <p className="truncate font-mono text-dense" title={`${r.here.domain}${r.here.path}`}>{r.here.domain}{r.here.path}</p>
                     ) : plan.layout === 'subdomain' ? (
                       <Input
                         value={answers.domains[r.site.id] ?? r.here.domain}
@@ -119,11 +120,11 @@ export function NetworkSection({ facts, plan, main, answers, errors, onChange, n
                         aria-label={`Local domain for ${name}`}
                         aria-invalid={error ? true : undefined}
                         spellCheck={false}
-                        className={cn('font-mono text-[13px]', error ? 'border-danger' : 'border-teal-500/45 bg-teal-500/[0.04] dark:border-teal-400/40 dark:bg-teal-400/[0.05]')}
+                        className={cn('font-mono text-dense', error ? 'border-danger' : 'border-teal-500/45 bg-teal-500/[0.04] dark:border-teal-400/40 dark:bg-teal-400/[0.05]')}
                       />
                     ) : (
                       <div className="flex min-w-0 items-center gap-1.5">
-                        <span className="max-w-[45%] shrink-0 truncate font-mono text-[13px] text-muted-foreground" title={r.here.domain}>{r.here.domain}</span>
+                        <span className="max-w-[45%] shrink-0 truncate font-mono text-dense text-muted-foreground" title={r.here.domain}>{r.here.domain}</span>
                         <Input
                           value={answers.paths[r.site.id] ?? r.here.path}
                           onChange={(e) => type(r.site.id, e.target.value)}
@@ -131,7 +132,7 @@ export function NetworkSection({ facts, plan, main, answers, errors, onChange, n
                           aria-label={`Path for ${name}`}
                           aria-invalid={error ? true : undefined}
                           spellCheck={false}
-                          className={cn('min-w-0 font-mono text-[13px]', error ? 'border-danger' : 'border-teal-500/45 bg-teal-500/[0.04] dark:border-teal-400/40 dark:bg-teal-400/[0.05]')}
+                          className={cn('min-w-0 font-mono text-dense', error ? 'border-danger' : 'border-teal-500/45 bg-teal-500/[0.04] dark:border-teal-400/40 dark:bg-teal-400/[0.05]')}
                         />
                       </div>
                     )}
@@ -152,6 +153,6 @@ export function NetworkSection({ facts, plan, main, answers, errors, onChange, n
           {plan.layout === 'subdomain' && ' The new hosts get a hosts line and go in the certificate.'}
         </p>
       )}
-    </section>
+    </Card>
   );
 }

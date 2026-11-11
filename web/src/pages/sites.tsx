@@ -1,15 +1,19 @@
 import type { InstallHow, Preferences, Site, SiteGit } from '@devmagic-panel/shared';
 import { branchWebUrl, INSTALL_HOW_LABELS, INSTALL_HOWS, repoWeb, SITE_SERVER_LABEL, siteRepoLabel, SITES_SORT_LABELS, SITES_SORTS } from '@devmagic-panel/shared';
-import { Archive, ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LayoutGrid, List, LoaderCircle, LogIn, PackageOpen, Plus, Search } from 'lucide-react';
+import { Archive, ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LogIn, PackageOpen, Plus, Search } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { SitesSkeleton } from '@/components/skeletons';
 import { BriefingCard } from '@/components/briefing-card';
 import { coreLabel, installLabel, IssueLine, NetworkBadge, openInVSCode, siteSubtitle, siteUrl, StatusDot, vscodeUrl } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
+import { FilterChips } from '@/components/ui/filter-chips';
 import { Input } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
+import { RowList } from '@/components/ui/list-row';
+import { Segmented } from '@/components/ui/segmented';
 import { UnfinishedInstalls } from '@/components/unfinished-installs';
 import { api } from '@/lib/api';
 import { bytes, shortDate } from '@/lib/format';
@@ -20,9 +24,10 @@ import { useReloadWhileBusy } from '@/lib/jobs';
 import { useAsync } from '@/lib/use-async';
 import { siteHref, siteName, siteTarget } from '@/lib/site-ref';
 import { cn } from '@/lib/utils';
-import { Notice, PageHeader } from '@/components/page';
+import { EmptyState, Notice, PageHeader } from '@/components/page';
 import { RemovedSites, removedMatches } from '@/pages/removed-sites';
 import { scrollToCard } from '@/lib/scroll-to';
+import { Spinner } from '@/components/ui/spinner';
 
 type Filter = 'all' | 'attention' | 'removed';
 
@@ -131,23 +136,17 @@ export function SitesPage() {
             className="pl-9"
           />
         </div>
-        <div role="radiogroup" aria-label="Show" className="inline-flex self-start rounded-lg border bg-muted p-0.5 text-sm">
-          {(['all', 'attention', ...(removed?.length || filter === 'removed' ? (['removed'] as const) : [])] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              role="radio"
-              aria-checked={filter === f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground',
-                filter === f && 'bg-card text-foreground shadow-xs ring-1 ring-border',
-              )}
-            >
-              {f === 'all' ? 'All' : f === 'attention' ? 'Needs attention' : `Removed${removed?.length ? ` ${removed.length}` : ''}`}
-            </button>
-          ))}
-        </div>
+        <FilterChips
+          label="Show"
+          value={filter}
+          onChange={setFilter}
+          className="self-start sm:self-auto"
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'attention', label: 'Needs attention' },
+            ...(removed?.length || filter === 'removed' ? [{ value: 'removed' as const, label: `Removed${removed?.length ? ` ${removed.length}` : ''}` }] : []),
+          ]}
+        />
         {filter !== 'removed' && hows.length > 1 && (
           <Select value={how} onChange={(e) => setHow(e.target.value as InstallHow | 'any' | 'taken-over')} aria-label="How installed" className="h-9" wrapClassName="self-start sm:self-auto">
             <option value="any">Installed any way</option>
@@ -165,25 +164,7 @@ export function SitesPage() {
           <Select value={sort} onChange={(e) => savePreferences({ sitesSort: e.target.value as Preferences['sitesSort'] })} aria-label="Sort sites" className="h-9">
             {SITES_SORTS.map((s) => <option key={s} value={s}>{SITES_SORT_LABELS[s]}</option>)}
           </Select>
-          <div role="radiogroup" aria-label="View" className="inline-flex rounded-lg border bg-muted p-0.5">
-            {([['grid', 'Grid', LayoutGrid], ['list', 'List', List]] as const).map(([value, label, Icon]) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={view === value}
-                title={label}
-                onClick={() => savePreferences({ sitesView: value })}
-                className={cn(
-                  'inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground',
-                  view === value && 'bg-card text-foreground shadow-xs ring-1 ring-border',
-                )}
-              >
-                <Icon className="size-4" />
-                <span className="sr-only">{label}</span>
-              </button>
-            ))}
-          </div>
+          <Segmented label="View" value={view} onChange={(v) => savePreferences({ sitesView: v })} options={[['grid', 'Grid'], ['list', 'List']]} />
         </div>
       </div>
 
@@ -193,9 +174,12 @@ export function SitesPage() {
 
       {filter !== 'removed' && loading && !sites && <SitesSkeleton view={view} className="mt-5" />}
       {filter !== 'removed' && sites && shown.length === 0 && (
-        <div className="mt-5 rounded-xl border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
-          No sites match. <button type="button" className="font-medium text-foreground hover:underline" onClick={() => { setQuery(''); setFilter('all'); setHow('any'); setPhp('any'); }}>Clear the filter</button>
-        </div>
+        <EmptyState
+          icon={Search}
+          title="No sites match."
+          className="mt-5"
+          action={<Button size="sm" variant="outline" onClick={() => { setQuery(''); setFilter('all'); setHow('any'); setPhp('any'); }}>Clear the filter</Button>}
+        />
       )}
       {filter !== 'removed' && shown.length > 0 && view === 'grid' && (
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -203,9 +187,11 @@ export function SitesPage() {
         </div>
       )}
       {filter !== 'removed' && shown.length > 0 && view === 'list' && (
-        <ul className="mt-5 divide-y rounded-xl border bg-card shadow-xs">
-          {shown.map((site) => <SiteRow key={siteName(site)} site={site} />)}
-        </ul>
+        <Card className="mt-5">
+          <RowList>
+            {shown.map((site) => <SiteRow key={siteName(site)} site={site} />)}
+          </RowList>
+        </Card>
       )}
       {/* Removed sites never mix with live ones: one quiet line after the list says they are there. */}
       {filter !== 'removed' && sites && removedMatching.length > 0 && (
@@ -229,7 +215,7 @@ function SiteCard({ site }: { site: Site }) {
   const href = site.installing ? `/jobs/${encodeURIComponent(site.installing)}` : siteHref(site);
   const held = Boolean(site.installing || site.busy);
   return (
-    <article className="group relative flex flex-col rounded-xl border bg-card shadow-xs transition-shadow hover:shadow-md">
+    <Card role="article" className="group relative flex flex-col transition-shadow hover:shadow-md">
       <div className="flex items-start gap-3 px-5 pt-4">
         <StatusDot status={site.health} className="mt-1.5" />
         <div className="min-w-0 flex-1">
@@ -245,11 +231,11 @@ function SiteCard({ site }: { site: Site }) {
             {site.network && <NetworkBadge site={site} />}
             <Badge tone={site.server === 'apache' ? 'neutral' : 'primary'} title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>
             {site.install?.takenOver && <Badge title={`Made by hand, managed by the panel since ${shortDate(site.install.takenOver.at)}`}>Taken over</Badge>}
-            {site.installing && <Badge tone="warning"><LoaderCircle className="size-3 animate-spin" />Installing: see progress</Badge>}
+            {site.installing && <Badge tone="warning"><Spinner className="size-3" />Installing: see progress</Badge>}
           </div>
           {site.busy && (
             <Link href={site.busy.jobId ? `/jobs/${encodeURIComponent(site.busy.jobId)}` : href} className="relative z-10 mt-1.5 block w-fit">
-              <Badge tone="warning"><LoaderCircle className="size-3 animate-spin" />Busy: {site.busy.title}</Badge>
+              <Badge tone="warning"><Spinner className="size-3" />Busy: {site.busy.title}</Badge>
             </Link>
           )}
         </div>
@@ -276,7 +262,7 @@ function SiteCard({ site }: { site: Site }) {
         {site.mounts?.map((m) =>
           m.git ? (
             <Meta key={m.path} icon={<GitBranch />} label={`Branch of ${m.path}`}>
-              <span className="shrink-0 font-mono text-[13px] text-muted-foreground">{m.path}</span>
+              <span className="shrink-0 font-mono text-dense text-muted-foreground">{m.path}</span>
               <BranchLink git={m.git} />
               <GitState git={m.git} />
             </Meta>
@@ -284,7 +270,7 @@ function SiteCard({ site }: { site: Site }) {
         )}
         {site.db && (
           <Meta icon={<Database />} label="Database">
-            <span className="font-mono text-[13px]">{site.db.name}</span>
+            <span className="font-mono text-dense">{site.db.name}</span>
             {site.db.tables > 0 && <span className="text-xs text-muted-foreground">{bytes(site.db.sizeBytes)}</span>}
           </Meta>
         )}
@@ -312,7 +298,7 @@ function SiteCard({ site }: { site: Site }) {
           VS Code
         </ButtonLink>
       </div>
-    </article>
+    </Card>
   );
 }
 
@@ -339,8 +325,8 @@ function SiteRow({ site }: { site: Site }) {
       </div>
       <Badge tone={site.server === 'apache' ? 'neutral' : 'primary'} className="hidden shrink-0 sm:inline-flex" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>
       {site.install?.takenOver && <Badge className="hidden shrink-0 sm:inline-flex">Taken over</Badge>}
-      {site.installing && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Installing</Badge>}
-      {site.busy && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Busy</Badge>}
+      {site.installing && <Badge tone="warning" className="shrink-0"><Spinner className="size-3" />Installing</Badge>}
+      {site.busy && <Badge tone="warning" className="shrink-0"><Spinner className="size-3" />Busy</Badge>}
       {issues > 0 && <Badge tone={site.health === 'fail' ? 'danger' : 'warning'} className="hidden shrink-0 sm:inline-flex">{issues === 1 ? '1 issue' : `${issues} issues`}</Badge>}
       <div className="hidden w-52 min-w-0 shrink-0 items-center gap-2 text-sm md:flex">
         <RowBranch site={site} />
@@ -350,11 +336,11 @@ function SiteRow({ site }: { site: Site }) {
       </span>
       <span className="hidden w-24 shrink-0 text-xs text-muted-foreground xl:block">{site.php && <PhpLabel php={site.php} />}</span>
       <div className={cn('relative z-10 hidden shrink-0 gap-1.5 sm:flex', held && 'pointer-events-none opacity-50')} aria-disabled={held ? true : undefined}>
-        <Button size="sm" variant="ghost" onClick={() => window.open(siteUrl(site.domain, site.path), '_blank', 'noopener')}>
+        <Button size="sm" variant="soft" onClick={() => window.open(siteUrl(site.domain, site.path), '_blank', 'noopener')}>
           <ExternalLink />
           Open
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => void openWpAdmin(site)}>
+        <Button size="sm" variant="soft" onClick={() => void openWpAdmin(site)}>
           <LogIn />
           wp-admin
         </Button>
@@ -407,14 +393,14 @@ function RowBranch({ site }: { site: Site }) {
 /** The branch name, linking to the branch on its host (GitHub, GitLab, Bitbucket, Gitea) when the remote is known. */
 function BranchLink({ git }: { git: SiteGit }) {
   const url = git.remote ? branchWebUrl(git.remote, git.branch) : null;
-  if (!url) return <span className="truncate font-mono text-[13px]">{git.branch}</span>;
+  if (!url) return <span className="truncate font-mono text-dense">{git.branch}</span>;
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
       title={`Open ${git.branch} on ${repoWeb(git.remote ?? '')?.name ?? 'the git host'}`}
-      className="relative z-10 inline-flex min-w-0 items-center gap-1 rounded font-mono text-[13px] underline-offset-2 hover:underline"
+      className="relative z-10 inline-flex min-w-0 items-center gap-1 rounded font-mono text-dense underline-offset-2 hover:underline"
     >
       <span className="truncate">{git.branch}</span>
       <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />

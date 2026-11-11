@@ -1,6 +1,6 @@
 import type { AccessReport, ClaudeUsage, ClaudeRun, ClaudeStep, InstallDraft, OrgRepo, OrgStatus, Prefill, RepoFacts, UploadResult } from '@devmagic-panel/shared';
 import { accessKey, DEFAULT_CLAUDE_RUN, LINKS_EFFORT, gitlabHost, namespaceShortLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, repoWeb } from '@devmagic-panel/shared';
-import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, ExternalLink, LoaderCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {} from '@/components/branch-picker';
 import { settled, useJob } from '@/components/job-steps';
@@ -8,19 +8,22 @@ import { DumpFactsCard } from '@/components/dump-facts';
 import {} from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Field, Select } from '@/components/ui/field';
+import { Card } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
+import { KeyValue } from '@/components/ui/key-value';
+import { TextLink } from '@/components/ui/text-link';
 import {} from '@/components/ui/menu';
 import { api } from '@/lib/api';
 import { failureOf, runSource, usageHover, usageText } from '@/lib/claude-steps';
 import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS } from '@/components/claude-run-fields';
 import { bytes } from '@/lib/format';
-import { Link } from '@/lib/router';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import type { RepoProgress } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './new-site';
 import { Notice } from '@/components/page';
+import { Spinner } from '@/components/ui/spinner';
 
 /** Installing from an organization: the repo picked, what Claude Code read, the links it checked and the dump. */
 export interface OrgState {
@@ -94,17 +97,16 @@ export function CliHints({ status, onRecheck }: { status: OrgStatus; onRecheck?:
   }
   if (lines.length === 0) return null;
   return (
-    <div className="grid gap-1.5 rounded-md border border-warning/40 bg-warning/6 px-3 py-2 text-xs">
-      {lines.map((l) => (
-        <p key={l.host}>
-          <span className="font-medium">{l.host}:</span> {l.text}
-        </p>
-      ))}
-      <p className="text-muted-foreground">
-        Cloning needs only your SSH key; these only list repos.{' '}
-        {onRecheck && <button type="button" className="font-medium text-primary hover:underline" onClick={onRecheck}>Check again</button>}
-      </p>
-    </div>
+    <Notice tone="warning" size="inline" action={onRecheck && <Button size="xs" variant="soft" onClick={onRecheck}>Check again</Button>}>
+      <div className="grid gap-1.5">
+        {lines.map((l) => (
+          <p key={l.host}>
+            <span className="font-medium">{l.host}:</span> {l.text}
+          </p>
+        ))}
+        <p className="text-muted-foreground">Cloning needs only your SSH key; these only list repos.</p>
+      </div>
+    </Notice>
   );
 }
 
@@ -170,7 +172,7 @@ export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?
   return (
     <div className="grid gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
       <div>
-        <p className="font-medium">Organizations and groups to scan {saving && <LoaderCircle className="inline size-3.5 animate-spin" />}</p>
+        <p className="font-medium">Organizations and groups to scan {saving && <Spinner className="inline size-3.5" />}</p>
         <p className="text-muted-foreground">The GitHub organizations and GitLab groups you belong to, your own accounts, and the repos shared with you: ones you were added to outside those. A GitLab group is scanned with its subgroups.</p>
       </div>
       <CliHints status={status} {...(onRecheck ? { onRecheck } : {})} />
@@ -190,7 +192,7 @@ export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?
         hint={hostsError ? <span className="text-danger">{hostsError}</span> : <>One per line, like gitlab.wandworks.test; gitlab.com is always listed. Sign in to each once with <code className="font-mono whitespace-nowrap">glab auth login --hostname gitlab.wandworks.test</code>.</>}
       >
         <div className="flex max-w-md items-start gap-2">
-          <Textarea id="gitlab-hosts" value={hostsText} onChange={(e) => setHostsText(e.target.value)} rows={2} spellCheck={false} placeholder="gitlab.wandworks.test" className="min-h-16 flex-1 font-mono text-[13px]" />
+          <Textarea id="gitlab-hosts" value={hostsText} onChange={(e) => setHostsText(e.target.value)} rows={2} spellCheck={false} placeholder="gitlab.wandworks.test" className="min-h-16 flex-1 font-mono text-dense" />
           <Button variant="outline" size="sm" disabled={saving || hostsText.trim() === settings.gitlabHosts.join('\n')} onClick={() => void saveHosts()}>Save hosts</Button>
         </div>
       </Field>
@@ -323,17 +325,19 @@ export function ProjectReadStep({ state, setState, status, draftId, saveNow }: {
           <h3 className="text-sm font-medium">What the repo says</h3>
           <p className="text-sm text-muted-foreground">From {org.read.files?.length ? org.read.files.join(', ') : 'no doc files: the repo has none'}.</p>
           <DoneActivity lines={org.read.activity} />
-          <dl className="grid gap-2 rounded-lg border bg-card p-4 text-sm sm:grid-cols-[12rem_1fr]">
-            {rows.map(([label, value, field]) => (
-              <div key={label} className="contents">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className={cn(!value && 'text-muted-foreground')}>
+          <KeyValue
+            labelWidth="md"
+            className="gap-y-2 rounded-lg border bg-card p-4"
+            rows={rows.map(([label, value, field]) => ({
+              label,
+              value: (
+                <span className={cn(!value && 'text-muted-foreground')}>
                   {value ?? 'Not found'}
                   {value && source(field) && <span className="ml-2 text-xs text-muted-foreground">from {source(field)}</span>}
-                </dd>
-              </div>
-            ))}
-          </dl>
+                </span>
+              ),
+            }))}
+          />
           {f.notes.length > 0 && <ul className="grid list-disc gap-1 pl-5 text-sm">{f.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
         </section>
 
@@ -343,7 +347,7 @@ export function ProjectReadStep({ state, setState, status, draftId, saveNow }: {
           {org.access.status === 'checking' && (
             <>
               <Working title={`Claude Code is checking ${links.length} ${links.length === 1 ? 'link' : 'links'} with your claude.ai account, read-only...`} job={job.job} />
-              <Button variant="ghost" size="sm" className="w-fit" onClick={() => setOrg(setState, (o) => ({ ...o, access: { status: 'skipped' } }))}>Skip the links and pick a dump myself</Button>
+              <Button variant="soft" size="sm" className="w-fit" onClick={() => setOrg(setState, (o) => ({ ...o, access: { status: 'skipped' } }))}>Skip the links and pick a dump myself</Button>
             </>
           )}
           {org.access.status === 'error' && (
@@ -405,7 +409,7 @@ export function PrefillSummary({ prefill, upload, onChange }: { prefill: Prefill
       <p className="flex flex-wrap items-center gap-2 font-medium">
         <Check className="size-4 text-success" />
         {upload.name} ({bytes(upload.size)}) is in; the next steps are filled in.
-        <Button variant="ghost" size="sm" onClick={onChange}>Pick another dump</Button>
+        <Button variant="soft" size="sm" onClick={onChange}>Pick another dump</Button>
       </p>
       {prefill.differences.length > 0 && (
         <div>
@@ -495,7 +499,7 @@ export function ClaudeRunCard({ status, org }: { status: OrgStatus; org: OrgStat
     return typeof usage.costUsd === 'number' ? [{ label: PART_LABELS[part], usage: usage as ClaudeUsage }] : [];
   });
   return (
-    <aside aria-label="Claude Code" className="grid gap-4 rounded-xl border bg-card p-4 text-sm lg:sticky lg:top-4">
+    <Card role="complementary" aria-label="Claude Code" className="grid gap-4 p-4 text-sm lg:sticky lg:top-4">
       <div className="grid gap-1">
         <p className="flex items-center gap-2 font-medium">
           <Sparkles className="size-4 text-primary" />
@@ -509,31 +513,30 @@ export function ClaudeRunCard({ status, org }: { status: OrgStatus; org: OrgStat
       </div>
       <div className="grid gap-2 rounded-lg bg-muted/60 p-3 text-xs">
         <p className="font-medium text-foreground">This step runs with</p>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-          <dt className="text-muted-foreground">Model</dt>
-          <dd className="text-right">{CLAUDE_MODEL_LABELS[run.model]}</dd>
-          <dt className="text-muted-foreground">Effort</dt>
-          <dd className="text-right">{CLAUDE_EFFORT_LABELS[run.effort]} for the repo, {CLAUDE_EFFORT_LABELS[LINKS_EFFORT].toLowerCase()} for links</dd>
-          <dt className="text-muted-foreground">Spending cap</dt>
-          <dd className="text-right">${run.budgetUsd.toFixed(2)} for both</dd>
-        </dl>
+        <KeyValue
+          dense
+          rows={[
+            { label: 'Model', value: <span className="block text-right">{CLAUDE_MODEL_LABELS[run.model]}</span> },
+            { label: 'Effort', value: <span className="block text-right">{CLAUDE_EFFORT_LABELS[run.effort]} for the repo, {CLAUDE_EFFORT_LABELS[LINKS_EFFORT].toLowerCase()} for links</span> },
+            { label: 'Spending cap', value: <span className="block text-right">${run.budgetUsd.toFixed(2)} for both</span> },
+          ]}
+        />
         <p className="text-muted-foreground">
-          {own ? 'Changed for this install on the Code step.' : <>Your defaults, from <Link href="/settings" className="font-medium text-primary hover:underline">Settings</Link>. The Code step changes them for one install.</>}
+          {own ? 'Changed for this install on the Code step.' : <>Your defaults, from <TextLink href="/settings">Settings</TextLink>. The Code step changes them for one install.</>}
         </p>
       </div>
       <p className="text-xs text-muted-foreground">Read-only: it reads the repo&apos;s docs, never wp-config.php or .env, and only opens the links those docs name.</p>
       {costs.length > 0 && (
         <div className="grid gap-2 border-t pt-3 text-xs">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-            {costs.map(({ label, usage }) => (
-              <div key={label} className="contents">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="text-right font-mono" title={usageHover(usage, status.claude.claudeAi)}>{usageText(usage)}</dd>
-              </div>
-            ))}
-          </dl>
+          <KeyValue
+            dense
+            rows={costs.map(({ label, usage }) => ({
+              label,
+              value: <span className="block text-right font-mono" title={usageHover(usage, status.claude.claudeAi)}>{usageText(usage)}</span>,
+            }))}
+          />
         </div>
       )}
-    </aside>
+    </Card>
   );
 }

@@ -1,6 +1,6 @@
 import type { DbCell, DbCleanupView, DbColumnHead, DbFilter, DbFilterOp, DbOverview, DbRow, DbRowsPage, DbStructure, DbTable, Preferences } from '@devmagic-panel/shared';
 import { DB_FILTER_LABELS, DB_FILTER_OPS, DB_PAGE_SIZES } from '@devmagic-panel/shared';
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Eraser, ExternalLink, Filter, KeyRound, LoaderCircle, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Eraser, ExternalLink, Filter, KeyRound, Pencil, Plus, RefreshCw, Rows3, Search, Table2, Trash2, TriangleAlert, X } from 'lucide-react';
 import { type ClipboardEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CleanupsCard, ConfirmCleanup } from '@/components/cleanups';
 import { JobBox } from '@/components/job-box';
@@ -8,10 +8,12 @@ import { settled, useJob } from '@/components/job-steps';
 import { DeleteRowsDialog, deleteRowsNow, type EditorMode, RowChangesCard, RowEditor, toastRowChange } from '@/components/row-editor';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader } from '@/components/ui/card';
 import { Dialog, useFullScreen } from '@/components/ui/dialog';
 import { ShowMore, useShowMore } from '@/components/ui/show-more';
 import { Select } from '@/components/ui/field';
+import { FilterChips } from '@/components/ui/filter-chips';
+import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
 import { Segmented } from '@/components/ui/segmented';
@@ -24,6 +26,7 @@ import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { CardSkeleton, Reading, TableSkeleton } from '@/components/skeletons';
 import { Notice } from '@/components/page';
+import { Spinner } from '@/components/ui/spinner';
 
 export type DbShow = 'rows' | 'structure';
 
@@ -129,27 +132,31 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex min-w-0 items-center gap-2">
-          <Table2 className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">Tables of <span className="font-mono text-[13px]">{database}</span></span>
-        </CardTitle>
-        <div className="flex items-center gap-1">
-          {exportable(overview) && (
-            <Button size="sm" variant="outline" onClick={() => setExporting(true)}>
-              <Download />Export
+      <CardHeader
+        title={
+          <span className="flex min-w-0 items-center gap-2">
+            <Table2 className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate">Tables of <span className="font-mono text-dense">{database}</span></span>
+          </span>
+        }
+        actions={
+          <div className="flex items-center gap-1">
+            {exportable(overview) && (
+              <Button size="sm" variant="outline" onClick={() => setExporting(true)}>
+                <Download />Export
+              </Button>
+            )}
+            {overview.phpMyAdmin && (
+              <ButtonLink size="sm" variant="outline" href={pmaHref(overview.phpMyAdmin, database)} target="_blank" rel="noreferrer">
+                <ExternalLink />phpMyAdmin
+              </ButtonLink>
+            )}
+            <Button size="icon" variant="ghost" onClick={reload} disabled={loading} aria-label="Read the tables again">
+              <RefreshCw className={cn(loading && 'animate-spin')} />
             </Button>
-          )}
-          {overview.phpMyAdmin && (
-            <ButtonLink size="sm" variant="outline" href={pmaHref(overview.phpMyAdmin, database)} target="_blank" rel="noreferrer">
-              <ExternalLink />phpMyAdmin
-            </ButtonLink>
-          )}
-          <Button size="icon" variant="ghost" onClick={reload} disabled={loading} aria-label="Read the tables again">
-            <RefreshCw className={cn(loading && 'animate-spin')} />
-          </Button>
-        </div>
-      </CardHeader>
+          </div>
+        }
+      />
       {header}
       {/* A job started from a row's menu shows at the top of the list. */}
       {job && <div className="px-5 pt-4"><JobBox job={job} onRetry={() => void runner.retry()} /></div>}
@@ -168,19 +175,17 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
         />
       </div>
       {prefix && others > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-5 pt-3" role="group" aria-label="Show">
-          {([['all', 'All', overview.tables.length], ['site', `Prefix ${prefix}`, overview.tables.length - others], ['other', 'Other prefixes', others]] as const).map(([value, label, count]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-              className={cn('rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-muted', filter === value ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'text-muted-foreground')}
-            >
-              {label} <span className="tabular-nums">{count}</span>
-            </button>
-          ))}
-        </div>
+        <FilterChips
+          label="Show"
+          className="px-5 pt-3"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'all', label: 'All', count: overview.tables.length },
+            { value: 'site', label: `Prefix ${prefix}`, count: overview.tables.length - others },
+            { value: 'other', label: 'Other prefixes', count: others },
+          ]}
+        />
       )}
       <p className="px-5 pt-3 text-xs text-muted-foreground">
         {number(overview.tables.length)} {overview.tables.length === 1 ? 'table' : 'tables'}, {bytes(overview.totalBytes)}, read {timeAgo(overview.checkedAt)}. Row counts of InnoDB tables are MySQL&apos;s estimate.
@@ -190,7 +195,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
           <li key={t.name} className="flex items-center gap-3 px-5 py-2.5 text-sm">
             <button type="button" onClick={() => onNavigate({ table: t.name, show: 'rows' })} className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
               <span className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-[13px] break-all hover:underline">{t.name}</span>
+                <span className="font-mono text-dense break-all hover:underline">{t.name}</span>
                 {t.view && <Badge>View</Badge>}
                 {prefix && !t.name.startsWith(prefix) && <Badge>Other prefix</Badge>}
                 {t.engine && t.engine.toLowerCase() !== 'innodb' && <Badge tone="warning">{t.engine}</Badge>}
@@ -286,7 +291,7 @@ function ExportDialog({ database, tables, onClose }: { database: string; tables:
                 <li key={t.name}>
                   <label className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded px-1 py-0.5 hover:bg-muted">
                     <input type="checkbox" checked={ticked.has(t.name)} onChange={(e) => setTicked((s) => { const n = new Set(s); if (e.target.checked) n.add(t.name); else n.delete(t.name); return n; })} />
-                    <span className="truncate font-mono text-[13px]">{t.name}</span>
+                    <span className="truncate font-mono text-dense">{t.name}</span>
                     <span className="text-xs text-muted-foreground tabular-nums">{t.view ? 'view' : bytes(t.dataBytes)}</span>
                   </label>
                 </li>
@@ -482,9 +487,7 @@ function RowsView({ database, table, editable }: { database: string; table: stri
           <div className="grid gap-1">
             <span className="flex w-fit max-w-full items-center gap-1 rounded-full border border-primary/40 bg-primary/10 py-0.5 pr-1 pl-3 text-xs font-medium text-primary">
               <span className="truncate">Only: {cleanup.label ?? 'what the clean-up would take'}</span>
-              <button type="button" className="rounded-full p-0.5 hover:bg-primary/15" aria-label="Show every row" title="Show every row" onClick={clearCleanup}>
-                <X className="size-3.5" />
-              </button>
+              <IconButton icon={X} label="Show every row" className="size-auto rounded-full p-0.5 hover:bg-primary/15 [&_svg]:size-3.5" onClick={clearCleanup} />
             </span>
             {cleanup.note && <p className="text-xs text-muted-foreground">{cleanup.note}</p>}
           </div>
@@ -519,7 +522,7 @@ function RowsView({ database, table, editable }: { database: string; table: stri
             {(drafts.length > 0 || filters.length > 0) && <Button size="sm" variant="outline" onClick={clear}>Clear</Button>}
           </div>
           <div role="group" aria-label="Rows" className="ml-auto flex flex-wrap items-center gap-2">
-            {rows.loading && <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-label="Reading rows" />}
+            {rows.loading && <Spinner className="size-4 text-muted-foreground" label="Reading rows" />}
             {canChange && picked.length > 0 && (
               <Button size="sm" variant="outline" className="text-danger" onClick={() => setDeleting(picked)}><Trash2 />Delete {picked.length === 1 ? 'the ticked row' : `the ${picked.length} ticked rows`}</Button>
             )}
@@ -603,7 +606,7 @@ function RowsGrid({ page, sort, onSort, onOpen, selected, onSelect }: {
     });
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left text-[13px]">
+      <table className="w-full border-collapse text-left text-dense">
         <thead>
           <tr className="border-b bg-muted/50">
             {onSelect && (
@@ -736,7 +739,7 @@ function FullValue({ cell, column, rowKey, database, table }: { cell: DbCell; co
       {long && !full && rowKey && (
         <div>
           <Button size="sm" variant="outline" onClick={() => void load()} disabled={loading}>
-            {loading && <LoaderCircle className="animate-spin" />}
+            {loading && <Spinner />}
             Show all {number((cell as { length: number }).length)} {(cell as { binary?: true }).binary ? 'bytes' : 'characters'}
           </Button>
         </div>
@@ -766,7 +769,7 @@ export function ValueView({ cell }: { cell: DbCell }) {
   const php = useMemo(() => (text && !binary && typeof cell === 'string' ? parsePhpSerialized(text) : null), [text, binary, cell]);
   const json = useMemo(() => (text && !binary && !php && typeof cell === 'string' ? parseJsonValue(text) : undefined), [text, binary, php, cell]);
   const [asTree, setAsTree] = useState(true);
-  if (text === null) return <p className="rounded-md bg-muted/60 px-3 py-2 font-mono text-[13px] text-muted-foreground italic">NULL</p>;
+  if (text === null) return <p className="rounded-md bg-muted/60 px-3 py-2 font-mono text-dense text-muted-foreground italic">NULL</p>;
   const hasTree = php !== null || json !== undefined;
   const cut = typeof cell !== 'string';
   return (
@@ -779,11 +782,11 @@ export function ValueView({ cell }: { cell: DbCell }) {
         </div>
       )}
       {hasTree && asTree ? (
-        <div className="max-h-96 overflow-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-[13px]">
+        <div className="max-h-96 overflow-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-dense">
           {php ? <PhpTree value={php} /> : <JsonTree value={json} />}
         </div>
       ) : (
-        <pre onCopy={copyRealBytes} className="max-h-96 overflow-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-[13px] break-all whitespace-pre-wrap">
+        <pre onCopy={copyRealBytes} className="max-h-96 overflow-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-dense break-all whitespace-pre-wrap">
           {binary ? `0x${text}` : text === '' ? <span className="font-sans text-muted-foreground italic">empty</span> : <Visible text={text} />}
           {cut && <span className="text-muted-foreground">…</span>}
         </pre>
@@ -876,7 +879,7 @@ function Property({ name, className }: { name: string; className: string }) {
   const tag = p.visibility === 'protected' ? 'protected' : p.visibility === 'private' ? (p.owner === className ? 'private' : `private to ${p.owner}`) : null;
   return (
     <>
-      {tag && <span className="mr-1.5 rounded-sm border px-1 font-sans text-[11px]">{tag}</span>}
+      {tag && <span className="mr-1.5 rounded-sm border px-1 font-sans text-2xs">{tag}</span>}
       <Visible text={p.name} />
     </>
   );
@@ -923,19 +926,21 @@ function StructureView({ database, table }: { database: string; table: string })
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       {s.warnings.length > 0 && (
-        <ul className="grid gap-1.5 rounded-lg border border-warning/30 bg-warning/8 px-4 py-3 text-sm">
-          {s.warnings.map((w) => (
-            <li key={w} className="flex gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-label="Warning" />{w}</li>
-          ))}
-        </ul>
+        <Notice tone="warning" icon={false}>
+          <ul className="grid gap-1.5">
+            {s.warnings.map((w) => (
+              <li key={w} className="flex gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-label="Warning" />{w}</li>
+            ))}
+          </ul>
+        </Notice>
       )}
       <Card>
-        <CardHeader><CardTitle>Columns</CardTitle></CardHeader>
+        <CardHeader title="Columns" />
         <p className="px-5 pt-3 text-xs text-muted-foreground">
           {s.table.view ? 'A view: a saved query, with no rows of its own.' : <>{s.table.engine}, {s.table.collation}, {tableMeta(s.table)}</>}
         </p>
         <div className="mt-2 overflow-x-auto">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-dense">
             <thead>
               <tr className="border-y bg-muted/50 text-xs text-muted-foreground">
                 {['Name', 'Type', 'NULL', 'Default', 'Key', 'Extra'].map((h) => <th key={h} scope="col" className="px-3 py-2 font-medium whitespace-nowrap first:pl-5">{h}</th>)}
@@ -958,10 +963,10 @@ function StructureView({ database, table }: { database: string; table: string })
       </Card>
       {!s.table.view && (
         <Card>
-          <CardHeader><CardTitle>Indexes</CardTitle></CardHeader>
+          <CardHeader title="Indexes" />
           <ul className="divide-y">
             {s.indexes.map((x) => (
-              <li key={x.name} className="flex flex-wrap items-center gap-2 px-5 py-2 text-[13px]">
+              <li key={x.name} className="flex flex-wrap items-center gap-2 px-5 py-2 text-dense">
                 <span className="font-mono">{x.name}</span>
                 {x.name === 'PRIMARY' ? <Badge tone="primary">Primary</Badge> : x.unique ? <Badge>Unique</Badge> : null}
                 {x.type && x.type !== 'BTREE' && <Badge>{x.type}</Badge>}
@@ -974,11 +979,8 @@ function StructureView({ database, table }: { database: string; table: string })
         </Card>
       )}
       <Card>
-        <CardHeader>
-          <CardTitle>{s.table.view ? 'CREATE VIEW' : 'CREATE TABLE'}</CardTitle>
-          <CopyButton text={s.createSql} />
-        </CardHeader>
-        <pre className="max-h-96 overflow-auto px-5 py-4 font-mono text-[12px] leading-relaxed whitespace-pre">{s.createSql}</pre>
+        <CardHeader title={s.table.view ? 'CREATE VIEW' : 'CREATE TABLE'} actions={<CopyButton text={s.createSql} />} />
+        <pre className="max-h-96 overflow-auto px-5 py-4 font-mono text-xs leading-relaxed whitespace-pre">{s.createSql}</pre>
       </Card>
     </div>
   );

@@ -1,14 +1,16 @@
 import type { GitTidyPreview } from '@devmagic-panel/shared';
 import { GIT_KEEP_DAYS } from '@devmagic-panel/shared';
-import { LoaderCircle, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogList } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/field';
+import { Notice } from '@/components/ui/notice';
 import { api } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { toast } from '@/lib/toast';
+import { Spinner } from '@/components/ui/spinner';
 
 type Target = { domain: string; mount?: string; repo?: string };
 
@@ -84,17 +86,17 @@ export function GitTidyDialog({ target, label, onClose, onDone }: { target: Targ
         <>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button disabled={!preview || busy || (ticked.size === 0 && !gc)} onClick={() => void go()}>
-            {busy ? <LoaderCircle className="animate-spin" /> : <Sparkles />}
+            {busy ? <Spinner /> : <Sparkles />}
             {busy && gc ? 'Packing...' : 'Tidy up'}
           </Button>
         </>
       }
     >
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {!preview && !error && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><LoaderCircle className="size-4 animate-spin" />{step}</p>}
+      {!preview && !error && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner className="size-4" />{step}</p>}
       {preview && (
         <div className="grid gap-4 text-sm">
-          {fetchNote && <p className="rounded-lg bg-warning/8 px-3 py-2 text-xs">{fetchNote}</p>}
+          {fetchNote && <Notice tone="warning" size="inline">{fetchNote}</Notice>}
           <p>
             Its objects take <span className="font-medium">{bytes(preview.objectsBytes)}</span>, most of <span className="font-mono">.git</span>.
             {preview.objectsBytes > BIG && <span className="text-muted-foreground"> git gc packs them tighter; when the history itself holds big files, gc frees little, and only a new, shallow clone would.</span>}
@@ -120,7 +122,7 @@ export function GitTidyDialog({ target, label, onClose, onDone }: { target: Targ
                       })}
                       label={
                         <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-[13px] break-all">{g.name}</span>
+                          <span className="font-mono text-dense break-all">{g.name}</span>
                           {g.current && <Badge tone="warning">current: switch first</Badge>}
                           {g.merged ? <Badge tone="success">in {preview.mainBranch}</Badge> : <Badge>not in {preview.mainBranch ?? 'the default branch'}</Badge>}
                         </span>

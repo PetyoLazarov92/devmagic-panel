@@ -1,5 +1,5 @@
 import type { CheckFix, AuraItem } from '@devmagic-panel/shared';
-import { CircleCheck, LoaderCircle, Sparkles, Wrench } from 'lucide-react';
+import { CircleCheck, Sparkles, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { Tabs } from '@/components/ui/tabs';
 import { IssueRow } from '@/components/site-bits';
@@ -16,6 +16,7 @@ import { siteHref } from '@/lib/site-ref';
 import { useAsync } from '@/lib/use-async';
 import { CheckAgain, Notice, PageHeader } from '@/components/page';
 import { CardSkeleton, Reading } from '@/components/skeletons';
+import { Spinner } from '@/components/ui/spinner';
 
 const MACHINE = 'This machine';
 
@@ -107,7 +108,7 @@ function Problems() {
         <div className="ml-auto flex flex-wrap gap-2">
           {fixes.length > 1 && (
             <Button size="sm" onClick={() => void fixAll()} disabled={fixing !== null || loading}>
-              {fixing ? <LoaderCircle className="animate-spin" /> : <Wrench />}
+              {fixing ? <Spinner /> : <Wrench />}
               {fixing ? `Fixing ${fixing.done + 1} of ${fixing.total}` : `Fix all ${fixes.length}`}
             </Button>
           )}

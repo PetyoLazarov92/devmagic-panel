@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { KeyValue } from '@/components/ui/key-value';
 import { cn } from '@/lib/utils';
 
 /** Pieces the PHP tab of Services and a site's PHP tab share. */
@@ -42,7 +43,7 @@ export function SettingField({ name, setting, value, inherited, own, onChange }:
   return (
     <div className="grid content-start gap-1.5">
       <label htmlFor={id} className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
-        <code className="font-mono text-[13px]">{name}</code>
+        <code className="font-mono text-dense">{name}</code>
         {value && <Badge tone="primary">{own}</Badge>}
       </label>
       {options ? (
@@ -72,13 +73,17 @@ export function InfoTables({ info, filter, onFilter, marked }: { info: PhpInfo; 
 
   return (
     <div className="grid gap-4">
-      <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1.5 text-xs">
-        <dt className="text-muted-foreground">PHP</dt><dd>{info.version} <span className="text-muted-foreground">({info.sapi})</span></dd>
-        <dt className="text-muted-foreground">Loaded php.ini</dt><dd className="font-mono [overflow-wrap:anywhere]">{info.iniFile || 'none'}</dd>
-        <dt className="text-muted-foreground">Extra ini files</dt><dd className="font-mono [overflow-wrap:anywhere]">{info.scannedFiles.length > 0 ? info.scannedFiles.map((f) => f.split('/').at(-1)).join(', ') : 'none'}</dd>
-        <dt className="text-muted-foreground">Extensions</dt><dd className="[overflow-wrap:anywhere]">{Object.keys(info.extensions).sort((a, b) => a.localeCompare(b)).join(', ')}</dd>
-        {info.zendExtensions.length > 0 && <><dt className="text-muted-foreground">Zend extensions</dt><dd>{info.zendExtensions.join(', ')}</dd></>}
-      </dl>
+      <KeyValue
+        dense
+        labelWidth="md"
+        rows={[
+          { label: 'PHP', value: <>{info.version} <span className="text-muted-foreground">({info.sapi})</span></> },
+          { label: 'Loaded php.ini', value: <span className="font-mono">{info.iniFile || 'none'}</span> },
+          { label: 'Extra ini files', value: <span className="font-mono">{info.scannedFiles.length > 0 ? info.scannedFiles.map((f) => f.split('/').at(-1)).join(', ') : 'none'}</span> },
+          { label: 'Extensions', value: Object.keys(info.extensions).sort((a, b) => a.localeCompare(b)).join(', ') },
+          ...(info.zendExtensions.length > 0 ? [{ label: 'Zend extensions', value: info.zendExtensions.join(', ') }] : []),
+        ]}
+      />
       <Input aria-label="Filter settings" placeholder="Filter settings, like upload" value={filter} onChange={(e) => onFilter(e.target.value)} className="w-full sm:max-w-xs" />
       {shown.length === 0 && <p className="text-muted-foreground">No setting matches {filter}.</p>}
       {shown.map(([name, keys]) => (

@@ -1,19 +1,21 @@
 import { type ProductionSettings, type Site, type UploadsCompare, type UploadsFolder, type UploadsHere, type UploadsKind, FILE_TRASH_DAYS, isWpCliCommand, splitSshHost, UPLOADS_LISTED } from '@devmagic-panel/shared';
-import { CloudDownload, GitCompareArrows, HardDrive, LoaderCircle, Server } from 'lucide-react';
+import { CloudDownload, GitCompareArrows, HardDrive, Server } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { JobFooter } from '@/components/job-box';
 import { useJob } from '@/components/job-steps';
 import { EmptyState, Notice } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { KeyValue } from '@/components/ui/key-value';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { forgetProduction } from '@/lib/production';
 import { bytes, dateTime, timeAgo } from '@/lib/format';
 import { siteTarget } from '@/lib/site-ref';
 import { ServerPassword } from '@/pages/new-site-database';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * Uploads from production, the Files tab's second view: what the site's own
@@ -67,21 +69,21 @@ function ServerForm({ site, saved, onSaved, onCancel }: { site: Site; saved: Pro
     <div className="grid gap-2.5 text-left">
       <div className="grid gap-1.5">
         <label htmlFor="uploads-server-host" className="text-xs font-medium">SSH host</label>
-        <Input id="uploads-server-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="deploy@www.spellbook.example, or an alias from ~/.ssh/config" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
+        <Input id="uploads-server-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="deploy@www.spellbook.example, or an alias from ~/.ssh/config" className="font-mono text-dense" autoComplete="off" spellCheck={false} aria-invalid={host.trim() !== '' && !hostOk ? true : undefined} />
       </div>
       <div className="grid gap-1.5">
         <label htmlFor="uploads-server-folder" className="text-xs font-medium">WordPress folder on the server</label>
-        <Input id="uploads-server-folder" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="/var/www/spellbook" className="font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={folder.trim() !== '' && !folderOk ? true : undefined} />
+        <Input id="uploads-server-folder" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="/var/www/spellbook" className="font-mono text-dense" autoComplete="off" spellCheck={false} aria-invalid={folder.trim() !== '' && !folderOk ? true : undefined} />
       </div>
       <details className="text-xs">
         <summary className="cursor-pointer font-medium text-primary">WP-CLI has another name on the server?</summary>
-        <Input aria-label="WP-CLI command on the server" value={wpCli} onChange={(e) => setWpCli(e.target.value)} placeholder="wp" className="mt-2 font-mono text-[13px]" autoComplete="off" spellCheck={false} aria-invalid={!wpCliOk ? true : undefined} />
+        <Input aria-label="WP-CLI command on the server" value={wpCli} onChange={(e) => setWpCli(e.target.value)} placeholder="wp" className="mt-2 font-mono text-dense" autoComplete="off" spellCheck={false} aria-invalid={!wpCliOk ? true : undefined} />
       </details>
       <p className="text-xs text-muted-foreground">Saved for this site, with no password. Refresh from production and Missing plugins use the same server and folder.</p>
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={!hostOk || !folderOk || !wpCliOk || saving} onClick={save}>{saving && <LoaderCircle className="animate-spin" />}Save the server</Button>
-        {onCancel && <Button variant="ghost" onClick={onCancel}>Cancel</Button>}
+        <Button variant="outline" disabled={!hostOk || !folderOk || !wpCliOk || saving} onClick={save}>{saving && <Spinner />}Save the server</Button>
+        {onCancel && <Button variant="soft" onClick={onCancel}>Cancel</Button>}
       </div>
     </div>
   );
@@ -175,38 +177,38 @@ export function UploadsFromProduction({ site }: { site: Site }) {
     <div className="grid gap-4">
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><HardDrive className="size-4 text-muted-foreground" aria-hidden />Here</CardTitle></CardHeader>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 px-5 py-4 text-sm">
-            <dt className="text-muted-foreground">Uploads</dt>
-            <dd>{here ? (here.exists ? `${count(here.files, 'file')}, ${bytes(here.bytes)}` : 'No uploads folder yet') : 'Reading...'}</dd>
-            <dt className="text-muted-foreground">Free space</dt>
-            <dd>{here ? bytes(here.freeBytes) : 'Reading...'}</dd>
-            <dt className="text-muted-foreground">Last copy</dt>
-            <dd>{here?.last ? <><time dateTime={here.last.at} title={dateTime(here.last.at)}>{timeAgo(here.last.at)}</time> from {here.last.host}</> : 'None yet'}</dd>
-            <dt className="text-muted-foreground">Missing ones</dt>
-            <dd>{site.uploadsFrom ? `Load from ${site.uploadsFrom.host} when a page asks for them, so pages show their pictures without a copy` : 'Show as broken pictures until they are copied'}</dd>
-          </dl>
+          <CardHeader title={<span className="flex items-center gap-2"><HardDrive className="size-4 text-muted-foreground" aria-hidden />Here</span>} />
+          <CardBody>
+            <KeyValue
+              rows={[
+                { label: 'Uploads', value: here ? (here.exists ? `${count(here.files, 'file')}, ${bytes(here.bytes)}` : 'No uploads folder yet') : 'Reading...' },
+                { label: 'Free space', value: here ? bytes(here.freeBytes) : 'Reading...' },
+                { label: 'Last copy', value: here?.last ? <><time dateTime={here.last.at} title={dateTime(here.last.at)}>{timeAgo(here.last.at)}</time> from {here.last.host}</> : 'None yet' },
+                { label: 'Missing ones', value: site.uploadsFrom ? `Load from ${site.uploadsFrom.host} when a page asks for them, so pages show their pictures without a copy` : 'Show as broken pictures until they are copied' },
+              ]}
+            />
+          </CardBody>
         </Card>
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Server className="size-4 text-muted-foreground" aria-hidden />The site's server</CardTitle>
-            {!editing && (
+          <CardHeader
+            title={<span className="flex items-center gap-2"><Server className="size-4 text-muted-foreground" aria-hidden />The site&apos;s server</span>}
+            actions={!editing && (
               <span className="flex gap-1">
-                <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Change</Button>
-                <Button size="sm" variant="ghost" title={`Forget ${production.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, (now) => { setProduction(now); setCompare(null); setSecret(''); })}>Forget</Button>
+                <Button size="sm" variant="soft" onClick={() => setEditing(true)}>Change</Button>
+                <Button size="sm" variant="soft" title={`Forget ${production.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, (now) => { setProduction(now); setCompare(null); setSecret(''); })}>Forget</Button>
               </span>
             )}
-          </CardHeader>
-          <div className="grid gap-3 px-5 py-4 text-sm">
+          />
+          <CardBody className="gap-3">
             {editing ? (
               <ServerForm site={site} saved={production} onCancel={() => setEditing(false)} onSaved={(s) => { setProduction(s); setEditing(false); setCompare(null); setSecret(''); }} />
             ) : (
               <>
-                <code className="font-mono text-[12px] [overflow-wrap:anywhere] text-muted-foreground">{production.host}:{compare?.dir ?? `${production.folder}/wp-content/uploads`}</code>
+                <code className="font-mono text-xs [overflow-wrap:anywhere] text-muted-foreground">{production.host}:{compare?.dir ?? `${production.folder}/wp-content/uploads`}</code>
                 <ServerPassword id="uploads-server-secret" host={production.host} value={secret} onChange={setSecret} />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <Button variant={compare ? 'outline' : 'default'} disabled={comparing || running} onClick={run}>
-                    {comparing ? <LoaderCircle className="animate-spin" /> : <GitCompareArrows />}
+                    {comparing ? <Spinner /> : <GitCompareArrows />}
                     {compare ? 'Compare again' : 'Compare'}
                   </Button>
                   {compare && <span className="text-muted-foreground">{count(compare.files, 'file')}, {bytes(compare.bytes)} on the server</span>}
@@ -214,22 +216,24 @@ export function UploadsFromProduction({ site }: { site: Site }) {
                 <p className="text-xs text-muted-foreground">Compare lists the files on the server and reads the ones here. Nothing is copied, and nothing is written or deleted on the server.</p>
               </>
             )}
-          </div>
+          </CardBody>
         </Card>
       </div>
       {error && <Notice>{error}</Notice>}
 
       {compare && (
         <Card>
-          <CardHeader className="flex-wrap">
-            <CardTitle>What to bring</CardTitle>
-            <div className="flex flex-wrap gap-1.5">
-              <Button size="sm" variant="ghost" onClick={() => setTicked(new Set(folders.filter((f) => f.kind === 'media' && f.newFiles > 0).map((f) => f.key)))}>All media</Button>
-              {[3, 12].map((n) => media.length > n && <Button key={n} size="sm" variant="ghost" onClick={() => lastMonths(n)}>Last {n} months</Button>)}
-              <Button size="sm" variant="ghost" onClick={() => setTicked(new Set())}>Nothing</Button>
-            </div>
-          </CardHeader>
-          <div className="grid gap-5 px-5 py-4 text-sm">
+          <CardHeader
+            title="What to bring"
+            actions={
+              <div className="flex flex-wrap gap-1.5">
+                <Button size="sm" variant="soft" onClick={() => setTicked(new Set(folders.filter((f) => f.kind === 'media' && f.newFiles > 0).map((f) => f.key)))}>All media</Button>
+                {[3, 12].map((n) => media.length > n && <Button key={n} size="sm" variant="soft" onClick={() => lastMonths(n)}>Last {n} months</Button>)}
+                <Button size="sm" variant="soft" onClick={() => setTicked(new Set())}>Nothing</Button>
+              </div>
+            }
+          />
+          <CardBody className="gap-5">
             {GROUPS.map((group) => {
               const rows = folders.filter((f) => f.kind === group.kind);
               if (rows.length === 0) return null;
@@ -255,7 +259,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
                           <input id={fid} type="checkbox" disabled={nothing} checked={ticked.has(f.key) && !nothing} onChange={(e) => tick([f.key], e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
                           <label htmlFor={fid} className="grid min-w-0 gap-0.5">
                             <span className="flex flex-wrap items-center gap-1.5">
-                              <span className={group.kind === 'media' ? '' : 'font-mono text-[12px] [overflow-wrap:anywhere]'}>{folderLabel(f)}</span>
+                              <span className={group.kind === 'media' ? '' : 'font-mono text-xs [overflow-wrap:anywhere]'}>{folderLabel(f)}</span>
                               {f.site !== undefined && <Badge>site {f.site}</Badge>}
                             </span>
                             <span className="text-xs text-muted-foreground">
@@ -292,7 +296,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
                   </label>
                   <details className="text-xs">
                     <summary className="cursor-pointer font-medium text-primary">See {compare.changedFiles > UPLOADS_LISTED ? `the first ${UPLOADS_LISTED} of them` : 'them'}</summary>
-                    <ul className="mt-2 grid max-h-56 gap-1 overflow-y-auto rounded-lg border bg-background px-3 py-2 font-mono text-[12px]">
+                    <ul className="mt-2 grid max-h-56 gap-1 overflow-y-auto rounded-lg border bg-background px-3 py-2 font-mono text-xs">
                       {compare.changed.map((c) => <li key={c.file} className="flex flex-wrap justify-between gap-x-4 [overflow-wrap:anywhere]"><span>{c.file}</span><span className="text-muted-foreground">{bytes(c.bytes)}, changed <time dateTime={c.changedAt} title={dateTime(c.changedAt)}>{timeAgo(c.changedAt)}</time></span></li>)}
                     </ul>
                   </details>
@@ -302,7 +306,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
                 <details className="text-xs">
                   <summary className="cursor-pointer font-medium text-primary">{count(compare.onlyHereFiles, 'file')} only here</summary>
                   <p className="mt-2 text-muted-foreground">Uploaded here, or deleted on production since. They stay: the panel never deletes a file here to match the server, and never sends one there.</p>
-                  <ul className="mt-2 grid max-h-56 gap-1 overflow-y-auto rounded-lg border bg-background px-3 py-2 font-mono text-[12px]">
+                  <ul className="mt-2 grid max-h-56 gap-1 overflow-y-auto rounded-lg border bg-background px-3 py-2 font-mono text-xs">
                     {compare.onlyHere.map((f) => <li key={f} className="[overflow-wrap:anywhere]">{f}</li>)}
                     {compare.onlyHereFiles > compare.onlyHere.length && <li className="font-sans text-muted-foreground">and {(compare.onlyHereFiles - compare.onlyHere.length).toLocaleString('en')} more</li>}
                   </ul>
@@ -316,7 +320,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
               )}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <Button disabled={files + changedFiles === 0 || !fits || !maxOk || running || comparing} onClick={start}>
-                  {running ? <LoaderCircle className="animate-spin" /> : <CloudDownload />}
+                  {running ? <Spinner /> : <CloudDownload />}
                   {files + changedFiles === 0 ? 'Nothing to bring' : `Bring ${count(files + changedFiles, 'file')}`}
                 </Button>
                 {files + changedFiles > 0 && (
@@ -327,7 +331,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
               </div>
               <p className="text-xs text-muted-foreground">Files are only added here: one that is here already is left as it is{changed ? ', unless it changed on production' : ''}. Stop keeps what came, and a new run brings the rest.</p>
             </div>
-          </div>
+          </CardBody>
           <JobFooter job={copy.job} error={copy.error} onRetry={() => void copy.retry()} onStop={() => void copy.stop()} stopNote="What came so far is kept, and a new run brings the rest." />
         </Card>
       )}

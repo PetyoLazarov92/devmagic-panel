@@ -1,6 +1,8 @@
 import { CircleCheck, CircleX, Info, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { IconButton } from '@/components/ui/icon-button';
 
 /**
  * Short result notices for actions started from menus and the command
@@ -50,33 +52,27 @@ export function Toaster() {
       className="pointer-events-none fixed right-0 bottom-0 z-50 grid w-full max-w-sm gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
       {toasts.map((t) => (
-        <div key={t.id} className={cn('pointer-events-auto flex gap-3 rounded-xl border bg-card px-4 py-3 text-sm shadow-lg')}>
+        <Card key={t.id} className="pointer-events-auto flex gap-3 px-4 py-3 text-sm shadow-lg">
           <span className="mt-0.5 shrink-0">{icons[t.tone]}</span>
           <div className="min-w-0 flex-1">
             <p className="font-medium">{t.title}</p>
             {t.detail && <p className="mt-0.5 font-mono text-xs break-words whitespace-pre-wrap text-muted-foreground">{t.detail}</p>}
           </div>
           {t.action && (
-            <button
-              type="button"
+            <Button
+              variant="soft"
+              size="xs"
               onClick={() => {
                 setToasts((list) => list.filter((x) => x.id !== t.id));
                 t.action?.run();
               }}
-              className="h-fit rounded-md px-2 py-0.5 text-sm font-medium text-primary hover:bg-primary/10"
+              className="text-primary"
             >
               {t.action.label}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={() => setToasts((list) => list.filter((x) => x.id !== t.id))}
-            className="h-fit rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="size-3.5" />
-            <span className="sr-only">Dismiss</span>
-          </button>
-        </div>
+          <IconButton icon={X} label="Dismiss" onClick={() => setToasts((list) => list.filter((x) => x.id !== t.id))} className="size-6 text-muted-foreground hover:text-foreground [&_svg]:size-3.5" />
+        </Card>
       ))}
     </div>
   );

@@ -1,20 +1,22 @@
 import { SITE_SERVER_LABEL, SITE_SERVERS, type Site, type SiteServer } from '@devmagic-panel/shared';
-import { ArrowLeftRight, Info, LoaderCircle, Server, TriangleAlert } from 'lucide-react';
+import { ArrowLeftRight, Info, Server } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { JobBox } from '@/components/job-box';
 import { settled, useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogList } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/field';
+import { Notice } from '@/components/ui/notice';
+import { TextLink } from '@/components/ui/text-link';
 import { api } from '@/lib/api';
-import { Link } from '@/lib/router';
 import { takeoverHref } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { HtaccessReview, reviewedSums, ruleCounts } from '@/pages/site-htaccess';
 import { cn } from '@/lib/utils';
+import { Spinner } from '@/components/ui/spinner';
 
 /** The badge tone of each web server: both nginx modes stand out from plain Apache. */
 export const SERVER_TONE: Record<SiteServer, 'neutral' | 'primary'> = { apache: 'neutral', 'nginx-apache': 'primary', nginx: 'primary' };
@@ -110,11 +112,8 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Web server</CardTitle>
-        <Server className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <div className="grid gap-3 p-5 text-sm">
+      <CardHeader title="Web server" meta={<Server className="size-4 text-muted-foreground" />} />
+      <CardBody className="gap-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="grid gap-1">
             <p className="flex flex-wrap items-center gap-2">
@@ -125,13 +124,13 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
               <p className="text-xs text-muted-foreground">
                 {/* The way out as a link where there is one: the words that name it in the reason go. */}
                 {nginxRefusal.replace(/ \(Take over\.\.\. on its Overview\)$/, '')}
-                {/set it up on Services, nginx/.test(nginxRefusal) && <> (<Link href="/services/nginx" className="text-primary hover:underline">open nginx</Link>)</>}
-                {!site.vhostManaged && !site.path ? <>: <Link href={takeoverHref(site)} className="font-medium text-primary hover:underline">Take over...</Link></> : '.'}
+                {/set it up on Services, nginx/.test(nginxRefusal) && <> (<TextLink href="/services/nginx">open nginx</TextLink>)</>}
+                {!site.vhostManaged && !site.path ? <>: <TextLink href={takeoverHref(site)}>Take over...</TextLink></> : '.'}
               </p>
             )}
           </div>
           <Button variant="outline" disabled={busy || !anyOpen} onClick={openDialog}>
-            {busy ? <LoaderCircle className="animate-spin" /> : <ArrowLeftRight />}
+            {busy ? <Spinner /> : <ArrowLeftRight />}
             Change
           </Button>
         </div>
@@ -141,7 +140,7 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
             {job.error && <p role="alert" className="text-danger">{job.error}</p>}
           </div>
         )}
-      </div>
+      </CardBody>
 
       <Dialog open={open} onClose={() => setOpen(false)} title={`Web server for ${site.domain}`} description="Pick the setup the site runs on in production, so it behaves the same here." size="lg" expandable={reviewing}>
         <div className="grid gap-4 text-sm">
@@ -185,16 +184,15 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
                 }
               />
               {staticRules.length > 0 && (
-                <div className="grid gap-1.5 rounded-md border border-warning/30 bg-warning/8 px-3 py-2">
-                  <p className="flex gap-2 text-warning">
-                    <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                    These .htaccess rules would not run for the files nginx serves:
-                  </p>
-                  <ul className="list-disc pl-9 text-xs text-muted-foreground">
-                    {staticRules.map((rule) => <li key={rule}><code>{rule}</code></li>)}
-                  </ul>
-                  <p className="pl-6 text-xs text-muted-foreground">Untick it to send every request through Apache, so they all run.</p>
-                </div>
+                <Notice tone="warning" size="inline" className="text-sm">
+                  <div className="grid gap-1.5">
+                    <p className="text-warning">These .htaccess rules would not run for the files nginx serves:</p>
+                    <ul className="list-disc pl-3 text-xs text-muted-foreground">
+                      {staticRules.map((rule) => <li key={rule}><code>{rule}</code></li>)}
+                    </ul>
+                    <p className="text-xs text-muted-foreground">Untick it to send every request through Apache, so they all run.</p>
+                  </div>
+                </Notice>
               )}
             </div>
           )}
@@ -203,18 +201,19 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
             <div className="grid gap-3 rounded-lg border px-3 py-2.5">
               <p className="font-medium">.htaccess rules on nginx</p>
               <p className="text-xs text-muted-foreground">nginx reads no .htaccess. The panel writes the translated rules into the site&apos;s nginx file; untick one to leave it out.</p>
-              {htaccess.loading && !report && <p className="flex items-center gap-2 text-xs text-muted-foreground"><LoaderCircle className="size-3.5 animate-spin" />Reading the .htaccess files</p>}
+              {htaccess.loading && !report && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Spinner className="size-3.5" />Reading the .htaccess files</p>}
               {htaccess.error && <p role="alert" className="text-xs text-danger">{htaccess.error}</p>}
               {report && <DialogList className="max-h-80"><HtaccessReview report={report} skip={skip} onSkip={setSkip} /></DialogList>}
               {report && left > 0 && (
-                <div className="grid gap-2 rounded-md border border-warning/30 bg-warning/8 px-3 py-2">
-                  <p className="flex gap-2 text-warning">
-                    <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                    {left} rule{left === 1 ? '' : 's'} would do nothing on nginx (not translated, or PHP settings for the PHP tab).
-                  </p>
-                  {!refusals['nginx-apache'] && <p className="pl-6 text-xs text-muted-foreground">To keep every rule working with nginx, pick nginx + Apache instead.</p>}
-                  <Checkbox id="server-accept-ignored" checked={accepted} onChange={setAccepted} label="Move it anyway; I know those rules do nothing on nginx" />
-                </div>
+                <Notice tone="warning" size="inline" className="text-sm">
+                  <div className="grid gap-2">
+                    <p className="text-warning">
+                      {left} rule{left === 1 ? '' : 's'} would do nothing on nginx (not translated, or PHP settings for the PHP tab).
+                    </p>
+                    {!refusals['nginx-apache'] && <p className="text-xs text-muted-foreground">To keep every rule working with nginx, pick nginx + Apache instead.</p>}
+                    <Checkbox id="server-accept-ignored" checked={accepted} onChange={setAccepted} label="Move it anyway; I know those rules do nothing on nginx" />
+                  </div>
+                </Notice>
               )}
             </div>
           )}
@@ -226,7 +225,7 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
             </p>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="soft" onClick={() => setOpen(false)}>Cancel</Button>
             <Button disabled={blocked} onClick={start}>
               {target === site.server ? 'Save' : `Move to ${SITE_SERVER_LABEL[target]}`}
             </Button>
