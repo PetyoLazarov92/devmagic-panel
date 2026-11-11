@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { Fragment, type KeyboardEvent, type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react';
+import { CountBadge } from '@/components/ui/badge';
 import { Menu } from '@/components/ui/menu';
 import { fittingTabs } from '@/lib/tabs-fit';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,8 @@ interface Props<T extends string> {
   items: TabItem<T>[];
   value: T;
   onChange: (value: T) => void;
+  /** sm: the second level, the views inside a tab (a database's Tables, SQL). */
+  size?: 'default' | 'sm';
   className?: string;
 }
 
@@ -28,7 +31,8 @@ const labelText = (item: TabItem<string>): string => (typeof item.label === 'str
  * that do not fit the row go under More, a menu at its end, instead of a
  * row that scrolls sideways.
  */
-export function Tabs<T extends string>({ items, value, onChange, className }: Props<T>) {
+export function Tabs<T extends string>({ items, value, onChange, size = 'default', className }: Props<T>) {
+  const pad = size === 'sm' ? 'px-2.5 py-1.5 text-dense' : 'px-3 py-2 text-sm';
   const id = useId();
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const row = useRef<HTMLDivElement>(null);
@@ -82,7 +86,8 @@ export function Tabs<T extends string>({ items, value, onChange, className }: Pr
           onClick={() => onChange(item.value)}
           onKeyDown={(e) => onKey(e, at)}
           className={cn(
-            '-mb-px inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors',
+            '-mb-px inline-flex shrink-0 items-center gap-2 border-b-2 whitespace-nowrap transition-colors',
+            pad,
             isSelected ? 'border-primary font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
           )}
         >
@@ -111,7 +116,7 @@ export function Tabs<T extends string>({ items, value, onChange, className }: Pr
                   <ChevronDown className="size-3.5" />
                 </>
               }
-              triggerClassName="-mb-px rounded-none border-b-2 border-transparent px-3 py-2 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
+              triggerClassName={cn('-mb-px rounded-none border-b-2 border-transparent whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground', pad)}
             />
           </div>
         )}
@@ -120,7 +125,7 @@ export function Tabs<T extends string>({ items, value, onChange, className }: Pr
       <div aria-hidden className="pointer-events-none invisible absolute inset-x-0 top-0 h-0 overflow-hidden">
         <div ref={measure} className="flex w-max gap-1 whitespace-nowrap">
           {items.map((item) => (
-            <span key={item.value} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium">
+            <span key={item.value} className={cn('inline-flex items-center gap-2 font-medium', pad)}>
               {item.startsGroup && <span className="mr-1 w-px" />}
               {item.label}
               {item.count !== undefined && <Count item={item} />}
@@ -133,14 +138,5 @@ export function Tabs<T extends string>({ items, value, onChange, className }: Pr
 }
 
 function Count({ item }: { item: TabItem<string> }) {
-  return (
-    <span
-      className={cn(
-        'rounded-full px-1.5 text-[11px] font-medium tabular-nums',
-        item.tone === 'danger' ? 'bg-danger/12 text-danger' : item.tone === 'warning' ? 'bg-warning/15 text-warning' : 'bg-muted text-muted-foreground',
-      )}
-    >
-      {item.count}
-    </span>
-  );
+  return <CountBadge count={item.count ?? 0} tone={item.tone ?? 'neutral'} />;
 }

@@ -1,4 +1,4 @@
-import { CircleAlert, Info, RefreshCw, TriangleAlert } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { timeAgo } from '@/lib/format';
@@ -69,36 +69,5 @@ export function ViewBar({ children, actions, onCheck, loading = false, checkedAt
   );
 }
 
-const TONES = {
-  danger: { box: 'border-danger/30 bg-danger/8 text-danger', icon: CircleAlert },
-  warning: { box: 'border-warning/30 bg-warning/8 text-foreground', icon: TriangleAlert },
-  info: { box: 'bg-muted/50 text-muted-foreground', icon: Info },
-} as const;
-
-/**
- * Something the whole page or view should know, right under its header or bar:
- * an error (danger), a problem with a way out (warning), or a fact (info).
- * A field's own error stays next to the field.
- */
-export function Notice({ tone = 'danger', children, action, className }: { tone?: keyof typeof TONES; children: ReactNode; action?: ReactNode; className?: string }) {
-  const { box, icon: Icon } = TONES[tone];
-  return (
-    <div role={tone === 'info' ? 'status' : 'alert'} className={cn('flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border px-4 py-3 text-sm', box, className)}>
-      <Icon className={cn('mt-0.5 size-4 shrink-0', tone === 'warning' && 'text-warning')} aria-hidden />
-      <div className="min-w-0 flex-[1_1_16rem] [overflow-wrap:anywhere]">{children}</div>
-      {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
-    </div>
-  );
-}
-
-/** Nothing here yet: what would be here, and the way to get it. */
-export function EmptyState({ icon: Icon, title, children, action, className }: { icon: typeof Info; title: string; children?: ReactNode; action?: ReactNode; className?: string }) {
-  return (
-    <div className={cn('grid justify-items-center gap-2 rounded-xl border border-dashed bg-card px-6 py-12 text-center', className)}>
-      <Icon className="size-8 text-muted-foreground" aria-hidden />
-      <p className="font-medium">{title}</p>
-      {children && <p className="max-w-md text-sm text-muted-foreground">{children}</p>}
-      {action && <div className="mt-2">{action}</div>}
-    </div>
-  );
-}
+/** Notice and EmptyState live with the other parts in components/ui; kept here for the pages that import them from this file. */
+export { EmptyState, Notice } from '@/components/ui/notice';

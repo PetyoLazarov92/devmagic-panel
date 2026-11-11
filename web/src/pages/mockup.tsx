@@ -1,6 +1,8 @@
-import { Ban, Check, FlaskConical, Link2 } from 'lucide-react';
+import { Ban, Check, FlaskConical, Link2, Shapes } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { ButtonLink } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { navigate } from '@/lib/router';
 import { Notice, PageHeader } from '@/components/page';
 import { DEMO_HOME, isDemo } from '@/lib/api';
 
@@ -15,6 +17,7 @@ export function MockupPage() {
             ? "devmagic-panel's own screens on made-up sample data, to click through every page before you install it. It looks and clicks like the panel, but nothing behind it is real."
             : "The panel's own screens on made-up sample data, for trying a flow, designing a change or taking screenshots. It looks and clicks like the panel, but nothing behind it is real."
         }
+        actions={!isDemo && <ButtonLink href="/mockup/parts" variant="outline" onClick={(e) => { e.preventDefault(); navigate('/mockup/parts'); }}><Shapes />The parts</ButtonLink>}
       />
       <Notice tone="info" className="mt-6">
         {isDemo
