@@ -210,6 +210,9 @@ The runner never touches another database, accounts, rights, routines or files.
     each time and never saved. Its last step names the plugins and themes
     the new database uses that the site's files lack. Nothing is fetched on
     its own: the Plugins tab's missing row installs or copies them.
+    **Change** saves another server; **Forget** removes the saved one, so
+    this, the missing row and Uploads from production ask again (Undo in
+    the toast saves it back).
   - **From a dump**: a `.sql`, `.sql.gz` or `.zip` from any source the new
     site wizard has: an upload, the Downloads folder, a cloud drive or Drive
     link, a public URL, a server over SSH (with tables to leave the rows of)

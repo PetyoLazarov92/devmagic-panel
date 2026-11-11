@@ -130,7 +130,7 @@ plugins, without a checksum check (WordPress.org has none for themes).
 
 A premium or custom plugin or theme, which WordPress.org does not have, can
 be copied from the site's own server. The row shows that server (its SSH host
-and WordPress folder) with **Change**, and asks for both when none is saved
+and WordPress folder) with **Change** and **Forget**, and asks for both when none is saved
 yet. It is the same server Refresh from production on the Database tab uses,
 saved once for the site, with no password. **See what the server has** reads
 its lists of plugins and themes, and **Copy from the server** copies the

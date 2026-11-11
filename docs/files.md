@@ -203,7 +203,7 @@ Nothing about uploads is on the Database tab, and a refresh from production
 never copies them.
 
 - It uses the server saved for Refresh from production (SSH host and
-  WordPress folder), with **Change**, and asks for both when none is saved. A
+  WordPress folder), with **Change** and **Forget**, and asks for both when none is saved. A
   server that asks for a password gets the one you type for that run; it is
   never kept.
 - **Here** says what this computer has: the files and size of uploads, the

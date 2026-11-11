@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
+import { forgetProduction } from '@/lib/production';
 import { bytes, dateTime, timeAgo } from '@/lib/format';
 import { siteTarget } from '@/lib/site-ref';
 import { ServerPassword } from '@/pages/new-site-database';
@@ -189,7 +190,12 @@ export function UploadsFromProduction({ site }: { site: Site }) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Server className="size-4 text-muted-foreground" aria-hidden />The site's server</CardTitle>
-            {!editing && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Change</Button>}
+            {!editing && (
+              <span className="flex gap-1">
+                <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Change</Button>
+                <Button size="sm" variant="ghost" title={`Forget ${production.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, (now) => { setProduction(now); setCompare(null); setSecret(''); })}>Forget</Button>
+              </span>
+            )}
           </CardHeader>
           <div className="grid gap-3 px-5 py-4 text-sm">
             {editing ? (

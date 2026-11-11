@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.39.0 (2026-11-11)
+* **Sites:** a site's saved production server (its SSH host and WordPress folder) can be forgotten. **Forget** sits next to **Change** on the Database tab's From production, the Plugins tab's missing row and Uploads from production. All three then ask for a server again, and Undo in the toast saves it back
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.38.1 (2026-11-11)
 * **New site:** a build script remembered from an earlier install of the repo, or named in its docs, that runs a gulp task its gulpfile does not define is let go: the build stays off until you pick another script, and that script is greyed out in the list with the task it lacks. v1.38.0 still took it from the remembered answers
 * **New site:** such a build stops before `npm install` with why: the repo's build script cannot work as the repo has it, so skip the step and run the script that builds it, or fix the script in the repo. A build of a repo's own root names the repo's folder instead of "/"

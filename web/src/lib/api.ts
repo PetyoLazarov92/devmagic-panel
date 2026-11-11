@@ -249,6 +249,8 @@ export interface Api {
   serverFiles: (host: string, path: string, password?: string, wpCli?: string) => Promise<ServerFiles>;
   /** What a site keeps for Refresh from production; null until it is set up. */
   productionSettings: (domain: string, path?: string) => Promise<ProductionSettings | null>;
+  /** Forgets the server saved for the site; gives back what it was, for Undo. */
+  forgetProductionSettings: (domain: string, path?: string) => Promise<{ forgotten: ProductionSettings | null }>;
   saveProductionSettings: (domain: string, path: string | undefined, settings: ProductionSettings) => Promise<ProductionSettings>;
   takeoverPreview: (domain: string) => Promise<TakeoverPreview>;
   /** The scan for missing plugins and themes: the last result, and one running on the server; starts one when there is none or it is old. */
@@ -475,6 +477,7 @@ const realApi: Api = {
   serverFiles: (host, path, password, wpCli) => request('POST', '/api/dumps/server-files', { host, path, ...(password ? { password } : {}), ...(wpCli ? { wpCli } : {}) }),
   productionSettings: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`),
   saveProductionSettings: (domain, path, settings) => request('PUT', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`, settings),
+  forgetProductionSettings: (domain, path) => request('DELETE', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`),
   takeoverPreview: (domain) => request('GET', `/api/sites/${encodeURIComponent(domain)}/takeover`),
   missing: (domain, path, peek) => request('GET', `/api/sites/${encodeURIComponent(domain)}/missing${atPath(path, '?')}${peek ? `${path ? '&' : '?'}peek=1` : ''}`),
   checkMissing: (domain, path) => request('POST', `/api/sites/${encodeURIComponent(domain)}/missing/check`, path ? { path } : {}),

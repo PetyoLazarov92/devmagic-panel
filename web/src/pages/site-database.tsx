@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { SecretInput } from '@/components/ui/secret-input';
 import { Segmented } from '@/components/ui/segmented';
 import { api, cleanCopyUrl, isMockup, snapshotUrl } from '@/lib/api';
+import { forgetProduction } from '@/lib/production';
 import { bytes, timeAgo } from '@/lib/format';
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
@@ -947,6 +948,7 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
               Refresh {db} now
             </Button>
             <Button variant="outline" disabled={busy} onClick={() => setEditing(true)}>Change</Button>
+            <Button variant="ghost" disabled={busy} title={`Forget ${settings.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, () => saved.reload())}>Forget</Button>
           </div>
         </>
       )}

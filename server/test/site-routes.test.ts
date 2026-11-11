@@ -102,6 +102,14 @@ describe('site routes', () => {
     expect((await get('/api/sites/local.shop.com/production')).json()).toBeNull();
     expect((await put('/api/sites/local.shop.com/production', { host: 'shop-prod', folder: '/var/www/shop', excludeRows: ['wp_x; DROP'] })).statusCode).toBe(400);
     expect((await put('/api/sites/local.other.com/production', { host: 'shop-prod', folder: '/var/www/shop' })).statusCode).toBe(404);
+    // Forget gives back what was saved, for Undo, and the site asks again; the other site's settings stay.
+    const forget = (url: string) => app.inject({ method: 'DELETE', url, headers: { host: HOST, origin: ORIGIN, cookie } });
+    await put('/api/sites/local.shop.com/production', { host: 'wrong-prod', folder: '/var/www/other', excludeRows: [] });
+    expect((await forget('/api/sites/local.shop.com/production')).json()).toEqual({ forgotten: { host: 'wrong-prod', folder: '/var/www/other', excludeRows: [], clean: false } });
+    expect((await get('/api/sites/local.shop.com/production')).json()).toBeNull();
+    expect((await get('/api/sites/local.shop.com/production?path=%2Flearn')).json()).toMatchObject({ host: 'shop-prod' });
+    expect((await forget('/api/sites/local.shop.com/production')).json()).toEqual({ forgotten: null });
+    expect((await forget('/api/sites/local.other.com/production')).statusCode).toBe(404);
   });
 
   it('need a session', async () => {

@@ -2207,6 +2207,12 @@ export const mockApi: Api = {
     await wait(120);
     return mockProduction[domain] ?? null;
   },
+  forgetProductionSettings: async (domain) => {
+    await wait(150);
+    const forgotten = mockProduction[domain] ?? null;
+    delete mockProduction[domain];
+    return { forgotten };
+  },
   saveProductionSettings: async (domain, _path, settings: ProductionSettings) => {
     await wait(150);
     mockProduction[domain] = settings;

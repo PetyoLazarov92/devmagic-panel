@@ -40,7 +40,7 @@ import { parseWpConfig } from './wpconfig.js';
 import { diffWithDisk, findByName, findInFiles, folderSize, gitDiff, gitStatus } from './file-find.js';
 import { FileRefused, type FilesContext, listFolder, rawFile, readFile, siteFolder } from './files.js';
 import type { WpCronReport } from '@devmagic-panel/shared';
-import { readProduction, saveProduction } from './refresh.js';
+import { forgetProduction, readProduction, saveProduction } from './refresh.js';
 import { MoreDumpsRefused, refusalWithPassword } from './more-dumps.js';
 import { withSshPassword } from './ssh-password.js';
 import { compareUploads, uploadsCopied, uploadsHere } from './uploads-compare.js';
@@ -466,6 +466,11 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     const body = productionSettings.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: body.error.issues[0]?.message ?? 'An ssh host, a folder and table names' });
     return saveProduction(deps.store, request.params.domain, request.query.path, body.data);
+  });
+  // Forget: the site has no saved server again, so every form asks. What was saved comes back, for Undo.
+  api.delete<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/production', async (request, reply) => {
+    if (!snapshotKey(request.params.domain, request.query.path)) return reply.code(404).send({ error: `no site called ${request.params.domain}${request.query.path ?? ''}` });
+    return { forgotten: forgetProduction(deps.store, request.params.domain, request.query.path) };
   });
   // Uploads from production: what the site has in wp-content/uploads here, and the last copy that finished.
   api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/uploads', async (request, reply): Promise<UploadsHere | undefined> => {

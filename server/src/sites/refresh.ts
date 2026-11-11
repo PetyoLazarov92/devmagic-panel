@@ -42,6 +42,13 @@ export function saveProduction(store: RunStore, domain: string, path: string | u
   return settings;
 }
 
+/** Forgets the server saved for a site, giving back what it was (for Undo); null when none was saved. */
+export function forgetProduction(store: RunStore, domain: string, path?: string): ProductionSettings | null {
+  const was = readProduction(store, domain, path);
+  store.deleteMeta(key(domain, path));
+  return was;
+}
+
 /** Every production host of the dump to the site's name for it: the local name it would get when the site serves that, else its main domain. */
 export function replaceFor(hosts: readonly string[], site: Pick<SiteRef, 'domain' | 'names'>): Array<{ from: string; to: string }> {
   return hosts.filter((h) => !isLocalName(h)).map((from) => {

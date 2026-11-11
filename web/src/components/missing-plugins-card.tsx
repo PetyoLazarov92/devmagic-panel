@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
+import { forgetProduction } from '@/lib/production';
 import { dateTime, timeAgo } from '@/lib/format';
 import { askWporg, onServer, pluginItem, pluginSlug } from '@/lib/missing-plugins';
 import { siteTarget } from '@/lib/site-ref';
@@ -297,6 +298,7 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
                   <>
                     <code className="font-mono text-[12px] text-muted-foreground">{production.host}:{production.folder}</code>
                     <Button size="sm" variant="ghost" className="ml-auto" onClick={edit}>Change</Button>
+                    <Button size="sm" variant="ghost" title={`Forget ${production.host}: the site has no saved server again`} onClick={() => void forgetProduction(site, (now) => { setProduction(now); setServer(null); setSecret(''); })}>Forget</Button>
                   </>
                 )}
               </div>
