@@ -27,7 +27,8 @@
     "mockup": "npm run build -w shared && npm run mockup -w web",
     "build:demo": "npm run build -w shared && npm run build:demo -w web && node scripts/demo/finish.mjs",
     "demo:serve": "node scripts/demo/serve.mjs",
-    "screenshots": "npm run build -w shared && node scripts/screenshots.mjs"
+    "screenshots": "npm run build -w shared && node scripts/screenshots.mjs",
+    "ui:inventory": "npm run build -w shared && node scripts/ui-inventory.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-demo/
 dist-shots/
+dist-inventory/
 coverage/
 *.tsbuildinfo
 .env
