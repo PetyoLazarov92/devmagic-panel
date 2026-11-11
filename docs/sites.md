@@ -3,7 +3,7 @@
 [Docs](README.md) › Sites
 
 The **Sites** page lists every local site on this machine, the ones you made by
-hand included, and each site has a page of its own with tabs.
+hand included, and each site has a page of its own with its sections.
 
 ## The Sites page
 
@@ -23,18 +23,26 @@ hand included, and each site has a page of its own with tabs.
 
 ## A site's page
 
-Each tab has its own address (`?tab=database`, `?tab=logs&log=apache`), so a
-reload or a link opens the same one. The tabs come in a fixed order, in three
-groups:
+Breadcrumbs over the name show where you are (Sites, the site, its section),
+and the header keeps **wp-admin** and **Open site** in view, with VS Code,
+Network Admin, the folder path and Remove site in its menu.
+
+A site's sections run down the side of its page on a wide screen, and become
+tabs on a narrower one. Each has its own address (`?tab=database`,
+`?tab=logs&log=apache`), so a reload or a link opens the same one. They come in
+a fixed order, in three groups:
 
 1. **Overview**, **Logs** and **Files**
 2. WordPress, its data and its speed: **Network** (on a multisite),
    **Plugins and themes**, **Database**, **Performance**, **Cron**, **Config**
 3. The server: **Server and PHP** (just **Server** without WordPress), **Domains and SSL**
 
-A tab a site lacks leaves the others where they are. Tabs that do not fit
-the width go under **More** at the end of the row, with their badges added
-up there, and the open tab always shows. A tab's badge counts only
+A section a site lacks leaves the others where they are. In the side menu
+every section and its badge are always in view; as tabs, those that do not
+fit the width go under **More**, with their badges added up there. A
+section's own views (the Database's Overview, Tables, SQL and Backups and
+tools; Plugins and Themes; Browse and Uploads from production) are small tabs
+under its title. A badge counts only
 what needs a look: errors in `debug.log`, late WP-Cron events, local constants
 to set, names the certificate or hosts file leaves out.
 

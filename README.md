@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.39.0-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.40.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -276,7 +276,7 @@ When the installer put Node.js in place for the panel, use
 | [Services](docs/services.md) | PHP, MySQL, Apache, nginx, Mailpit and cron, each on a tab of its own |
 | [Mail](docs/pages.md#mail) | The mail your local sites sent, caught by Mailpit |
 | [Settings](docs/pages.md#settings) | The panel password, the AI assistant, Claude Code's defaults and the constants new sites get |
-| [Sites](docs/sites.md) | Your local sites, and a page per site with tabs for logs, files, plugins, the database, cron, PHP and domains |
+| [Sites](docs/sites.md) | Your local sites, and a page per site with sections for logs, files, plugins, the database, cron, PHP and domains |
 | [New site](docs/new-site.md) | A wizard for a site from a repo and a dump, a fresh WordPress, an empty site or your organization |
 | [Activity](docs/pages.md#activity) | The jobs since the panel started, and every action it ran with its result, kept 90 days |
 | [Removed sites](docs/pages.md#removed-sites) | A filter of Sites: copies of removed or replaced sites from the last 14 days, to restore or delete |

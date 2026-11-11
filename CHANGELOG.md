@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.40.0 (2026-11-12)
+* **Look:** every screen is made of one set of parts: cards with the same header, body and footer, notices (the only tinted boxes, one tone each), status badges in the same colour for the same state, fact lists, rows, tiles, links that say when they open a new tab, one spinner and a fixed set of text sizes. Worded third buttons have a light fill, so they read as buttons
+* **Sites:** a site's sections run down the side of its page on a wide screen, every badge in view and nothing under More; tabs on a narrower one. Breadcrumbs replace the back link on a site, a job, a run and New site, and a section's own views (Database, Plugins and themes, Files) are small tabs. The header keeps wp-admin and Open site, with VS Code in its menu
+* **Services:** each service's card shows how it stands as a badge. The Plugins tab's Reload is Check again, as everywhere else
+* **Mockup:** a Parts page (`/mockup/parts`) shows every part with its rule, and `npm run ui:inventory` lists every control the screens show, so a change that loses one is caught
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.39.0 (2026-11-11)
 * **Sites:** a site's saved production server (its SSH host and WordPress folder) can be forgotten. **Forget** sits next to **Change** on the Database tab's From production, the Plugins tab's missing row and Uploads from production. All three then ask for a server again, and Undo in the toast saves it back
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

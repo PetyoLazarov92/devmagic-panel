@@ -21,6 +21,7 @@ npm run mockup        # the UI alone on sample data from web/src/mock/, no serve
 npm run build:demo    # the mockup as the public demo in dist-demo/, with its .htaccess
 npm run demo:serve    # serve dist-demo/ with the same headers, on 127.0.0.1:4180
 npm run screenshots   # assets/screenshots/ from the mockup, light and dark, through the system's Chrome
+npm run ui:inventory  # every control the mockup's screens show into web/test/ui-inventory.json; -- --check lists what a change lost
 ./install.sh --dry-run  # print every system change the installer would make
 ./install.sh --uninstall --dry-run  # print what an uninstall removes, asks about and keeps
 ```
