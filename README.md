@@ -98,6 +98,13 @@ listens on localhost.
   <img src="assets/screenshots/site-light.png" alt="A site's Server and PHP tab: its web server with a move to nginx, its PHP version and settings">
 </picture>
 
+**Files**: a site's folder with search, git status and diffs, an editor, uploads and a file trash kept 14 days
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/files-dark.png">
+  <img src="assets/screenshots/files-light.png" alt="The Files tab: a site's folder with its places as tiles, filters, permissions and a file trash with Put back">
+</picture>
+
 **Database**: what needs a look in the WordPress view, with clean-ups and table health
 
 <picture>
@@ -110,6 +117,13 @@ listens on localhost.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/sql-dark.png">
   <img src="assets/screenshots/sql-light.png" alt="The SQL runner: a query with suggestions for tables and columns, and its result rows">
+</picture>
+
+**Import a database**: a copy from production over SSH or a dump, as it is or cleaned, with the old tables kept 7 days
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/import-dark.png">
+  <img src="assets/screenshots/import-light.png" alt="Backups and tools: snapshots, Import a database from production, search and replace, and clean copies">
 </picture>
 
 **Performance**: Xdebug profiles with time per plugin, and slow queries

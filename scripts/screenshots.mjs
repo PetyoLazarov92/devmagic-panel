@@ -34,6 +34,8 @@ const SHOTS = [
       await page.waitForTimeout(600);
     },
   ],
+  ['files', `${SITE}?tab=files`],
+  ['import', `${SITE}?tab=database&view=tools`],
   ['performance', `${SITE}?tab=performance`],
   [
     'palette',
