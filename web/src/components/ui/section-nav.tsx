@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { CountBadge } from '@/components/ui/badge';
 import { type TabItem, Tabs } from '@/components/ui/tabs';
+import { Link } from '@/lib/router';
 import { cn } from '@/lib/utils';
 
 /**
@@ -8,11 +9,13 @@ import { cn } from '@/lib/utils';
  * screen, in its groups with a line between them and each badge in view, so no section hides
  * under More; the usual tabs on a narrower one. Next to it, the section's content.
  */
-export function SectionLayout<T extends string>({ label, items, value, onChange, children, className }: {
+export function SectionLayout<T extends string>({ label, items, value, onChange, views, children, className }: {
   label: string;
   items: TabItem<T>[];
   value: T;
   onChange: (value: T) => void;
+  /** The open section's own views, listed under it in the menu; the section draws them as small tabs below lg. */
+  views?: { items: Array<{ value: string; label: string; href: string }>; value: string } | null;
   children: ReactNode;
   className?: string;
 }) {
@@ -41,13 +44,35 @@ export function SectionLayout<T extends string>({ label, items, value, onChange,
                     <span className="min-w-0 truncate">{item.label}</span>
                     {item.count !== undefined && <CountBadge count={item.count} tone={item.tone ?? 'neutral'} />}
                   </button>
+                  {on && views && views.items.length > 1 && (
+                    <ul aria-label={`${typeof item.label === 'string' ? item.label : item.value} views`} className="mt-0.5 mb-1 ml-3.5 grid gap-0.5 border-l pl-1.5">
+                      {views.items.map((v) => {
+                        const here = v.value === views.value;
+                        return (
+                          <li key={v.value}>
+                            <Link
+                              href={v.href}
+                              aria-current={here ? 'page' : undefined}
+                              className={cn(
+                                'block truncate rounded-md px-2.5 py-1 text-dense transition-colors',
+                                here ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                              )}
+                            >
+                              {v.label}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </li>
               </Fragment>
             );
           })}
         </ul>
       </nav>
-      <div className="min-w-0">{children}</div>
+      {/* A container: the cards inside lay out by the room this column has, not by the window. */}
+      <div className="@container min-w-0">{children}</div>
     </div>
   );
 }

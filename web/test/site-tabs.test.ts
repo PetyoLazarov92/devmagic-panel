@@ -1,6 +1,6 @@
 import type { Site, WpDebugConstant } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { debugLabel, siteTabItems, uncoveredNames } from '../src/lib/site-tabs.js';
+import { debugLabel, sectionViews, siteTabItems, uncoveredNames } from '../src/lib/site-tabs.js';
 import { fittingTabs } from '../src/lib/tabs-fit.js';
 
 const OFF: Record<WpDebugConstant, boolean | null> = { WP_DEBUG: false, WP_DEBUG_LOG: null, WP_DEBUG_DISPLAY: null, SCRIPT_DEBUG: null, SAVEQUERIES: null };
@@ -96,5 +96,26 @@ describe('fittingTabs', () => {
     // The open fourth tab takes the second one's place.
     expect(fittingTabs([100, 100, 100, 100], 300, 3)).toEqual([0, 3]);
     expect(fittingTabs([100, 100, 100, 100], 120, 3)).toEqual([3]);
+  });
+});
+
+describe('sectionViews', () => {
+  const none = { view: null, table: null };
+  it('lists the database views with their addresses, Overview first where WordPress is', () => {
+    const v = sectionViews(site({ db: { name: 'spellbook' } } as Partial<Site>), 'database', none);
+    expect(v?.items.map((i) => i.value)).toEqual(['overview', 'tables', 'sql', 'tools']);
+    expect(v?.value).toBe('overview');
+    expect(v?.items.find((i) => i.value === 'sql')?.href).toContain('tab=database&view=sql');
+  });
+  it('picks the view the address asks for, and a table means Tables', () => {
+    const s = site({ db: { name: 'spellbook' } } as Partial<Site>);
+    expect(sectionViews(s, 'database', { view: 'tools', table: null })?.value).toBe('tools');
+    expect(sectionViews(s, 'database', { view: null, table: 'wp_options' })?.value).toBe('tables');
+    expect(sectionViews(s, 'plugins', { view: 'themes', table: null })?.value).toBe('themes');
+    expect(sectionViews(s, 'files', { view: 'uploads', table: null })?.value).toBe('uploads');
+  });
+  it('has none for a section without views', () => {
+    expect(sectionViews(site(), 'logs', none)).toBeNull();
+    expect(sectionViews(site(), 'overview', none)).toBeNull();
   });
 });

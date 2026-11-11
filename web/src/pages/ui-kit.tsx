@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardFooter, CardHeader, CardSection } from '@/components/ui/card';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { FilterBar, FilterChips } from '@/components/ui/filter-chips';
+import { Fold } from '@/components/ui/fold';
 import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { KeyValue } from '@/components/ui/key-value';
@@ -173,6 +174,20 @@ export function UiKitPage() {
             </CardBody>
           </Card>
         </div>
+      </Section>
+
+      <Section title="Long cards" rule="A card should fit the window. A long list shows its first rows and Show more (21 light rows, 10 heavy ones like a query). Several things of one kind (a site's repos) show one at a time behind small tabs. A long form folds its groups, the first one and any with your values open. Never a scroll box inside a card, but for code and logs.">
+        <Card>
+          <CardHeader title="PHP settings" meta={<ScopeLabel>PHP 8.3</ScopeLabel>} />
+          <CardBody className="gap-3">
+            <Fold title="Limits" note="2 set here" defaultOpen>
+              <p className="text-muted-foreground">memory_limit, upload_max_filesize and the rest, open because two are set here.</p>
+            </Fold>
+            <Fold title="Errors" note="5 settings">
+              <p className="text-muted-foreground">Folded: nothing of yours in it.</p>
+            </Fold>
+          </CardBody>
+        </Card>
       </Section>
 
       <Section title="Tiles" rule="A row of numbers at the top of an overview: label, value, a line in the tone of what it says. A tile opens the tab or card with the rest.">

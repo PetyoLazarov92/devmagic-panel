@@ -86,7 +86,7 @@ export function PluginsTab({ site }: { site: Site }) {
   const go = (next: View) => navigate(`${siteHref(site)}?tab=plugins${next === 'themes' ? '&view=themes' : ''}`, { scroll: false });
   return (
     <div className="grid gap-3">
-      <Tabs size="sm" label="Plugins and themes" value={view} onChange={go} items={[{ value: 'plugins', label: 'Plugins' }, { value: 'themes', label: 'Themes' }]} />
+      <Tabs className="lg:hidden" size="sm" label="Plugins and themes" value={view} onChange={go} items={[{ value: 'plugins', label: 'Plugins' }, { value: 'themes', label: 'Themes' }]} />
       {view === 'themes' ? <ThemesView site={site} /> : <PluginsView site={site} />}
     </div>
   );
@@ -100,6 +100,8 @@ function ThemesView({ site }: { site: Site }) {
   const { data: fresh, error, loading, reload } = useAsync(() => api.themes(site.domain, site.path).then((list) => (lastThemes.set(key, list), list)), [site.domain, site.path]);
   const data = fresh ?? lastThemes.get(key);
   const vulnerable = useVulnerabilities(site);
+  // As on Plugins: Details adds what each theme says it is and who made it; it starts compact every time.
+  const [details, setDetails] = useState(false);
   if (error && !data) {
     return (
       <Notice action={<Button size="sm" variant="outline" onClick={reload}><RefreshCw />Try again</Button>}>{error}</Notice>
@@ -128,7 +130,10 @@ function ThemesView({ site }: { site: Site }) {
           {active ? <>, <span className="font-medium text-foreground">{active.title}</span> is on</> : ', none of them is on'}
           {data.network && ' on the main site; each site of a network has its own'}
         </p>
-        <CheckAgain size="sm" onClick={reload} loading={loading} />
+        <div className="flex items-center gap-2">
+          <Segmented label="How much each theme shows" className="text-xs" value={details ? 'details' : 'compact'} onChange={(v) => setDetails(v === 'details')} options={[['compact', 'Compact'], ['details', 'Details']]} />
+          <CheckAgain size="sm" onClick={reload} loading={loading} />
+        </div>
       </div>
       <MissingPluginsCard site={site} show="themes" onChanged={reload} />
       {data.themes.length === 0 ? (
@@ -152,7 +157,7 @@ function ThemesView({ site }: { site: Site }) {
                   {t.inRepo && ' · found through Local mode'}
                   {' · '}<TextLink href={themeFolderHref(site, t)} aria-label={`Open the folder of ${t.title}`}>Open folder</TextLink>
                 </p>
-                {(t.description || t.author || t.themeUri || t.wporg) && (
+                {details && (t.description || t.author || t.themeUri || t.wporg) && (
                   <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
                     {t.description}
                     {t.author && <span className="text-muted-foreground/80">{t.description ? ' ' : ''}By <OutLink href={t.authorUri}>{t.author}</OutLink>.</span>}

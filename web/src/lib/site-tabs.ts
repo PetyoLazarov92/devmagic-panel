@@ -1,6 +1,9 @@
 import type { Site, WpDebugConstant } from '@devmagic-panel/shared';
 import { WP_DEBUG_CONSTANTS, WP_DEBUG_DEFAULTS } from '@devmagic-panel/shared';
 import type { TabItem } from '../components/ui/tabs.js';
+import { databaseHref, databaseView } from './database-href.js';
+import { filesHref, uploadsHref } from './file-links.js';
+import { siteHref } from './site-ref.js';
 
 export type Tab = 'overview' | 'logs' | 'files' | 'network' | 'plugins' | 'database' | 'performance' | 'cron' | 'config' | 'php' | 'domains';
 
@@ -60,4 +63,49 @@ export function debugLabel(site: Site): string {
   if (d.WP_DEBUG_LOG && !d.WP_DEBUG_DISPLAY) return 'Log only';
   if (d.WP_DEBUG_LOG) return 'Log and page';
   return d.WP_DEBUG_DISPLAY ? 'On the page' : 'On, not shown';
+}
+
+/** One view inside a section, with its address. */
+export interface SectionView {
+  value: string;
+  label: string;
+  href: string;
+}
+
+/**
+ * The views inside the open section (the Database's Overview, Tables, SQL and Backups and tools;
+ * Plugins and Themes; Browse and Uploads from production) and the one the address asks for, or
+ * null for a section without views. The side menu lists them under the section; on a narrow
+ * screen the section shows them as small tabs itself.
+ */
+export function sectionViews(site: Site, tab: Tab, query: { view: string | null; table: string | null }): { items: SectionView[]; value: string } | null {
+  const wordpress = site.core.kind !== 'none';
+  if (tab === 'database' && site.db) {
+    const items: SectionView[] = [
+      ...(wordpress ? [{ value: 'overview', label: 'Overview', href: databaseHref(site, 'overview') }] : []),
+      { value: 'tables', label: 'Tables', href: `${siteHref(site)}?tab=database&view=tables` },
+      { value: 'sql', label: 'SQL', href: databaseHref(site, 'sql') },
+      { value: 'tools', label: 'Backups and tools', href: databaseHref(site, 'tools') },
+    ];
+    return { items, value: databaseView(query.view, query.table, wordpress) };
+  }
+  if (tab === 'plugins' && wordpress) {
+    return {
+      items: [
+        { value: 'plugins', label: 'Plugins', href: `${siteHref(site)}?tab=plugins` },
+        { value: 'themes', label: 'Themes', href: `${siteHref(site)}?tab=plugins&view=themes` },
+      ],
+      value: query.view === 'themes' ? 'themes' : 'plugins',
+    };
+  }
+  if (tab === 'files' && wordpress) {
+    return {
+      items: [
+        { value: 'browse', label: 'Browse', href: filesHref(site) },
+        { value: 'uploads', label: 'Uploads from production', href: uploadsHref(site) },
+      ],
+      value: query.view === 'uploads' ? 'uploads' : 'browse',
+    };
+  }
+  return null;
 }

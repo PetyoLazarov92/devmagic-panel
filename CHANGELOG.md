@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.41.0 (2026-11-12)
+* **Sites:** the open section's own views (the Database's Overview, Tables, SQL and Backups and tools; Plugins and Themes; Browse and Uploads from production) are listed under it in the side menu, which stays in view as you scroll, and the breadcrumbs name the view. On a narrower screen they stay small tabs
+* **Sites:** the cards of a site's sections lay out by the room next to the side menu, not by the window: one column until there is room for two, so no card is squeezed. The Files card keeps the folder on one line, and Quick actions fits its buttons
+* **Sites:** the Git card of a site with several repos shows one at a time, with small tabs to switch. Themes have Compact and Details, as Plugins do
+* **Services:** PHP settings fold their groups: Limits and every group with a value set here open, the rest folded with what is inside. Top queries show 10 at a time
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.40.0 (2026-11-12)
 * **Look:** every screen is made of one set of parts: cards with the same header, body and footer, notices (the only tinted boxes, one tone each), status badges in the same colour for the same state, fact lists, rows, tiles, links that say when they open a new tab, one spinner and a fixed set of text sizes. Worded third buttons have a light fill, so they read as buttons
 * **Sites:** a site's sections run down the side of its page on a wide screen, every badge in view and nothing under More; tabs on a narrower one. Breadcrumbs replace the back link on a site, a job, a run and New site, and a section's own views (Database, Plugins and themes, Files) are small tabs. The header keeps wp-admin and Open site, with VS Code in its menu

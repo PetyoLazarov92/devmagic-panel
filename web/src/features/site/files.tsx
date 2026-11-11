@@ -24,6 +24,7 @@ export function FilesTab({ site }: { site: Site }) {
       {wordpress && (
         <Tabs
           size="sm"
+          className="lg:hidden"
           label="What the Files tab shows"
           value={uploads ? 'uploads' : 'browse'}
           onChange={(v) => navigate(v === 'uploads' ? uploadsHref(site) : filesHref(site, { dir }), { scroll: false })}

@@ -21,7 +21,7 @@ import { PerformanceTab } from '@/features/site/performance';
 import { FilesTab } from '@/features/site/files';
 import { PluginsTab } from '@/features/site/plugins';
 import { siteHref, siteName } from '@/lib/site-ref';
-import { siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
+import { sectionViews, siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
 import { Spinner } from '@/components/ui/spinner';
 import { tabHref } from '@/features/site/site-shared';
 import { Overview } from '@/features/site/overview';
@@ -46,6 +46,8 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
   const all = useAsync(() => (path ? Promise.resolve([]) : api.sites()), [domain, path]);
   const under = (all.data ?? []).filter((s) => s.domain === domain && s.path);
   const requested = useQueryParam('tab');
+  const viewParam = useQueryParam('view');
+  const tableParam = useQueryParam('table');
   const [removing, setRemoving] = useState(false);
   // The WordPress site's WP-Cron, for the Cron tab and its count; url picks a network site.
   const [cronUrl, setCronUrl] = useState<string | undefined>(undefined);
@@ -94,6 +96,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
   const configProblems = site.constants
     ? (locals.data ?? []).filter((c) => site.constants?.find((s) => s.name === c.name)?.value !== c.value).length + (site.salts && saltsSummary(site.salts).bad.length > 0 ? 1 : 0)
     : 0;
+  const views = sectionViews(site, tab, { view: viewParam, table: tableParam });
   const counts: TabCounts = { logs: problems, cron: cronProblems, config: configProblems, domains: site.path ? 0 : uncoveredNames(site).length };
 
   return (
@@ -102,7 +105,12 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         items={[
           { label: 'Sites', href: '/sites' },
           ...(site.path ? [{ label: site.domain, href: `/sites/${encodeURIComponent(site.domain)}` }] : []),
-          ...(tab === 'overview' ? [{ label: site.path ?? siteName(site) }] : [{ label: site.path ?? siteName(site), href: tabHref(site, 'overview') }, { label: tabLabel(site, tab) }]),
+          ...(tab === 'overview'
+            ? [{ label: site.path ?? siteName(site) }]
+            : [
+                { label: site.path ?? siteName(site), href: tabHref(site, 'overview') },
+                ...(views ? [{ label: tabLabel(site, tab), href: tabHref(site, tab) }, { label: views.items.find((v) => v.value === views.value)?.label ?? '' }] : [{ label: tabLabel(site, tab) }]),
+              ]),
         ]}
       />
 
@@ -176,7 +184,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         </Notice>
       )}
 
-      <SectionLayout className="mt-6" label={`${siteName(site)} sections`} value={tab} onChange={setTab} items={siteTabItems(site, counts)}>
+      <SectionLayout className="mt-6" label={`${siteName(site)} sections`} value={tab} onChange={setTab} items={siteTabItems(site, counts)} views={views}>
         {tab === 'overview' && <Overview site={site} onChanged={reload} onOpen={setTab} cron={wpCron} logErrors={logs.loading && !logs.data ? undefined : problems} />}
         {tab === 'logs' && <LogsTab site={site} onChanged={reload} />}
         {tab === 'files' && <FilesTab site={site} />}

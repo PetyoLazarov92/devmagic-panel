@@ -72,7 +72,7 @@ export function DatabaseTab({ site }: { site: Site }) {
   const views: Array<[DbView, string]> = [...(wordpress ? [['overview', 'Overview'] as [DbView, string]] : []), ['tables', 'Tables'], ['sql', 'SQL'], ['tools', 'Backups and tools']];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <Tabs size="sm" label="Database" value={view} onChange={(v) => go(v)} items={views.map(([value, label]) => ({ value, label }))} />
+      <Tabs className="lg:hidden" size="sm" label="Database" value={view} onChange={(v) => go(v)} items={views.map(([value, label]) => ({ value, label }))} />
       {view === 'tools' ? (
         <DatabaseTools site={site} />
       ) : view === 'sql' ? (
@@ -143,7 +143,7 @@ function DatabaseTools({ site }: { site: Site }) {
         loading={reading}
         note={<>Snapshots, imports and copies of <span className="font-mono">{site.db.name}</span>. Each job that changes it saves it first, so Undo or a snapshot puts it back.</>}
       />
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2">
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
           <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} footer={jobIn('snapshots')} />
           <ImportCard site={site} busy={busy} start={start} footer={jobIn('import')} />

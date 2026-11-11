@@ -225,7 +225,7 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
         </Notice>
       )}
       <NeedsALook items={wordpressFindings(r).map((f) => ({ ...f, key: `${f.card}:${f.text}` }))} />
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2">
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
           <div id="wp-autoload" className="grid scroll-mt-4"><AutoloadCard view={view} onTable={onTable} onAutoloadOff={(o) => void autoloadOff(o)} /></div>
           <div id="wp-transients" className="grid scroll-mt-4"><TransientsCard view={view} target={target} busy={busy} onTable={onTable} onDelete={(scope) => setAsking(transientsAsk(r, scope))} footer={footerFor('transients')} /></div>
@@ -278,7 +278,7 @@ function WordpressDbSkeleton() {
         <Reading>Reading what WordPress keeps in this database...</Reading>
         <Bar className="ml-auto h-8 w-28 rounded-md" />
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2">
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
           <CardSkeleton>
             <div className="grid gap-2.5 px-5 py-4">

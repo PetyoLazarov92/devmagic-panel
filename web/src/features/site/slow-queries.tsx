@@ -44,7 +44,7 @@ export function SlowQueries({ database, onExplain, inCard = false }: { database?
   const [resetting, setResetting] = useState(false);
   const [readAt, setReadAt] = useState<string | undefined>(undefined);
   const data = report.data;
-  const { shown, footer: more } = useShowMore(data?.queries ?? [], { reset: database });
+  const { shown, footer: more } = useShowMore(data?.queries ?? [], { reset: database, step: 10 });
   // The SQL view's editor loads while you read, so Explain opens on it, not on a plain box.
   useEffect(() => {
     if (onExplain) void loadSqlEditor().catch(() => undefined);

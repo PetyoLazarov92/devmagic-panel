@@ -41,8 +41,9 @@ A section a site lacks leaves the others where they are. In the side menu
 every section and its badge are always in view; as tabs, those that do not
 fit the width go under **More**, with their badges added up there. A
 section's own views (the Database's Overview, Tables, SQL and Backups and
-tools; Plugins and Themes; Browse and Uploads from production) are small tabs
-under its title. A badge counts only
+tools; Plugins and Themes; Browse and Uploads from production) are listed
+under it in the side menu, which stays in view as you scroll, and as small
+tabs on a narrower screen. A badge counts only
 what needs a look: errors in `debug.log`, late WP-Cron events, local constants
 to set, names the certificate or hosts file leaves out.
 
@@ -90,7 +91,9 @@ Undo on the job takes it back.
 ### Plugins
 
 The **Plugins and themes** tab has two views, kept in the address like the
-Database tab's: **Plugins** and **Themes**.
+Database tab's: **Plugins** and **Themes**. Both have **Compact** and
+**Details**: Details adds what each one says it does, who made it and its
+links.
 
 **Themes** lists the site's themes, read only: which one is on, the parent a
 child theme takes its templates from, the version and an update WordPress

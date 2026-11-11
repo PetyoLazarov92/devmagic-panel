@@ -155,7 +155,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             )}
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-12 sm:px-6 md:px-10">{children}</main>
+        <main className="@container mx-auto w-full max-w-7xl flex-1 px-4 pb-12 sm:px-6 md:px-10">{children}</main>
         <Toaster />
         {assistantOn && <AssistantDrawer />}
       </div>

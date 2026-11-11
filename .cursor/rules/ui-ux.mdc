@@ -69,7 +69,9 @@ lowers one lowers the baseline there too.
 - **Navigation**: `Breadcrumbs` above every page below the menu's top level
   (on a phone only the way back shows); `Tabs` for a page's views,
   `Tabs size="sm"` for a tab's own views (level 2); a detail page's sections
-  in `SectionLayout` (a menu down the side from `lg`, tabs below it).
+  in `SectionLayout` (a menu down the side from `lg`, tabs below it), with
+  the open section's own views listed under it (`sectionViews` in
+  `lib/site-tabs.ts`); below `lg` the section draws them as small tabs.
   `Segmented` only switches how the same thing shows (Compact, Details).
 - **Lists**: `FilterBar` over a list (search, then `FilterChips` with counts,
   then pickers and the view switch at its end).
@@ -150,6 +152,21 @@ lowers one lowers the baseline there too.
   password manager's ignore marker (`web/src/lib/secret-field.ts`), so the
   browser never offers to save it. Only the panel login and the panel
   password use `PasswordInput`; `web/test/secret-field.test.ts` keeps it so.
+
+## Long cards
+
+A card should fit the window (900px high is the check: `npm run ui:inventory`
+opens every page at 1440x900). Three ways, never a scroll box inside a card
+(code, logs and diffs excepted):
+
+- **A long list** shows its first rows and Show more: 21 light rows, 10 heavy
+  ones (a query with its SQL), see below.
+- **Several things of one kind** (a site's repos in the Git card) show one at
+  a time behind `Tabs size="sm"`.
+- **A long form** folds its groups with `Fold`: the first group and every
+  group with a value set here open, the rest folded with a note of what is
+  inside ("5 settings", "2 set here"). Folded fields stay in the page, so what
+  you typed is kept.
 
 ## Long lists in cards
 

@@ -1,3 +1,4 @@
+import { Tabs } from '@/components/ui/tabs';
 import type { ActionId, Site, SiteGit, SiteLocalMode, WpCronReport, WpDebugConstant } from '@devmagic-panel/shared';
 import { TakeoverCard } from '@/features/site/takeover-card';
 import { WordPressSummary } from '@/features/site/wordpress-summary';
@@ -215,6 +216,10 @@ export function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: S
   const salts = site.salts ? saltsSummary(site.salts) : null;
   const saltsName = salts && salts.bad.length > 0 ? salts.fixLabel : 'Make keys and salts new';
   const repos = siteRepos(site);
+  // A site with several repos shows one at a time in the Git card, so the card fits the window.
+  const repoKey = (r: (typeof repos)[number]) => `${r.mount ?? ''}:${r.repo ?? ''}`;
+  const [repoAt, setRepoAt] = useState<string | null>(null);
+  const openRepo = repos.find((r) => repoKey(r) === repoAt) ?? repos[0];
   // The repo the site was installed from, marked in its section.
   const installedFrom = site.install?.repo;
 
@@ -269,7 +274,7 @@ export function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: S
 
       <SiteTiles site={site} cron={cron} logErrors={logErrors} onOpen={onOpen} />
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 @4xl:grid-cols-2">
         {repos.length > 0 && (
           <Card>
             <CardHeader
@@ -281,8 +286,11 @@ export function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: S
                 </span>
               }
             />
+            {repos.length > 1 && openRepo && (
+              <Tabs size="sm" label="Repos" className="px-3" value={repoKey(openRepo)} onChange={setRepoAt} items={repos.map((r) => ({ value: repoKey(r), label: r.label }))} />
+            )}
             <div className="divide-y">
-              {repos.map((r) => (
+              {repos.filter((r) => r === openRepo).map((r) => (
                 <RepoSection
                   key={`${r.mount ?? ''}:${r.repo ?? ''}`}
                   domain={site.domain}
@@ -302,7 +310,7 @@ export function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: S
         <div className="grid gap-4">
           <Card>
             <CardHeader title="Quick actions" meta={<Wrench className="size-4 text-muted-foreground" />} />
-            <CardBody className="gap-2 sm:grid-cols-2">
+            <CardBody className="grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2">
               {([
                 { name: 'Clear all caches', icon: <Eraser />, id: 'site.clearCache' },
                 { name: 'Flush rewrite rules', icon: <RefreshCw />, id: 'site.flushRewrites' },
@@ -765,8 +773,8 @@ export function RunOutput({ result }: { result: { name: string; ok: boolean; out
 export function FolderLine({ path, files }: { path: string; files?: string }) {
   const link = 'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
   return (
-    <span className="flex items-start justify-between gap-2">
-      <span className="font-mono text-dense break-all">{path}</span>
+    <span className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+      <span className="min-w-0 flex-[1_1_14rem] font-mono text-dense break-all">{path}</span>
       <span className="flex shrink-0 items-center">
         {files && <Link href={files} className={link} title={`Open ${path} in the Files tab`}><FolderOpen className="size-3.5" />Files</Link>}
         <a href={vscodeUrl(path)} className={link} title={`Open ${path} in VS Code`}>

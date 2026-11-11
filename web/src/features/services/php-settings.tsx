@@ -1,3 +1,4 @@
+import { Fold } from '@/components/ui/fold';
 import type { PhpIniDiff, PhpIniKey, PhpSettings, PhpVersion } from '@devmagic-panel/shared';
 import { PHP_INI_KEYS, PHP_INI_SETTINGS, phpIniValueError } from '@devmagic-panel/shared';
 import { FileDiff, Settings2 } from 'lucide-react';
@@ -126,15 +127,21 @@ export function SettingsForm({ version, settings, onSaved }: { version: PhpVersi
   }
 
   return (
-    <div className="grid gap-5">
-      {GROUPS.map((group) => (
-        <fieldset key={group} className="grid gap-x-6 gap-y-3 sm:grid-cols-2" disabled={saving}>
-          <legend className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">{group}</legend>
-          {PHP_INI_KEYS.filter((k) => PHP_INI_SETTINGS[k].group === group).map((key) => (
-            <SettingField key={key} name={key} setting={PHP_INI_SETTINGS[key]} value={values[key] ?? ''} own="set here" inherited={inheritedValue(key, settings.files[key], 'php.ini', info.data)} onChange={(v) => set(key, v)} />
-          ))}
-        </fieldset>
-      ))}
+    <div className="grid gap-3">
+      {GROUPS.map((group) => {
+        const keys = PHP_INI_KEYS.filter((k) => PHP_INI_SETTINGS[k].group === group);
+        const own = keys.filter((k) => settings.panel[k]).length;
+        // Limits, and every group with a value set here, start open; the rest fold, so the card fits the window.
+        return (
+          <Fold key={group} title={group} note={own > 0 ? `${own} set here` : `${keys.length} settings`} defaultOpen={group === 'Limits' || own > 0}>
+            <fieldset aria-label={group} className="grid gap-x-6 gap-y-3 sm:grid-cols-2" disabled={saving}>
+              {keys.map((key) => (
+                <SettingField key={key} name={key} setting={PHP_INI_SETTINGS[key]} value={values[key] ?? ''} own="set here" inherited={inheritedValue(key, settings.files[key], 'php.ini', info.data)} onChange={(v) => set(key, v)} />
+              ))}
+            </fieldset>
+          </Fold>
+        );
+      })}
       <SaveBar
         changes={changes}
         saving={saving}
