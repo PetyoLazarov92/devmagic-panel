@@ -58,13 +58,26 @@ describe('running the builds of an install', () => {
     );
   });
 
+  it('stops before the install when the script runs a gulp task the gulpfile does not define, naming the repo', async () => {
+    const root = clone();
+    const theme = join(root, 'wp-content/themes/wandworks');
+    writeFileSync(join(theme, 'package.json'), JSON.stringify({ scripts: { build: 'gulp build', 'deploy-dev': 'gulp deploy-dev' } }));
+    writeFileSync(join(theme, 'gulpfile.js'), "gulp.task('deploy-dev', () => {});\n");
+    const fake = fakeExec({ 'npm ci': { stdout: 'ok' }, 'npm run': { stdout: 'built' } });
+    const results = await runBuild(fake.exec, theme, { dir: '', tool: 'npm', script: 'build' }, { home: root });
+    expect(results).toEqual([
+      { code: 1, stdout: '', stderr: "wandworks: the build failed: build runs gulp build, and the repo's gulpfile has no task by that name, so this build cannot work as the repo has it. Skip this step and run the script that builds it in a terminal (gulp --tasks lists the tasks), or fix the build script in the repo" },
+    ]);
+    expect(fake.calls).toEqual([]);
+  });
+
   it('says so when the script runs a gulp task the gulpfile does not define', async () => {
     const root = clone();
     const out = ['[08:21:04] Using gulpfile ~/wandworks/gulpfile.js', '[08:21:04] Task never defined: build', '[08:21:04] To list available tasks, try running: gulp --tasks'].join('\n');
     const fake = fakeExec({ 'npm ci': { stdout: 'ok' }, 'npm run': { code: 1, stderr: out } });
     const results = await runBuild(fake.exec, root, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'prod' }, { home: root });
     expect(results.at(-1)?.stderr.split('\n').at(-1)).toBe(
-      'wp-content/themes/wandworks: the build failed: prod runs gulp build, and the gulpfile has no task by that name. Pick another script of its package.json, or run the right one in a terminal (gulp --tasks lists them)',
+      "wp-content/themes/wandworks: the build failed: prod runs gulp build, and the repo's gulpfile has no task by that name, so this build cannot work as the repo has it. Skip this step and run the script that builds it in a terminal (gulp --tasks lists the tasks), or fix the build script in the repo",
     );
   });
 

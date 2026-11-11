@@ -26,6 +26,14 @@ describe('the build checklist', () => {
     expect(buildChoice(committed, { 'npm:wp-content/plugins/wandworks-slider': { on: true, script: 'dev' } }, docs)).toEqual({ on: true, script: 'dev', fromDocs: false });
   });
 
+  it('lets go of a remembered pick or a docs script that runs a gulp task the gulpfile lacks', () => {
+    const gulp: RepoBuild = { dir: '', tool: 'npm', scripts: ['build', 'compile:css'], needed: false, why: 'dist/ is ignored by git: pick its build script', missingTasks: { build: 'build' } };
+    // Remembered from an earlier install: build, which fails at once. It is off until you pick another script.
+    expect(buildChoice(gulp, { 'npm:': { on: true, script: 'build' } }, [])).toEqual({ on: false, fromDocs: false });
+    expect(buildChoice(gulp, {}, [{ folder: '', command: 'npm run build' }])).toEqual({ on: false, fromDocs: false });
+    expect(buildChoice(gulp, { 'npm:': { on: true, script: 'compile:css' } }, [])).toEqual({ on: true, script: 'compile:css', fromDocs: false });
+  });
+
   it('follows your ticks and scripts over the docs and the lookup', () => {
     const picks = { 'npm:wp-content/themes/wandworks': { on: false }, 'npm:wp-content/plugins/wandworks-slider': { on: true, script: 'dev' } };
     expect(buildSteps([theme, slider], picks, [{ folder: 'wp-content/themes/wandworks', command: 'npm run prod' }])).toEqual([{ repo: 0, dir: 'wp-content/plugins/wandworks-slider', tool: 'npm', script: 'dev' }]);

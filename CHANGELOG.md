@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.38.1 (2026-11-11)
+* **New site:** a build script remembered from an earlier install of the repo, or named in its docs, that runs a gulp task its gulpfile does not define is let go: the build stays off until you pick another script, and that script is greyed out in the list with the task it lacks. v1.38.0 still took it from the remembered answers
+* **New site:** such a build stops before `npm install` with why: the repo's build script cannot work as the repo has it, so skip the step and run the script that builds it, or fix the script in the repo. A build of a repo's own root names the repo's folder instead of "/"
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.38.0 (2026-11-11)
 * **Plugins:** the check for missing plugins and themes reads every site of a network with one database query instead of WP-CLI twice per site, so a big network takes seconds, not minutes. It runs on the server: changing tab or page no longer stops it, and coming back shows how far it got. The result is kept for half an hour, with when it was checked and **Check again**, and a job that changes the site makes the next visit check anew
 * **Plugins:** with **Details**, the author links to their site and the plugin to its own, with a **WordPress.org** link when WordPress's update check found it there. Themes show their description, author and the same links

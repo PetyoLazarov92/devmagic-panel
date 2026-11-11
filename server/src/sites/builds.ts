@@ -52,7 +52,7 @@ function json(text: string | undefined): Record<string, unknown> | null {
 }
 
 /** The names a gulpfile can have, in the order gulp looks for them. */
-const GULPFILES = ['gulpfile.js', 'gulpfile.cjs', 'gulpfile.mjs', 'gulpfile.ts', 'gulpfile.babel.js'];
+export const GULPFILES = ['gulpfile.js', 'gulpfile.cjs', 'gulpfile.mjs', 'gulpfile.ts', 'gulpfile.babel.js'];
 /** Gulpfiles that take their tasks from other files: what they define cannot be read from the one file. */
 const TASKS_ELSEWHERE = /require-dir|requireDir|gulp-hub|load-subtasks|\.registry\(|require\(\s*['"]\.\/(?:gulp|tasks)\b|from\s+['"]\.\/(?:gulp|tasks)\b/;
 

@@ -2115,7 +2115,11 @@ function BuildRows({ prefix, title, builds, picks, commands, docsFile, nodes, on
           {build.tool !== 'composer' && (
             <Select aria-label={`Script to run in ${build.dir || 'the repo root'}`} value={choice.script ?? ''} onChange={(e) => pick(build, { on: true, script: e.target.value })} className="h-8 font-mono text-[13px]" wrapClassName="max-w-64">
               {!choice.script && <option value="">Pick a script</option>}
-              {build.scripts.map((name) => <option key={name} value={name}>{`${build.tool} run ${name}`}</option>)}
+              {build.scripts.map((name) => (
+                <option key={name} value={name} disabled={Boolean(build.missingTasks?.[name])}>
+                  {`${build.tool} run ${name}${build.missingTasks?.[name] ? ` (no gulp task ${build.missingTasks[name]})` : ''}`}
+                </option>
+              ))}
             </Select>
           )}
           {build.tool !== 'composer' && nodes.length > 0 && (
@@ -2128,9 +2132,6 @@ function BuildRows({ prefix, title, builds, picks, commands, docsFile, nodes, on
             in <code className="font-mono">{build.dir || '/'}</code> · {build.why}
             {choice.fromDocs && build.builtInRepo && `; ${docsFile} builds it${choice.script ? ` with ${choice.script}` : ''}, tick it to run it anyway`}
           </span>
-          {choice.script && build.missingTasks?.[choice.script] && (
-            <span className="text-xs text-warning">{choice.script} runs gulp {build.missingTasks[choice.script]}, and the gulpfile has no task by that name, so it fails at once: pick another script.</span>
-          )}
           {choice.script && build.stopsOthers?.includes(choice.script) && (
             <span className="text-xs text-warning">{choice.script} runs its builds with concurrently --kill-others, so the first to finish stops the others: pick one of its parts, or change it to --kill-others-on-fail.</span>
           )}

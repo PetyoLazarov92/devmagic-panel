@@ -36,8 +36,12 @@ export function docsScript(build: RepoBuild, commands: DocsCommand[]): string | 
  * in the repo: rebuilding committed files takes minutes and can change them.
  */
 export function buildChoice(build: RepoBuild, picks: Record<string, BuildPick>, commands: DocsCommand[]): BuildPick & { fromDocs: boolean } {
-  const pick = picks[buildId(build)];
-  const docs = docsScript(build, commands);
+  // A script that runs a gulp task the gulpfile lacks fails at once: a pick remembered from an earlier install, or the docs, naming one is let go.
+  const broken = (script: string | undefined) => Boolean(script && build.missingTasks?.[script]);
+  const remembered = picks[buildId(build)];
+  const pick = broken(remembered?.script) ? undefined : remembered;
+  const named = docsScript(build, commands);
+  const docs = typeof named === 'string' && broken(named) ? undefined : named;
   const script = pick?.script ?? (typeof docs === 'string' ? docs : build.script);
   const on = pick?.on ?? (docs !== undefined && !build.builtInRepo ? true : build.needed);
   return { on, ...(script ? { script } : {}), ...(pick?.node ? { node: pick.node } : {}), fromDocs: docs !== undefined && !pick };

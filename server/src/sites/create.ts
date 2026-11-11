@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { GULPFILES, gulpTasks, gulpTasksOf } from './builds.js';
 import type { ActionInput, RepoPlacement } from '@devmagic-panel/shared';
 import { addressSummary, placementWarnings, repoTarget, throughCoreLink, databaseNameFor, hostMapper, isLocalName, MEDIA_PLUGIN, MEDIA_PLUGIN_URL, mountFolder, networkMoves } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
@@ -752,7 +753,8 @@ export function buildCommand(clone: string, build: BuildRun): string {
  * the clone through a link, or has no manifest any more, is skipped with a note.
  */
 export async function runBuild(exec: Executor, clone: string, build: BuildRun, node: NodeOptions = {}): Promise<ExecResult[]> {
-  const where = build.dir || '/';
+  // A repo's own root is named by its folder: "/" said nothing about which repo.
+  const where = build.dir || basename(clone);
   const folder = join(clone, build.dir);
   const inside = existsSync(folder) && relative(realpathSync(clone), realpathSync(folder)).split(sep)[0] !== '..';
   if (!inside || !existsSync(join(folder, MANIFEST[build.tool]))) return [ok(`${where}: no ${MANIFEST[build.tool]}, skipped`)];
@@ -768,6 +770,9 @@ export async function runBuild(exec: Executor, clone: string, build: BuildRun, n
     // Not JSON: no script runs.
   }
   if (build.script && !(build.script in scripts)) return [ok(`${where}: package.json has no ${build.script} script, skipped`)];
+  // A gulp task the gulpfile lacks fails at once: said before the install, which can take minutes.
+  const lacking = build.script ? missingGulpTask(folder, String(scripts[build.script])) : undefined;
+  if (lacking) return [{ code: 1, stdout: '', stderr: `${where}: ${noTaskNote(build.script as string, lacking)}` }];
   const attempt = async (on: NodeChoice): Promise<{ ran: ExecResult[]; install: ExecResult }> => {
     const env = nodeEnv(on);
     const run = (file: string, args: string[]) => exec(file, args, { cwd: folder, timeoutMs: 20 * 60_000, env });
@@ -796,13 +801,27 @@ export async function runBuild(exec: Executor, clone: string, build: BuildRun, n
     : undefined;
   // gulp names the task it lacks only on a line before its last one, which is all a step shows.
   const task = last.code !== 0 && build.script ? MISSING_TASK.exec(`${last.stdout}\n${last.stderr}`) : null;
-  const taskName = task?.[1] ?? task?.[2];
-  const noTask = task
-    ? `the build failed: ${build.script} runs ${taskName ? `gulp ${taskName}` : 'a gulp task'}, and the gulpfile has no task by that name. Pick another script of its package.json, or run the right one in a terminal (gulp --tasks lists them)`
-    : undefined;
+  const noTask = task ? noTaskNote(build.script as string, task[1] ?? task[2]) : undefined;
   const note = stopped ?? noTask ?? hint;
   if (note) results[results.length - 1] = { ...last, stderr: `${last.stderr.trim() ? `${last.stderr.trimEnd()}\n` : ''}${where}: ${note}` };
   return results;
+}
+
+/** Why a build that runs a missing gulp task fails, and the way on. */
+const noTaskNote = (script: string, task: string | undefined) =>
+  `the build failed: ${script} runs ${task ? `gulp ${task}` : 'a gulp task'}, and the repo's gulpfile has no task by that name, so this build cannot work as the repo has it. Skip this step and run the script that builds it in a terminal (gulp --tasks lists the tasks), or fix the build script in the repo`;
+
+/** The gulp task a script runs that the folder's gulpfile does not define; none when there is no gulpfile or its tasks cannot be read from it. */
+function missingGulpTask(folder: string, command: string): string | undefined {
+  const file = GULPFILES.map((f) => join(folder, f)).find((f) => existsSync(f));
+  if (!file) return undefined;
+  let tasks: Set<string> | null;
+  try {
+    tasks = gulpTasks(readFileSync(file, 'utf8'));
+  } catch {
+    return undefined;
+  }
+  return tasks ? gulpTasksOf(command)?.find((t) => !tasks.has(t)) : undefined;
 }
 
 /** What gulp prints for a task its gulpfile does not define: "Task never defined: build", or in gulp 3 "Task 'build' is not in your gulpfile". */
