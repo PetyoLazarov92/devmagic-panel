@@ -7,15 +7,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { IconButton } from '@/components/ui/icon-button';
-import { shareUpdate } from '@/components/update-indicator';
+import { shareUpdate } from '@/components/layout/update-indicator';
 import { api } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { navigate } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
-import { InstallForm, InstallProgress, LastInstall } from '@/pages/update-install';
-import { CheckAgain, Notice, PageHeader } from '@/components/page';
-import { CardsSkeleton } from '@/components/skeletons';
+import { InstallForm, InstallProgress, LastInstall } from '@/features/updates/update-install';
+import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
+import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
 
 /** The installer's command, for a terminal instead of the password field: folded, as the way most people never need. */

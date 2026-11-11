@@ -6,9 +6,9 @@ import { duration } from '@/lib/format';
 import { stepsSkipped } from '@/lib/jobs';
 import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
-import { RunStatus } from '@/pages/runs';
-import { Notice } from '@/components/page';
-import { Bar, LogSkeleton, Reading } from '@/components/skeletons';
+import { RunStatus } from '@/features/jobs/runs-list';
+import { Notice } from '@/components/layout/page';
+import { Bar, LogSkeleton, Reading } from '@/components/layout/skeletons';
 
 /** One run: what it was given (passwords already hidden when stored) and everything it printed. */
 export function RunPage({ id }: { id: number }) {

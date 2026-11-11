@@ -31,7 +31,7 @@ browser ─https─> Apache (local.devmagic, local CA cert) ─proxy─> Fastify
 | `server/src/release-source.ts` | The ways to the releases, tried in order: public HTTPS, the GitHub CLI, git on the `pkg/vX.Y.Z` package tags; no token |
 | `server/src/update.ts` | Updates: check through the first way that works, notes from the releases, download, checksum, unpack into `releases/`, switch `current`, restart; switching back to an installed release |
 | `server/src/update-install.ts` | `panel.installRelease`: a release's `install.sh --from-panel` in a transient user unit, the sudo password through a FIFO, the job following `update-status.json`, and the run finished by the panel that runs after the restart |
-| `web/src/` | React UI; `lib/api.ts` is the only place that calls the server |
+| `web/src/` | React UI; `lib/api.ts` is the only place that calls the server. `pages/` holds one file per route, `components/ui/` the parts every screen is made of, `components/layout/` the app frame and page pieces, `features/<area>/` the tabs, cards and steps of one area (site, database, new-site, services...), `lib/` logic without UI |
 | `scripts/bin/dmp-root` | Root entry point; libraries in `scripts/lib/*.sh` |
 | `scripts/bin/dmp-restore` | Restores a backup; run by hand with `sudo`, never passwordless |
 | `server/src/wpcore.ts` | Reads the shared `/etc/wpcore.conf` and lists installed cores |

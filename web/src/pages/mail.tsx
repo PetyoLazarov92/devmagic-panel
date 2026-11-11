@@ -2,7 +2,7 @@ import type { MailMessage, MailSummary } from '@devmagic-panel/shared';
 import { MAILPIT_WEB, textLinks } from '@devmagic-panel/shared';
 import { ExternalLink, Mail, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { MailpitInstall } from '@/components/mailpit-install';
+import { MailpitInstall } from '@/features/services/mailpit-install';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
@@ -13,8 +13,8 @@ import { timeAgo } from '@/lib/format';
 import { runWithToast } from '@/lib/site-actions';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
-import { CheckAgain, PageHeader } from '@/components/page';
-import { CardSkeleton, ListSkeleton, Reading } from '@/components/skeletons';
+import { CheckAgain, PageHeader } from '@/components/layout/page';
+import { CardSkeleton, ListSkeleton, Reading } from '@/components/layout/skeletons';
 
 /** The site filter starts from ?site= so a site page can link straight to its mail. */
 const initialSite = () => new URLSearchParams(window.location.search).get('site') ?? '';

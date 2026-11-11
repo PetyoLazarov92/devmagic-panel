@@ -1,7 +1,7 @@
 import type { OrgRepo, UploadResult } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { asideUploads, KEPT_REPOS, switchOrg, switchRepo } from '../src/lib/org-repos.js';
-import type { WizardState } from '../src/pages/new-site.js';
+import type { WizardState } from '../src/features/new-site/wizard-shared.js';
 
 const repo = (name: string): OrgRepo => ({ org: 'wandworks', name, fullName: `wandworks/${name}`, sshUrl: `git@github.com:wandworks/${name}.git`, url: `https://github.com/wandworks/${name}`, archived: false, kind: 'site', defaultBranch: 'main' });
 const blank = { source: 'repo', repoUrl: '', branch: '', upload: null, domains: [{ prod: '', local: '' }], adminPassword: null, passed: {}, org: null } as unknown as WizardState;

@@ -1,7 +1,7 @@
 import { Database, Download, MoreHorizontal, Plug, RefreshCw, Server, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { CheckAgain, PageHeader, ViewBar } from '@/components/page';
-import { ScopeLabel } from '@/components/scope-label';
+import { CheckAgain, PageHeader, ViewBar } from '@/components/layout/page';
+import { ScopeLabel } from '@/components/layout/scope-label';
 import { Badge, CountBadge, StatusBadge } from '@/components/ui/badge';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { Button } from '@/components/ui/button';

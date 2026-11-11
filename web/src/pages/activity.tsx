@@ -1,8 +1,8 @@
-import { PageHeader } from '@/components/page';
+import { PageHeader } from '@/components/layout/page';
 import { Tabs } from '@/components/ui/tabs';
 import { navigate } from '@/lib/router';
-import { JobsPage } from '@/pages/jobs';
-import { RunsPage } from '@/pages/runs';
+import { JobsPage } from '@/features/jobs/jobs-list';
+import { RunsPage } from '@/features/jobs/runs-list';
 
 export type ActivityTab = 'jobs' | 'runs';
 

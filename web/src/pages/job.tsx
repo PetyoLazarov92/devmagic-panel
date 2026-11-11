@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { JobScreen } from '@/components/job-screen';
+import { JobScreen } from '@/features/jobs/job-screen';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { markJobSeen } from '@/lib/seen-jobs';
 

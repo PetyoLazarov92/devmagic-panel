@@ -82,7 +82,7 @@ lowers one lowers the baseline there too.
 
 - **A job shows where it was started**: as the footer of the card whose
   button started it (`JobFooter`, or `JobBox` under a `border-t` line, in
-  `web/src/components/job-box.tsx`), scrolled into view, with its steps,
+  `web/src/features/jobs/job-box.tsx`), scrolled into view, with its steps,
   Retry when it failed and the link to Undo once it settled. Never a box or
   card of its own between cards: the cards around it stay where they are. A
   job started from a row's menu in a long list shows at the top of that list,
@@ -131,7 +131,7 @@ lowers one lowers the baseline there too.
   result row), and `fullScreen` on top. `web/test/dialog-sizes.test.ts` fails
   on a width passed in `className`.
 - **The menu is three groups** (Work, Server, System, in
-  `components/app-shell.tsx`), every page visible, each with a short hint or
+  `components/layout/app-shell.tsx`), every page visible, each with a short hint or
   a live count on the right. Group by what a page is for, not by technology:
   a site's Performance tab holds its profiles and slow queries together.
 - **A page that moves keeps its old address**: add it to `lib/moved.ts`,
@@ -170,8 +170,8 @@ has; a list the server pages (a table's rows) keeps its pages.
 
 ## One layout per page type
 
-Every page is made of the pieces in `web/src/components/page.tsx` and
-`web/src/components/skeletons.tsx`, and follows the layout of its type.
+Every page is made of the pieces in `web/src/components/layout/page.tsx` and
+`web/src/components/layout/skeletons.tsx`, and follows the layout of its type.
 
 - **The pieces.** `PageHeader` (title and intro left, actions right, Check
   again last) tops a page; `ViewBar` (a picker or filters left, Check again

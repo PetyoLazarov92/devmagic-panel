@@ -1,6 +1,6 @@
 import type { LocalHelperPlugin, OrgRepo, RepoBuild, RepoKind, RepoLookup, RepoPlacement } from '@devmagic-panel/shared';
 import { placementForKind, placementProblems, repoTarget, repoWeb, sameRepo } from '@devmagic-panel/shared';
-import type { WizardState } from '@/pages/new-site';
+import type { WizardState } from '@/features/new-site/wizard-shared';
 import type { BuildPick } from './builds';
 
 /** What the lookup read from a repo's branch: its local helpers, BE Media, builds, what it holds. */

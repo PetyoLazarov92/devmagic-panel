@@ -1,9 +1,9 @@
 import { ArrowLeft, ChevronRight, KeyRound, LockKeyhole, TriangleAlert } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { LoginArt } from '@/components/login-art';
-import { Logo } from '@/components/logo';
-import { CopyCommand, NewPassword, newPasswordOk } from '@/components/panel-password';
-import { ThemeToggle } from '@/components/theme-toggle';
+import { LoginArt } from '@/components/layout/login-art';
+import { Logo } from '@/components/layout/logo';
+import { CopyCommand, NewPassword, newPasswordOk } from '@/features/settings/panel-password';
+import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Notice } from '@/components/ui/notice';
 import { PasswordInput } from '@/components/ui/password-input';

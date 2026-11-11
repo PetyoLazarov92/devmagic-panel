@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { ButtonLink } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { navigate } from '@/lib/router';
-import { Notice, PageHeader } from '@/components/page';
+import { Notice, PageHeader } from '@/components/layout/page';
 import { DEMO_HOME, isDemo } from '@/lib/api';
 
 /** Only in the mockup (npm run mockup): what it is, what it never touches, and the addresses that show other states. */

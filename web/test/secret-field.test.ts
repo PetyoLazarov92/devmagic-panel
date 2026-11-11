@@ -36,6 +36,6 @@ describe('secret fields', () => {
       .filter((file) => /type="password"|<PasswordInput\b/.test(readFileSync(file, 'utf8')))
       .map((file) => relative(SRC, file))
       .sort();
-    expect(found).toEqual(['components/panel-password.tsx', 'pages/login.tsx']);
+    expect(found).toEqual(['features/settings/panel-password.tsx', 'pages/login.tsx']);
   });
 });

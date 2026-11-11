@@ -1,11 +1,11 @@
 import { type DeveloperReport, RUN_KEEP_DAYS, RUN_KEEP_MAX } from '@devmagic-panel/shared';
 import { Activity, FileText, FolderTree, History, ScrollText, Settings2, Trash2, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import { AnsiText } from '@/components/ansi-text';
+import { AnsiText } from '@/components/layout/ansi-text';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { PathTree } from '@/components/path-tree';
+import { PathTree } from '@/features/site/path-tree';
 import { ConfirmField } from '@/components/ui/confirm-field';
 import { Dialog } from '@/components/ui/dialog';
 import { KeyValue } from '@/components/ui/key-value';
@@ -18,8 +18,8 @@ import { runWithToast } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
-import { CheckAgain, Notice, PageHeader } from '@/components/page';
-import { CardsSkeleton } from '@/components/skeletons';
+import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
+import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
 import { TextLink } from '@/components/ui/text-link';
 

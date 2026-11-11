@@ -1,7 +1,7 @@
 import type { OrgRepo } from '@devmagic-panel/shared';
 import { gitUrl, parseNamespaceRef, repoWeb } from '@devmagic-panel/shared';
-import type { WizardState } from '@/pages/new-site';
-import type { OrgState } from '@/pages/new-site-org';
+import type { WizardState } from '@/features/new-site/wizard-shared';
+import type { OrgState } from '@/features/new-site/org';
 
 /** How many other repos an organization install keeps its progress for. */
 export const KEPT_REPOS = 3;

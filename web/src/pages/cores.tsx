@@ -2,13 +2,13 @@ import type { CoreSecurity, CoresReport } from '@devmagic-panel/shared';
 import { coreVersion } from '@devmagic-panel/shared';
 import { Download, Layers, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { settled, StepList, useJob } from '@/components/job-steps';
+import { settled, StepList, useJob } from '@/features/jobs/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmField } from '@/components/ui/confirm-field';
 import { Dialog } from '@/components/ui/dialog';
-import { ReleaseListLink } from '@/components/release-link';
+import { ReleaseListLink } from '@/components/layout/release-link';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
@@ -17,8 +17,8 @@ import { lastLine, runWithToast } from '@/lib/site-actions';
 import { siteFromName, siteHref as siteRefHref, siteTarget } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
-import { CheckAgain, Notice, PageHeader } from '@/components/page';
-import { CardSkeleton, ListSkeleton, Reading } from '@/components/skeletons';
+import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
+import { CardSkeleton, ListSkeleton, Reading } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
 
 const STATUS: Record<CoreSecurity, { label: string; tone: 'success' | 'warning' | 'danger' }> = {

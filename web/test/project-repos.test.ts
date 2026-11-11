@@ -1,7 +1,7 @@
 import type { OrgRepo } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { allRows, isPicked, makeMain, pickRepo, shownOrder, placementOf, planLines, rowPlacement, rowsProblem, unpickRepo } from '../src/lib/project-repos.js';
-import type { WizardState } from '../src/pages/new-site.js';
+import type { WizardState } from '../src/features/new-site/wizard-shared.js';
 
 const repo = (fullName: string, kind: OrgRepo['kind'] = 'site'): OrgRepo => ({
   org: 'wandworks', name: fullName.split('/').pop() as string, fullName, sshUrl: `git@github.com:${fullName}.git`, url: `https://github.com/${fullName}`, archived: false, kind, defaultBranch: 'main',
