@@ -22,7 +22,7 @@ export function SectionLayout<T extends string>({ label, items, value, onChange,
         <Tabs items={items} value={value} onChange={onChange} />
       </div>
       <nav aria-label={label} className="hidden lg:block">
-        <ul className="sticky top-20 grid gap-0.5">
+        <ul className="sticky top-4 grid gap-0.5">
           {items.map((item, i) => {
             const on = item.value === value;
             return (
