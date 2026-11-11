@@ -60,10 +60,9 @@ export function ViewBar({ children, actions, onCheck, loading = false, checkedAt
         </div>
       </div>
       {(read || note) && (
-        <p className="text-xs text-muted-foreground">
-          {note}
-          {note && read ? ' ' : ''}
-          {read}
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          {note && <span className="min-w-0">{note}</span>}
+          {read && <span>{read}</span>}
         </p>
       )}
     </div>

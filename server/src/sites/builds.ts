@@ -10,7 +10,7 @@ import type { BuildTool, RepoBuild } from '@devmagic-panel/shared';
  */
 
 /** The files the lookup reads besides the tree: build manifests, ignore rules and plugin readmes. */
-export const BUILD_FILES = /(^|\/)(composer\.json|package\.json|\.gitignore|readme\.txt|\.nvmrc|\.node-version)$/;
+export const BUILD_FILES = /(^|\/)(composer\.json|package\.json|\.gitignore|readme\.txt|\.nvmrc|\.node-version|gulpfile\.(?:js|cjs|mjs|ts|babel\.js))$/;
 /** Folders whose files are someone else's: never a build of the site. */
 export const SKIPPED_DIRS = /(^|\/)(vendor|node_modules|bower_components)\//;
 
@@ -49,6 +49,67 @@ function json(text: string | undefined): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/** The names a gulpfile can have, in the order gulp looks for them. */
+const GULPFILES = ['gulpfile.js', 'gulpfile.cjs', 'gulpfile.mjs', 'gulpfile.ts', 'gulpfile.babel.js'];
+/** Gulpfiles that take their tasks from other files: what they define cannot be read from the one file. */
+const TASKS_ELSEWHERE = /require-dir|requireDir|gulp-hub|load-subtasks|\.registry\(|require\(\s*['"]\.\/(?:gulp|tasks)\b|from\s+['"]\.\/(?:gulp|tasks)\b/;
+
+/**
+ * The tasks a gulpfile defines: gulp.task('name'), exports.name and ES
+ * exports, and default. Null when it cannot be told from the file alone,
+ * like tasks loaded from a folder.
+ */
+export function gulpTasks(text: string): Set<string> | null {
+  if (TASKS_ELSEWHERE.test(text)) return null;
+  const tasks = new Set<string>();
+  const add = (re: RegExp) => {
+    for (const m of text.matchAll(re)) if (m[1]) tasks.add(m[1]);
+  };
+  add(/\btask\(\s*['"`]([\w:.-]+)['"`]/g);
+  add(/\b(?:module\.)?exports\.([\w$]+)\s*=/g);
+  add(/\b(?:module\.)?exports\[\s*['"`]([\w:.-]+)['"`]\s*\]\s*=/g);
+  add(/\bexport\s+(?:const|let|var|function|async\s+function)\s+([\w$]+)/g);
+  for (const m of text.matchAll(/\bexport\s*\{([^}]*)\}/g)) for (const part of (m[1] ?? '').split(',')) {
+    const name = part.trim().split(/\s+as\s+/).at(-1)?.trim();
+    if (name) tasks.add(name);
+  }
+  if (/\bexport\s+default\b|\bexports\.default\s*=|module\.exports\s*=/.test(text)) tasks.add('default');
+  // module.exports = { build, styles }: the names inside.
+  for (const m of text.matchAll(/\bmodule\.exports\s*=\s*\{([^}]*)\}/g)) for (const part of (m[1] ?? '').split(',')) {
+    const name = part.split(':')[0]?.trim();
+    if (name && /^[\w$]+$/.test(name)) tasks.add(name);
+  }
+  return tasks.size ? tasks : null;
+}
+
+/** The gulp tasks a script runs, like gulp build and gulp styles scripts; default for a bare gulp. Null when it picks its own gulpfile. */
+export function gulpTasksOf(command: string): string[] | null {
+  const out: string[] = [];
+  for (const part of command.split(/&&|\|\||;|\|/)) {
+    const words = part.trim().split(/\s+/);
+    const at = words.findIndex((w) => w === 'gulp' || w.endsWith('/gulp'));
+    if (at < 0) continue;
+    const args = words.slice(at + 1);
+    if (args.some((a) => a === '--gulpfile' || a.startsWith('--gulpfile=') || a === '-f' || a === '--cwd' || a.startsWith('--cwd='))) return null;
+    const names = args.filter((a) => !a.startsWith('-'));
+    out.push(...(names.length ? names : ['default']));
+  }
+  return out;
+}
+
+/** The scripts of a folder that run a gulp task its gulpfile does not define, with that task. */
+function missingGulpTasks(dir: string, files: BuildFiles, scripts: Record<string, unknown>, names: string[]): Record<string, string> {
+  const file = GULPFILES.map((f) => inDir(dir, f)).find((f) => files.text.has(f));
+  const tasks = file ? gulpTasks(files.text.get(file) ?? '') : null;
+  if (!tasks) return {};
+  const out: Record<string, string> = {};
+  for (const name of names) {
+    const missing = gulpTasksOf(String(scripts[name]))?.find((t) => !tasks.has(t));
+    if (missing) out[name] = missing;
+  }
+  return out;
 }
 
 /** A plugin from wordpress.org: its readme has a Stable tag, and it ships what it builds. */
@@ -130,7 +191,9 @@ function packageBuild(dir: string, files: BuildFiles, installed: Set<BuildTool>,
     .map(([name]) => name);
   if (offered.length === 0) return null;
   const stopsOthers = offered.filter((name) => STOPS_OTHERS.test(scripts[name] as string));
-  const script = PREFERRED.find((name) => offered.includes(name) && !stopsOthers.includes(name));
+  // A script that runs a gulp task the gulpfile lacks fails at once: never picked, and said so.
+  const noTask = missingGulpTasks(dir, files, scripts, offered);
+  const script = PREFERRED.find((name) => offered.includes(name) && !stopsOthers.includes(name) && !(name in noTask));
   const tool: BuildTool = files.paths.has(inDir(dir, 'package-lock.json')) ? 'npm' : files.paths.has(inDir(dir, 'yarn.lock')) ? 'yarn' : files.paths.has(inDir(dir, 'pnpm-lock.yaml')) ? 'pnpm' : 'npm';
   const output = ignoredOutput(dir, files);
   const wporg = fromWordPressOrg(dir, files);
@@ -141,7 +204,7 @@ function packageBuild(dir: string, files: BuildFiles, installed: Set<BuildTool>,
       : !output
         ? 'its built files are in the repo'
         : !script
-          ? `${output}/ is ignored by git: pick its build script`
+          ? `${output}/ is ignored by git: pick its build script${Object.keys(noTask).length ? ` (${Object.entries(noTask).map(([name, task]) => `${name} runs gulp ${task}, which the gulpfile does not define`).join('; ')})` : ''}`
           : `${output}/ is ignored by git`;
   return {
     dir,
@@ -152,6 +215,7 @@ function packageBuild(dir: string, files: BuildFiles, installed: Set<BuildTool>,
     why,
     ...(!output || wporg ? { builtInRepo: true } : {}),
     ...(stopsOthers.length ? { stopsOthers } : {}),
+    ...(Object.keys(noTask).length ? { missingTasks: noTask } : {}),
     ...(node?.(dir) ? { node: node(dir) as string } : {}),
   };
 }

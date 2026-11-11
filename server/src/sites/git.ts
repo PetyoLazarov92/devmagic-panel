@@ -1,7 +1,7 @@
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ActionInput, GitDetails, GitPullRequest } from '@devmagic-panel/shared';
-import { repoFolder } from '@devmagic-panel/shared';
+import type { ActionInput, GitDetails, GitPullRequest, GitTidyPreview } from '@devmagic-panel/shared';
+import { GIT_KEEP_DAYS, repoFolder } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { ExecResult, Executor } from '../exec.js';
 import { openPullsOf } from '../repo-hosts/index.js';
@@ -128,3 +128,140 @@ export async function switchBranch(ctx: GitActionContext, { domain, mount, repo,
   // A branch only on origin is created tracking origin/<branch> (git's own guess, which needs one match).
   return { results: [await git(ctx.exec, dir, ['switch', branch])] };
 }
+
+/** Where Tidy up keeps a deleted branch: refs/devmagic-panel/deleted/<stamp>/<branch>, out of every branch list. */
+const KEPT = 'refs/devmagic-panel/deleted';
+const stampOf = (date: Date) => date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+const dateOfStamp = (stamp: string) => {
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(stamp);
+  return m ? new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`) : null;
+};
+
+/** git count-objects -v: loose objects, packs and garbage, in bytes. */
+export async function objectsBytes(exec: Executor, dir: string): Promise<number> {
+  const r = await git(exec, dir, ['count-objects', '-v']);
+  let kib = 0;
+  for (const line of r.stdout.split('\n')) {
+    const m = /^(size|size-pack|size-garbage): (\d+)$/.exec(line.trim());
+    if (m) kib += Number(m[2]);
+  }
+  return kib * 1024;
+}
+
+/** The branches Tidy up kept, newest first: name, commit and when. */
+async function keptBranches(exec: Executor, dir: string): Promise<Array<{ ref: string; name: string; hash: string; deletedAt: Date }>> {
+  const r = await git(exec, dir, ['for-each-ref', '--format=%(refname)%1f%(objectname)', KEPT]);
+  return r.stdout
+    .split('\n')
+    .filter(Boolean)
+    .flatMap((line) => {
+      const [ref = '', hash = ''] = line.split('\x1f');
+      const [stamp = '', ...name] = ref.slice(KEPT.length + 1).split('/');
+      const at = dateOfStamp(stamp);
+      return at && name.length ? [{ ref, name: name.join('/'), hash, deletedAt: at }] : [];
+    })
+    .sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
+}
+
+/** Local branches whose branch on origin is gone, after a fetch with prune; and which are in origin's default branch. */
+async function goneBranches(exec: Executor, dir: string): Promise<{ gone: GitTidyPreview['gone']; mainBranch?: string }> {
+  const [refs, head] = await Promise.all([
+    git(exec, dir, ['for-each-ref', '--format=%(refname:short)%1f%(upstream)%1f%(upstream:track)%1f%(HEAD)%1f%(objectname:short)%1f%(subject)%1f%(committerdate:iso-strict)', 'refs/heads']),
+    git(exec, dir, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
+  ]);
+  const mainBranch = head.code === 0 && head.stdout.trim() ? head.stdout.trim() : undefined;
+  const merged = new Set<string>();
+  if (mainBranch) {
+    const r = await git(exec, dir, ['branch', '--format=%(refname:short)', '--merged', mainBranch]);
+    for (const b of r.stdout.split('\n')) if (b.trim()) merged.add(b.trim());
+  }
+  const gone = refs.stdout
+    .split('\n')
+    .filter(Boolean)
+    .flatMap((line) => {
+      const [name = '', upstream = '', track = '', star = '', hash = '', subject = '', date = ''] = line.split('\x1f');
+      return upstream && track === '[gone]' ? [{ name, current: star === '*', merged: merged.has(name), hash, subject, date }] : [];
+    });
+  return { gone, ...(mainBranch ? { mainBranch } : {}) };
+}
+
+/** What Tidy up would do; the Git card fetches with prune first, so gone branches show. Read only. */
+export async function readTidyPreview(exec: Executor, dir: string, now = new Date()): Promise<GitTidyPreview> {
+  const [{ gone, mainBranch }, bytes, kept] = await Promise.all([goneBranches(exec, dir), objectsBytes(exec, dir), keptBranches(exec, dir)]);
+  const since = now.getTime() - GIT_KEEP_DAYS * 86_400_000;
+  return { objectsBytes: bytes, gone, ...(mainBranch ? { mainBranch } : {}), kept: kept.filter((k) => k.deletedAt.getTime() >= since).map((k) => ({ name: k.name, deletedAt: k.deletedAt.toISOString() })) };
+}
+
+/**
+ * Tidy up: fetch with prune, delete the gone branches asked for (each kept
+ * under refs/devmagic-panel/deleted first, so Undo puts it back), forget kept
+ * ones older than GIT_KEEP_DAYS, and with gc, git gc. History is never
+ * rewritten and the working files are never touched.
+ */
+export async function tidy(ctx: GitActionContext, { domain, mount, repo, branches, gc }: ActionInput<'git.tidy'>, now = new Date()): Promise<HandlerOutcome> {
+  const dir = gitFolder(ctx.config, domain, mount, repo);
+  const results: ExecResult[] = [];
+  const fetched = await git(ctx.exec, dir, ['fetch', '--prune', 'origin'], true);
+  results.push(fetched.code === 0 ? { ...fetched, stdout: fetched.stdout || fetched.stderr || 'Fetched, nothing new', stderr: '' } : { ...fetched, code: 0, stdout: `warn: could not fetch from origin, so only branches already known gone are deleted: ${(fetched.stderr || fetched.stdout).trim().split('\n').at(-1) ?? ''}`, stderr: '' });
+  const before = gc ? await objectsBytes(ctx.exec, dir) : 0;
+  if (branches.length) {
+    const { gone } = await goneBranches(ctx.exec, dir);
+    const deleted: string[] = [];
+    const left: string[] = [];
+    for (const name of branches) {
+      const b = gone.find((g) => g.name === name);
+      if (!b || b.current) {
+        left.push(name);
+        continue;
+      }
+      const full = await git(ctx.exec, dir, ['rev-parse', '--verify', `refs/heads/${name}`]);
+      const keep = await git(ctx.exec, dir, ['update-ref', `${KEPT}/${stampOf(now)}/${name}`, full.stdout.trim()]);
+      if (full.code !== 0 || keep.code !== 0) {
+        left.push(name);
+        continue;
+      }
+      const del = await git(ctx.exec, dir, ['branch', '-D', '--', name]);
+      if (del.code === 0) deleted.push(name);
+      else left.push(name);
+    }
+    if (deleted.length) results.push(ok(`deleted ${deleted.length} branch${deleted.length === 1 ? '' : 'es'} gone from origin: ${deleted.join(', ')}; kept ${GIT_KEEP_DAYS} days for Undo`));
+    if (left.length) results.push(ok(`warn: left as ${left.length === 1 ? 'it is' : 'they are'}, being current or still on origin: ${left.join(', ')}`));
+  }
+  const since = now.getTime() - GIT_KEEP_DAYS * 86_400_000;
+  const old = (await keptBranches(ctx.exec, dir)).filter((k) => k.deletedAt.getTime() < since);
+  for (const k of old) await git(ctx.exec, dir, ['update-ref', '-d', k.ref]);
+  if (old.length) results.push(ok(`forgot ${old.length} branch${old.length === 1 ? '' : 'es'} deleted more than ${GIT_KEEP_DAYS} days ago`));
+  if (gc) {
+    const r = await ctx.exec('git', ['-C', dir, 'gc', '--quiet'], { timeoutMs: 20 * 60_000 });
+    if (r.code !== 0) return { results: [...results, r] };
+    const after = await objectsBytes(ctx.exec, dir);
+    results.push(ok(`packed with git gc: ${mib(before)} before, ${mib(after)} now`));
+  }
+  return { results };
+}
+
+/** Puts back branches Tidy up deleted, the newest kept copy of each. */
+export async function restoreBranches(ctx: GitActionContext, { domain, mount, repo, branches }: ActionInput<'git.restoreBranches'>): Promise<HandlerOutcome> {
+  const dir = gitFolder(ctx.config, domain, mount, repo);
+  const kept = await keptBranches(ctx.exec, dir);
+  const back: string[] = [];
+  const results: ExecResult[] = [];
+  for (const name of branches) {
+    const k = kept.find((x) => x.name === name);
+    if (!k) {
+      results.push(ok(`warn: ${name} is not kept any more`));
+      continue;
+    }
+    const made = await git(ctx.exec, dir, ['branch', '--', name, k.hash]);
+    if (made.code !== 0) {
+      results.push(ok(`warn: ${name} was not put back: ${(made.stderr || made.stdout).trim().split('\n').at(-1) ?? ''}`));
+      continue;
+    }
+    await git(ctx.exec, dir, ['update-ref', '-d', k.ref]);
+    back.push(name);
+  }
+  if (back.length) results.unshift(ok(`put back ${back.join(', ')}`));
+  return { results: results.length ? results : [ok('nothing to put back')] };
+}
+
+const mib = (bytes: number) => (bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0.1, bytes / 1024 ** 2).toFixed(1)} MB`);

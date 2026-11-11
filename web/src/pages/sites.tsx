@@ -27,7 +27,7 @@ import { scrollToCard } from '@/lib/scroll-to';
 type Filter = 'all' | 'attention' | 'removed';
 
 /** The sites in the order picked: by when they came here (unknown last), else by name. */
-/** The badge's tooltip for a site on nginx, alone or in front of Apache. */
+/** The server badge's tooltip: Apache, nginx alone, or nginx in front of Apache. */
 const SERVER_TITLE: Record<Site['server'], string> = {
   apache: 'Runs on Apache',
   'nginx-apache': 'nginx answers in front of Apache, which reads .htaccess',
@@ -240,15 +240,13 @@ function SiteCard({ site }: { site: Site }) {
             </Link>
           </h2>
           {siteSubtitle(site) && <p className="truncate text-sm text-muted-foreground">{siteSubtitle(site)}</p>}
-          {/* One row of badges with room between them, wrapping on a narrow card: a network on nginx shows both side by side, lined up. */}
-          {(site.network || site.server !== 'apache' || site.install?.takenOver || site.installing) && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {site.network && <NetworkBadge site={site} />}
-              {site.server !== 'apache' && <Badge tone="primary" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>}
-              {site.install?.takenOver && <Badge title={`Made by hand, managed by the panel since ${shortDate(site.install.takenOver.at)}`}>Taken over</Badge>}
-              {site.installing && <Badge tone="warning"><LoaderCircle className="size-3 animate-spin" />Installing: see progress</Badge>}
-            </div>
-          )}
+          {/* One row of badges with room between them, wrapping on a narrow card. Every site says which server answers it: Apache in grey, nginx in front or alone in blue. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {site.network && <NetworkBadge site={site} />}
+            <Badge tone={site.server === 'apache' ? 'neutral' : 'primary'} title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>
+            {site.install?.takenOver && <Badge title={`Made by hand, managed by the panel since ${shortDate(site.install.takenOver.at)}`}>Taken over</Badge>}
+            {site.installing && <Badge tone="warning"><LoaderCircle className="size-3 animate-spin" />Installing: see progress</Badge>}
+          </div>
           {site.busy && (
             <Link href={site.busy.jobId ? `/jobs/${encodeURIComponent(site.busy.jobId)}` : href} className="relative z-10 mt-1.5 block w-fit">
               <Badge tone="warning"><LoaderCircle className="size-3 animate-spin" />Busy: {site.busy.title}</Badge>
@@ -339,7 +337,7 @@ function SiteRow({ site }: { site: Site }) {
         </p>
         {site.title && <p className="truncate text-xs text-muted-foreground">{site.title}</p>}
       </div>
-      {site.server !== 'apache' && <Badge tone="primary" className="hidden shrink-0 sm:inline-flex" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>}
+      <Badge tone={site.server === 'apache' ? 'neutral' : 'primary'} className="hidden shrink-0 sm:inline-flex" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>
       {site.install?.takenOver && <Badge className="hidden shrink-0 sm:inline-flex">Taken over</Badge>}
       {site.installing && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Installing</Badge>}
       {site.busy && <Badge tone="warning" className="shrink-0"><LoaderCircle className="size-3 animate-spin" />Busy</Badge>}

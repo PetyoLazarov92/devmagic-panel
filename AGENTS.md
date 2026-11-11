@@ -81,6 +81,10 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    same way (`server/src/repo-hosts/`): GitHub through gh, GitLab (gitlab.com
    and your own hosts) through `glab api --hostname` only; the panel never
    reads glab's config, keyring or token either, and never sets one.
+   The vulnerability check (`server/src/vulnerabilities.ts`, off until
+   switched on in Aura) sends WPVulnerability only slugs WordPress's own update
+   check found on WordPress.org, never a version, a site name or a custom
+   plugin's name; versions are compared here.
    When no MySQL account you have signs in, `setup` can make the panel's own,
    `devmagic_panel@localhost`, with `sudo mysql` on the terminal (sudo asks
    for your password; never through the sudoers rule) and a generated

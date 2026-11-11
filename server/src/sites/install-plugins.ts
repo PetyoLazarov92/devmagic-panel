@@ -153,50 +153,6 @@ export function pluginPresent(docroot: string, file: string): boolean {
 }
 
 /**
- * What a site's database names that its files lack, read with WP-CLI and
- * nothing of the site loaded: the active plugins of every site of a network
- * and network-wide, the installed ones from WordPress's update check (with
- * their version and WordPress.org slug), and the ones turned off this week.
- */
-export async function missingOnSite(exec: Executor, docroot: string, host: string): Promise<DumpPlugin[]> {
-  const json = async (args: string[], url = `https://${host}/`): Promise<unknown> => {
-    const r = await exec('wp', [`--path=${docroot}`, `--url=${url}`, ...args, '--skip-plugins', '--skip-themes'], { timeoutMs: 60_000 });
-    if (r.code !== 0) return undefined;
-    try {
-      return JSON.parse(r.stdout) as unknown;
-    } catch {
-      return undefined;
-    }
-  };
-  const files = (v: unknown): string[] => (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.keys(v) : []).filter((f): f is string => typeof f === 'string' && PLUGIN_FILE.test(f) && !f.includes('..'));
-  const byFile = new Map<string, DumpPlugin>();
-  const get = (file: string) => byFile.get(file) ?? { file, active: false };
-  const sites = await json(['site', 'list', '--fields=url', '--format=json']);
-  const urls = Array.isArray(sites) ? sites.flatMap((s) => (s && typeof (s as { url?: unknown }).url === 'string' ? [(s as { url: string }).url] : [])).slice(0, 200) : [`https://${host}/`];
-  const network = Array.isArray(sites);
-  for (const url of urls) {
-    for (const file of files(await json(['option', 'get', 'active_plugins', '--format=json'], url))) {
-      const p = get(file);
-      byFile.set(file, { ...p, active: true, ...(network ? { sites: (p.sites ?? 0) + 1 } : {}) });
-    }
-  }
-  if (network) for (const file of files(await json(['site', 'option', 'get', 'active_sitewide_plugins', '--format=json']))) byFile.set(file, { ...get(file), active: true, network: true });
-  const check = (await json(['transient', 'get', 'update_plugins', '--network', '--format=json'])) as { checked?: unknown; response?: unknown; no_update?: unknown } | undefined;
-  if (check && typeof check === 'object') {
-    for (const [file, version] of Object.entries((check.checked && typeof check.checked === 'object' ? check.checked : {}) as Record<string, unknown>)) {
-      if (PLUGIN_FILE.test(file) && !file.includes('..')) byFile.set(file, { ...get(file), ...(typeof version === 'string' && /^[\w.+-]{1,40}$/.test(version) ? { version } : {}) });
-    }
-    for (const list of [check.response, check.no_update]) {
-      for (const [file, info] of Object.entries((list && typeof list === 'object' ? list : {}) as Record<string, { slug?: unknown }>)) {
-        if (byFile.has(file) && typeof info?.slug === 'string' && /^[a-z0-9_-]{1,100}$/.test(info.slug)) byFile.set(file, { ...get(file), slug: info.slug });
-      }
-    }
-  }
-  for (const file of files(await json(['option', 'get', 'recently_activated', '--format=json']))) byFile.set(file, get(file));
-  return [...byFile.values()].filter((p) => !pluginPresent(docroot, p.file)).sort((a, b) => Number(b.active) - Number(a.active) || a.file.localeCompare(b.file));
-}
-
-/**
  * Themes the database uses that the files lack, installed from
  * WordPress.org by slug the same way: each on its own, production's version
  * first and the latest when that one is gone, a failure noted, nothing
@@ -244,47 +200,4 @@ export async function installThemes(exec: Executor, docroot: string, host: strin
   const done = themes.length - failed.length;
   results.push(ok(failed.length ? `installed ${done} of ${themes.length} themes; not installed: ${failed.join(', ')}` : `installed ${done} theme${done === 1 ? '' : 's'} from WordPress.org`));
   return { results, installed, failed };
-}
-
-/**
- * The themes a site's database uses that its files lack, read with WP-CLI
- * and nothing of the site loaded: each site's own theme and the parent a
- * child theme takes its templates from, with production's version from
- * WordPress's update check. A theme in a repo under wp-content/repos counts
- * as there.
- */
-export async function missingThemesOnSite(exec: Executor, docroot: string, host: string): Promise<DumpTheme[]> {
-  const run = async (args: string[], url = `https://${host}/`): Promise<string | undefined> => {
-    const r = await exec('wp', [`--path=${docroot}`, `--url=${url}`, ...args, '--skip-plugins', '--skip-themes'], { timeoutMs: 60_000 });
-    return r.code === 0 ? r.stdout.trim() : undefined;
-  };
-  const name = (v: string | undefined) => (v && THEME_NAME.test(v) && !v.includes('..') ? v : undefined);
-  let sites: unknown;
-  try {
-    sites = JSON.parse((await run(['site', 'list', '--fields=url', '--format=json'])) ?? 'null');
-  } catch {
-    sites = null;
-  }
-  const network = Array.isArray(sites);
-  const urls = Array.isArray(sites) ? sites.flatMap((s) => (s && typeof (s as { url?: unknown }).url === 'string' ? [(s as { url: string }).url] : [])).slice(0, 200) : [`https://${host}/`];
-  const used = new Map<string, number>();
-  const parents = new Set<string>();
-  for (const url of urls) {
-    const own = name(await run(['option', 'get', 'stylesheet'], url));
-    const template = name(await run(['option', 'get', 'template'], url));
-    if (own) used.set(own, (used.get(own) ?? 0) + 1);
-    if (template && template !== own) parents.add(template);
-  }
-  let versions: Record<string, unknown> = {};
-  try {
-    const check = JSON.parse((await run(['transient', 'get', 'update_themes', '--network', '--format=json'])) ?? 'null') as { checked?: unknown } | null;
-    if (check?.checked && typeof check.checked === 'object') versions = check.checked as Record<string, unknown>;
-  } catch {
-    // No update check kept: no versions.
-  }
-  const version = (n: string) => (typeof versions[n] === 'string' && /^[\w.+-]{1,40}$/.test(versions[n] as string) ? { version: versions[n] as string } : {});
-  return [
-    ...[...used].map(([n, count]): DumpTheme => ({ name: n, ...(network ? { sites: count } : {}), ...version(n) })),
-    ...[...parents].filter((n) => !used.has(n)).map((n): DumpTheme => ({ name: n, parent: true, ...version(n) })),
-  ].filter((t) => !existsSync(themeDir(docroot, t.name)));
 }

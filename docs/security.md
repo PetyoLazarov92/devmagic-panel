@@ -52,6 +52,16 @@ and the panel never reads it. The same goes for the GitLab CLI, which lists
 GitLab groups and merge requests, and for Claude Code and rclone in an install
 from an organization.
 
+## What leaves the machine for vulnerability checks
+
+The vulnerability check in Aura is off until you switch it on. Then it asks
+[WPVulnerability](https://www.wpvulnerability.com/) about plugins and themes
+by slug, once a day each: only slugs WordPress's own update check found on
+WordPress.org, read from what WordPress saved, so the name of a custom or
+client plugin is never sent. No version, site name or address goes with it:
+the answer lists every known vulnerability with its version range, and the
+panel compares your versions here.
+
 ## Checked packages
 
 Updates are packages GitHub built from a version tag, checked against their

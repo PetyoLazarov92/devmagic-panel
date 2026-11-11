@@ -5,7 +5,8 @@ import type { JobStep } from '../jobs.js';
 import type { RunStore } from '../store.js';
 import { type CleanContext, planCleanCopy } from './clean.js';
 import { DbRefused, planImport, wordpressSite } from './db.js';
-import { missingOnSite, missingThemesOnSite, slugOf } from './install-plugins.js';
+import { slugOf } from './install-plugins.js';
+import { scanMissing } from './missing-scan.js';
 import { type MoreDumpsContext, planServerDump } from './more-dumps.js';
 import type { SiteRef } from './site-actions.js';
 import { readUpload } from './uploads.js';
@@ -105,8 +106,7 @@ export function planRefresh(ctx: RefreshContext, input: ActionInput<'site.refres
     label: 'Look for plugins and themes the new database names that the files lack',
     skippable: 'The check for missing plugins and themes did not run: the Plugins tab shows them.',
     run: async () => {
-      const plugins = await missingOnSite(ctx.exec, site.docroot, site.host);
-      const themes = await missingThemesOnSite(ctx.exec, site.docroot, site.host);
+      const { plugins, themes } = await scanMissing(ctx.exec, site);
       if (plugins.length + themes.length === 0) return ok('the files have every plugin and theme the new database names');
       const names = [...themes.map((t) => `${t.name} (theme)`), ...plugins.filter((p) => p.active).map((p) => slugOf(p))];
       const parts = [plugins.length ? `${plugins.length} plugin${plugins.length === 1 ? '' : 's'}` : '', themes.length ? `${themes.length} theme${themes.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');

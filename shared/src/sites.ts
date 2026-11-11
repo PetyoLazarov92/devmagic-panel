@@ -114,6 +114,21 @@ export interface GitDetails {
   fetchedAt?: string;
 }
 
+/** What Tidy up on the Git card would do, read after a fetch with prune. */
+export interface GitTidyPreview {
+  /** The repo's objects (packs and loose ones), in bytes: most of .git. */
+  objectsBytes: number;
+  /** Local branches whose branch on origin was deleted. */
+  gone: Array<{ name: string; current: boolean; merged: boolean; hash: string; subject: string; date: string }>;
+  /** What merged means here: in origin's default branch, like origin/main. */
+  mainBranch?: string;
+  /** Branches Tidy up deleted, kept for Undo for GIT_KEEP_DAYS days. */
+  kept: Array<{ name: string; deletedAt: string }>;
+}
+
+/** How long a branch Tidy up deleted is kept, so Undo can put it back. */
+export const GIT_KEEP_DAYS = 14;
+
 /**
  * An open pull request on GitHub (through the GitHub CLI) or merge request on
  * GitLab (through the GitLab CLI), for the branch it comes from. Ones from
@@ -343,6 +358,11 @@ export interface SitePlugin {
   /** From its header, as plain text. */
   description?: string;
   author?: string;
+  /** Its Plugin URI and Author URI headers, only http(s) links. */
+  pluginUri?: string;
+  authorUri?: string;
+  /** Its slug on WordPress.org, when WordPress's own update check found it there (nothing is asked for it). */
+  wporg?: string;
 }
 
 export interface SitePlugins {
@@ -364,6 +384,13 @@ export interface SiteTheme {
   folder: string;
   /** In a repo of its own under wp-content/repos, which Local mode makes a themes folder. */
   inRepo?: true;
+  /** From its style.css, as plain text, and its Theme URI and Author URI, only http(s) links. */
+  description?: string;
+  author?: string;
+  themeUri?: string;
+  authorUri?: string;
+  /** Its slug on WordPress.org, when WordPress's own update check found it there. */
+  wporg?: string;
 }
 
 export interface SiteThemes {
@@ -421,6 +448,52 @@ export interface DumpPlugin {
   version?: string;
   /** Its slug on WordPress.org, when WordPress's update check found it there. */
   slug?: string;
+}
+
+/** A known vulnerability of a plugin or theme version, from WPVulnerability. */
+export interface KnownVulnerability {
+  title: string;
+  severity?: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  /** The CVSS score, 0 to 10. */
+  score?: number;
+  /** The first version without it, when there is one. */
+  fixedIn?: string;
+  /** No fixed version yet. */
+  unfixed?: true;
+  /** Its advisory, like a CVE record. */
+  link?: string;
+}
+
+/** A site's plugins and themes with known vulnerabilities, as the last check found them. */
+export interface SiteVulnerabilities {
+  checkedAt: string;
+  /** How many plugins and themes were looked up: only ones WordPress.org has. */
+  checked: number;
+  hits: Array<{ kind: 'plugin' | 'theme'; slug: string; title: string; version: string; vulnerabilities: KnownVulnerability[] }>;
+}
+
+/** Whether the vulnerability check is on, runs now, and what it last found for a site. */
+export interface VulnerabilityState {
+  enabled: boolean;
+  running: boolean;
+  /** When the last round over every site started. */
+  lastRound?: string;
+  found?: SiteVulnerabilities;
+}
+
+/** What a site's database names that its files lack, as the last scan found it. */
+export interface MissingScan {
+  plugins: DumpPlugin[];
+  themes: DumpTheme[];
+  checkedAt: string;
+}
+
+/** The Plugins tab's scan for missing plugins and themes: the last result, and one that runs on the server now. */
+export interface MissingScanState {
+  scan?: MissingScan;
+  running?: { startedAt: string; step: string; done: number; total: number };
+  /** Why the last scan failed, when there is no result to show. */
+  error?: string;
 }
 
 /** A plugin or theme a server has, as its WP-CLI lists it. */
@@ -984,6 +1057,8 @@ export interface RepoBuild {
   builtInRepo?: boolean;
   /** Scripts that run their builds with concurrently --kill-others, so the first to finish stops the rest. */
   stopsOthers?: string[];
+  /** Scripts that run a gulp task the gulpfile does not define, with that task: they fail at once, so none is picked. */
+  missingTasks?: Record<string, string>;
   /** The Node it would run on and why, like "Node 16.20.2 from nvm (node-sass 7 runs on Node 16 at most)", or why none can be picked. */
   node?: string;
 }

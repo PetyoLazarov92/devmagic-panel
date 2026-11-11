@@ -245,7 +245,10 @@ production-only plugins go off as on every install from a dump.
 - **Build**: a checklist per repo lists every `composer.json` and
   `package.json` and ticks only the ones whose output the repo does not hold
   (`vendor/` or a build folder git ignores; never a wordpress.org plugin), with
-  their build, prod or production script. Watchers are never offered. Builds
+  their build, prod or production script. Watchers are never offered. A
+  script that runs a gulp task its gulpfile does not define (`gulp build` with
+  no `build` task) is never picked: the row says so and you pick another, and
+  a build that still fails that way says which task is missing. Builds
   run in their repo's folder with a Node from nvm, picked in this order: the
   one you choose on the build's row, the repo's `.nvmrc` or `.node-version`,
   what its `package.json` says (volta, `engines`, or a package that stops on

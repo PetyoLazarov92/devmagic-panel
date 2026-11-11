@@ -1006,6 +1006,19 @@ export const actions = {
     changesSystem: true,
     input: z.object({ ...gitTarget, branch: branchName }),
   },
+  'git.tidy': {
+    title: 'Tidy up the repo',
+    description:
+      "Fetches from origin with prune (so branches deleted there go here too), deletes the local branches named whose branch on origin is gone (never the current one; each kept 14 days under refs/devmagic-panel/deleted, so Undo puts it back) and, with gc, packs the repo with git gc to make .git smaller. Never rewrites history or touches the working files.",
+    changesSystem: true,
+    input: z.object({ ...gitTarget, branches: z.array(branchName).max(500), gc: z.boolean() }),
+  },
+  'git.restoreBranches': {
+    title: 'Put deleted branches back',
+    description: 'Puts back branches Tidy up deleted in the last 14 days, at the commit they had. A branch whose name is taken again is left as it is.',
+    changesSystem: true,
+    input: z.object({ ...gitTarget, branches: z.array(branchName).min(1).max(500) }),
+  },
   'db.cleanTransients': {
     title: 'Delete transients',
     description:

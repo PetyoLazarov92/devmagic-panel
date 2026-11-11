@@ -531,7 +531,7 @@ function RowsView({ database, table, editable }: { database: string; table: stri
             )}
             {canChange && <span aria-hidden className="mx-1 h-5 w-px bg-border" />}
             <label htmlFor={`${table}-page-size`} className="text-xs text-muted-foreground">Rows a page</label>
-            <Select id={`${table}-page-size`} value={pageSize} onChange={(e) => (setPageSize(Number(e.target.value) as (typeof DB_PAGE_SIZES)[number]), setPage(1))} className="h-8 py-0 text-xs">
+            <Select id={`${table}-page-size`} value={pageSize} onChange={(e) => (setPageSize(Number(e.target.value) as (typeof DB_PAGE_SIZES)[number]), setPage(1))} className="h-8 w-24 py-0 text-xs">
               {DB_PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
             </Select>
           </div>

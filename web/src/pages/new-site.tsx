@@ -2128,6 +2128,9 @@ function BuildRows({ prefix, title, builds, picks, commands, docsFile, nodes, on
             in <code className="font-mono">{build.dir || '/'}</code> · {build.why}
             {choice.fromDocs && build.builtInRepo && `; ${docsFile} builds it${choice.script ? ` with ${choice.script}` : ''}, tick it to run it anyway`}
           </span>
+          {choice.script && build.missingTasks?.[choice.script] && (
+            <span className="text-xs text-warning">{choice.script} runs gulp {build.missingTasks[choice.script]}, and the gulpfile has no task by that name, so it fails at once: pick another script.</span>
+          )}
           {choice.script && build.stopsOthers?.includes(choice.script) && (
             <span className="text-xs text-warning">{choice.script} runs its builds with concurrently --kill-others, so the first to finish stops the others: pick one of its parts, or change it to --kill-others-on-fail.</span>
           )}

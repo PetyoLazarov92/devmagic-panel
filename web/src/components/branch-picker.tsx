@@ -127,13 +127,34 @@ export function BranchPicker({ id, branches, pulls, value, onChange, disabled, c
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        // After a pick the field keeps focus, so focus alone would not open it again: a click does.
+        onClick={() => setOpen(true)}
         onKeyDown={onKeyDown}
         disabled={disabled}
         spellCheck={false}
         autoComplete="off"
         className="h-10 w-full rounded-md border border-input bg-card pr-9 pl-3 font-mono text-[13px] shadow-xs focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 focus-visible:outline-none disabled:opacity-60"
       />
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label={open ? 'Close the branch list' : 'Open the branch list'}
+        disabled={disabled}
+        // Keeps the focus in the field, so typing goes on there.
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          if (open) {
+            setQuery('');
+            setOpen(false);
+          } else {
+            setOpen(true);
+            document.getElementById(id)?.focus();
+          }
+        }}
+        className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground disabled:opacity-60"
+      >
+        <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} />
+      </button>
       {open && (
         <ul ref={list} id={listId} role="listbox" className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-md border bg-card py-1 text-sm shadow-lg">
           {shown.length === 0 && <li className="px-3 py-2 text-muted-foreground">No branch matches "{query}"</li>}

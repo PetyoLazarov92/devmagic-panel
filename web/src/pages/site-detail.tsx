@@ -1,9 +1,11 @@
 import type { ActionId, JobView, Site, SiteGit, SiteLocalMode, WpCronReport, WpDebugConstant } from '@devmagic-panel/shared';
 import { TakeoverCard } from '@/components/takeover-card';
+import { WordPressSummary } from '@/components/wordpress-summary';
+import { GitTidyDialog } from '@/components/git-tidy';
 import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, sameRepo, SITE_SERVER_LABEL, siteRepos, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import {
   ArrowDownToLine, ArrowLeft, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LoaderCircle, LogIn, Network, RefreshCw,
-  ShieldCheck, SkipForward, SquareTerminal, Trash2, Wrench, X,
+  ShieldCheck, SkipForward, Sparkles, SquareTerminal, Trash2, Wrench, X,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Bar, ListSkeleton, LogSkeleton, SitePageSkeleton } from '@/components/skeletons';
@@ -42,6 +44,7 @@ import { ServerCard } from '@/pages/site-server';
 import { HtaccessCard } from '@/pages/site-htaccess';
 import { siteHref, siteName, siteTarget, takeoverHref } from '@/lib/site-ref';
 import { debugLabel, debugValues, siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
+import { filesHref } from '@/lib/file-links';
 import { cn } from '@/lib/utils';
 
 /** A tab's address: the site's page with ?tab=, nothing for Overview. Not a path segment, which a site under that path would own. */
@@ -520,6 +523,7 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
               <CardHeader><CardTitle>WordPress</CardTitle><Layers className="size-4 text-muted-foreground" /></CardHeader>
               <div className="grid gap-4 p-5">
                 <p className="text-sm">{coreLabel(site)}</p>
+                <WordPressSummary site={site} />
                 {site.core.kind === 'wpcore' ? (
                   <Field label="Core version" htmlFor="core" hint="Switches the symlinks to another shared core, then updates the database. Files in wp-content stay as they are.">
                     <div className="flex gap-2">
@@ -559,12 +563,17 @@ function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: Site; on
         {site.localMode && <UploadsCard site={site} onChanged={onChanged} />}
 
         <Card>
-          <CardHeader><CardTitle>Files</CardTitle><FolderOpen className="size-4 text-muted-foreground" /></CardHeader>
+          <CardHeader>
+            <CardTitle>Files</CardTitle>
+            <Link href={filesHref(site)} className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+              <FolderOpen className="size-4" />Open in Files
+            </Link>
+          </CardHeader>
           <dl className="grid gap-3 p-5 text-sm">
             <Row label="Installed">{installLabel(site.install)}</Row>
-            <Row label="Folder"><FolderLine path={site.docroot} /></Row>
+            <Row label="Folder"><FolderLine path={site.docroot} files={filesHref(site)} /></Row>
             {site.mounts?.map((m) => (
-              <Row key={m.path} label={m.path}><FolderLine path={m.docroot} /></Row>
+              <Row key={m.path} label={m.path}><FolderLine path={m.docroot} files={filesHref({ domain: site.domain, path: m.path })} /></Row>
             ))}
             {site.prodUrl && <Row label="Production"><a href={site.prodUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{site.prodUrl}</a></Row>}
           </dl>
@@ -591,6 +600,7 @@ function RepoSection({ domain, mount, repo, label, folder, git, installedFrom = 
   const [branch, setBranch] = useState(git.branch);
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<{ name: string; ok: boolean; output: string } | null>(null);
+  const [tidying, setTidying] = useState(false);
   const target = { domain, ...(mount ? { mount } : {}), ...(repo ? { repo } : {}) };
   const branches = details.data?.branches ?? [{ name: git.branch, current: true, remoteOnly: false }];
   const commits = details.data?.commits ?? [git.lastCommit];
@@ -672,7 +682,23 @@ function RepoSection({ domain, mount, repo, label, folder, git, installedFrom = 
           <RefreshCw className={cn(busy === 'Fetch' && 'animate-spin')} />
           Fetch
         </Button>
+        <Button variant="outline" className="h-10" disabled={busy !== null} title="Delete branches gone from origin and pack the repo smaller" onClick={() => setTidying(true)}>
+          <Sparkles />
+          Tidy up
+        </Button>
       </div>
+      {tidying && (
+        <GitTidyDialog
+          target={target}
+          label={label}
+          onClose={() => setTidying(false)}
+          onDone={(r) => {
+            setResult(r);
+            onChanged();
+            details.reload();
+          }}
+        />
+      )}
       {branch !== git.branch && git.dirty > 0 && (
         <p className="-mt-1 text-xs text-warning">Commit or stash the {git.dirty} uncommitted change{git.dirty === 1 ? '' : 's'} before switching.</p>
       )}
@@ -1089,18 +1115,19 @@ function RunOutput({ result }: { result: { name: string; ok: boolean; output: st
   );
 }
 
-function FolderLine({ path }: { path: string }) {
+/** A folder, with links to it in the Files tab (when it is a site's) and in VS Code. */
+function FolderLine({ path, files }: { path: string; files?: string }) {
+  const link = 'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
   return (
     <span className="flex items-start justify-between gap-2">
       <span className="font-mono text-[13px] break-all">{path}</span>
-      <a
-        href={vscodeUrl(path)}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        title={`Open ${path} in VS Code`}
-      >
-        <Code2 className="size-3.5" />
-        VS Code
-      </a>
+      <span className="flex shrink-0 items-center">
+        {files && <Link href={files} className={link} title={`Open ${path} in the Files tab`}><FolderOpen className="size-3.5" />Files</Link>}
+        <a href={vscodeUrl(path)} className={link} title={`Open ${path} in VS Code`}>
+          <Code2 className="size-3.5" />
+          VS Code
+        </a>
+      </span>
     </span>
   );
 }

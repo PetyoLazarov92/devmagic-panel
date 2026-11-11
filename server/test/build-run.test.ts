@@ -58,6 +58,16 @@ describe('running the builds of an install', () => {
     );
   });
 
+  it('says so when the script runs a gulp task the gulpfile does not define', async () => {
+    const root = clone();
+    const out = ['[08:21:04] Using gulpfile ~/wandworks/gulpfile.js', '[08:21:04] Task never defined: build', '[08:21:04] To list available tasks, try running: gulp --tasks'].join('\n');
+    const fake = fakeExec({ 'npm ci': { stdout: 'ok' }, 'npm run': { code: 1, stderr: out } });
+    const results = await runBuild(fake.exec, root, { dir: 'wp-content/themes/wandworks', tool: 'npm', script: 'prod' }, { home: root });
+    expect(results.at(-1)?.stderr.split('\n').at(-1)).toBe(
+      'wp-content/themes/wandworks: the build failed: prod runs gulp build, and the gulpfile has no task by that name. Pick another script of its package.json, or run the right one in a terminal (gulp --tasks lists them)',
+    );
+  });
+
   it('keeps the two older switches as builds at the repo root', () => {
     const base = { build: { composer: true, npm: true } } as Parameters<typeof buildsFor>[0];
     expect(buildsFor(base)).toEqual([{ repo: 0, dir: '', tool: 'composer' }, { repo: 0, dir: '', tool: 'npm', script: 'build' }]);

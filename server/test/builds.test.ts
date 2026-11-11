@@ -1,6 +1,6 @@
 import type { BuildTool } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { composerPlugins, ignoredFolder, ignoredOutput, planBuilds, type BuildFiles } from '../src/sites/builds.js';
+import { composerPlugins, gulpTasks, gulpTasksOf, ignoredFolder, ignoredOutput, planBuilds, type BuildFiles } from '../src/sites/builds.js';
 
 /** A repo as the lookup sees it: every path, and the text of the few files it reads. */
 function repo(text: Record<string, string>, more: string[] = []): BuildFiles {
@@ -12,6 +12,44 @@ const composer = (require: Record<string, string>) => JSON.stringify({ require }
 const WPORG = '=== Wandworks Forms ===\nStable tag: 2.1.0\n';
 
 describe('the builds of a repo', () => {
+  it('never picks a script that runs a gulp task the gulpfile does not define, and says which', () => {
+    const theme = 'wp-content/themes/wandworks';
+    const [build] = planBuilds(
+      repo({
+        [`${theme}/package.json`]: pkg({ build: 'gulp build', 'deploy-dev': 'gulp deploy-dev', 'compile:css': 'node-sass sass/ -o .' }),
+        [`${theme}/gulpfile.js`]: "const gulp = require('gulp');\ngulp.task( 'deploy-dev', () => {} );\ngulp.task('deploy-prod', () => {});\n",
+        [`${theme}/.gitignore`]: 'dist/\n',
+      }),
+      all,
+    );
+    expect(build?.script).toBeUndefined();
+    expect(build?.needed).toBe(false);
+    expect(build?.missingTasks).toEqual({ build: 'build' });
+    expect(build?.why).toBe('dist/ is ignored by git: pick its build script (build runs gulp build, which the gulpfile does not define)');
+    // One that defines it is picked as before.
+    const [ok] = planBuilds(
+      repo({
+        [`${theme}/package.json`]: pkg({ build: 'gulp build' }),
+        [`${theme}/gulpfile.js`]: 'exports.build = series(styles, scripts);\n',
+        [`${theme}/.gitignore`]: 'dist/\n',
+      }),
+      all,
+    );
+    expect(ok?.script).toBe('build');
+    expect(ok?.missingTasks).toBeUndefined();
+  });
+
+  it('reads the tasks of a gulpfile, and says nothing when they come from other files', () => {
+    expect([...(gulpTasks("gulp.task('styles', fn);\nexports.build = build;\nexports['build:prod'] = x;\nexport const scripts = () => {};\nexport { watch as dev };\nexport default build;") ?? [])].sort()).toEqual(['build', 'build:prod', 'default', 'dev', 'scripts', 'styles']);
+    expect([...(gulpTasks('module.exports = { build, styles: css };') ?? [])].sort()).toEqual(['build', 'default', 'styles']);
+    expect(gulpTasks("require('require-dir')('./gulp/tasks');")).toBeNull();
+    expect(gulpTasks("const tasks = require('./tasks/build');")).toBeNull();
+    expect(gulpTasksOf('npm run clean && gulp styles scripts --production')).toEqual(['styles', 'scripts']);
+    expect(gulpTasksOf('NODE_ENV=production npx gulp')).toEqual(['default']);
+    expect(gulpTasksOf('gulp --gulpfile build/gulpfile.js build')).toBeNull();
+    expect(gulpTasksOf('webpack --mode production')).toEqual([]);
+  });
+
   it('marks scripts that stop their other builds when one finishes, and never picks one by default', () => {
     const [build] = planBuilds(
       repo({

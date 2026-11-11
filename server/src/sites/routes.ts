@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { AuraReport, CompatScan, FileDiff, FileFindResult, FileGitStatus, FileSize, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, DumpPlugin, DumpTheme } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, FileDiff, FileFindResult, FileGitStatus, FileSize, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, GitTidyPreview, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, MissingScanState, VulnerabilityState } from '@devmagic-panel/shared';
 import { FILE_TEXT_MAX, actions, sshHost, serverPath, wpCliCommand, branchName, cleanCopyName, gitUrl, isActionId, isSitePath, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { SystemConfig } from '../config.js';
@@ -17,12 +17,13 @@ import { listSnapshots, snapshotDir } from './db.js';
 import { cleanDir, listCleanCopies } from './export.js';
 import { listKept } from './kept.js';
 import { takeoverPreview, TakeoverRefused } from './takeover.js';
-import { missingOnSite, missingThemesOnSite } from './install-plugins.js';
+import { MissingScans } from './missing-scan.js';
+import { VulnerabilityWatch, vulnerabilityItems } from '../vulnerabilities.js';
 import { wporgPlugins, wporgThemes } from '../wporg-plugins.js';
 import { z } from 'zod';
 import { cleanPreview } from './clean-current.js';
 import { readLocalConstants } from '../local-constants.js';
-import { gitFolder, readGitDetails, readPullRequests } from './git.js';
+import { gitFolder, readGitDetails, readPullRequests, readTidyPreview } from './git.js';
 import { parseApacheErrorLog, parseDebugLog, parseNginxErrorLog, tailFile } from './logs.js';
 import { removalRefusal } from './remove.js';
 import { readHtaccessReport } from './htaccess-rules.js';
@@ -92,6 +93,11 @@ export function readSiteLog(config: SystemConfig, domain: string, source: 'debug
 
 /** Read-only site routes; registered inside the authenticated scope. */
 export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): { aura: () => Promise<AuraReport>; sites: () => Promise<Site[]> } {
+  const missingScans = new MissingScans(deps.store, deps.exec);
+  // A job on a site may have changed its plugins, themes or database: the next visit scans again.
+  deps.jobs?.onEnd((view) => {
+    if (view.target) missingScans.forget(view.target);
+  });
   let cached: { at: number; sites: Promise<Site[]> } | null = null;
   const sites = () => {
     // A job that ended since (an install, a removal) changed what discovery sees.
@@ -138,9 +144,29 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
 
   api.get('/api/sites', async () => marked(await sites()));
 
-  const aura = async (): Promise<AuraReport> =>
-    readAura({ config: deps.config, exec: deps.exec, localConstants: readLocalConstants(deps.store), compatScans: (key) => deps.store.compatScans(key) as CompatScan[], wpCronTasks: () => wpCronSites(deps.exec) }, await sites());
+  // Known vulnerabilities of plugins and themes: off until switched on; a read of Aura starts the day's round in the background.
+  const vulnerabilities = new VulnerabilityWatch(deps.store, deps.exec, deps.config);
+  const aura = async (): Promise<AuraReport> => {
+    const list = await sites();
+    vulnerabilities.maybeStart(sites);
+    const report = await readAura({ config: deps.config, exec: deps.exec, localConstants: readLocalConstants(deps.store), compatScans: (key) => deps.store.compatScans(key) as CompatScan[], wpCronTasks: () => wpCronSites(deps.exec) }, list);
+    if (!vulnerabilities.enabled()) return report;
+    const items = [...report.items, ...vulnerabilityItems(list, (site) => vulnerabilities.kept(site))];
+    items.sort((a, b) => (a.status === b.status ? 0 : a.status === 'fail' ? -1 : 1));
+    return { ...report, items };
+  };
   api.get('/api/aura', aura);
+  // A site's plugins and themes with known vulnerabilities, as the last check found them. Read only.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/vulnerabilities', async (request): Promise<VulnerabilityState> => {
+    const found = vulnerabilities.enabled() ? vulnerabilities.kept(`${request.params.domain}${request.query.path ?? ''}`) : undefined;
+    return { enabled: vulnerabilities.enabled(), running: vulnerabilities.running(), ...(found ? { found } : {}) };
+  });
+  api.get('/api/vulnerabilities', async (): Promise<VulnerabilityState> => ({ enabled: vulnerabilities.enabled(), running: vulnerabilities.running(), ...(vulnerabilities.lastRound() ? { lastRound: vulnerabilities.lastRound() as string } : {}) }));
+  // Check now: a new round over every site, unless one runs. Asks WPVulnerability only when it is switched on.
+  api.post('/api/vulnerabilities/check', async (): Promise<VulnerabilityState> => {
+    vulnerabilities.maybeStart(sites, true);
+    return { enabled: vulnerabilities.enabled(), running: vulnerabilities.running() };
+  });
 
   // ?path=/learn picks the WordPress install under that path of the domain.
   api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain', async (request, reply) => {
@@ -389,6 +415,19 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     }
   });
 
+  // What Tidy up would do on the Git card: the size of the repo's objects and its branches gone from origin. Read only.
+  api.get<{ Params: { domain: string }; Querystring: { mount?: string; repo?: string } }>('/api/sites/:domain/git/tidy', async (request, reply): Promise<GitTidyPreview | undefined> => {
+    const { mount, repo } = request.query;
+    if (mount !== undefined && !mountPath.safeParse(mount).success) return reply.code(400).send({ error: 'mount must be a path like /learn' });
+    if (repo !== undefined && !repoFolder.safeParse(repo).success) return reply.code(400).send({ error: 'repo must be a folder like wp-content/themes/wandworks' });
+    try {
+      return await readTidyPreview(deps.exec, gitFolder(deps.config, request.params.domain, mount, repo));
+    } catch (error) {
+      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
+      throw error;
+    }
+  });
+
   /** The snapshot folder key of a site, or null when there is no such site (or path). */
   const snapshotKey = (domain: string, path: string | undefined): string | null => {
     if (path !== undefined && !mountPath.safeParse(path).success) return null;
@@ -397,17 +436,25 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     return siteKey(domain, path);
   };
 
-  // What a site's database names that its files lack, for the Plugins tab's Missing plugins. Read only.
-  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/missing-plugins', async (request, reply): Promise<DumpPlugin[] | undefined> => {
-    const key = snapshotKey(request.params.domain, request.query.path);
-    if (!key) return reply.code(404).send({ error: `no site called ${request.params.domain}${request.query.path ?? ''}` });
+  // What a site's database names that its files lack, for the Plugins and Themes views: the last scan at once, and one
+  // on the server when there is none or it is old. It goes on when the browser leaves. Read only.
+  const missingState = (domain: string, path: string | undefined, how: 'read' | 'force' | 'peek', reply: FastifyReply): MissingScanState | FastifyReply => {
+    if (!snapshotKey(domain, path)) return reply.code(404).send({ error: `no site called ${domain}${path ?? ''}` });
     try {
-      const site = siteFor(deps.config, request.params.domain, request.query.path);
-      return await missingOnSite(deps.exec, site.docroot, site.host);
+      const site = siteFor(deps.config, domain, path);
+      return missingScans.state(`${domain}${path ?? ''}`, () => site, how);
     } catch (error) {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       throw error;
     }
+  };
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; peek?: string } }>('/api/sites/:domain/missing', async (request, reply) =>
+    missingState(request.params.domain, request.query.path, request.query.peek === '1' ? 'peek' : 'read', reply),
+  );
+  api.post<{ Params: { domain: string }; Body: unknown }>('/api/sites/:domain/missing/check', async (request, reply) => {
+    const body = z.object({ path: z.string().max(200).optional() }).safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: 'A path like /learn' });
+    return missingState(request.params.domain, body.data.path, 'force', reply);
   });
   // Refresh from production: where the site's production is and how to copy it, kept in the panel's database. No secret in it.
   api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/production', async (request, reply) => {
@@ -447,17 +494,6 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     } catch (error) {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: password.success && password.data ? refusalWithPassword(body.data.host, error.message) : error.message });
-      throw error;
-    }
-  });
-  // The themes a site's database uses that its files lack. Read only.
-  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/missing-themes', async (request, reply): Promise<DumpTheme[] | undefined> => {
-    if (!snapshotKey(request.params.domain, request.query.path)) return reply.code(404).send({ error: `no site called ${request.params.domain}${request.query.path ?? ''}` });
-    try {
-      const site = siteFor(deps.config, request.params.domain, request.query.path);
-      return await missingThemesOnSite(deps.exec, site.docroot, site.host);
-    } catch (error) {
-      if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       throw error;
     }
   });

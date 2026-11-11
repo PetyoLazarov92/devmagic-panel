@@ -46,6 +46,15 @@ problem in one list, with one-click fixes and **Fix all**:
 - A `wp-content` WordPress cannot write to.
 - On nginx: a hosts line pointing at the other server, `.htaccess` rules nginx
   ignores, and nginx rules of another kind after a site became a network.
+- Known vulnerabilities in the sites' plugins and themes, once you switch the
+  check on in the **Known vulnerabilities** card under the list. It runs once a
+  day in the background (or on **Check now**) through
+  [WPVulnerability](https://www.wpvulnerability.com/), free and without a key.
+  Only the slugs WordPress's own update check found on WordPress.org are
+  asked about, never a version: the answer lists every known vulnerability with
+  its version range, and the panel compares the installed version here. A high
+  or critical one fails, the others warn, each with the fixed version and its
+  advisory. Answers are kept a day per slug.
 
 **Machine checks** (`/aura/machine`): every check of this machine, passing or
 not. The panel's own installation (files, root scripts, build), Apache,

@@ -10,6 +10,8 @@ hand included, and each site has a page of its own with tabs.
 - Every site with its health, certificate, WordPress core, git branch,
   database, multisite, logs and how it was installed: by the panel and from
   what, restored, or by hand. A filter picks sites by how they came here.
+- A badge for the server that answers each site: Apache in grey, nginx +
+  Apache or nginx in blue.
 - Unfinished installs are listed at the top, to continue or discard (see
   [New site](new-site.md#install-drafts)).
 - A site under a path of another site shows on its own, next to its parent
@@ -45,7 +47,20 @@ to set, names the certificate or hosts file leaves out.
   folders. Each shows its branch, with pull, fetch, switch (search by any
   letters of the name) and its open pull or merge requests (through the GitHub
   CLI when you are signed in to it).
-- Quick actions and the core.
+- **Tidy up** on each repo: it fetches from origin with prune (branches
+  deleted there go from the list here), then lists the local branches whose
+  branch on origin was deleted, all ticked but the current one, each saying
+  whether it is in origin's default branch (a squash merge often is not), and
+  offers `git gc`, with the size of the repo's objects before and after. A
+  deleted branch is kept 14 days under `refs/devmagic-panel/deleted`, so Undo
+  in the toast puts it back; the next Tidy up after that lets it go. History
+  is never rewritten. When the history itself holds big files, gc frees little:
+  the dialog says so.
+- Quick actions, and the core with a summary of the plugins and themes (how
+  many, how many on, updates, and what the last missing check found), each a
+  link to its view. It reads what was found; it never starts a check.
+- **Files**: where the site lives, with **Open in Files** and a Files link for
+  each folder, next to VS Code.
 
 ### Logs
 
@@ -71,15 +86,21 @@ Database tab's: **Plugins** and **Themes**.
 
 **Themes** lists the site's themes, read only: which one is on, the parent a
 child theme takes its templates from, the version and an update WordPress
-already found, and where each folder is, with **Open folder** to it on the
-Files tab. A theme in a repo of its own under `wp-content/repos` is listed
+already found, what its `style.css` says of it and who made it, and where
+each folder is, with **Open folder** to it on the Files tab. A theme in a repo of its own under `wp-content/repos` is listed
 too, marked **In its repo**. The theme is switched in wp-admin.
 
 **Plugins**: each plugin on or off with one switch: search, filters, the updates WordPress
 already found, what each plugin needs and what needs it, and the plugins turned
 off at install and the local helpers marked. Undo is in the toast.
 **Details** adds what each plugin says it does and who made it, read from its
-header; it starts at **Compact** each time. A long list shows its first rows,
+header, with links: the author's name to their site, **Plugin site** to the
+plugin's own, and **WordPress.org** when WordPress's own update check found it
+there (nothing is asked for it). Only http(s) links are shown. It starts at
+**Compact** each time. With the vulnerability check on (see
+[Aura](pages.md#aura)), a plugin or theme with a known vulnerability at its
+version has a **Vulnerable** badge, with the fixed version and a link to the
+advisory. A long list shows its first rows,
 with **Show more** and **Show all**. **Open folder** goes to the plugin's
 folder on the Files tab, or **Open file** for a plugin that is one file.
 
@@ -88,7 +109,11 @@ themes**, one row in the Themes view): plugins the
 database names that the site's files lack, after a database import or a pull.
 The row is always there and keeps its height, so the list under it never
 moves: it says it is checking, then that no plugin is missing, or how many
-are, and **Review** opens it. Active
+are, and **Review** opens it. The check reads every site of a network with one
+database query (in chunks of 200 sites) and runs on the server: changing tab
+or page does not stop it, and coming back shows how far it got. Its result is
+kept for half an hour, with when it was checked and **Check again**; a job
+that changes the site makes the next visit check anew. Active
 ones (on any site of a network, or network-wide) and ones production had
 installed, read from WordPress's own update check, which also gives
 production's version and the plugin's WordPress.org slug. Ones on WordPress.org

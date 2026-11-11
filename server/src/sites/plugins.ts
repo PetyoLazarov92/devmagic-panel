@@ -40,6 +40,44 @@ export function headerField(header: string, field: string): string {
   return text.length > 300 ? `${text.slice(0, 299)}…` : text;
 }
 
+/** A header's link, like Plugin URI: an http(s) address only, else empty. */
+export function headerUrl(header: string, field: string): string {
+  const text = new RegExp(`^[ \\t/*#@]*${field}:(.*)$`, 'im').exec(header)?.[1]?.trim() ?? '';
+  if (!text || text.length > 300) return '';
+  try {
+    const url = new URL(text);
+    return (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * The plugins (by file) or themes (by folder) WordPress's own update check
+ * found on WordPress.org, with their slug there: read from what WordPress
+ * saved, so nothing goes out. Empty when it never checked.
+ */
+export async function wporgKnown(exec: Executor, site: SiteRef, kind: 'plugins' | 'themes'): Promise<Map<string, string>> {
+  const r = await exec('wp', [`--path=${site.docroot}`, `--url=https://${site.host}/`, 'transient', 'get', `update_${kind}`, '--network', '--format=json', '--skip-plugins', '--skip-themes'], { timeoutMs: 60_000 });
+  const known = new Map<string, string>();
+  if (r.code !== 0) return known;
+  let check: unknown;
+  try {
+    check = JSON.parse(r.stdout);
+  } catch {
+    return known;
+  }
+  if (!check || typeof check !== 'object') return known;
+  for (const list of [(check as { response?: unknown }).response, (check as { no_update?: unknown }).no_update]) {
+    if (!list || typeof list !== 'object') continue;
+    for (const [key, info] of Object.entries(list as Record<string, unknown>)) {
+      const slug = (info as { slug?: unknown; theme?: unknown } | null)?.[kind === 'plugins' ? 'slug' : 'theme'];
+      if (typeof slug === 'string' && /^[a-z0-9_-]{1,100}$/.test(slug) && !key.includes('..')) known.set(key, slug);
+    }
+  }
+  return known;
+}
+
 /** The first 8 KB of a plugin's main file, where WordPress reads its headers too; empty when it cannot be read. */
 function headerOf(file: string): string {
   try {
@@ -63,11 +101,14 @@ function headerOf(file: string): string {
  * not loaded, so a broken one cannot stop the list.
  */
 export async function readPlugins(exec: Executor, site: SiteRef, productionOnly: readonly string[] = []): Promise<SitePlugins> {
-  const result = await exec(
-    'wp',
-    [`--path=${site.docroot}`, `--url=https://${site.host}/`, 'plugin', 'list', '--format=json', '--fields=name,title,status,version,update,update_version,file', '--skip-update-check', '--skip-plugins', '--skip-themes'],
-    { timeoutMs: 60_000 },
-  );
+  const [result, wporg] = await Promise.all([
+    exec(
+      'wp',
+      [`--path=${site.docroot}`, `--url=https://${site.host}/`, 'plugin', 'list', '--format=json', '--fields=name,title,status,version,update,update_version,file', '--skip-update-check', '--skip-plugins', '--skip-themes'],
+      { timeoutMs: 60_000 },
+    ),
+    wporgKnown(exec, site, 'plugins'),
+  ]);
   if (result.code !== 0) throw new SiteActionRefused(`WP-CLI could not list the plugins: ${(result.stderr || result.stdout).trim().split('\n').at(-1) ?? ''}`);
   let rows: WpPluginRow[];
   try {
@@ -85,6 +126,9 @@ export async function readPlugins(exec: Executor, site: SiteRef, productionOnly:
       const requires = requiredPlugins(header);
       const description = headerField(header, 'Description');
       const author = headerField(header, 'Author');
+      const pluginUri = headerUrl(header, 'Plugin URI');
+      const authorUri = headerUrl(header, 'Author URI');
+      const slug = wporg.get(r.file);
       // Its folder, or its one file for a plugin like hello.php: what Open folder goes to.
       const top = r.file.split('/')[0] ?? '';
       return {
@@ -99,6 +143,9 @@ export async function readPlugins(exec: Executor, site: SiteRef, productionOnly:
         ...(own && /^[A-Za-z0-9._-]+$/.test(top) && top !== '..' ? { path: `wp-content/plugins/${top}`, ...(r.file.includes('/') ? {} : { oneFile: true as const }) } : {}),
         ...(description ? { description } : {}),
         ...(author ? { author } : {}),
+        ...(pluginUri ? { pluginUri } : {}),
+        ...(authorUri ? { authorUri } : {}),
+        ...(slug ? { wporg: slug } : {}),
       };
     });
   const on = (p: SitePlugin) => p.status === 'active' || p.status === 'active-network';
@@ -139,6 +186,15 @@ interface WpThemeRow {
   update_version?: string;
 }
 
+/** What a theme's style.css says of it: its description, author and links. */
+function themeHeader(header: string): Pick<SiteTheme, 'description' | 'author' | 'themeUri' | 'authorUri'> {
+  const description = headerField(header, 'Description');
+  const author = headerField(header, 'Author');
+  const themeUri = headerUrl(header, 'Theme URI');
+  const authorUri = headerUrl(header, 'Author URI');
+  return { ...(description ? { description } : {}), ...(author ? { author } : {}), ...(themeUri ? { themeUri } : {}), ...(authorUri ? { authorUri } : {}) };
+}
+
 /**
  * Every theme of a site, read with WP-CLI and nothing of the site loaded,
  * plus the themes in repos under wp-content/repos, which WordPress finds
@@ -147,7 +203,7 @@ interface WpThemeRow {
  */
 export async function readThemes(exec: Executor, site: SiteRef): Promise<SiteThemes> {
   const wp = (args: string[]) => exec('wp', [`--path=${site.docroot}`, `--url=https://${site.host}/`, ...args, '--skip-plugins', '--skip-themes'], { timeoutMs: 60_000 });
-  const result = await wp(['theme', 'list', '--format=json', '--fields=name,title,status,version,update,update_version', '--skip-update-check']);
+  const [result, wporg] = await Promise.all([wp(['theme', 'list', '--format=json', '--fields=name,title,status,version,update,update_version', '--skip-update-check']), wporgKnown(exec, site, 'themes')]);
   if (result.code !== 0) throw new SiteActionRefused(`WP-CLI could not list the themes: ${(result.stderr || result.stdout).trim().split('\n').at(-1) ?? ''}`);
   let rows: WpThemeRow[];
   try {
@@ -164,6 +220,8 @@ export async function readThemes(exec: Executor, site: SiteRef): Promise<SiteThe
       version: r.version ?? '',
       ...(r.update === 'available' && r.update_version ? { update: r.update_version } : {}),
       folder: `wp-content/themes/${r.name}`,
+      ...(/^[A-Za-z0-9._-]+$/.test(r.name) && r.name !== '..' ? themeHeader(headerOf(join(site.docroot, 'wp-content', 'themes', r.name, 'style.css'))) : {}),
+      ...(wporg.get(r.name) ? { wporg: wporg.get(r.name) as string } : {}),
     }));
   // Themes in a repo of their own: by folder, with what style.css says.
   const inRepos: SiteTheme[] = [];
@@ -180,7 +238,7 @@ export async function readThemes(exec: Executor, site: SiteRef): Promise<SiteThe
       if (themes.some((t) => t.name === name) || inRepos.some((t) => t.name === name)) continue;
       const header = headerOf(join(dir, 'style.css'));
       const field = (label: string) => new RegExp(`^[ \\t/*#@]*${label}:(.*)$`, 'mi').exec(header)?.[1]?.trim();
-      inRepos.push({ name, title: field('Theme Name') || name, status: 'inactive', version: field('Version') ?? '', folder: `wp-content/${folder}/${name}`, inRepo: true });
+      inRepos.push({ name, title: field('Theme Name') || name, status: 'inactive', version: field('Version') ?? '', folder: `wp-content/${folder}/${name}`, inRepo: true, ...themeHeader(header) });
     }
   }
   if (inRepos.length) {

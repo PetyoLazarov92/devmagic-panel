@@ -6,6 +6,7 @@ import { IssueRow } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { VulnerabilityCheckCard } from '@/components/vulnerability-check';
 import { api } from '@/lib/api';
 import { Link, navigate } from '@/lib/router';
 import { MachineChecks } from '@/pages/machine-checks';
@@ -154,6 +155,7 @@ function Problems() {
             </div>
           </Card>
         ))}
+        <VulnerabilityCheckCard onChecked={reload} />
       </div>
     </div>
   );

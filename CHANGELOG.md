@@ -1,5 +1,17 @@
 # Changelog
 
+### v1.38.0 (2026-11-11)
+* **Plugins:** the check for missing plugins and themes reads every site of a network with one database query instead of WP-CLI twice per site, so a big network takes seconds, not minutes. It runs on the server: changing tab or page no longer stops it, and coming back shows how far it got. The result is kept for half an hour, with when it was checked and **Check again**, and a job that changes the site makes the next visit check anew
+* **Plugins:** with **Details**, the author links to their site and the plugin to its own, with a **WordPress.org** link when WordPress's update check found it there. Themes show their description, author and the same links
+* **Aura:** a daily check of the sites' plugins and themes for known vulnerabilities, through WPVulnerability, free and without a key. It is off until you switch it on in Aura. Only names WordPress.org lists are asked about and the versions are compared here, so custom plugins and your versions never leave the machine. What it finds shows in Aura by site, and as a **Vulnerable** badge on the Plugins tab with the fixed version and the advisory
+* **Git:** **Tidy up** on the Git card fetches from origin with prune, offers to delete the local branches whose branch on origin was deleted (all ticked but the current one, and each says whether it is in the default branch) and packs the repo with `git gc`, saying the size before and after. Deleted branches are kept 14 days, so Undo puts them back. History is never rewritten
+* **Sites:** the Overview's WordPress card sums up the plugins and themes: how many, how many on, updates and what the last check found missing, each a link to its view. The Files card links to the Files tab, and each folder in it has a Files link
+* **Sites:** every site on the Sites page has a server badge: Apache, nginx + Apache or nginx
+* **Web:** the rows a page picker in the database browser shows its whole number. In the Files tab the repo line and the time it was read sit on one line, lined up
+* **New site:** a build script that runs a gulp task its gulpfile does not define, like `gulp build` with only deploy tasks, is no longer picked: the build's row says which task is missing and asks you to pick another script. A build that fails that way says so, instead of only gulp's last line, "To list available tasks"
+* **Git:** the branch field on the Git card opens its list on a click, also right after a pick, while it still has focus; the arrow opens and closes it
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.37.0 (2026-11-10)
 * **Sites:** taking over a site made by hand also takes its line in `/etc/hosts` that you wrote outside the panel's block. That line kept deciding where the site goes, so a site taken over could not move to nginx. It moves into the takeover record with its place in the file, the dialog shows it first, and Give back puts it back where it was. A line that also names another host stays, and the dialog says so
 * **nginx:** a site taken over earlier, whose hand-made hosts line is still there, moves to nginx: the move takes that line into the takeover record first, as its own step, instead of refusing. A line the move cannot take is named in the refusal, with what to do

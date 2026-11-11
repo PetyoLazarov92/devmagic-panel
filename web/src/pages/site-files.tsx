@@ -563,7 +563,7 @@ function FolderView({ site, dir, find }: { site: Site; dir: string; find: Find |
         checkedAt={read?.at}
         note={
           gitStatus?.repo !== undefined && (
-            <span className="mr-1 inline-flex items-center gap-1">
+            <span className="inline-flex items-center gap-1">
               <GitBranch className="size-3" aria-hidden />
               Repo {nameOf(gitStatus.repo) || 'of the site folder'}{gitStatus.branch ? `, on ${gitStatus.branch}` : ''}: {gitChanges === 0 ? 'nothing changed here since the last commit.' : `${gitChanges} changed here since the last commit.`}
             </span>

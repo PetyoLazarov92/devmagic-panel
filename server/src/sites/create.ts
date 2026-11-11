@@ -794,10 +794,19 @@ export async function runBuild(exec: Executor, clone: string, build: BuildRun, n
   const stopped = last.code !== 0 && build.script && STOPPED.test(`${last.stdout}\n${last.stderr}`)
     ? `the build failed: ${build.script} runs its builds with concurrently --kill-others, so the first to finish stopped the others; run one of its parts instead, or change it to --kill-others-on-fail in package.json`
     : undefined;
-  const note = stopped ?? hint;
+  // gulp names the task it lacks only on a line before its last one, which is all a step shows.
+  const task = last.code !== 0 && build.script ? MISSING_TASK.exec(`${last.stdout}\n${last.stderr}`) : null;
+  const taskName = task?.[1] ?? task?.[2];
+  const noTask = task
+    ? `the build failed: ${build.script} runs ${taskName ? `gulp ${taskName}` : 'a gulp task'}, and the gulpfile has no task by that name. Pick another script of its package.json, or run the right one in a terminal (gulp --tasks lists them)`
+    : undefined;
+  const note = stopped ?? noTask ?? hint;
   if (note) results[results.length - 1] = { ...last, stderr: `${last.stderr.trim() ? `${last.stderr.trimEnd()}\n` : ''}${where}: ${note}` };
   return results;
 }
+
+/** What gulp prints for a task its gulpfile does not define: "Task never defined: build", or in gulp 3 "Task 'build' is not in your gulpfile". */
+const MISSING_TASK = /Task never defined: ([\w:.-]+)|Task '([\w:.-]+)' is not in your gulpfile|To list available tasks, try running: gulp --tasks/;
 
 /** What concurrently prints when one of its builds ends and --kill-others stops the rest. */
 const STOPPED = /^--> Sending SIGTERM to other processes/m;

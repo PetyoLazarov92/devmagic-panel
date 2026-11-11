@@ -1,4 +1,4 @@
-import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerTables, RepoBuild, TrustedOwner, DumpPlugin, RepoFacts, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerTables, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
@@ -27,6 +27,45 @@ const keptReports = new Map<string, WpDbReport>();
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Stands in for actions that are not wired yet; does nothing on the system. */
+/** What the vulnerability check finds on a mock site: one plugin with a fixed version out. */
+const MOCK_VULNERABILITIES: SiteVulnerabilities = {
+  checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+  checked: 14,
+  hits: [
+    {
+      kind: 'plugin',
+      slug: 'hello-wands',
+      title: 'Hello Wands',
+      version: '1.7.2',
+      vulnerabilities: [{ title: 'Hello Wands < 1.7.3: reflected cross-site scripting in its settings page', severity: 'medium', score: 6.1, fixedIn: '1.7.3', link: 'https://www.cve.org/' }],
+    },
+  ],
+};
+
+/** The mock scan for missing plugins and themes: it runs a few seconds the first time, then its result is kept. */
+const mockScans = new Map<string, { startedAt: number; checkedAt?: string }>();
+async function mockMissing(site: string, force: boolean): Promise<MissingScanState> {
+  await wait(120);
+  let scan = mockScans.get(site);
+  if (!scan || (force && scan.checkedAt)) {
+    scan = { startedAt: Date.now(), ...(scan?.checkedAt ? { checkedAt: scan.checkedAt } : {}) };
+    mockScans.set(site, scan);
+  }
+  const elapsed = Date.now() - scan.startedAt;
+  if (elapsed > 3000) {
+    if (!scan.checkedAt || scan.startedAt > Date.parse(scan.checkedAt)) scan.checkedAt = new Date(scan.startedAt + 3000).toISOString();
+    return {
+      scan: {
+        plugins: MOCK_DUMP_PLUGINS.filter((p) => ['redirection/redirection.php', 'wandworks-pro-forms/loader.php', 'duplicate-post/duplicate-post.php'].includes(p.file)),
+        themes: [{ name: 'wandworks-parent', parent: true as const, version: '1.4.0' }],
+        checkedAt: scan.checkedAt,
+      },
+    };
+  }
+  const done = Math.min(12, Math.floor(elapsed / 250));
+  return { running: { startedAt: new Date(scan.startedAt).toISOString(), step: done < 12 ? 'Reading the plugins and themes of 12 sites' : 'Reading what WordPress saved of its update checks', done, total: 12 } };
+}
+
 export const mockDelay = () => wait(700);
 
 const environment: EnvironmentReport = {
@@ -102,16 +141,16 @@ const mockPlugins: SitePlugin[] = [
   { name: 'devmagic-panel-local', title: 'devmagic-panel Local mode', status: 'must-use', version: '3' },
   { name: 'advanced-cache.php', title: 'advanced-cache.php', status: 'dropin', version: '' },
   { name: 'advanced-custom-fields-pro', title: 'Advanced Custom Fields PRO', status: 'active', version: '6.4.2', requiredBy: ['ACF Blocks for Wandworks'], path: 'wp-content/plugins/advanced-custom-fields-pro', description: 'Custom fields and field groups for posts, pages and options.', author: 'Sam Lee' },
-  { name: 'wandworks-acf-blocks', title: 'ACF Blocks for Wandworks', status: 'active', version: '1.3.0', requires: ['advanced-custom-fields-pro'], path: 'wp-content/plugins/wandworks-acf-blocks', description: 'The block library of the Wandworks theme, built on ACF.', author: 'Wandworks' },
+  { name: 'wandworks-acf-blocks', title: 'ACF Blocks for Wandworks', status: 'active', version: '1.3.0', authorUri: 'https://wandworks.example/', requires: ['advanced-custom-fields-pro'], path: 'wp-content/plugins/wandworks-acf-blocks', description: 'The block library of the Wandworks theme, built on ACF.', author: 'Wandworks' },
   { name: 'cloudflare', title: 'Cloudflare', status: 'inactive', version: '4.14.4', update: '4.14.5', productionOnly: true, path: 'wp-content/plugins/cloudflare', description: 'Cache purging and settings for the Cloudflare in front of the site.', author: 'Alex Morgan' },
   { name: 'wp-rocket', title: 'WP Rocket', status: 'inactive', version: '3.19.1', productionOnly: true, path: 'wp-content/plugins/wp-rocket', description: 'Page cache, file minification and lazy loading.', author: 'Sam Lee' },
   { name: 'gravityforms', title: 'Gravity Forms', status: 'active', version: '2.9.8', update: '2.9.9', path: 'wp-content/plugins/gravityforms', description: 'Forms with conditional fields and entries kept in the database.', author: 'Wandworks' },
-  { name: 'query-monitor', title: 'Query Monitor', status: 'active', version: '3.17.0', localHelper: true, path: 'wp-content/plugins/query-monitor', description: 'The developer tools panel: queries, hooks, HTTP calls and errors.', author: 'Alex Morgan' },
+  { name: 'query-monitor', title: 'Query Monitor', status: 'active', version: '3.17.0', localHelper: true, wporg: 'query-monitor', pluginUri: 'https://wordpress.org/plugins/query-monitor/', authorUri: 'https://wandworks.example/team/alex-morgan/', path: 'wp-content/plugins/query-monitor', description: 'The developer tools panel: queries, hooks, HTTP calls and errors.', author: 'Alex Morgan' },
   { name: 'user-switching', title: 'User Switching', status: 'inactive', version: '1.9.1', localHelper: true, path: 'wp-content/plugins/user-switching', description: 'Switch between user accounts with one click.', author: 'Sam Lee' },
   { name: 'seo-by-rank-math', title: 'Rank Math SEO', status: 'active', version: '1.0.279', update: '1.0.280', path: 'wp-content/plugins/seo-by-rank-math', description: 'Titles, sitemaps and schema for search engines.', author: 'Wandworks' },
   { name: 'stream', title: 'Stream', status: 'active', version: '4.1.1', path: 'wp-content/plugins/stream', description: 'A log of what users do in wp-admin.', author: 'Alex Morgan' },
   { name: 'wp-mail-smtp-pro', title: 'WP Mail SMTP Pro', status: 'active', version: '4.8.0', path: 'wp-content/plugins/wp-mail-smtp-pro', description: 'Sends WordPress mail through an SMTP server or a mail service.', author: 'Sam Lee' },
-  { name: 'hello-wands', title: 'Hello Wands', status: 'inactive', version: '1.7.2', path: 'wp-content/plugins/hello-wands.php', oneFile: true, description: 'A spell of the day in the top corner of every admin page.', author: 'Wandworks' },
+  { name: 'hello-wands', title: 'Hello Wands', status: 'inactive', version: '1.7.2', wporg: 'hello-wands', pluginUri: 'https://wandworks.example/plugins/hello-wands/', path: 'wp-content/plugins/hello-wands.php', oneFile: true, description: 'A spell of the day in the top corner of every admin page.', author: 'Wandworks' },
 ];
 
 /** Refresh from production per site: Spellbook is set up, the others not yet. */
@@ -990,9 +1029,9 @@ let mockRemembered: RememberedRepo[] = [
 // Kept for the browser session, as the panel keeps them in its database.
 const mockPreferences: Preferences = (() => {
   try {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false, ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
   } catch {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false };
   }
 })();
 
@@ -1591,6 +1630,15 @@ export const mockApi: Api = {
       text: '/etc/hosts still points local.oldclient.test here, but no site uses it',
       fix: { action: 'hosts.remove', input: { domain: 'local.oldclient.test' }, label: 'Remove the line' },
     });
+    if (mockPreferences.checkVulnerabilities) {
+      items.push({
+        id: 'site.vulnerable',
+        status: 'warn',
+        text: 'Hello Wands 1.7.2 has 1 known vulnerability, the worst medium: fixed in 1.7.3',
+        hint: 'Hello Wands < 1.7.3: reflected cross-site scripting in its settings page. Update it with WP-CLI or in wp-admin, the way production updates it. From WPVulnerability.',
+        domain: sites[0]?.domain ?? 'local.spellbook.example',
+      });
+    }
     items.sort((a, b) => (a.status === b.status ? 0 : a.status === 'fail' ? -1 : 1));
     return { checkedAt: new Date().toISOString(), items };
   },
@@ -1636,6 +1684,27 @@ export const mockApi: Api = {
       ],
       changes: (repo?.dirty ?? 0) > 0 ? [{ code: ' M', path: 'wp-content/themes/dailypost/functions.php' }, { code: '??', path: 'wp-content/themes/dailypost/notes.txt' }] : [],
       fetchedAt: new Date(Date.now() - 42 * 60_000).toISOString(),
+    };
+  },
+  vulnerabilityCheck: async () => ({ enabled: mockPreferences.checkVulnerabilities, running: false, ...(mockPreferences.checkVulnerabilities ? { lastRound: new Date(Date.now() - 3 * 3_600_000).toISOString() } : {}) }),
+  checkVulnerabilities: async () => ({ enabled: mockPreferences.checkVulnerabilities, running: false, lastRound: new Date().toISOString() }),
+  siteVulnerabilities: async () => ({
+    enabled: mockPreferences.checkVulnerabilities,
+    running: false,
+    ...(mockPreferences.checkVulnerabilities ? { found: MOCK_VULNERABILITIES } : {}),
+  }),
+  gitTidy: async (): Promise<GitTidyPreview> => {
+    await wait(400);
+    const day = 86_400_000;
+    return {
+      objectsBytes: 812 * 1024 ** 2,
+      mainBranch: 'origin/main',
+      gone: [
+        { name: 'feature/cart-drawer', current: false, merged: true, hash: 'a41f0c2', subject: 'Open the cart in a drawer', date: new Date(Date.now() - 12 * day).toISOString() },
+        { name: 'fix/checkout-notice', current: false, merged: false, hash: '9be37d1', subject: 'Show the checkout notice once', date: new Date(Date.now() - 30 * day).toISOString() },
+        { name: 'spike/search', current: false, merged: false, hash: '3c0d9ee', subject: 'Try a faster search', date: new Date(Date.now() - 90 * day).toISOString() },
+      ],
+      kept: [],
     };
   },
   gitPulls: async (domain, mount, inner): Promise<GitPullRequest[]> => {
@@ -2143,14 +2212,8 @@ export const mockApi: Api = {
     mockProduction[domain] = settings;
     return settings;
   },
-  missingPlugins: async () => {
-    await wait(300);
-    return MOCK_DUMP_PLUGINS.filter((p) => ['redirection/redirection.php', 'wandworks-pro-forms/loader.php', 'duplicate-post/duplicate-post.php'].includes(p.file));
-  },
-  missingThemes: async () => {
-    await wait(300);
-    return [{ name: 'wandworks-parent', parent: true as const, version: '1.4.0' }];
-  },
+  missing: async (domain, path, peek) => (peek && !mockScans.get(`${domain}${path ?? ''}`) ? {} : mockMissing(`${domain}${path ?? ''}`, false)),
+  checkMissing: async (domain, path) => mockMissing(`${domain}${path ?? ''}`, true),
   wporgThemes: async (slugs) => {
     await wait(200);
     return Object.fromEntries(slugs.map((slug) => [slug, slug === 'twentytwentyfive' ? { name: 'Twenty Twenty-Five', version: '1.3' } : null]));

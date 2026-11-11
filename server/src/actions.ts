@@ -33,7 +33,7 @@ import { planCleanCurrent } from './sites/clean-current.js';
 import { deleteCleanCopy, planExportClean } from './sites/export.js';
 import { deleteKept, planRestoreKept } from './sites/kept.js';
 import { DbRefused, deleteSnapshot, planImport, planRestore, planSearchReplace, planSnapshot } from './sites/db.js';
-import { fetchOrigin, pull, switchBranch } from './sites/git.js';
+import { fetchOrigin, pull, restoreBranches, switchBranch, tidy } from './sites/git.js';
 import { setPlugin } from './sites/plugins.js';
 import { planAddNetworkAdmin } from './sites/network-admin.js';
 import { openTerminal } from './terminal.js';
@@ -710,6 +710,8 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'git.fetch': fetchOrigin,
   'git.pull': pull,
   'git.switch': switchBranch,
+  'git.tidy': tidy,
+  'git.restoreBranches': restoreBranches,
   'db.snapshot': async (ctx, input) => startJob(ctx, planSnapshot(ctx, input), `Snapshot ${input.domain}${input.path ?? ''}`, `${input.domain}${input.path ?? ''}`),
   'db.restore': async (ctx, input) => startJob(ctx, planRestore(ctx, input), `Restore ${input.snapshot} on ${input.domain}${input.path ?? ''}`, `${input.domain}${input.path ?? ''}`),
   'db.deleteSnapshot': async (ctx, input) => [deleteSnapshot(ctx.config, input)],

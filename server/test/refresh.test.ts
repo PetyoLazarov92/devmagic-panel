@@ -82,10 +82,10 @@ describe('Refresh from production', () => {
     saveProduction(store, 'local.shop.com', undefined, productionSettings.parse({ host: 'shop-prod', folder: '/var/www/shop' }));
     const wp = `wp --path=${t.docroot} --url=https://local.shop.com/`;
     const fake = fakeExec({
-      [`${wp} site list`]: { code: 1, stderr: 'Error: This is not a multisite installation.' },
-      [`${wp} option get active_plugins`]: { stdout: JSON.stringify(['wandworks-pro-forms/loader.php']) },
-      [`${wp} option get stylesheet`]: { stdout: 'wandworks' },
-      [`${wp} option get template`]: { stdout: 'wandworks' },
+      [`${wp} db query`]: (call) =>
+        String(call.args[4]).includes('information_schema')
+          ? { stdout: 't\twp_options\n' }
+          : { stdout: '1\tactive_plugins\ta:1:{i:0;s:30:"wandworks-pro-forms/loader.php";}\n1\tstylesheet\twandworks\n1\ttemplate\twandworks\n' },
       [wp]: { code: 1 },
     });
     const ctx = { config: t.config, exec: fake.exec, uploadsDir: join(t.root, 'uploads'), dmpRoot: '/x', store, secrets: null };

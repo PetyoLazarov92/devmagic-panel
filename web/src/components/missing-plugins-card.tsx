@@ -1,13 +1,14 @@
-import type { DumpPlugin, DumpTheme, ProductionSettings, ServerFiles, Site, WporgPlugin } from '@devmagic-panel/shared';
+import type { DumpPlugin, DumpTheme, MissingScanState, ProductionSettings, ServerFiles, Site, WporgPlugin } from '@devmagic-panel/shared';
 import { isWpCliCommand, splitSshHost } from '@devmagic-panel/shared';
-import { Check, ChevronDown, Download, LoaderCircle, PackageX, Server } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, ChevronDown, Download, LoaderCircle, PackageX, RefreshCw, Server } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { JobFooter } from '@/components/job-box';
 import { useJob } from '@/components/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
+import { dateTime, timeAgo } from '@/lib/format';
 import { askWporg, onServer, pluginItem, pluginSlug } from '@/lib/missing-plugins';
 import { siteTarget } from '@/lib/site-ref';
 import { cn } from '@/lib/utils';
@@ -51,45 +52,85 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
   const [serverError, setServerError] = useState<string | null>(null);
   const install = useJob();
   const copy = useJob();
-  const read = () => {
-    setFailed(false);
-    return Promise.all([show === 'plugins' ? api.missingPlugins(site.domain, site.path) : Promise.resolve([] as DumpPlugin[]), show === 'themes' ? api.missingThemes(site.domain, site.path) : Promise.resolve([] as DumpTheme[])]).then(async ([list, themeList]) => {
+  // The scan runs on the server: the last result shows at once, a running one is asked about again until it ends.
+  const [state, setState] = useState<MissingScanState | null>(null);
+  const shown = useRef<string | null>(null);
+  const askScan = (force = false) =>
+    (force ? api.checkMissing : api.missing)(site.domain, site.path).then(setState, (error: Error) => setState({ error: error.message }));
+  useEffect(() => {
+    if (!state?.running) return;
+    const timer = setTimeout(() => void askScan(), 1500);
+    return () => clearTimeout(timer);
+  }, [state]);
+  // A new result: WordPress.org is asked about the ones this view lists (kept a day on the server), then they show.
+  useEffect(() => {
+    const scan = state?.scan;
+    if (!scan) {
+      if (state?.error && !state.running) {
+        setMissing([]);
+        setThemes([]);
+        setFailed(true);
+      }
+      return;
+    }
+    if (shown.current === scan.checkedAt) return;
+    shown.current = scan.checkedAt;
+    const list = show === 'plugins' ? scan.plugins : [];
+    const themeList = show === 'themes' ? scan.themes : [];
+    void (async () => {
       const answers = list.length ? (await askWporg(list.map(pluginSlug), api.wporgPlugins)).answers : ({} as Record<string, WporgPlugin | null>);
       const themeAnswers = themeList.length ? (await askWporg(themeList.map((t) => t.name), api.wporgThemes)).answers : ({} as Record<string, WporgPlugin | null>);
       setWporg(answers);
       setWporgThemes(themeAnswers);
       setThemes(themeList);
       setMissing(list);
+      setFailed(false);
       // Active ones on WordPress.org start ticked, and every theme there: a site without its theme shows nothing. Ones production only had installed, not.
       setTicked(new Set([...list.filter((p) => p.active && answers[pluginSlug(p)]).map((p) => p.file), ...themeList.filter((t) => themeAnswers[t.name]).map((t) => themeKey(t.name))]));
-    }, () => {
-      setMissing([]);
-      setThemes([]);
-      setFailed(true);
-    });
+    })();
+  }, [state?.scan?.checkedAt, state?.error, state?.running]);
+  const checkAgain = () => {
+    setFailed(false);
+    void askScan(true);
   };
   useEffect(() => {
     setMissing(null);
+    setState(null);
+    shown.current = null;
     setOpen(false);
     setServer(null);
-    void read();
+    void askScan();
     setEditing(false);
     void api.productionSettings(site.domain, site.path).then(setProduction, () => setProduction(null));
   }, [site.domain, site.path, show]);
   const done = `${install.job?.status}|${copy.job?.status}`;
   useEffect(() => {
     if (install.job?.status === 'done' || copy.job?.status === 'done') {
-      void read();
+      // The job's end made the server forget the last scan: this starts the next.
+      checkAgain();
       onChanged();
     }
   }, [done]);
+  const scanning = state?.running;
+  const checked = state?.scan && (
+    <span className="shrink-0 text-xs text-muted-foreground" title={dateTime(state.scan.checkedAt)}>Checked {timeAgo(state.scan.checkedAt)}</span>
+  );
+  const again = (
+    <Button size="sm" variant="ghost" className="shrink-0" disabled={Boolean(scanning)} onClick={checkAgain} aria-label={`Check the database for missing ${show} again`}>
+      <RefreshCw className={cn(scanning && 'animate-spin')} />{scanning ? 'Checking' : 'Check again'}
+    </Button>
+  );
 
   const row = 'flex min-h-11 items-center gap-2.5 rounded-xl border bg-card px-4 py-2 text-sm';
   if (missing === null) {
+    const r = state?.running;
     return (
       <p className={cn(row, 'text-muted-foreground')} role="status" aria-busy="true">
         <LoaderCircle className="size-4 shrink-0 animate-spin" />
-        Checking the database for {show} the files lack...
+        <span className="min-w-0 flex-1">
+          Checking the database for {show} the files lack{r && r.step !== 'Starting' ? `: ${r.step.charAt(0).toLowerCase()}${r.step.slice(1)}${r.total > 1 ? ` (${r.done} of ${r.total})` : ''}` : ''}...
+          <span className="block text-xs">It goes on while you look elsewhere; the result is kept for half an hour.</span>
+        </span>
       </p>
     );
   }
@@ -99,8 +140,11 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
     return (
       <p className={cn(row, 'text-muted-foreground')}>
         {failed ? <PackageX className="size-4 shrink-0" /> : <Check className="size-4 shrink-0 text-success" />}
-        {failed ? `Could not check the database for missing ${show}.` : show === 'plugins' ? 'No plugin is missing: the files have every plugin the database names.' : 'No theme is missing: the files have the theme of every site, and its parent.'}
-        {failed && <Button size="sm" variant="ghost" className="ml-auto" onClick={() => { setMissing(null); void read(); }}>Check again</Button>}
+        <span className="min-w-0 flex-1">
+          {failed ? `Could not check the database for missing ${show}${state?.error ? `: ${state.error}` : '.'}` : show === 'plugins' ? 'No plugin is missing: the files have every plugin the database names.' : 'No theme is missing: the files have the theme of every site, and its parent.'}
+        </span>
+        {checked}
+        {again}
       </p>
     );
   }
@@ -161,7 +205,8 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
   const active = missing.filter((p) => p.active).length;
   return (
     <section className="overflow-hidden rounded-xl border bg-card text-sm" aria-label={`Missing ${show}`}>
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-muted/50">
+      <div className="flex items-center gap-2 pr-2">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 px-4 py-2 text-left hover:bg-muted/50">
         <PackageX className={cn('size-4 shrink-0', total > 0 ? 'text-warning' : 'text-muted-foreground')} />
         <span className="min-w-0 flex-1">
           <span className="font-medium">{total === 0 ? 'Nothing is missing any more' : `${[missing.length ? `${missing.length} plugin${missing.length === 1 ? '' : 's'}` : '', themes.length ? `${themes.length} theme${themes.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')} ${total === 1 ? 'is' : 'are'} missing`}</span>
@@ -170,6 +215,9 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
         {running && <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" />}
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary">{open ? 'Hide' : 'Review'}<ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} /></span>
       </button>
+      <span className="hidden sm:inline">{checked}</span>
+      {again}
+      </div>
       {open && (
         <div className="grid gap-3 border-t p-4">
           <p className="text-xs text-muted-foreground">

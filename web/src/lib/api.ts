@@ -1,4 +1,4 @@
-import type { FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, DumpPlugin, DumpTheme, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
+import type { FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
@@ -132,6 +132,14 @@ export interface Api {
   gitDetails: (domain: string, mount?: string, repo?: string) => Promise<GitDetails>;
   /** Open pull requests (GitHub) or merge requests (GitLab) by branch; none when the CLI is missing or signed out, or origin is elsewhere. */
   gitPulls: (domain: string, mount?: string, repo?: string) => Promise<GitPullRequest[]>;
+  /** What Tidy up would do: the repo's size and its branches gone from origin. */
+  gitTidy: (domain: string, mount?: string, repo?: string) => Promise<GitTidyPreview>;
+  /** The vulnerability check: on or off, running, and its last round. */
+  vulnerabilityCheck: () => Promise<VulnerabilityState>;
+  /** Starts a round over every site now, when it is on. */
+  checkVulnerabilities: () => Promise<VulnerabilityState>;
+  /** What the last round found for a site. */
+  siteVulnerabilities: (domain: string, path?: string) => Promise<VulnerabilityState>;
   snapshots: (domain: string, path?: string) => Promise<SnapshotInfo[]>;
   /** Gzipped clean copies of the site's database, to share with the team. */
   cleanCopies: (domain: string, path?: string) => Promise<CleanCopyInfo[]>;
@@ -243,10 +251,12 @@ export interface Api {
   productionSettings: (domain: string, path?: string) => Promise<ProductionSettings | null>;
   saveProductionSettings: (domain: string, path: string | undefined, settings: ProductionSettings) => Promise<ProductionSettings>;
   takeoverPreview: (domain: string) => Promise<TakeoverPreview>;
-  missingPlugins: (domain: string, path?: string) => Promise<DumpPlugin[]>;
+  /** The scan for missing plugins and themes: the last result, and one running on the server; starts one when there is none or it is old. */
+  missing: (domain: string, path?: string, peek?: boolean) => Promise<MissingScanState>;
+  /** Starts a new scan, unless one runs. */
+  checkMissing: (domain: string, path?: string) => Promise<MissingScanState>;
   wporgPlugins: (slugs: string[]) => Promise<Record<string, WporgPlugin | null>>;
   /** The themes a site's database uses that its files lack, and whether themes are on WordPress.org. */
-  missingThemes: (domain: string, path?: string) => Promise<DumpTheme[]>;
   wporgThemes: (slugs: string[]) => Promise<Record<string, WporgPlugin | null>>;
   remoteList: (remote: string, path: string) => Promise<RemoteEntry[]>;
   repoTrust: (url: string) => Promise<RepoTrustAnswer>;
@@ -390,6 +400,10 @@ const realApi: Api = {
   logs: (domain, source, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/logs?source=${source}${atPath(path, '&')}`),
   gitDetails: (domain, mount, repo) => request('GET', `/api/sites/${encodeURIComponent(domain)}/git${gitQuery(mount, repo)}`),
   gitPulls: (domain, mount, repo) => request('GET', `/api/sites/${encodeURIComponent(domain)}/git/pulls${gitQuery(mount, repo)}`),
+  gitTidy: (domain, mount, repo) => request('GET', `/api/sites/${encodeURIComponent(domain)}/git/tidy${gitQuery(mount, repo)}`),
+  vulnerabilityCheck: () => request('GET', '/api/vulnerabilities'),
+  checkVulnerabilities: () => request('POST', '/api/vulnerabilities/check', {}),
+  siteVulnerabilities: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/vulnerabilities${atPath(path, '?')}`),
   snapshots: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/snapshots${atPath(path, '?')}`),
   cleanCopies: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/clean-copies${atPath(path, '?')}`),
   keptDatabases: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/kept-databases${atPath(path, '?')}`),
@@ -462,9 +476,9 @@ const realApi: Api = {
   productionSettings: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`),
   saveProductionSettings: (domain, path, settings) => request('PUT', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`, settings),
   takeoverPreview: (domain) => request('GET', `/api/sites/${encodeURIComponent(domain)}/takeover`),
-  missingPlugins: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/missing-plugins${atPath(path, '?')}`),
+  missing: (domain, path, peek) => request('GET', `/api/sites/${encodeURIComponent(domain)}/missing${atPath(path, '?')}${peek ? `${path ? '&' : '?'}peek=1` : ''}`),
+  checkMissing: (domain, path) => request('POST', `/api/sites/${encodeURIComponent(domain)}/missing/check`, path ? { path } : {}),
   wporgPlugins: (slugs) => request('POST', '/api/wporg/plugins', { slugs }),
-  missingThemes: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/missing-themes${atPath(path, '?')}`),
   wporgThemes: (slugs) => request('POST', '/api/wporg/themes', { slugs }),
   remoteList: (remote, path) => request('POST', '/api/dumps/remote-list', { remote, path }),
   repoTrust: (url) => request('GET', `/api/repo-trust?url=${encodeURIComponent(url)}`),

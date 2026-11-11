@@ -1,7 +1,7 @@
-import type { Site, SitePlugin, SitePlugins, SiteThemes } from '@devmagic-panel/shared';
+import type { Site, SitePlugin, SitePlugins, SiteThemes, VulnerabilityState } from '@devmagic-panel/shared';
 import { MissingPluginsCard } from '@/components/missing-plugins-card';
-import { Lock, Palette, Plug, RefreshCw, Search, X } from 'lucide-react';
-import { useState } from 'react';
+import { ExternalLink, Lock, Palette, Plug, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -90,6 +90,7 @@ function ThemesView({ site }: { site: Site }) {
   const key = `${site.domain}${site.path ?? ''}`;
   const { data: fresh, error, loading, reload } = useAsync(() => api.themes(site.domain, site.path).then((list) => (lastThemes.set(key, list), list)), [site.domain, site.path]);
   const data = fresh ?? lastThemes.get(key);
+  const vulnerable = useVulnerabilities(site);
   if (error && !data) {
     return (
       <div className="rounded-xl border bg-card px-5 py-4 text-sm">
@@ -136,6 +137,7 @@ function ThemesView({ site }: { site: Site }) {
                 {t.status === 'active' && <Badge tone="success">On</Badge>}
                 {t.status === 'parent' && <Badge tone="primary">Parent of the theme that is on</Badge>}
                 {t.inRepo && <Badge>In its repo</Badge>}
+                <VulnerableBadge hit={t.wporg ? vulnerable.get(`theme:${t.wporg}`) : undefined} />
               </p>
               <p className="mt-0.5 text-xs break-words text-muted-foreground">
                 <span className="font-mono">{t.folder}</span>
@@ -144,6 +146,13 @@ function ThemesView({ site }: { site: Site }) {
                 {t.inRepo && ' · found through Local mode'}
                 {' · '}<Link href={themeFolderHref(site, t)} className="font-medium text-primary hover:underline" aria-label={`Open the folder of ${t.title}`}>Open folder</Link>
               </p>
+              {(t.description || t.author || t.themeUri || t.wporg) && (
+                <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
+                  {t.description}
+                  {t.author && <span className="text-muted-foreground/80">{t.description ? ' ' : ''}By <OutLink href={t.authorUri}>{t.author}</OutLink>.</span>}
+                  <OutLinks site={t.themeUri} siteLabel="Theme site" wporg={t.wporg && `https://wordpress.org/themes/${t.wporg}/`} />
+                </p>
+              )}
             </li>
           ))}
         </ul>
@@ -165,6 +174,7 @@ function PluginsView({ site }: { site: Site }) {
     [site.domain, site.path],
   );
   const data = fresh ?? lastLists.get(key);
+  const vulnerable = useVulnerabilities(site);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [busy, setBusy] = useState<string | null>(null);
@@ -295,6 +305,7 @@ function PluginsView({ site }: { site: Site }) {
                     {p.productionOnly && <Badge tone="warning">Turned off at install</Badge>}
                     {p.localHelper && <Badge tone="success">Local helper</Badge>}
                     {p.status === 'active-network' && <Badge tone="primary">Network</Badge>}
+                    <VulnerableBadge hit={p.wporg ? vulnerable.get(`plugin:${p.wporg}`) : undefined} />
                     {busy === p.name && <RefreshCw className="size-3.5 animate-spin text-muted-foreground" aria-label="Working" />}
                   </p>
                   <p className="mt-0.5 text-xs break-words text-muted-foreground">
@@ -307,10 +318,11 @@ function PluginsView({ site }: { site: Site }) {
                     {p.requiredBy && <> · needed by {p.requiredBy.join(', ')}</>}
                     {p.path && <> · <Link href={pluginFolderHref(site, p)} className="font-medium text-primary hover:underline" aria-label={p.oneFile ? `Open the file of ${p.title}` : `Open the folder of ${p.title}`}>{p.oneFile ? 'Open file' : 'Open folder'}</Link></>}
                   </p>
-                  {details && (p.description || p.author) && (
+                  {details && (p.description || p.author || p.pluginUri || p.wporg) && (
                     <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
                       {p.description}
-                      {p.author && <span className="text-muted-foreground/80">{p.description ? ' ' : ''}By {p.author}.</span>}
+                      {p.author && <span className="text-muted-foreground/80">{p.description ? ' ' : ''}By <OutLink href={p.authorUri}>{p.author}</OutLink>.</span>}
+                      <OutLinks site={p.pluginUri} siteLabel="Plugin site" wporg={p.wporg && `https://wordpress.org/plugins/${p.wporg}/`} />
                     </p>
                   )}
                 </div>
@@ -343,4 +355,65 @@ function PluginsView({ site }: { site: Site }) {
       </Dialog>
     </div>
   );
+}
+
+/** A link out of the panel, in a new tab without the panel as referrer; plain text when there is no address. */
+function OutLink({ href, children, className }: { href?: string | undefined; children: ReactNode; className?: string }) {
+  if (!href) return <>{children}</>;
+  return <a href={href} target="_blank" rel="noopener noreferrer" className={cn('font-medium text-primary hover:underline', className)}>{children}</a>;
+}
+
+/** A plugin's or theme's own site and its page on WordPress.org, after its description. */
+function OutLinks({ site, siteLabel, wporg }: { site?: string | undefined; siteLabel: string; wporg?: string | undefined }) {
+  // A Plugin URI that is its WordPress.org page already shows once.
+  const own = site && !(wporg && site.replace(/\/$/, '') === wporg.replace(/\/$/, '')) ? site : undefined;
+  if (!own && !wporg) return null;
+  return (
+    <span className="ml-1 inline-flex flex-wrap items-center gap-x-2.5 align-baseline">
+      {own && <OutLink href={own} className="inline-flex items-center gap-1">{siteLabel}<ExternalLink className="size-3" aria-hidden /></OutLink>}
+      {wporg && <OutLink href={wporg} className="inline-flex items-center gap-1">WordPress.org<ExternalLink className="size-3" aria-hidden /></OutLink>}
+    </span>
+  );
+}
+
+type Hit = NonNullable<VulnerabilityState['found']>['hits'][number];
+
+/** What the last vulnerability check found for the site, by kind and WordPress.org slug; empty while it is off. */
+function useVulnerabilities(site: Site): Map<string, Hit> {
+  const [hits, setHits] = useState<Map<string, Hit>>(new Map());
+  useEffect(() => {
+    let live = true;
+    void api.siteVulnerabilities(site.domain, site.path).then(
+      (v) => live && setHits(new Map((v.found?.hits ?? []).map((h) => [`${h.kind}:${h.slug}`, h]))),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [site.domain, site.path]);
+  return hits;
+}
+
+/** A plugin's or theme's known vulnerabilities as one badge, linking to the worst one's advisory. */
+function VulnerableBadge({ hit }: { hit: Hit | undefined }) {
+  if (!hit) return null;
+  const top = hit.vulnerabilities[0];
+  const fixed = hit.vulnerabilities.map((v) => v.fixedIn).filter((v): v is string => Boolean(v)).sort(compareVersions).at(-1);
+  const serious = top?.severity === 'high' || top?.severity === 'critical';
+  const label = `Vulnerable${fixed ? `, fixed in ${fixed}` : hit.vulnerabilities.some((v) => v.unfixed) ? ', no fix yet' : ''}`;
+  const title = hit.vulnerabilities.map((v) => `${v.title}${v.severity ? ` (${v.severity})` : ''}`).join('\n');
+  const badge = <Badge tone={serious ? 'danger' : 'warning'} title={title}><ShieldAlert className="size-3" />{label}</Badge>;
+  return top?.link ? <a href={top.link} target="_blank" rel="noopener noreferrer" className="hover:opacity-80">{badge}</a> : badge;
+}
+
+/** Version order, part by part, as the server compares them. */
+function compareVersions(a: string, b: string): number {
+  const x = a.split(/[.+-]/);
+  const y = b.split(/[.+-]/);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const p = Number(x[i] ?? 0);
+    const q = Number(y[i] ?? 0);
+    if (p !== q && Number.isFinite(p) && Number.isFinite(q)) return p < q ? -1 : 1;
+  }
+  return 0;
 }

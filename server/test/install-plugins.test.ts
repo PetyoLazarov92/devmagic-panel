@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { installPlugins, installThemes, missingOnSite, missingThemesOnSite, pluginPresent, removeInstalled, slugOf } from '../src/sites/install-plugins.js';
+import { installPlugins, installThemes, pluginPresent, removeInstalled, slugOf } from '../src/sites/install-plugins.js';
 import { readThemes } from '../src/sites/plugins.js';
 import { siteFor } from '../src/sites/site-actions.js';
 import { RunStore } from '../src/store.js';
@@ -99,23 +99,9 @@ describe('installing missing plugins from WordPress.org', () => {
     expect(existsSync(join(content, 'upgrade.devmagic-panel-aside'))).toBe(false);
   });
 
-  it('finds what a live site lacks: every site of a network, network-wide, and what production had installed', async () => {
-    const t = wpSiteTree({ multisite: true });
-    mkdirSync(join(t.docroot, 'wp-content/plugins/akismet'), { recursive: true });
-    const b = base(t.docroot);
-    const fake = fakeExec({
-      [`${b} site list`]: { stdout: JSON.stringify([{ url: 'https://local.shop.com/' }, { url: 'https://local.shop.com/de/' }]) },
-      [`${b} option get active_plugins`]: { stdout: JSON.stringify(['akismet/akismet.php', 'redirection/redirection.php']) },
-      ['wp --path=' + t.docroot + ' --url=https://local.shop.com/de/ option get active_plugins']: { stdout: JSON.stringify(['redirection/redirection.php', '../../etc/x.php']) },
-      [`${b} site option get active_sitewide_plugins`]: { stdout: JSON.stringify({ 'wandworks-sso/sso.php': 1762600000 }) },
-      [`${b} transient get update_plugins --network`]: { stdout: JSON.stringify({ checked: { 'redirection/redirection.php': '5.5.1', 'hello.php': '1.7.2', 'akismet/akismet.php': '5.3' }, no_update: { 'hello.php': { slug: 'hello-dolly' } } }) },
-      [`${b} option get recently_activated`]: { stdout: '[]' },
-    });
-    expect(await missingOnSite(fake.exec, t.docroot, 'local.shop.com')).toEqual([
-      { file: 'redirection/redirection.php', active: true, sites: 2, version: '5.5.1' },
-      { file: 'wandworks-sso/sso.php', active: true, network: true },
-      { file: 'hello.php', active: false, version: '1.7.2', slug: 'hello-dolly' },
-    ]);
+  it('reads a plugin\'s slug and whether it is on disk', () => {
+    const t = wpSiteTree();
+    mkdirSync(join(t.docroot, 'wp-content/plugins'), { recursive: true });
     expect(slugOf({ file: 'hello.php', slug: 'hello-dolly' })).toBe('hello-dolly');
     expect(slugOf({ file: 'redirection/redirection.php' })).toBe('redirection');
     writeFileSync(join(t.docroot, 'wp-content/plugins/hello.php'), '<?php');
@@ -143,20 +129,6 @@ describe('installing missing plugins from WordPress.org', () => {
 });
 
 describe('missing themes', () => {
-  it('lists each site\'s theme and a child\'s parent that the files lack, counting a theme in wp-content/repos as there', async () => {
-    const t = wpSiteTree();
-    mkdirSync(join(t.docroot, 'wp-content/themes/twentytwentyfive'), { recursive: true });
-    mkdirSync(join(t.docroot, 'wp-content/repos/theme-kit/wandworks'), { recursive: true });
-    for (const f of ['functions.php', 'index.php', 'header.php']) writeFileSync(join(t.docroot, 'wp-content/repos/theme-kit/wandworks', f), '<?php');
-    const fake = fakeExec({
-      [`${base(t.docroot)} site list`]: { code: 1, stderr: 'Error: This is not a multisite installation.' },
-      [`${base(t.docroot)} option get stylesheet`]: { stdout: 'wandworks\n' },
-      [`${base(t.docroot)} option get template`]: { stdout: 'wandworks-parent\n' },
-      [`${base(t.docroot)} transient get update_themes`]: { stdout: JSON.stringify({ checked: { 'wandworks-parent': '1.4.0', wandworks: '2.1.0' } }) },
-    });
-    expect(await missingThemesOnSite(fake.exec, t.docroot, 'local.shop.com')).toEqual([{ name: 'wandworks-parent', parent: true, version: '1.4.0' }]);
-  });
-
   it('installs a theme from WordPress.org at production\'s version, notes one that fails, and never activates', async () => {
     const t = wpSiteTree();
     const themes = join(t.docroot, 'wp-content', 'themes');
