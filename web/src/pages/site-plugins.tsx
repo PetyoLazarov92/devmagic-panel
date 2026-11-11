@@ -1,3 +1,4 @@
+import { Tabs } from '@/components/ui/tabs';
 import { CheckAgain } from '@/components/page';
 import type { Site, SitePlugin, SitePlugins, SiteThemes, VulnerabilityState } from '@devmagic-panel/shared';
 import { MissingPluginsCard } from '@/components/missing-plugins-card';
@@ -85,7 +86,7 @@ export function PluginsTab({ site }: { site: Site }) {
   const go = (next: View) => navigate(`${siteHref(site)}?tab=plugins${next === 'themes' ? '&view=themes' : ''}`, { scroll: false });
   return (
     <div className="grid gap-3">
-      <Segmented label="Plugins and themes" value={view} onChange={go} options={[['plugins', 'Plugins'], ['themes', 'Themes']]} className="justify-self-start" />
+      <Tabs size="sm" label="Plugins and themes" value={view} onChange={go} items={[{ value: 'plugins', label: 'Plugins' }, { value: 'themes', label: 'Themes' }]} />
       {view === 'themes' ? <ThemesView site={site} /> : <PluginsView site={site} />}
     </div>
   );

@@ -1,7 +1,6 @@
-import { ArrowLeft } from 'lucide-react';
 import { useEffect } from 'react';
 import { JobScreen } from '@/components/job-screen';
-import { Link } from '@/lib/router';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { markJobSeen } from '@/lib/seen-jobs';
 
 /** A job on its own page, so an install can be followed again after leaving the wizard. */
@@ -10,10 +9,7 @@ export function JobPage({ id }: { id: string }) {
   useEffect(() => markJobSeen(id), [id]);
   return (
     <div className="grid gap-4 pt-4">
-      <Link href="/activity" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" />
-        All jobs
-      </Link>
+      <Breadcrumbs items={[{ label: 'Activity', href: '/activity' }, { label: 'Job' }]} />
       <JobScreen jobId={id} wide />
     </div>
   );

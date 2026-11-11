@@ -4,7 +4,7 @@ import { WordPressSummary } from '@/components/wordpress-summary';
 import { GitTidyDialog } from '@/components/git-tidy';
 import { branchWebUrl, commitWebUrl, hostname, LOCAL_MODE_DEFAULT_BLOCKED_HOSTS, MAILPIT_WEB, repoWeb, sameRepo, SITE_SERVER_LABEL, siteRepos, subjectLinks, WP_DEBUG_CONSTANTS } from '@devmagic-panel/shared';
 import {
-  ArrowDownToLine, ArrowLeft, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LogIn, Network, RefreshCw,
+  ArrowDownToLine, Check, Code2, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Image as ImageIcon, KeyRound, Layers, LogIn, Network, RefreshCw,
   ShieldCheck, SkipForward, Sparkles, SquareTerminal, Trash2, Wrench, X,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -14,7 +14,7 @@ import { BranchPicker, PullBadge } from '@/components/branch-picker';
 import { JobScreen } from '@/components/job-screen';
 import { settled, StepList, useJob } from '@/components/job-steps';
 import { LogView } from '@/components/log-view';
-import { coreLabel, installLabel, IssueRow, NETWORK_TYPE_LABEL, NetworkBadge, siteSubtitle, siteUrl, StatusDot, vscodeUrl } from '@/components/site-bits';
+import { coreLabel, installLabel, IssueRow, NETWORK_TYPE_LABEL, NetworkBadge, siteSubtitle, siteUrl, openInVSCode, StatusDot, vscodeUrl } from '@/components/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -26,10 +26,11 @@ import { FilterChips } from '@/components/ui/filter-chips';
 import { KeyValue } from '@/components/ui/key-value';
 import { Menu } from '@/components/ui/menu';
 import { Notice } from '@/components/ui/notice';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
+import { SectionLayout } from '@/components/ui/section-nav';
 import { Segmented } from '@/components/ui/segmented';
 import { StatTile } from '@/components/ui/stat-tile';
 import { Switch } from '@/components/ui/switch';
-import { Tabs } from '@/components/ui/tabs';
 import { TextLink } from '@/components/ui/text-link';
 import { CheckAgain } from '@/components/page';
 import { lastLine, openWpAdmin, runWithToast } from '@/lib/site-actions';
@@ -56,6 +57,11 @@ import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 
 /** A tab's address: the site's page with ?tab=, nothing for Overview. Not a path segment, which a site under that path would own. */
+/** A tab's name, for the breadcrumbs. */
+const tabLabel = (site: Parameters<typeof siteTabItems>[0], tab: Tab): string => {
+  const label = siteTabItems(site).find((t) => t.value === tab)?.label;
+  return typeof label === 'string' ? label : tab;
+};
 const tabHref = (site: { domain: string; path?: string }, tab: Tab, extra = '') => `${siteHref(site)}${tab === 'overview' ? '' : `?tab=${tab}${extra}`}`;
 
 /** A site's page; with a path, the WordPress install under that path of the domain. */
@@ -98,9 +104,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
   if (site.installing) {
     return (
       <div className="grid gap-4 pt-2">
-        <Link href="/sites" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" /> Sites
-        </Link>
+        <Breadcrumbs items={[{ label: 'Sites', href: '/sites' }, { label: siteName(site) }]} />
         <Notice tone="warning" action={<CheckAgain size="sm" onClick={reload} />}>
           {siteName(site)} is still being installed. Its actions open once the install finishes.
         </Notice>
@@ -120,9 +124,13 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
 
   return (
     <div className="pt-2">
-      <Link href="/sites" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Sites
-      </Link>
+      <Breadcrumbs
+        items={[
+          { label: 'Sites', href: '/sites' },
+          ...(site.path ? [{ label: site.domain, href: `/sites/${encodeURIComponent(site.domain)}` }] : []),
+          ...(tab === 'overview' ? [{ label: site.path ?? siteName(site) }] : [{ label: site.path ?? siteName(site), href: tabHref(site, 'overview') }, { label: tabLabel(site, tab) }]),
+        ]}
+      />
 
       {site.busy && (
         <Notice tone="warning" icon={false} className="mt-3">
@@ -169,10 +177,6 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
             <ExternalLink />
             Open site
           </Button>
-          <ButtonLink variant="outline" href={vscodeUrl(site.docroot)} title={`Open ${site.docroot} in VS Code`}>
-            <Code2 />
-            VS Code
-          </ButtonLink>
           <Button onClick={() => void openWpAdmin(site)}>
             <LogIn />
             wp-admin
@@ -180,6 +184,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
           <Menu
             items={[
               ...(site.network ? [{ label: 'Network Admin', icon: <Network />, onSelect: () => void openWpAdmin(site, { to: 'network' }) }] : []),
+              { label: 'VS Code', icon: <Code2 />, onSelect: () => openInVSCode(site.docroot) },
               { label: 'Copy folder path', icon: <FolderOpen />, onSelect: () => void navigator.clipboard?.writeText(site.docroot) },
               site.removable
                 ? { label: 'Remove site', icon: <Trash2 />, danger: true, onSelect: () => setRemoving(true) }
@@ -197,14 +202,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         </Notice>
       )}
 
-      <Tabs
-        className="mt-6"
-        value={tab}
-        onChange={setTab}
-        items={siteTabItems(site, counts)}
-      />
-
-      <div className="mt-5">
+      <SectionLayout className="mt-6" label={`${siteName(site)} sections`} value={tab} onChange={setTab} items={siteTabItems(site, counts)}>
         {tab === 'overview' && <Overview site={site} onChanged={reload} onOpen={setTab} cron={wpCron} logErrors={logs.loading && !logs.data ? undefined : problems} />}
         {tab === 'logs' && <LogsTab site={site} onChanged={reload} />}
         {tab === 'files' && <FilesTab site={site} />}
@@ -216,7 +214,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         {tab === 'performance' && <PerformanceTab site={site} />}
         {tab === 'config' && <ConfigTab site={site} onChanged={reload} />}
         {tab === 'domains' && <DomainsTab site={site} onChanged={reload} />}
-      </div>
+      </SectionLayout>
 
       {!site.path && <RemoveDialog site={site} open={removing} onClose={() => setRemoving(false)} />}
     </div>
@@ -766,7 +764,7 @@ function GitLinks({ remote, branch }: { remote: string | undefined; branch: stri
         <GitBranch />
         Open branch on {web.name}
       </ButtonLink>
-      <ButtonLink size="sm" variant="ghost" href={web.repoUrl} target="_blank" rel="noopener noreferrer">
+      <ButtonLink size="sm" variant="soft" href={web.repoUrl} target="_blank" rel="noopener noreferrer">
         <FolderGit2 />
         Repository
       </ButtonLink>
@@ -860,7 +858,7 @@ function NetworkCard({ site }: { site: Site }) {
                 <span className="block truncate font-mono text-xs text-muted-foreground">{s.url}</span>
               </span>
               <span className="flex gap-2">
-                <ButtonLink size="sm" variant="ghost" href={s.url} target="_blank" rel="noopener noreferrer">
+                <ButtonLink size="sm" variant="soft" href={s.url} target="_blank" rel="noopener noreferrer">
                   <ExternalLink />
                   Open
                 </ButtonLink>

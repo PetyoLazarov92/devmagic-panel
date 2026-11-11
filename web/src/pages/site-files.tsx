@@ -1,3 +1,4 @@
+import { Tabs } from '@/components/ui/tabs';
 import { type ActionId, type FileDiff, type FileEntry, type FileGitState, type FileGitStatus, type FileListing, type FileMatch, type FileTrashEntry, type FileView, type Site, FILE_CHANGED, FILE_TRASH_DAYS, FILE_TRASH_MAX, isFileName, joinPath, nameOf, parentOf } from '@devmagic-panel/shared';
 import { ArrowDown, ArrowUp, ChevronRight, CloudDownload, FileArchive, PackageOpen, Upload, Copy, CopyPlus, Download, File, FileCode, FileImage, FilePlus, FileText, Folder, FolderGit2, FolderInput, FolderOpen, FolderPlus, GitBranch, GitCompare, KeyRound, Link2, Lock, Pencil, Save, Search, TextCursorInput, Trash2, X } from 'lucide-react';
 import { type DragEvent, Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -126,12 +127,12 @@ export function FilesTab({ site }: { site: Site }) {
   return (
     <div className="grid gap-4">
       {wordpress && (
-        <Segmented
+        <Tabs
+          size="sm"
           label="What the Files tab shows"
-          className="w-fit"
           value={uploads ? 'uploads' : 'browse'}
           onChange={(v) => navigate(v === 'uploads' ? uploadsHref(site) : filesHref(site, { dir }), { scroll: false })}
-          options={[['browse', 'Browse'], ['uploads', 'Uploads from production']]}
+          items={[{ value: 'browse', label: 'Browse' }, { value: 'uploads', label: 'Uploads from production' }]}
         />
       )}
       {uploads ? <UploadsFromProduction site={site} /> : <FolderView site={site} dir={dir} find={find} />}

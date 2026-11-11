@@ -1,3 +1,4 @@
+import { Tabs } from '@/components/ui/tabs';
 import type { CleanCopyInfo, CleanPreview, KeptDatabaseInfo, Site, SnapshotInfo, UploadResult } from '@devmagic-panel/shared';
 import { isLocalName } from '@devmagic-panel/shared';
 import { Archive, Camera, ChevronDown, Download, Eraser, FileArchive, PackageCheck, RefreshCw, Replace, RotateCcw, Search, ShieldCheck, Trash2, Upload } from 'lucide-react';
@@ -71,7 +72,7 @@ export function DatabaseTab({ site }: { site: Site }) {
   const views: Array<[DbView, string]> = [...(wordpress ? [['overview', 'Overview'] as [DbView, string]] : []), ['tables', 'Tables'], ['sql', 'SQL'], ['tools', 'Backups and tools']];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <Segmented label="Database" value={view} onChange={(v) => go(v)} options={views} className="justify-self-start" />
+      <Tabs size="sm" label="Database" value={view} onChange={(v) => go(v)} items={views.map(([value, label]) => ({ value, label }))} />
       {view === 'tools' ? (
         <DatabaseTools site={site} />
       ) : view === 'sql' ? (

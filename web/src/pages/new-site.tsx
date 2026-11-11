@@ -6,6 +6,7 @@ import {} from '@/components/branch-picker';
 import {} from '@/components/dump-facts';
 import { JobScreen } from '@/components/job-screen';
 import { Badge } from '@/components/ui/badge';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { Checkbox, Field, Select } from '@/components/ui/field';
@@ -806,19 +807,12 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
 
   return (
     <div className="pt-2">
-      <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-        <Link href="/sites" className="hover:text-foreground">Sites</Link>
-        <ChevronRight className="size-3.5 shrink-0" />
-        {inDraft ? (
-          <>
-            <Link href="/sites/new" className="shrink-0 hover:text-foreground">New site</Link>
-            <ChevronRight className="size-3.5 shrink-0" />
-            <span aria-current="page" className={cn('truncate text-foreground', named && 'font-mono text-dense')}>{named ? title : 'Draft'}</span>
-          </>
-        ) : (
-          <span aria-current="page" className="text-foreground">New site</span>
-        )}
-      </nav>
+      <Breadcrumbs
+        items={[
+          { label: 'Sites', href: '/sites' },
+          ...(inDraft ? [{ label: 'New site', href: '/sites/new' }, { label: named ? <span className="font-mono text-dense">{title}</span> : 'Draft' }] : [{ label: 'New site' }]),
+        ]}
+      />
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
         <h1 className={cn('min-w-0 truncate text-2xl font-semibold tracking-tight', named && 'font-mono')}>{named ? title : 'New site'}</h1>
         {inDraft && <Badge tone="primary">{KIND_LABEL[kind]}</Badge>}
