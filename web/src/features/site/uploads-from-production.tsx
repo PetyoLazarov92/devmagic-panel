@@ -175,7 +175,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 @4xl:grid-cols-2">
+      <div className="grid gap-4 @3xl:grid-cols-2">
         <Card>
           <CardHeader title={<span className="flex items-center gap-2"><HardDrive className="size-4 text-muted-foreground" aria-hidden />Here</span>} />
           <CardBody>

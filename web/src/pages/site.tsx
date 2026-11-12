@@ -23,7 +23,7 @@ import { PluginsTab } from '@/features/site/plugins';
 import { siteHref, siteName } from '@/lib/site-ref';
 import { sectionViews, siteTabItems, type Tab, type TabCounts, uncoveredNames } from '@/lib/site-tabs';
 import { Spinner } from '@/components/ui/spinner';
-import { tabHref } from '@/features/site/site-shared';
+import { SITE_TAB_ICONS, tabHref } from '@/features/site/site-shared';
 import { Overview } from '@/features/site/overview';
 import { LogsTab } from '@/features/site/logs';
 import { NetworkCard } from '@/features/site/network';
@@ -184,7 +184,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
         </Notice>
       )}
 
-      <SectionLayout className="mt-6" label={`${siteName(site)} sections`} value={tab} onChange={setTab} items={siteTabItems(site, counts)} views={views}>
+      <SectionLayout className="mt-6" label={`${siteName(site)} sections`} value={tab} onChange={setTab} items={siteTabItems(site, counts)} icons={SITE_TAB_ICONS} views={views}>
         {tab === 'overview' && <Overview site={site} onChanged={reload} onOpen={setTab} cron={wpCron} logErrors={logs.loading && !logs.data ? undefined : problems} />}
         {tab === 'logs' && <LogsTab site={site} onChanged={reload} />}
         {tab === 'files' && <FilesTab site={site} />}

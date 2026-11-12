@@ -43,7 +43,9 @@ fit the width go under **More**, with their badges added up there. A
 section's own views (the Database's Overview, Tables, SQL and Backups and
 tools; Plugins and Themes; Browse and Uploads from production) are listed
 under it in the side menu, which stays in view as you scroll, and as small
-tabs on a narrower screen. A badge counts only
+tabs on a narrower screen. Cards side by side come in pairs of a kind and are
+as tall as each other; a card that does most (Git, Import a database) takes
+the whole row. A badge counts only
 what needs a look: errors in `debug.log`, late WP-Cron events, local constants
 to set, names the certificate or hosts file leaves out.
 

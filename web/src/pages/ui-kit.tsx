@@ -1,4 +1,4 @@
-import { Database, Download, MoreHorizontal, Plug, RefreshCw, Server, Trash2 } from 'lucide-react';
+import { Database, Download, FolderOpen, LayoutDashboard, MoreHorizontal, Plug, RefreshCw, ScrollText, Server, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { CheckAgain, PageHeader, ViewBar } from '@/components/layout/page';
 import { ScopeLabel } from '@/components/layout/scope-label';
@@ -101,6 +101,7 @@ export function UiKitPage() {
             { value: 'logs', label: 'Logs', count: 4, tone: 'danger' },
             { value: 'files', label: 'Files' },
           ]}
+          icons={{ overview: LayoutDashboard, logs: ScrollText, files: FolderOpen }}
           value={tab}
           onChange={setTab}
         >

@@ -21,7 +21,10 @@ globs: ["web/**"]
 - Layouts work from 375 px wide: stack on small screens, no horizontal scroll.
   A grid that holds cards gets `grid-cols-[minmax(0,1fr)]` (before
   `lg:grid-cols-2`), so a long name in a card is cut with an ellipsis instead
-  of pushing the card past its column.
+  of pushing the card past its column. Beside a side menu, columns follow the
+  room the content has (`@3xl:grid-cols-2`), not the window. Cards side by
+  side are as tall as each other: pair cards of a kind and a size, and a card
+  left alone takes the whole row. A row of tiles fills the row (`tileSpan`).
 - Keyboard first: visible focus, Enter submits, actions reachable by Tab.
 
 ## Components: one part for each job
@@ -69,7 +72,8 @@ lowers one lowers the baseline there too.
 - **Navigation**: `Breadcrumbs` above every page below the menu's top level
   (on a phone only the way back shows); `Tabs` for a page's views,
   `Tabs size="sm"` for a tab's own views (level 2); a detail page's sections
-  in `SectionLayout` (a menu down the side from `lg`, tabs below it), with
+  in `SectionLayout` (a menu down the side from `lg` in a frame like the
+  cards, each section with its icon as the main menu has, tabs below it), with
   the open section's own views listed under it (`sectionViews` in
   `lib/site-tabs.ts`); below `lg` the section draws them as small tabs.
   `Segmented` only switches how the same thing shows (Compact, Details).
@@ -190,9 +194,17 @@ has; a list the server pages (a table's rows) keeps its pages.
 Every page is made of the pieces in `web/src/components/layout/page.tsx` and
 `web/src/components/layout/skeletons.tsx`, and follows the layout of its type.
 
+- **Width by page type** (`lib/page-width.ts`): the top bar runs the whole
+  width (search left, what changes while you work right). Lists and grids of
+  like items (Sites, Services, Activity, WP Cores) run up to 120rem and add
+  columns (three from 96rem of content, four from 110rem); detail pages (a
+  site, a job, a run, a section of Services) stop at 100rem and keep their
+  cards in pairs; settings and flows (Settings, Update, the new site wizard)
+  stop at 64rem. Never the whole screen for text or forms.
 - **The pieces.** `PageHeader` (title and intro left, actions right, Check
   again last) tops a page; `ViewBar` (a picker or filters left, Check again
-  right, "Read 2 min ago" and a short note under it) tops a tab or a view.
+  right, "Read 2 min ago" and a short note under it, or in the picker's place
+  when there is none, so the bar is one line) tops a tab or a view.
   The button that reads a page again is always `CheckAgain`: never Refresh or
   Read again. Something the whole page or view should know is a `Notice` right
   under its header or bar (danger, warning, info); a field's own error stays

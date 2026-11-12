@@ -21,6 +21,7 @@ import { loadPreferences, savePreferences, usePreferences } from '@/lib/preferen
 import { useAsync } from '@/lib/use-async';
 import { Link } from '@/lib/router';
 import { Toaster } from '@/lib/toast';
+import { PAGE_MAX_WIDTH, pageWidth } from '@/lib/page-width';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -125,10 +126,9 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             </a>
           </Notice>
         )}
-        {/* Lined up with the page below: the search centered over it while the indicators on the right leave room, else just left of them. */}
-        <header className="mx-auto flex w-full max-w-7xl items-center gap-2 px-4 pt-4 sm:px-6 md:px-10">
+        {/* The whole width on every page: the search on the left, what changes while you work on the right, the room between. */}
+        <header className="flex w-full items-center gap-2 px-4 pt-4 sm:px-6 md:px-10">
           <IconButton icon={Menu} label="Open the menu" onClick={() => setMenuOpen(true)} className="shrink-0 md:hidden" aria-expanded={menuOpen} />
-          <div className="hidden min-w-0 flex-1 basis-0 md:block" />
           {/* Drawn like a search field: it opens the command palette. */}
           <Button
             variant="outline"
@@ -139,7 +139,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             <span className="flex-1 truncate text-left">Search sites and actions</span>
             <kbd className="hidden rounded border bg-muted px-1.5 font-mono text-2xs sm:inline">Ctrl K</kbd>
           </Button>
-          <div className="flex shrink-0 items-center justify-end gap-2 md:flex-1 md:basis-0">
+          <div className="ml-auto flex shrink-0 items-center justify-end gap-2">
             {/* On a phone the menu has these: the bar keeps what changes while you work. */}
             <div className="hidden items-center gap-2 md:flex">
               <UpdateIndicator status={update} />
@@ -155,7 +155,8 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             )}
           </div>
         </header>
-        <main className="@container mx-auto w-full max-w-7xl flex-1 px-4 pb-12 sm:px-6 md:px-10">{children}</main>
+        {/* The content's width follows the page type: wide lists, detail pages, narrow settings and flows. */}
+        <main className={cn('@container mx-auto w-full flex-1 px-4 pb-12 sm:px-6 md:px-10', PAGE_MAX_WIDTH[pageWidth(path)])}>{children}</main>
         <Toaster />
         {assistantOn && <AssistantDrawer />}
       </div>

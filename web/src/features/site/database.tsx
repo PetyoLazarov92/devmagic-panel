@@ -143,17 +143,15 @@ function DatabaseTools({ site }: { site: Site }) {
         loading={reading}
         note={<>Snapshots, imports and copies of <span className="font-mono">{site.db.name}</span>. Each job that changes it saves it first, so Undo or a snapshot puts it back.</>}
       />
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2">
-        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
-          <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} footer={jobIn('snapshots')} />
-          <ImportCard site={site} busy={busy} start={start} footer={jobIn('import')} />
-          <CleanCurrentCard site={site} preview={preview.data} error={preview.error} busy={busy} start={start} footer={jobIn('cleanCurrent')} />
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
-          <SearchReplaceCard site={site} busy={busy} start={start} preview={kind === 'preview' ? runner.job : null} footer={jobIn('replace')} />
-          <CleanCopiesCard site={site} copies={copies.data ?? []} loading={copies.loading} busy={busy} start={start} onDeleted={copies.reload} footer={jobIn('copies')} />
-          <KeptCard site={site} kept={kept.data ?? []} loading={kept.loading} busy={busy} start={start} onDeleted={kept.reload} footer={jobIn('kept')} />
-        </div>
+      {/* In pairs of a kind, each pair as tall as each other: going back (snapshots, kept tables),
+          bringing a database in across the row, cleaning (this one, copies to share), then search and replace. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @3xl:grid-cols-2">
+        <SnapshotsCard site={site} snapshots={list.data ?? []} loading={list.loading} busy={busy} start={start} onDeleted={list.reload} footer={jobIn('snapshots')} />
+        <KeptCard site={site} kept={kept.data ?? []} loading={kept.loading} busy={busy} start={start} onDeleted={kept.reload} footer={jobIn('kept')} />
+        <ImportCard site={site} busy={busy} start={start} footer={jobIn('import')} className="@3xl:col-span-2" />
+        <CleanCurrentCard site={site} preview={preview.data} error={preview.error} busy={busy} start={start} footer={jobIn('cleanCurrent')} />
+        <CleanCopiesCard site={site} copies={copies.data ?? []} loading={copies.loading} busy={busy} start={start} onDeleted={copies.reload} footer={jobIn('copies')} />
+        <SearchReplaceCard site={site} busy={busy} start={start} preview={kind === 'preview' ? runner.job : null} footer={jobIn('replace')} className="@3xl:col-span-2" />
       </div>
     </div>
   );
@@ -320,7 +318,7 @@ function replacementCount(output: string | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
-function SearchReplaceCard({ footer, site, busy, start, preview }: { footer: ReactNode;  site: Site; busy: boolean; start: Start; preview: ReturnType<typeof useJob>['job'] }) {
+function SearchReplaceCard({ footer, site, busy, start, preview, className }: { footer: ReactNode; site: Site; busy: boolean; start: Start; preview: ReturnType<typeof useJob>['job']; className?: string }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [previewed, setPreviewed] = useState<{ from: string; to: string } | null>(null);
@@ -332,21 +330,21 @@ function SearchReplaceCard({ footer, site, busy, start, preview }: { footer: Rea
   const canRun = previewed !== null && previewed.from === from && previewed.to === to && preview?.status === 'done';
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader title="Search and replace" meta={<Replace className="size-4 text-muted-foreground" />} />
       <CardBody className="grid-cols-[minmax(0,1fr)]">
         <p className="text-xs text-muted-foreground">
           Runs <code className="font-mono">wp search-replace</code> on every table of the site, serialized data included; guid columns are skipped. Preview first: it only counts.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        {/* Across the row: the two fields and the buttons on one line. */}
+        <div className="grid gap-3 sm:grid-cols-2 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] @3xl:items-end">
           <Field label="Find" htmlFor="sr-from">
             <Input id="sr-from" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="https://staging.example.com" className="font-mono text-dense" spellCheck={false} />
           </Field>
           <Field label="Replace with" htmlFor="sr-to">
             <Input id="sr-to" value={to} onChange={(e) => setTo(e.target.value)} placeholder={`https://${siteName(site)}`} className="font-mono text-dense" spellCheck={false} />
           </Field>
-        </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 sm:col-span-2 @3xl:col-span-1">
           <Button
             variant="outline"
             disabled={busy || !ready}
@@ -362,6 +360,7 @@ function SearchReplaceCard({ footer, site, busy, start, preview }: { footer: Rea
             <Replace />
             {count !== null ? `Replace ${count}` : 'Replace'}
           </Button>
+        </div>
         </div>
         {preview && previewed && (
           <div className="grid gap-2">
@@ -457,7 +456,7 @@ function ReplacePairs({ dump }: { dump: DumpUpload }) {
  * site, or a dump from any source, as it is or cleaned. Either way it goes
  * into a side database and is swapped in, with the tables from before kept.
  */
-function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: Site; busy: boolean; start: Start }) {
+function ImportCard({ footer, site, busy, start, className }: { footer: ReactNode; site: Site; busy: boolean; start: Start; className?: string }) {
   const dump = useDumpUpload(site);
   const { upload, replace } = dump;
   const [copy, setCopy] = useState<'whole' | 'clean'>('whole');
@@ -477,15 +476,19 @@ function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: S
     : null;
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader title="Import a database" meta={<FileArchive className="size-4 text-muted-foreground" />} />
       <CardBody className="grid-cols-[minmax(0,1fr)]">
         <p className="text-xs text-muted-foreground">
           Replaces {db} with a copy from production or a dump, as it is or cleaned. The copy goes into a side database and is swapped in at once; production domains become this site&apos;s, and the tables from before are kept for 7 days.
         </p>
-        <ProductionRefresh site={site} busy={busy} start={start} />
+        {/* The two ways in side by side once the card has the room, one under the other before. */}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @3xl:grid-cols-2 @3xl:gap-6">
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
+          <ProductionRefresh site={site} busy={busy} start={start} />
+        </div>
 
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 border-t pt-4">
+        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4 border-t pt-4 @3xl:border-t-0 @3xl:border-l @3xl:pt-0 @3xl:pl-6">
           <p className="text-sm font-medium">From a dump</p>
           <DumpChooser dump={dump} busy={busy} site={site} />
 
@@ -521,6 +524,7 @@ function ImportCard({ footer, site, busy, start }: { footer: ReactNode;  site: S
               )}
             </>
           )}
+        </div>
         </div>
       </CardBody>
       <ConfirmDialog

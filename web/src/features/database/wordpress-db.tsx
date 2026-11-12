@@ -225,19 +225,18 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
         </Notice>
       )}
       <NeedsALook items={wordpressFindings(r).map((f) => ({ ...f, key: `${f.card}:${f.text}` }))} />
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2">
-        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
-          <div id="wp-autoload" className="grid scroll-mt-4"><AutoloadCard view={view} onTable={onTable} onAutoloadOff={(o) => void autoloadOff(o)} /></div>
-          <div id="wp-transients" className="grid scroll-mt-4"><TransientsCard view={view} target={target} busy={busy} onTable={onTable} onDelete={(scope) => setAsking(transientsAsk(r, scope))} footer={footerFor('transients')} /></div>
-          <MetaKeysCard view={view} onTable={onTable} onSizes={report.readSizes} />
-          <div id="wp-plugins" className="grid scroll-mt-4"><PluginsCard view={view} busy={busy} onTable={onTable} onAsk={setAsking} footer={footerFor('plugins')} /></div>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
-          <div id="wp-health" className="grid scroll-mt-4"><HealthCard view={view} busy={busy} onFix={setAsking} footer={footerFor('health')} /></div>
-          <div id="wp-cleanup" className="grid scroll-mt-4"><CleanupCard view={view} target={target} busy={busy} onClean={setAsking} onScan={report.readDuplicates} onTable={onTable} footer={footerFor('content', 'orphans')} /></div>
-          <UsersCard view={view} />
-          <GrowthCard view={view} onTable={onTable} />
-        </div>
+      {/* In pairs of a kind and a size, each pair as tall as each other: what loads on every page and
+          the tables' health, the caches and what grows, what a clean-up finds and the biggest meta,
+          then what plugins and themes keep and the users across the row. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @3xl:grid-cols-2">
+        <div id="wp-autoload" className="grid scroll-mt-4"><AutoloadCard view={view} onTable={onTable} onAutoloadOff={(o) => void autoloadOff(o)} /></div>
+        <div id="wp-health" className="grid scroll-mt-4"><HealthCard view={view} busy={busy} onFix={setAsking} footer={footerFor('health')} /></div>
+        <div id="wp-transients" className="grid scroll-mt-4"><TransientsCard view={view} target={target} busy={busy} onTable={onTable} onDelete={(scope) => setAsking(transientsAsk(r, scope))} footer={footerFor('transients')} /></div>
+        <GrowthCard view={view} onTable={onTable} />
+        <div id="wp-cleanup" className="grid scroll-mt-4"><CleanupCard view={view} target={target} busy={busy} onClean={setAsking} onScan={report.readDuplicates} onTable={onTable} footer={footerFor('content', 'orphans')} /></div>
+        <MetaKeysCard view={view} onTable={onTable} onSizes={report.readSizes} />
+        <div id="wp-plugins" className="grid scroll-mt-4 @3xl:col-span-2"><PluginsCard view={view} busy={busy} onTable={onTable} onAsk={setAsking} footer={footerFor('plugins')} /></div>
+        <div className="grid @3xl:col-span-2"><UsersCard view={view} /></div>
       </div>
       <CleanupsCard database={r.database} site={siteKey} refresh={refresh} onUndone={() => report.reload()} />
       {asking && (
@@ -278,7 +277,7 @@ function WordpressDbSkeleton() {
         <Reading>Reading what WordPress keeps in this database...</Reading>
         <Bar className="ml-auto h-8 w-28 rounded-md" />
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @3xl:grid-cols-2">
         <div className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
           <CardSkeleton>
             <div className="grid gap-2.5 px-5 py-4">

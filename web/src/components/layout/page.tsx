@@ -38,6 +38,7 @@ export function PageHeader({ title, intro, actions, className }: { title: ReactN
 /**
  * The bar at the top of a tab or a view: what it is about (a picker, filters)
  * on the left, Check again on the right, and under it what was read and when.
+ * With nothing on the left, the note takes its place, so the bar is one line.
  */
 export function ViewBar({ children, actions, onCheck, loading = false, checkedAt, note, className }: {
   children?: ReactNode;
@@ -50,21 +51,23 @@ export function ViewBar({ children, actions, onCheck, loading = false, checkedAt
   className?: string;
 }) {
   const read = checkedAt ? `Read ${timeAgo(checkedAt)}.` : null;
+  const left = children !== undefined && children !== null && children !== false;
+  const line = (read || note) && (
+    <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground', !left && 'min-w-0 flex-[1_1_20rem]')}>
+      {note && <span className="min-w-0">{note}</span>}
+      {read && <span>{read}</span>}
+    </p>
+  );
   return (
     <div className={cn('grid gap-1.5', className)}>
       <div className="flex flex-wrap items-center gap-3">
-        {children}
+        {left ? children : line}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {actions}
           {onCheck && <CheckAgain size="sm" onClick={onCheck} loading={loading} />}
         </div>
       </div>
-      {(read || note) && (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          {note && <span className="min-w-0">{note}</span>}
-          {read && <span>{read}</span>}
-        </p>
-      )}
+      {left && line}
     </div>
   );
 }

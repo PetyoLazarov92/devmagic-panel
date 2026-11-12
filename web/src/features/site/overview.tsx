@@ -29,6 +29,7 @@ import { SaltsConfirm, saltsSummary } from '@/features/site/config';
 import { siteTarget } from '@/lib/site-ref';
 import { debugLabel, debugValues, siteTabItems, type Tab, uncoveredNames } from '@/lib/site-tabs';
 import { filesHref } from '@/lib/file-links';
+import { tileSpan } from '@/lib/tile-span';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { SERVER_NAME } from './site-shared';
@@ -123,7 +124,7 @@ export function DebugSettings({ site, onChanged }: { site: Site; onChanged: () =
  * (WP-Cron, the errors in debug.log) keeps its place while it loads, with a
  * bar where its value or detail goes, so the tiles never move.
  */
-export function Tile({ label, value, detail, tone, loading, onOpen }: { label: string; value?: string; detail?: string; tone?: 'warning' | 'danger'; loading?: 'value' | 'detail'; onOpen: () => void }) {
+export function Tile({ label, value, detail, tone, loading, onOpen, className }: { label: string; value?: string; detail?: string; tone?: 'warning' | 'danger'; loading?: 'value' | 'detail'; onOpen: () => void; className?: string }) {
   return (
     <StatTile
       label={label}
@@ -131,7 +132,7 @@ export function Tile({ label, value, detail, tone, loading, onOpen }: { label: s
       sub={loading ? <span className="flex h-4 items-center"><Bar className="h-2.5 w-24" /><span className="sr-only">Reading...</span></span> : detail}
       tone={tone ?? 'neutral'}
       onClick={onOpen}
-      className="px-4 py-3"
+      className={cn('px-4 py-3', className)}
     />
   );
 }
@@ -194,12 +195,21 @@ export function SiteTiles({ site, cron, logErrors, onOpen }: { site: Site; cron:
       onOpen: () => onOpen('domains'),
     });
   }
+  // The tiles fill their rows: all in one row once the column has room, else rows of three (two
+  // on a phone) with the last row's tiles sharing it, so no row stops short of the cards below.
+  const wide = tiles.length > 5 ? ONE_ROW.xl4 : ONE_ROW.xl3;
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-      {tiles.map(({ key, ...tile }) => <Tile key={key} {...tile} />)}
+    <div className={cn('grid grid-cols-6 gap-3', wide.grid)}>
+      {tiles.map(({ key, ...tile }, i) => <Tile key={key} {...tile} className={cn(tileSpan(i, tiles.length), wide.tile)} />)}
     </div>
   );
 }
+
+const ONE_ROW = {
+  xl3: { grid: '@3xl:grid-flow-col @3xl:grid-cols-none @3xl:auto-cols-fr', tile: '@3xl:col-span-1' },
+  xl4: { grid: '@4xl:grid-flow-col @4xl:grid-cols-none @4xl:auto-cols-fr', tile: '@4xl:col-span-1' },
+};
+
 
 /**
  * A site at a glance: the facts from its other tabs, then what you do most (git, quick actions, the core),
@@ -274,40 +284,44 @@ export function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: S
 
       <SiteTiles site={site} cron={cron} logErrors={logErrors} onOpen={onOpen} />
 
-      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 @4xl:grid-cols-2">
-        {repos.length > 0 && (
-          <Card>
-            <CardHeader
-              title="Git"
-              meta={
-                <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {repos.length > 1 && `${repos.length} repos`}
-                  <GitBranch className="size-4" />
-                </span>
-              }
-            />
-            {repos.length > 1 && openRepo && (
-              <Tabs size="sm" label="Repos" className="px-3" value={repoKey(openRepo)} onChange={setRepoAt} items={repos.map((r) => ({ value: repoKey(r), label: r.label }))} />
-            )}
-            <div className="divide-y">
-              {repos.filter((r) => r === openRepo).map((r) => (
-                <RepoSection
-                  key={`${r.mount ?? ''}:${r.repo ?? ''}`}
-                  domain={site.domain}
-                  {...(r.mount ? { mount: r.mount } : {})}
-                  {...(r.repo ? { repo: r.repo } : {})}
-                  label={r.label}
-                  folder={r.mount && r.mount !== site.path ? (site.mounts?.find((m) => m.path === r.mount)?.docroot ?? site.docroot) : r.repo ? `${site.docroot}/${r.repo}` : site.docroot}
-                  git={r.git}
-                  installedFrom={Boolean(installedFrom && r.git.remote && sameRepo(r.git.remote, installedFrom))}
-                  onChanged={onChanged}
-                />
-              ))}
-            </div>
-          </Card>
-        )}
+      {/* Git first, across the row: what you use most, with room for its commits beside the branch. */}
+      {repos.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Git"
+            meta={
+              <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                {repos.length > 1 && `${repos.length} repos`}
+                <GitBranch className="size-4" />
+              </span>
+            }
+          />
+          {repos.length > 1 && openRepo && (
+            <Tabs size="sm" label="Repos" className="px-3" value={repoKey(openRepo)} onChange={setRepoAt} items={repos.map((r) => ({ value: repoKey(r), label: r.label }))} />
+          )}
+          <div className="divide-y">
+            {repos.filter((r) => r === openRepo).map((r) => (
+              <RepoSection
+                key={`${r.mount ?? ''}:${r.repo ?? ''}`}
+                domain={site.domain}
+                {...(r.mount ? { mount: r.mount } : {})}
+                {...(r.repo ? { repo: r.repo } : {})}
+                label={r.label}
+                folder={r.mount && r.mount !== site.path ? (site.mounts?.find((m) => m.path === r.mount)?.docroot ?? site.docroot) : r.repo ? `${site.docroot}/${r.repo}` : site.docroot}
+                git={r.git}
+                installedFrom={Boolean(installedFrom && r.git.remote && sameRepo(r.git.remote, installedFrom))}
+                onChanged={onChanged}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
 
-        <div className="grid gap-4">
+      {/* Two columns once there is room, each pair of cards as tall as each other: the cards come in
+          pairs of a kind and a size (the quick actions and WordPress, Local mode and uploads,
+          taking over and the files), and a card left alone takes the whole row. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @3xl:grid-cols-2 @3xl:[&>:last-child:nth-child(odd)]:col-span-2">
+
           <Card>
             <CardHeader title="Quick actions" meta={<Wrench className="size-4 text-muted-foreground" />} />
             <CardBody className="grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2">
@@ -330,10 +344,10 @@ export function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: S
                 {busy === terminalName ? <Spinner /> : <SquareTerminal />}
                 {terminalName}
               </Button>
-              <p className="text-xs text-muted-foreground sm:col-span-2">
+              <p className="col-span-full text-xs text-muted-foreground">
                 Clearing caches runs <code className="font-mono">wp cache flush</code>, deletes transients and reloads Apache to reset OPcache.
               </p>
-              {quickResult && <div className="sm:col-span-2"><RunOutput result={quickResult} /></div>}
+              {quickResult && <div className="col-span-full"><RunOutput result={quickResult} /></div>}
             </CardBody>
           </Card>
 
@@ -371,15 +385,12 @@ export function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: S
               </CardBody>
             </Card>
           )}
-        </div>
-
-        <SaltsConfirm mode={salting} onClose={() => setSalting(null)} onConfirm={(only) => void run(saltsName, 'site.shuffleSalts', { ...siteTarget(site), only })} />
-
-        <TakeoverCard site={site} onChanged={onChanged} />
 
         {site.localMode && <LocalModeCard site={site} localMode={site.localMode} onChanged={onChanged} />}
 
         {site.localMode && <UploadsCard site={site} onChanged={onChanged} />}
+
+        <TakeoverCard site={site} onChanged={onChanged} />
 
         <Card>
           <CardHeader
@@ -404,6 +415,8 @@ export function Overview({ site, onChanged, onOpen, cron, logErrors }: { site: S
           </CardBody>
         </Card>
       </div>
+
+      <SaltsConfirm mode={salting} onClose={() => setSalting(null)} onConfirm={(only) => void run(saltsName, 'site.shuffleSalts', { ...siteTarget(site), only })} />
     </div>
   );
 }
@@ -455,81 +468,101 @@ export function RepoSection({ domain, mount, repo, label, folder, git, installed
 
   const id = `branch-${label.replace(/\W/g, '')}`;
   return (
-    <section className="grid grid-cols-[minmax(0,1fr)] gap-3 p-5 text-sm" aria-label={`${label} repository`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground" title={folder}>{label}</span>
-        <span className="font-mono">{git.branch}</span>
-        {installedFrom && <Badge title="The site was installed from this repo">installed from</Badge>}
-        {currentPull && <PullBadge pull={currentPull} withTitle />}
-        {git.dirty > 0 && <Badge tone="warning">{git.dirty} changed</Badge>}
-        {git.upstream === null ? (
-          <Badge tone="warning">not pushed</Badge>
-        ) : (
-          <>
-            {git.ahead > 0 && <Badge>{git.ahead} ahead</Badge>}
-            {git.behind > 0 && <Badge>{git.behind} behind</Badge>}
-          </>
-        )}
-      </div>
-      <p className="-mt-1 text-xs text-muted-foreground">
-        {git.upstream ? `Tracks ${git.upstream}` : 'No remote branch yet: push it to share it and to see what is ahead or behind.'}
-        {details.data?.fetchedAt && ` · fetched ${timeAgo(details.data.fetchedAt)}`}
-      </p>
-
-      <div className="flex flex-wrap gap-2">
-        <label htmlFor={id} className="sr-only">Branch</label>
-        <div className="min-w-48 flex-1">
-          <BranchPicker id={id} branches={branches} pulls={pullFor} value={branch} onChange={setBranch} disabled={busy !== null} />
+    // Across the whole row from @3xl: the branch and what you do with it on the left, its recent commits on the right.
+    <section className="grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-3 p-5 text-sm @3xl:grid-cols-2" aria-label={`${label} repository`}>
+      <div className="grid content-start gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground" title={folder}>{label}</span>
+          <span className="font-mono">{git.branch}</span>
+          {installedFrom && <Badge title="The site was installed from this repo">installed from</Badge>}
+          {currentPull && <PullBadge pull={currentPull} withTitle />}
+          {git.dirty > 0 && <Badge tone="warning">{git.dirty} changed</Badge>}
+          {git.upstream === null ? (
+            <Badge tone="warning">not pushed</Badge>
+          ) : (
+            <>
+              {git.ahead > 0 && <Badge>{git.ahead} ahead</Badge>}
+              {git.behind > 0 && <Badge>{git.behind} behind</Badge>}
+            </>
+          )}
         </div>
-        {branch !== git.branch && (
+        <p className="-mt-1 text-xs text-muted-foreground">
+          {git.upstream ? `Tracks ${git.upstream}` : 'No remote branch yet: push it to share it and to see what is ahead or behind.'}
+          {details.data?.fetchedAt && ` · fetched ${timeAgo(details.data.fetchedAt)}`}
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          <label htmlFor={id} className="sr-only">Branch</label>
+          <div className="min-w-48 flex-1">
+            <BranchPicker id={id} branches={branches} pulls={pullFor} value={branch} onChange={setBranch} disabled={busy !== null} />
+          </div>
+          {branch !== git.branch && (
+            <Button
+              variant="outline"
+              className="h-10"
+              disabled={busy !== null || git.dirty > 0}
+              title={git.dirty > 0 ? 'Commit or stash the uncommitted changes first' : undefined}
+              onClick={() => void run('Switch', 'git.switch', { ...target, branch })}
+            >
+              {busy === 'Switch' ? <Spinner /> : <GitBranch />}
+              Switch
+            </Button>
+          )}
           <Button
             variant="outline"
             className="h-10"
-            disabled={busy !== null || git.dirty > 0}
-            title={git.dirty > 0 ? 'Commit or stash the uncommitted changes first' : undefined}
-            onClick={() => void run('Switch', 'git.switch', { ...target, branch })}
+            disabled={busy !== null || git.upstream === null}
+            title={git.upstream === null ? 'This branch has no remote branch to pull from' : 'Pull, fast-forward only'}
+            onClick={() => void run('Pull', 'git.pull', target)}
           >
-            {busy === 'Switch' ? <Spinner /> : <GitBranch />}
-            Switch
+            {busy === 'Pull' ? <Spinner /> : <ArrowDownToLine />}
+            {git.behind > 0 ? `Pull ${git.behind}` : 'Pull'}
           </Button>
+          <Button variant="outline" className="h-10" disabled={busy !== null} title="Fetch branches and commits from origin" onClick={() => void run('Fetch', 'git.fetch', target)}>
+            <RefreshCw className={cn(busy === 'Fetch' && 'animate-spin')} />
+            Fetch
+          </Button>
+          <Button variant="outline" className="h-10" disabled={busy !== null} title="Delete branches gone from origin and pack the repo smaller" onClick={() => setTidying(true)}>
+            <Sparkles />
+            Tidy up
+          </Button>
+        </div>
+        {tidying && (
+          <GitTidyDialog
+            target={target}
+            label={label}
+            onClose={() => setTidying(false)}
+            onDone={(r) => {
+              setResult(r);
+              onChanged();
+              details.reload();
+            }}
+          />
         )}
-        <Button
-          variant="outline"
-          className="h-10"
-          disabled={busy !== null || git.upstream === null}
-          title={git.upstream === null ? 'This branch has no remote branch to pull from' : 'Pull, fast-forward only'}
-          onClick={() => void run('Pull', 'git.pull', target)}
-        >
-          {busy === 'Pull' ? <Spinner /> : <ArrowDownToLine />}
-          {git.behind > 0 ? `Pull ${git.behind}` : 'Pull'}
-        </Button>
-        <Button variant="outline" className="h-10" disabled={busy !== null} title="Fetch branches and commits from origin" onClick={() => void run('Fetch', 'git.fetch', target)}>
-          <RefreshCw className={cn(busy === 'Fetch' && 'animate-spin')} />
-          Fetch
-        </Button>
-        <Button variant="outline" className="h-10" disabled={busy !== null} title="Delete branches gone from origin and pack the repo smaller" onClick={() => setTidying(true)}>
-          <Sparkles />
-          Tidy up
-        </Button>
-      </div>
-      {tidying && (
-        <GitTidyDialog
-          target={target}
-          label={label}
-          onClose={() => setTidying(false)}
-          onDone={(r) => {
-            setResult(r);
-            onChanged();
-            details.reload();
-          }}
-        />
-      )}
-      {branch !== git.branch && git.dirty > 0 && (
-        <p className="-mt-1 text-xs text-warning">Commit or stash the {git.dirty} uncommitted change{git.dirty === 1 ? '' : 's'} before switching.</p>
-      )}
-      {result && <RunOutput result={result} />}
+        {branch !== git.branch && git.dirty > 0 && (
+          <p className="-mt-1 text-xs text-warning">Commit or stash the {git.dirty} uncommitted change{git.dirty === 1 ? '' : 's'} before switching.</p>
+        )}
+        {result && <RunOutput result={result} />}
 
-      <ol className="grid gap-2 rounded-lg bg-muted px-3 py-2.5">
+        {changes.length > 0 && (
+          <details className="rounded-lg border px-3 py-2">
+            <summary className="cursor-pointer text-xs font-medium">
+              {changes.length} uncommitted change{changes.length === 1 ? '' : 's'}
+            </summary>
+            <ul className="mt-2 grid gap-1 font-mono text-xs">
+              {changes.map((c) => (
+                <li key={c.path} className="flex gap-2 break-all">
+                  <span className="w-5 shrink-0 text-muted-foreground" title={changeLabel(c.code)}>{c.code.trim()}</span>
+                  {c.path}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        <GitLinks remote={git.remote} branch={git.branch} />
+      </div>
+
+      <ol aria-label="Recent commits" className="grid content-start gap-2 rounded-lg bg-muted px-3 py-2.5">
         {commits.slice(0, 5).map((c) => (
           <li key={c.hash}>
             <p className="font-medium break-words">
@@ -543,23 +576,6 @@ export function RepoSection({ domain, mount, repo, label, folder, git, installed
           </li>
         ))}
       </ol>
-
-      {changes.length > 0 && (
-        <details className="rounded-lg border px-3 py-2">
-          <summary className="cursor-pointer text-xs font-medium">
-            {changes.length} uncommitted change{changes.length === 1 ? '' : 's'}
-          </summary>
-          <ul className="mt-2 grid gap-1 font-mono text-xs">
-            {changes.map((c) => (
-              <li key={c.path} className="flex gap-2 break-all">
-                <span className="w-5 shrink-0 text-muted-foreground" title={changeLabel(c.code)}>{c.code.trim()}</span>
-                {c.path}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-      <GitLinks remote={git.remote} branch={git.branch} />
     </section>
   );
 }
