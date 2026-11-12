@@ -330,7 +330,7 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
                 </div>
               ) : production && (
                 <>
-                  <ServerPassword id="missing-server-secret" host={production.host} value={secret} onChange={setSecret} />
+                  <ServerPassword id="missing-server-secret" host={production.host} value={secret} onChange={setSecret} auto={false} />
                   <Button variant="outline" className="w-fit" disabled={asking} onClick={ask}>
                     {asking ? <Spinner /> : <Server />}
                     {server ? `Ask ${production.host} again` : `See what ${production.host} has`}

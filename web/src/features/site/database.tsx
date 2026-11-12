@@ -943,7 +943,7 @@ function ProductionRefresh({ site, busy, start }: { site: Site; busy: boolean; s
               <p className="text-xs text-muted-foreground sm:col-span-2">An administrator's login on production, or empty for a new user, admin. {keepHint(Boolean(site.network))} The password is for this local copy only and is not saved.</p>
             </div>
           )}
-          <ServerPassword id="refresh-server-secret" host={settings.host} value={serverSecret} onChange={setServerSecret} />
+          <ServerPassword id="refresh-server-secret" host={settings.host} value={serverSecret} onChange={setServerSecret} auto={false} />
           <div className="flex flex-wrap gap-2">
             <Button variant="danger" disabled={busy || (settings.clean && (password === '' || keepProblem !== null))} onClick={() => setConfirming(true)}>
               <RefreshCw />

@@ -109,7 +109,7 @@ function installedList(ctx: DeveloperContext): Array<Omit<InstalledPath, 'exists
 /** The panel's own files, made as it runs; secrets.json is listed, never read. */
 function ownFiles(ctx: DeveloperContext): Array<[string, string]> {
   return [
-    [join(ctx.configDir, 'secrets.json'), 'panel password hash, MySQL admin account and the Anthropic key (mode 0600)'],
+    [join(ctx.configDir, 'secrets.json'), 'panel password hash, MySQL admin account, the Anthropic key and saved SSH passwords (mode 0600)'],
     [join(ctx.configDir, 'settings.json'), 'assistant settings'],
     [join(ctx.dataDir, 'panel.db'), 'run history, queued proposals and the wizard\'s answers per repo'],
     [join(ctx.dataDir, 'uploads'), 'database dumps waiting for an install or import'],

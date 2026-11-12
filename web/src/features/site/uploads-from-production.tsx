@@ -205,7 +205,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
             ) : (
               <>
                 <code className="font-mono text-xs [overflow-wrap:anywhere] text-muted-foreground">{production.host}:{compare?.dir ?? `${production.folder}/wp-content/uploads`}</code>
-                <ServerPassword id="uploads-server-secret" host={production.host} value={secret} onChange={setSecret} />
+                <ServerPassword id="uploads-server-secret" host={production.host} value={secret} onChange={setSecret} auto={false} />
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <Button variant={compare ? 'outline' : 'default'} disabled={comparing || running} onClick={run}>
                     {comparing ? <Spinner /> : <GitCompareArrows />}

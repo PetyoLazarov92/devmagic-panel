@@ -756,6 +756,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         return install ? { ...e, install } : e;
       }),
       drafts: () => drafts.list(),
+      secrets: deps.secrets,
+      ...(deps.secretsFile ? { secretsFile: deps.secretsFile } : {}),
     });
     if (deps.secretsFile && deps.settingsFile) {
       const conventionsFile = join(dirname(deps.settingsFile), 'conventions.md');

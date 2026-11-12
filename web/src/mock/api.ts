@@ -1,4 +1,4 @@
-import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerTables, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
@@ -44,6 +44,9 @@ const MOCK_VULNERABILITIES: SiteVulnerabilities = {
 
 /** The mock scan for missing plugins and themes: it runs a few seconds the first time, then its result is kept. */
 const mockScans = new Map<string, { startedAt: number; checkedAt?: string }>();
+/** Servers' SSH passwords saved in the mockup (only that one is), and the sign-in answers kept, as the server keeps them. */
+const mockSavedSsh = new Set<string>(['spellbook-prod']);
+const mockSignIns = new Map<string, ServerSignIn>();
 async function mockMissing(site: string, force: boolean): Promise<MissingScanState> {
   await wait(120);
   let scan = mockScans.get(site);
@@ -1942,7 +1945,7 @@ export const mockApi: Api = {
       config: [['PANEL_USER', 'wandworksco'], ['PANEL_PORT', '4710'], ['PANEL_DOMAIN', 'local.devmagic'], ['WEB_DIR', '/var/www'], ['CERTS_DIR', '/etc/ssl/localcerts'], ['BACKUP_DIR', '/home/wandworksco/devmagic-panel-backups'], ['STATE_DIR', '/var/lib/devmagic-panel']].map(([key, value]) => ({ key: key as string, value: value as string })),
       installedFiles: listed.map(([kind, path, onUninstall, note, size]) => ({ kind, path, onUninstall, note, exists: true, ...(size ? { sizeBytes: size } : {}) })),
       panelFiles: [
-        { path: '/home/wandworksco/.config/devmagic-panel/secrets.json', note: 'panel password hash, MySQL admin account and the Anthropic key (mode 0600)', exists: true, sizeBytes: 412, kind: 'file' },
+        { path: '/home/wandworksco/.config/devmagic-panel/secrets.json', note: 'panel password hash, MySQL admin account, the Anthropic key and saved SSH passwords (mode 0600)', exists: true, sizeBytes: 412, kind: 'file' },
         { path: '/home/wandworksco/.local/share/devmagic-panel/panel.db', note: "run history, queued proposals and the wizard's answers per repo", exists: true, sizeBytes: 1_843_200, kind: 'file' },
         { path: '/home/wandworksco/.local/share/devmagic-panel/uploads', note: 'database dumps waiting for an install or import', exists: true, kind: 'dir' },
         { path: '/home/wandworksco/.local/share/devmagic-panel/mailpit', note: 'Mailpit, when installed from the panel', exists: mailpitRunning, kind: 'dir' },
@@ -2174,12 +2177,29 @@ export const mockApi: Api = {
     return [{ file: '/home/wandworksco/Downloads/wandworks-store-2026-10-24.sql.gz', name: 'wandworks-store-2026-10-24.sql.gz', sizeBytes: 432_000_000, modifiedAt: new Date(Date.now() - 20 * 60_000).toISOString() }];
   },
   // In the mockup a host with "password" in its name asks for one, "locked" takes keys only, "new" is not in known_hosts.
-  serverSignIn: async (host) => {
+  // spellbook-prod asks for one too and has one saved, to show that state; answers are kept as the server keeps them.
+  serverSignIn: async (host, how = {}) => {
+    const saved = mockSavedSsh.has(host.toLowerCase());
+    const kept = mockSignIns.get(host.toLowerCase());
+    if (kept && !how.fresh) return { ...kept, saved };
+    if (how.last) return { how: 'unchecked', saved };
     await wait(500);
-    if (host.includes('password')) return { how: 'password' };
-    if (host.includes('locked')) return { how: 'refused', problem: `${host} takes SSH keys only, and refused yours (the panel uses your ssh-agent and ~/.ssh/config)` };
-    if (host.includes('new')) return { how: 'unknown', problem: `${host} is not in your known_hosts: connect once in a terminal with ssh ${host}, check its key, then try again` };
-    return { how: 'key' };
+    const checkedAt = new Date().toISOString();
+    const answer: ServerSignIn = host.includes('password') || host.startsWith('spellbook-prod') ? { how: 'password', checkedAt }
+      : host.includes('locked') ? { how: 'refused', checkedAt, problem: `${host} takes SSH keys only, and refused yours (the panel uses your ssh-agent and ~/.ssh/config)` }
+      : host.includes('new') ? { how: 'unknown', checkedAt, problem: `${host} is not in your known_hosts: connect once in a terminal with ssh ${host}, check its key, then try again` }
+      : { how: 'key', checkedAt };
+    if (answer.how !== 'unknown') mockSignIns.set(host.toLowerCase(), answer);
+    return { ...answer, saved };
+  },
+  saveSshPassword: async (host) => {
+    await wait(200);
+    mockSavedSsh.add(host.toLowerCase());
+    return { saved: true };
+  },
+  forgetSshPassword: async (host) => {
+    await wait(200);
+    return { forgotten: mockSavedSsh.delete(host.toLowerCase()) };
   },
   serverTables: async (): Promise<ServerTables> => {
     await wait(500);

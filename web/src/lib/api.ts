@@ -241,8 +241,14 @@ export interface Api {
   downloads: () => Promise<Array<{ file: string; name: string; sizeBytes: number; modifiedAt: string }>>;
   rcloneRemotes: () => Promise<RcloneRemotes>;
   /** A server's tables with their sizes, over SSH and read only, for leaving the rows of some out. */
-  /** How a server signs you in over SSH: with your key, or with a password. Runs nothing there but true. */
-  serverSignIn: (host: string) => Promise<ServerSignIn>;
+  /**
+   * How a server signs you in over SSH: with your key, or with a password. Runs nothing there but true, and the
+   * answer is kept an hour: `last` asks for the kept one only (connects to nothing), `fresh` connects again.
+   */
+  serverSignIn: (host: string, how?: { last?: boolean; fresh?: boolean }) => Promise<ServerSignIn>;
+  /** Saves a server's SSH password in the panel; it is never sent back, only whether one is saved. */
+  saveSshPassword: (host: string, password: string) => Promise<{ saved: true }>;
+  forgetSshPassword: (host: string) => Promise<{ forgotten: boolean }>;
   /** password: the server's own, when it asks for one; for this read only. */
   serverTables: (host: string, path: string, password?: string, wpCli?: string) => Promise<ServerTables>;
   /** The plugins and themes a server has, read only, for copying the ones a site lacks. */
@@ -472,7 +478,9 @@ const realApi: Api = {
   orgRepos: (org, scan) => request('GET', `/api/org/repos?${new URLSearchParams({ org, scan })}`),
   downloads: () => request('GET', '/api/downloads'),
   rcloneRemotes: () => request('GET', '/api/dumps/remotes'),
-  serverSignIn: (host) => request('POST', '/api/dumps/server-sign-in', { host }),
+  serverSignIn: (host, how = {}) => request('POST', '/api/dumps/server-sign-in', { host, ...how }),
+  saveSshPassword: (host, password) => request('PUT', '/api/ssh/saved', { host, password }),
+  forgetSshPassword: (host) => request('DELETE', '/api/ssh/saved', { host }),
   serverTables: (host, path, password, wpCli) => request('POST', '/api/dumps/server-tables', { host, path, ...(password ? { password } : {}), ...(wpCli ? { wpCli } : {}) }),
   serverFiles: (host, path, password, wpCli) => request('POST', '/api/dumps/server-files', { host, path, ...(password ? { password } : {}), ...(wpCli ? { wpCli } : {}) }),
   productionSettings: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/production${atPath(path, '?')}`),

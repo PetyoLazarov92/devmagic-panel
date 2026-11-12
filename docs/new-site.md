@@ -159,8 +159,12 @@ against the free space.
   host; a server that takes keys only and refuses yours, or one it cannot
   reach, is said there too. The password is kept out of the browser's and
   password managers' saved passwords, and it is used for that run's connections only (reading the
-  tables, the export or the copy) and never saved, logged or shown, so you
-  give it again next time. Nothing is written on the server, and no key is
+  tables, the export or the copy), never logged or shown. **Save for** the
+  host keeps it in the panel's `secrets.json` (readable by you only): an
+  empty field then uses it, a new one replaces it, **Forget password** removes
+  it, and it is never shown back. How a server signs you in is checked once
+  you stop typing the host or press **Check connection**, and kept for an
+  hour; a site's saved server is not checked when you open a view. Nothing is written on the server, and no key is
   added to it. A wrong password is tried once. Paths take letters, digits and `. _ - /`
   only, as ssh hands the command to the server's shell.
   The export is compressed on the way, writes no file on the server and

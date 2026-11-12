@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { GitHosts, InstallDraft, OrgNamespace, OrgRepoList, OrgSettings, OrgStatus, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
+import type { GitHosts, InstallDraft, OrgNamespace, OrgRepoList, OrgSettings, OrgStatus, ServerSignIn, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
 import { DEFAULT_ORG_SETTINGS, gitlabHostsWith, knownLeftOut, orgName, orgScanMode, orgSettingsInput, registerGitlabHosts, sshHost, wpCliCommand } from '@devmagic-panel/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Executor } from '../exec.js';
@@ -9,9 +9,10 @@ import { RepoRefused } from '../sites/repo.js';
 import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } from './claude-code.js';
 import { DumpRefused, listRemote, rcloneRemotes, recentDownloads, rcloneRemote } from './dumps.js';
 import { z } from 'zod';
-import { MoreDumpsRefused, refusalWithPassword, serverSignIn, serverTables } from '../sites/more-dumps.js';
+import { MoreDumpsRefused, readSignedIn, serverSignIn, serverTables } from '../sites/more-dumps.js';
+import type { Secrets } from '../secrets.js';
+import { forgetSshPassword, isSavablePassword, savedSshPassword, saveSshPassword, sshKey } from '../ssh-saved.js';
 import { serverFiles } from '../sites/server-files.js';
-import { withSshPassword } from '../sites/ssh-password.js';
 import { ghStatus } from '../repo-hosts/github.js';
 import { type GitHostDetector, glabOverview, HostRefused, listNamespaces, remotesOf } from '../repo-hosts/index.js';
 import { OrgScanner } from './scan.js';
@@ -65,6 +66,10 @@ export interface OrgRouteDeps {
   installs: () => Map<string, SiteInstall>;
   trash: () => Promise<TrashEntry[]>;
   drafts: () => InstallDraft[];
+  /** The secrets as they are now, for a server's saved SSH password. */
+  secrets: () => Secrets | null;
+  /** Where a server's SSH password is saved; without it none can be. */
+  secretsFile?: string;
 }
 
 /**
@@ -74,6 +79,9 @@ export interface OrgRouteDeps {
  * (org.readRepo and org.checkAccess, one after the other), so it goes on when
  * you leave the page.
  */
+/** How long the panel keeps a server's answer to how it signs you in. */
+const SIGN_IN_KEPT_MS = 60 * 60 * 1000;
+
 export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): void {
   const scanner = new OrgScanner(deps.exec, deps.store);
   // Links to your own GitLab hosts come out right from the start, not only once this page is opened.
@@ -172,15 +180,15 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
   api.post<{ Body: unknown }>('/api/dumps/server-tables', async (request, reply) => {
     const body = serverFolder.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'An ssh host and an absolute folder' });
-    // The server's password, when it asks for one: for this one read, never kept or logged.
+    // The server's password, when it asks for one: typed for this one read and never kept or logged, else the one saved for the host.
     const password = z.string().max(1024).optional().safeParse((request.body as { password?: unknown } | null)?.password);
     try {
       const read = (exec: typeof deps.exec) => serverTables(exec, body.data.host, body.data.path, body.data.wpCli ?? 'wp');
-      const tables = password.success && password.data ? await withSshPassword({ exec: deps.exec }, password.data, read) : await read(deps.exec);
+      const tables = await readSignedIn(deps.exec, body.data.host, password.success ? password.data : undefined, deps.secrets(), read);
       const kept = deps.store.getMeta(`server-export:${body.data.host}|${body.data.path}`);
       return { tables, ...knownLeftOut(tables.map((t) => t.name)), ...(kept ? { remembered: JSON.parse(kept) as string[] } : {}) };
     } catch (error) {
-      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: password.success && password.data ? refusalWithPassword(body.data.host, error.message) : error.message });
+      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: error.message });
       throw error;
     }
   });
@@ -192,19 +200,46 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
     const password = z.string().max(1024).optional().safeParse((request.body as { password?: unknown } | null)?.password);
     try {
       const read = (exec: typeof deps.exec) => serverFiles(exec, { host: body.data.host, folder: body.data.path, wpCli: body.data.wpCli });
-      return password.success && password.data ? await withSshPassword({ exec: deps.exec }, password.data, read) : await read(deps.exec);
+      return await readSignedIn(deps.exec, body.data.host, password.success ? password.data : undefined, deps.secrets(), read);
     } catch (error) {
-      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: password.success && password.data ? refusalWithPassword(body.data.host, error.message) : error.message });
+      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: error.message });
       throw error;
     }
   });
 
   // rclone's remotes and one folder of one, read only, for the Database step: names and sizes of dumps, never their contents.
   // How a server signs you in, so the form asks for a password only when the server would. Read only: it runs `true` there.
+  // The answer is kept for an hour, so opening a view again does not connect again: `last` asks for the kept answer only,
+  // `fresh` (Check connection) connects whatever is kept. An answer the panel could not get is not kept.
+  const signIns = new Map<string, { answer: ServerSignIn; at: number }>();
   api.post<{ Body: unknown }>('/api/dumps/server-sign-in', async (request, reply) => {
-    const body = z.object({ host: sshHost }).safeParse(request.body);
+    const body = z.object({ host: sshHost, last: z.boolean().optional(), fresh: z.boolean().optional() }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'An alias from ~/.ssh/config, or user@host' });
-    return serverSignIn(deps.exec, body.data.host);
+    const key = sshKey(body.data.host);
+    const saved = savedSshPassword(deps.secrets(), body.data.host) !== undefined;
+    const kept = signIns.get(key);
+    if (kept && Date.now() - kept.at < SIGN_IN_KEPT_MS && !body.data.fresh) return { ...kept.answer, checkedAt: new Date(kept.at).toISOString(), saved };
+    if (body.data.last) return { how: 'unchecked', saved } satisfies ServerSignIn;
+    const answer = await serverSignIn(deps.exec, body.data.host);
+    const at = Date.now();
+    if (answer.how !== 'unknown') signIns.set(key, { answer, at });
+    else signIns.delete(key);
+    return { ...answer, checkedAt: new Date(at).toISOString(), saved };
+  });
+
+  // A server's SSH password, saved when you ask (ssh-saved.ts): never read back, only "saved" or not. Plain routes, never
+  // registry actions, so no run history, job or assistant ever sees one.
+  const savedBody = z.object({ host: sshHost });
+  api.put<{ Body: unknown }>('/api/ssh/saved', async (request, reply) => {
+    const body = savedBody.extend({ password: z.string().refine(isSavablePassword, 'One line, up to 1024 characters') }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'An ssh host and its password: one line, up to 1024 characters' });
+    if (!deps.secretsFile || !saveSshPassword(deps.secretsFile, body.data.host, body.data.password)) return reply.code(409).send({ error: 'The panel cannot write its secrets file here' });
+    return { saved: true };
+  });
+  api.delete<{ Body: unknown }>('/api/ssh/saved', async (request, reply) => {
+    const body = savedBody.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'An alias from ~/.ssh/config, or user@host' });
+    return { forgotten: deps.secretsFile ? forgetSshPassword(deps.secretsFile, body.data.host) : false };
   });
 
   api.get('/api/dumps/remotes', async () => rcloneRemotes(deps.exec));

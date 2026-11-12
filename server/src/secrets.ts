@@ -27,6 +27,8 @@ export interface Secrets {
   };
   /** The assistant's Anthropic API key, when saved in the panel. */
   anthropic?: { apiKey: string };
+  /** Servers' SSH passwords you chose to save, by host as written, lowercased (ssh-saved.ts). Never sent to a browser. */
+  sshPasswords?: Record<string, string>;
 }
 
 export async function hashPassword(password: string): Promise<string> {

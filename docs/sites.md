@@ -151,7 +151,8 @@ ticked ones over SSH:
 
 - Only reads on the server: WP-CLI says where the plugins folder is, and
   `tar` streams one folder to this machine. Nothing is written there, and a
-  password the server asks for is used for that run only.
+  password the server asks for is used for that run only, unless you saved
+  it for the server.
 - What arrives is checked before it is unpacked: every entry inside the one
   folder asked for, no hard links, nothing under a link. Links are dropped.
 - A folder that exists is never written over, the copy is kept out of git

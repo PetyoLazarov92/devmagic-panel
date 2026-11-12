@@ -73,9 +73,11 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    `--dry-run` and a `sudo` stub that fails if called.
 7. **Secrets stay local.** The panel password is a scrypt hash and the MySQL
    admin account, the SQL runner's read-only account (`devmagic_panel_ro`,
-   SELECT and SHOW VIEW only) and the optional Anthropic API key live in
-   `~/.config/devmagic-panel/secrets.json` (0600). The key never goes back to
-   the browser, and the assistant's settings are never registry actions.
+   SELECT and SHOW VIEW only), the optional Anthropic API key and the SSH
+   passwords you chose to save for a server live in
+   `~/.config/devmagic-panel/secrets.json` (0600). The key and the passwords
+   never go back to the browser (only whether one is saved), and the
+   assistant's settings and saved passwords are never registry actions.
    Updates need no token: the panel reads its releases through public HTTPS,
    the GitHub CLI or git (`server/src/release-source.ts`), and gh and git keep
    their own sign-in, which the panel never reads. Site repos are listed the
@@ -259,11 +261,15 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       `du` reads their size and `rsync` brings them, only adding here
       (`--ignore-existing`, never a delete), without PHP files, links or
       plugins' cache and backup folders. A server that asks for a
-      password gets the one you give for that run (`sites/ssh-password.ts`):
-      it reaches ssh through its askpass helper and a FIFO only you can
-      open, never argv, the environment, a file or a log, is handed out once
-      and never kept, and one prompt is allowed. Nothing is written on the
-      server, no key is added there, and the host key is still checked.
+      password gets the one you give for that run (`sites/ssh-password.ts`),
+      handed out once, or else the one you saved for that host
+      (`ssh-saved.ts`, in secrets.json, saved only when you press Save and
+      shown back never): either reaches ssh through its askpass helper and a
+      FIFO only you can open, never argv, the environment, a log, run
+      history or an AI, and one prompt is allowed. How a server signs you in
+      is asked when you type a host or press Check connection, and kept an
+      hour, never on opening a view. Nothing is written on the server, no
+      key is added there, and the host key is still checked.
     - **Removed sites go to the trash first**, made by the panel or not:
       `dmp-root trash-site` archives the folder (`WEB_DIR/<domain>`), the
       vhosts (`<domain>-ssl.conf` or `<domain>.conf`), the certificate and the

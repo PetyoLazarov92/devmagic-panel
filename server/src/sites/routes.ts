@@ -41,8 +41,7 @@ import { diffWithDisk, findByName, findInFiles, folderSize, gitDiff, gitStatus }
 import { FileRefused, type FilesContext, listFolder, rawFile, readFile, siteFolder } from './files.js';
 import type { WpCronReport } from '@devmagic-panel/shared';
 import { forgetProduction, readProduction, saveProduction } from './refresh.js';
-import { MoreDumpsRefused, refusalWithPassword } from './more-dumps.js';
-import { withSshPassword } from './ssh-password.js';
+import { MoreDumpsRefused, readSignedIn } from './more-dumps.js';
 import { compareUploads, uploadsCopied, uploadsHere } from './uploads-compare.js';
 import { type CronContext, CronRefused } from '../cron.js';
 import { readWpCron, testWpCron } from './wp-cron.js';
@@ -490,15 +489,15 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     const body = z.object({ path: z.string().max(200).optional(), host: sshHost, folder: serverPath, wpCli: wpCliCommand.optional() }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'An ssh host and an absolute folder' });
     if (!snapshotKey(request.params.domain, body.data.path)) return reply.code(404).send({ error: `no site called ${request.params.domain}${body.data.path ?? ''}` });
-    // The server's password, when it asks for one: for this one read, never kept or logged.
+    // The server's password, when it asks for one: typed for this one read and never kept or logged, else the one saved for the host.
     const password = z.string().max(1024).optional().safeParse((request.body as { password?: unknown } | null)?.password);
     try {
       const site = siteFor(deps.config, request.params.domain, body.data.path);
       const read = (exec: Executor) => compareUploads(exec, site.docroot, { host: body.data.host, folder: body.data.folder, wpCli: body.data.wpCli });
-      return password.success && password.data ? await withSshPassword({ exec: deps.exec }, password.data, read) : await read(deps.exec);
+      return await readSignedIn(deps.exec, body.data.host, password.success ? password.data : undefined, deps.secrets(), read);
     } catch (error) {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
-      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: password.success && password.data ? refusalWithPassword(body.data.host, error.message) : error.message });
+      if (error instanceof MoreDumpsRefused) return reply.code(400).send({ error: error.message });
       throw error;
     }
   });

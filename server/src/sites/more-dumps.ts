@@ -13,6 +13,8 @@ import type { JobRuntime, JobStep } from '../jobs.js';
 import { formatBytes, snapshotDir, wpFor } from './db.js';
 import { MAX_UNZIPPED_BYTES } from './dump.js';
 import { siteFor } from './site-actions.js';
+import type { Secrets } from '../secrets.js';
+import { savedSshPassword } from '../ssh-saved.js';
 import { oncePassword, type SshPasswordContext, withSshPassword } from './ssh-password.js';
 import { adoptUpload, removeUpload, type UploadInfo } from './uploads.js';
 
@@ -31,6 +33,8 @@ export interface MoreDumpsContext {
   dmpRoot: string;
   /** How a server's password reaches ssh, for a run that was given one; tests swap in a fake feeder. */
   sshPassword?: Pick<SshPasswordContext, 'runtimeDir' | 'feed'>;
+  /** The secrets as the call started, for a server's saved password (ssh-saved.ts). */
+  secrets?: Secrets | null;
 }
 
 export class MoreDumpsRefused extends Error {}
@@ -73,11 +77,14 @@ const sshCommand = (host: string) => {
 };
 
 /** What a refused sign-in says without a password given: where to give one. */
-const REFUSED = (host: string) => `${host} refused your SSH key (the panel uses your ssh-agent and ~/.ssh/config). When the server asks for a password, the field for it shows under the host: it is used for this run only and not kept`;
+const REFUSED = (host: string) => `${host} refused your SSH key (the panel uses your ssh-agent and ~/.ssh/config). When the server asks for a password, the field for it shows under the host: used for this run only, unless you save it for the host`;
 /** The same with a password given: it was not taken either. */
 const refusedWithPassword = (host: string) => `${host} did not take the password, or it does not let you sign in with one. Nothing was kept`;
 /** What a refusal says once a password was given. */
 export const refusalWithPassword = (host: string, message: string) => (message === REFUSED(host) ? refusedWithPassword(host) : message);
+/** The same with the password saved for the host: give the new one, or forget it. */
+const refusedWithSaved = (host: string) => `${host} did not take the password saved for it: it may have changed. Give the new one under the host to replace it, or forget it`;
+export const refusalWithSaved = (host: string, message: string) => (message === REFUSED(host) ? refusedWithSaved(host) : message);
 
 export function sshProblem(host: string, stderr: string, code = 1, hint = ''): string {
   const last = stderr.trim().split('\n').filter(Boolean).at(-1) ?? '';
@@ -112,14 +119,37 @@ function scratch(ctx: MoreDumpsContext, name: string): string {
 }
 
 /**
- * A step's work with an executor that signs in to the server: as it is with
- * your key, or with the server's password when one was given, for this one
- * run of the step. The password is handed out once: a Retry has none.
+ * A read over SSH from a route (a server's tables, its plugins, its uploads):
+ * with your key, the password typed for this read, or the one saved for the
+ * host. A refusal says which password was not taken.
  */
-export function signedInWith(ctx: Pick<MoreDumpsContext, 'exec' | 'sshPassword'>, host: string, given: string | undefined) {
+export async function readSignedIn<T>(exec: Executor, host: string, given: string | undefined, secrets: Secrets | null | undefined, read: (exec: Executor) => Promise<T>): Promise<T> {
+  const password = given || savedSshPassword(secrets, host);
+  if (!password) return read(exec);
+  try {
+    return await withSshPassword({ exec }, password, read);
+  } catch (error) {
+    if (error instanceof MoreDumpsRefused) throw new MoreDumpsRefused(given ? refusalWithPassword(host, error.message) : refusalWithSaved(host, error.message));
+    throw error;
+  }
+}
+
+/**
+ * A step's work with an executor that signs in to the server: as it is with
+ * your key, with the server's password when one was given, for this one run
+ * of the step (handed out once: a Retry has none), or else with the password
+ * saved for the host, which a Retry has too.
+ */
+export function signedInWith(ctx: Pick<MoreDumpsContext, 'exec' | 'sshPassword' | 'secrets'>, host: string, given: string | undefined) {
   const secret = oncePassword(given);
   return async (work: (exec: Executor) => Promise<ExecResult | ExecResult[]>): Promise<ExecResult | ExecResult[]> => {
-    if (!secret.given) return work(ctx.exec);
+    if (!secret.given) {
+      const saved = savedSshPassword(ctx.secrets, host);
+      if (!saved) return work(ctx.exec);
+      const out = await withSshPassword({ exec: ctx.exec, ...ctx.sshPassword }, saved, work);
+      const said = (r: ExecResult): ExecResult => ({ ...r, stderr: refusalWithSaved(host, r.stderr) });
+      return Array.isArray(out) ? out.map(said) : said(out);
+    }
     const password = secret.take();
     // Dropped when the step ended the first time: a Retry has none.
     if (password === undefined) return { code: 1, stdout: '', stderr: 'The password was used once and is gone: start this again and give the password' };

@@ -1,7 +1,7 @@
 import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerSignIn, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
 import { defaultLeftOut, isWpCliCommand, knownLeftOut, splitSshHost } from '@devmagic-panel/shared';
 import { TablesPicker } from '@/features/database/tables-picker';
-import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
+import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, KeyRound, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { CopyChoice, findings } from '@/features/database/copy-choice';
 import { DumpFactsCard } from '@/features/new-site/dump-facts';
@@ -17,6 +17,7 @@ import { TextLink } from '@/components/ui/text-link';
 import { api, isMockup } from '@/lib/api';
 import { bytes, shortDate, timeAgo } from '@/lib/format';
 import { asideUploads } from '@/lib/org-repos';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './wizard-shared';
 import { applyOrgAnswers, PrefillSummary } from './org';
@@ -451,7 +452,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
 }) {
   const uid = useId();
   const [host, setHost] = useState(initial?.host ?? '');
-  // The server's password, when it asks for one: for the runs started from here, never kept.
+  // The server's password, when it asks for one: for the runs started from here, kept only when you save it for the host.
   const [secret, setSecret] = useState('');
   // WP-CLI's command there, when it is not wp.
   const [wpCli, setWpCli] = useState(initial?.wpCli ?? '');
@@ -550,7 +551,7 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
       )}
       {more}
       <ul className="grid gap-1 text-xs text-muted-foreground">
-        <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />Your SSH key through your agent, or the server's password for this run only, never kept; a host not in your known_hosts is refused, not trusted on the fly.</li>
+        <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />Your SSH key through your agent, or the server's password for this run only, unless you save it for the host; a host not in your known_hosts is refused, not trusted on the fly.</li>
         <li className="flex items-start gap-2"><ShieldCheck className="mt-px size-3.5 shrink-0 text-success" />{mode === 'export' ? 'Runs only wp db export (and wp db size for the tables) on the server: it reads, writes no file there, and the database password stays there. Compressed on the way.' : 'Copies the file with sftp; nothing runs on the server.'}</li>
       </ul>
       {/* The button that takes it comes last, once everything above is chosen. */}
@@ -566,47 +567,123 @@ export function FromServer({ working, clean, setClean, onTake, initial, takeLabe
 }
 
 /**
- * How the server signs you in, asked as soon as the host is typed, and the
- * field for its password only when it would ask for one. With your key
- * signing in, no field shows at all. The password goes with this run only, is
- * kept nowhere, and nothing is written on the server. SecretInput keeps it
- * from the browser's and every password manager's saved passwords.
+ * How the server signs you in, and the field for its password only when it
+ * would ask for one. Asked once you stop typing a host (`auto`, the wizard);
+ * for a site's saved server only the last answer is shown, so opening a view
+ * connects to nothing, and Check connection asks again. The server keeps an
+ * answer for an hour. A password typed here goes with this run only, unless
+ * you save it for the host: then the panel keeps it (secrets.json, 0600) and
+ * never shows it back, an empty field uses it, and a new one replaces it.
+ * SecretInput keeps it from the browser's and every password manager's saved passwords.
  */
-export function ServerPassword({ id, host, value, onChange }: { id: string; host: string; value: string; onChange: (value: string) => void }) {
+export function ServerPassword({ id, host, value, onChange, auto = true }: { id: string; host: string; value: string; onChange: (value: string) => void; auto?: boolean }) {
   const ok = splitSshHost(host) !== null;
   const [answer, setAnswer] = useState<{ host: string; signIn: ServerSignIn | null } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (!ok) return;
     let live = true;
-    // Once you stop typing the host.
+    // Once you stop typing the host; for a saved server, the last answer at once, without connecting.
     const timer = window.setTimeout(() => {
-      api.serverSignIn(host).then(
+      api.serverSignIn(host, auto ? {} : { last: true }).then(
         (signIn) => live && setAnswer({ host, signIn }),
         () => live && setAnswer({ host, signIn: null }),
       );
-    }, 700);
+    }, auto ? 700 : 0);
     return () => {
       live = false;
       window.clearTimeout(timer);
     };
-  }, [host, ok]);
+  }, [host, ok, auto]);
   // A password typed for one host never goes to another.
   useEffect(() => {
     if (value !== '') onChange('');
   }, [host]);
   if (!ok) return null;
+
+  const check = () => {
+    setChecking(true);
+    api.serverSignIn(host, { fresh: true }).then(
+      (signIn) => setAnswer({ host, signIn }),
+      () => setAnswer({ host, signIn: null }),
+    ).finally(() => setChecking(false));
+  };
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.saveSshPassword(host, value);
+      onChange('');
+      setAnswer((a) => (a && a.host === host && a.signIn ? { host, signIn: { ...a.signIn, saved: true } } : a));
+      toast({ tone: 'success', title: `Password saved for ${host}`, detail: 'Runs that sign in there use it until you replace it or forget it.' });
+    } catch (error) {
+      toast({ tone: 'danger', title: 'Could not save the password', detail: (error as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const forget = async () => {
+    setSaving(true);
+    try {
+      await api.forgetSshPassword(host);
+      setAnswer((a) => (a && a.host === host && a.signIn ? { host, signIn: { ...a.signIn, saved: false } } : a));
+      toast({ tone: 'success', title: `Password forgotten for ${host}` });
+    } catch (error) {
+      toast({ tone: 'danger', title: 'Could not forget the password', detail: (error as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const known = answer?.host === host ? answer : null;
-  if (!known) return <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Spinner className="size-3.5" />Checking how {host} signs you in...</p>;
+  if (!known) return auto ? <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Spinner className="size-3.5" />Checking how {host} signs you in...</p> : null;
   const how = known.signIn?.how;
-  if (how === 'key') return <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><ShieldCheck className="size-3.5 shrink-0 text-success" />Your SSH key signs in to {host}: no password is needed.</p>;
-  if (how === 'refused' || how === 'unknown') return <p role="alert" className="flex items-start gap-1.5 text-xs text-warning"><CircleAlert className="mt-px size-3.5 shrink-0" />{known.signIn?.problem}</p>;
+  const saved = known.signIn?.saved === true;
+  const when = known.signIn?.checkedAt ? ` Checked ${timeAgo(known.signIn.checkedAt)}.` : '';
+  const checkButton = (
+    <Button size="xs" variant="soft" disabled={checking} onClick={check}>
+      {checking ? <Spinner /> : <RefreshCw />}
+      {how === 'unchecked' ? 'Check connection' : 'Check again'}
+    </Button>
+  );
+  const status =
+    how === 'key' ? <span className="flex items-center gap-1.5"><ShieldCheck className="size-3.5 shrink-0 text-success" />Your SSH key signs in to {host}: no password is needed.{when}</span>
+    : how === 'password' ? <span>{host} asks for a password: your SSH key does not sign in there.{when}</span>
+    : how === 'unchecked' ? <span>Not checked in the last hour how {host} signs you in.</span>
+    : how === 'refused' || how === 'unknown' ? <span role="alert" className="flex items-start gap-1.5 text-warning"><CircleAlert className="mt-px size-3.5 shrink-0" />{known.signIn?.problem}</span>
+    : <span>The panel could not check how {host} signs you in: give its password only if it asks for one.</span>;
+  // The field shows when the server asks for a password, when the panel could not tell, and while one is saved.
+  const field = how === 'password' || how === undefined || saved || (how === 'unchecked' && !auto);
   return (
-    <div className="grid gap-1.5 text-xs">
-      <label htmlFor={id} className="text-sm font-medium text-foreground">Password on the server</label>
-      <SecretInput id={id} value={value} onChange={(e) => onChange(e.target.value)} />
-      <p className="text-muted-foreground">
-        {how === 'password' ? `${host} asks for a password: your SSH key does not sign in there.` : `The panel could not check how ${host} signs you in: give its password only if it asks for one.`} Used for this run&apos;s connections and not saved, so you give it again next time. Nothing is written on the server.
-      </p>
+    <div className="grid gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-muted-foreground">
+        {status}
+        {checkButton}
+      </div>
+      {field && (
+        <div className="grid gap-1.5">
+          <label htmlFor={id} className="text-sm font-medium text-foreground">Password on the server</label>
+          <div className="flex flex-wrap gap-2">
+            <div className="min-w-48 flex-1">
+              <SecretInput id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={saved ? 'Saved: type to replace' : undefined} />
+            </div>
+            {value !== '' && (
+              <Button variant="outline" className="h-10" disabled={saving} onClick={() => void save()}>
+                {saving ? <Spinner /> : <KeyRound />}
+                {saved ? 'Replace saved' : `Save for ${host}`}
+              </Button>
+            )}
+            {saved && value === '' && (
+              <Button variant="soft" className="h-10" disabled={saving} onClick={() => void forget()}>Forget password</Button>
+            )}
+          </div>
+          <p className="text-muted-foreground">
+            {saved
+              ? `A password is saved for ${host}: leave this empty to use it. The panel never shows it back.`
+              : 'Used for this run\'s connections and not saved, unless you save it for the host. Nothing is written on the server.'}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

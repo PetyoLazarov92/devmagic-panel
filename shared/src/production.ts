@@ -69,8 +69,13 @@ export interface ServerTables {
  * not yours), or unknown, with why (not in known_hosts, not reachable).
  */
 export interface ServerSignIn {
-  how: 'key' | 'password' | 'refused' | 'unknown';
+  /** unchecked: asked for the last answer only, and there is none from the last hour. */
+  how: 'key' | 'password' | 'refused' | 'unknown' | 'unchecked';
   problem?: string;
+  /** When the panel connected to find out, as an ISO time; answers are kept for an hour. */
+  checkedAt?: string;
+  /** A password is saved in the panel for this host (never the password itself). */
+  saved?: boolean;
 }
 
 /** What a site keeps for Refresh from production: no secret, only where and how. */
