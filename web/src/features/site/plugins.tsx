@@ -2,7 +2,10 @@ import { Tabs } from '@/components/ui/tabs';
 import { CheckAgain } from '@/components/layout/page';
 import type { Site, SitePlugin, SitePlugins, SiteThemes, VulnerabilityState } from '@devmagic-panel/shared';
 import { MissingPluginsCard } from '@/features/site/missing-plugins-card';
-import { Lock, Palette, Plug, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
+import { JobFooter } from '@/features/jobs/job-box';
+import { settled, useJob } from '@/features/jobs/job-steps';
+import { Checkbox } from '@/components/ui/field';
+import { ArrowUpCircle, Lock, Palette, Plug, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -76,6 +79,49 @@ function PluginsSkeleton() {
 
 type View = 'plugins' | 'themes';
 
+/** A plugin the panel updates: a folder in wp-content/plugins with an update WordPress found; never must-use, a drop-in or one file. */
+const canUpdate = (p: SitePlugin) => Boolean(p.update) && !always(p) && !p.oneFile;
+
+/**
+ * Updates of a site's plugins or themes, as a job: one Update to on each row, Update all above
+ * the list, and a snapshot of the database first unless you untick it. The job's steps show
+ * under the bar, Undo puts the versions from before back, and the list reads again once it ends.
+ */
+function useUpdates(site: Site, kind: 'plugins' | 'themes', onDone: () => void) {
+  const job = useJob();
+  const [snapshot, setSnapshot] = useState(true);
+  const running = job.job !== null && !settled(job.job);
+  const status = job.job?.status;
+  useEffect(() => {
+    if (status && status !== 'running' && status !== 'queued' && status !== 'undoing') onDone();
+  }, [status]);
+  const start = (names: string[]) => void job.follow(api.startJob('site.updatePlugins', { ...siteTarget(site), plugins: kind === 'plugins' ? names : [], themes: kind === 'themes' ? names : [], snapshot }));
+  return { job, snapshot, setSnapshot, running, start };
+}
+
+function UpdatesBar({ kind, names, updates }: { kind: 'plugins' | 'themes'; names: string[]; updates: ReturnType<typeof useUpdates> }) {
+  if (names.length === 0 && !updates.job.job && !updates.job.error) return null;
+  const noun = kind === 'plugins' ? 'plugin' : 'theme';
+  return (
+    <Card>
+      {names.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+          <p className="min-w-0 flex-[1_1_18rem] text-sm">
+            <span className="font-medium">{names.length} {noun}{names.length === 1 ? '' : 's'}</span> with an update WordPress found.{' '}
+            <span className="text-muted-foreground">Each folder is kept first, so Undo puts the version from before back.</span>
+          </p>
+          <Checkbox id={`${kind}-update-snapshot`} checked={updates.snapshot} onChange={updates.setSnapshot} disabled={updates.running} label="Snapshot the database first" />
+          <Button size="sm" disabled={updates.running} onClick={() => updates.start(names)}>
+            <ArrowUpCircle />
+            {names.length === 1 ? 'Update it' : `Update all ${names.length}`}
+          </Button>
+        </div>
+      )}
+      <JobFooter job={updates.job.job} error={updates.job.error} onRetry={() => void updates.job.retry()} />
+    </Card>
+  );
+}
+
 /**
  * A site's plugins and themes, in two views kept in the address (view=themes),
  * as the Database tab keeps its own. Each view has its list and, under its
@@ -102,6 +148,7 @@ function ThemesView({ site }: { site: Site }) {
   const vulnerable = useVulnerabilities(site);
   // As on Plugins: Details adds what each theme says it is and who made it; it starts compact every time.
   const [details, setDetails] = useState(false);
+  const updates = useUpdates(site, 'themes', reload);
   if (error && !data) {
     return (
       <Notice action={<Button size="sm" variant="outline" onClick={reload}><RefreshCw />Try again</Button>}>{error}</Notice>
@@ -122,6 +169,9 @@ function ThemesView({ site }: { site: Site }) {
     );
   }
   const active = data.themes.find((t) => t.status === 'active');
+  // Only a theme in wp-content/themes: one in a repo's folder is updated in its repo.
+  const canUpdateTheme = (t: SiteThemes['themes'][number]) => Boolean(t.update) && !t.inRepo && t.folder === `wp-content/themes/${t.name}`;
+  const themeUpdates = data.themes.filter(canUpdateTheme).map((t) => t.name);
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -136,33 +186,42 @@ function ThemesView({ site }: { site: Site }) {
         </div>
       </div>
       <MissingPluginsCard site={site} show="themes" onChanged={reload} />
+      <UpdatesBar kind="themes" names={themeUpdates} updates={updates} />
       {data.themes.length === 0 ? (
         <EmptyState icon={Palette} title="This site has no themes." className="py-10" />
       ) : (
         <Card className="overflow-hidden">
           <ul className="divide-y">
             {data.themes.map((t) => (
-              <li key={t.folder} className="px-4 py-2.5">
-                <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium', t.status === 'inactive' && 'text-muted-foreground')}>
-                  <span className="break-words">{t.title}</span>
-                  {t.status === 'active' && <Badge tone="success">On</Badge>}
-                  {t.status === 'parent' && <Badge tone="primary">Parent of the theme that is on</Badge>}
-                  {t.inRepo && <Badge>In its repo</Badge>}
-                  <VulnerableBadge hit={t.wporg ? vulnerable.get(`theme:${t.wporg}`) : undefined} />
-                </p>
-                <p className="mt-0.5 text-xs break-words text-muted-foreground">
-                  <span className="font-mono">{t.folder}</span>
-                  {t.version && <> · {t.version}</>}
-                  {t.update && <span className="text-warning"> · {t.update} available</span>}
-                  {t.inRepo && ' · found through Local mode'}
-                  {' · '}<TextLink href={themeFolderHref(site, t)} aria-label={`Open the folder of ${t.title}`}>Open folder</TextLink>
-                </p>
-                {details && (t.description || t.author || t.themeUri || t.wporg) && (
-                  <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
-                    {t.description}
-                    {t.author && <span className="text-muted-foreground/80">{t.description ? ' ' : ''}By <OutLink href={t.authorUri}>{t.author}</OutLink>.</span>}
-                    <OutLinks site={t.themeUri} siteLabel="Theme site" wporg={t.wporg && `https://wordpress.org/themes/${t.wporg}/`} />
+              <li key={t.folder} className="flex items-center gap-3 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium', t.status === 'inactive' && 'text-muted-foreground')}>
+                    <span className="break-words">{t.title}</span>
+                    {t.status === 'active' && <Badge tone="success">On</Badge>}
+                    {t.status === 'parent' && <Badge tone="primary">Parent of the theme that is on</Badge>}
+                    {t.inRepo && <Badge>In its repo</Badge>}
+                    <VulnerableBadge hit={t.wporg ? vulnerable.get(`theme:${t.wporg}`) : undefined} />
                   </p>
+                  <p className="mt-0.5 text-xs break-words text-muted-foreground">
+                    <span className="font-mono">{t.folder}</span>
+                    {t.version && <> · {t.version}</>}
+                    {t.update && <span className="text-warning"> · {t.update} available</span>}
+                    {t.inRepo && ' · found through Local mode'}
+                    {' · '}<TextLink href={themeFolderHref(site, t)} aria-label={`Open the folder of ${t.title}`}>Open folder</TextLink>
+                  </p>
+                  {details && (t.description || t.author || t.themeUri || t.wporg) && (
+                    <p className="mt-1 max-w-3xl text-xs text-pretty text-muted-foreground">
+                      {t.description}
+                      {t.author && <span className="text-muted-foreground/80">{t.description ? ' ' : ''}By <OutLink href={t.authorUri}>{t.author}</OutLink>.</span>}
+                      <OutLinks site={t.themeUri} siteLabel="Theme site" wporg={t.wporg && `https://wordpress.org/themes/${t.wporg}/`} />
+                    </p>
+                  )}
+                </div>
+                {canUpdateTheme(t) && (
+                  <Button size="xs" variant="outline" className="shrink-0" disabled={updates.running} onClick={() => updates.start([t.name])} aria-label={`Update ${t.title} to ${t.update}`}>
+                    <ArrowUpCircle />
+                    Update to {t.update}
+                  </Button>
                 )}
               </li>
             ))}
@@ -188,13 +247,19 @@ function PluginsView({ site }: { site: Site }) {
   const data = fresh ?? lastLists.get(key);
   const vulnerable = useVulnerabilities(site);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
+  // The Overview's "3 updates" opens the list on them (show=updates).
+  const [filter, setFilter] = useState<Filter>(useQueryParam('show') === 'updates' ? 'updates' : 'all');
+  const updates = useUpdates(site, 'plugins', reload);
   const [busy, setBusy] = useState<string | null>(null);
   const [asking, setAsking] = useState<SitePlugin | null>(null);
   // Details adds what each plugin says it does and who made it; it starts compact every time.
   const [details, setDetails] = useState(false);
   const plugins = data?.plugins ?? [];
   const test = FILTERS.find((f) => f.value === filter)?.test ?? (() => true);
+  // A filter that nothing passes any more (the last update done) goes back to All, as its chip is gone.
+  useEffect(() => {
+    if (data && filter !== 'all' && !data.plugins.some(test)) setFilter('all');
+  }, [data, filter]);
   // Must-use plugins and drop-ins last, as wp-admin keeps them on tabs of their own.
   const shown = plugins.filter((p) => test(p) && (pluginMatches(p.name, query) || pluginMatches(p.title, query))).sort((a, b) => Number(always(a)) - Number(always(b)));
   // A long list shows its first rows, then Show more or Show all; a search or filter starts it short again.
@@ -278,6 +343,7 @@ function PluginsView({ site }: { site: Site }) {
 
       {/* Under the search and filters, one row that keeps its height while it checks: the list below never moves. */}
       <MissingPluginsCard site={site} show="plugins" onChanged={reload} />
+      <UpdatesBar kind="plugins" names={plugins.filter(canUpdate).map((p) => p.name)} updates={updates} />
 
       {shown.length === 0 ? (
         <EmptyState
@@ -325,6 +391,12 @@ function PluginsView({ site }: { site: Site }) {
                     </p>
                   )}
                 </div>
+                {canUpdate(p) && (
+                  <Button size="xs" variant="outline" className="shrink-0" disabled={updates.running} onClick={() => updates.start([p.name])} aria-label={`Update ${p.title} to ${p.update}`}>
+                    <ArrowUpCircle />
+                    Update to {p.update}
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

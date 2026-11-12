@@ -45,6 +45,7 @@ import { MoreDumpsRefused, planLocalDump, planServerDump, signedInWith } from '.
 import { planRefresh } from './sites/refresh.js';
 import { giveBack, planTakeOver, TakeoverRefused } from './sites/takeover.js';
 import { installPlugins, installThemes, removeInstalled } from './sites/install-plugins.js';
+import { undoUpdates, updateItems } from './sites/update-plugins.js';
 import { copyFromServer, removeCopied } from './sites/server-files.js';
 import { copyUploads } from './sites/server-uploads.js';
 import { copyChosenUploads, uploadsCopied } from './sites/uploads-compare.js';
@@ -793,6 +794,27 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       });
     }
     return startJob(ctx, steps, `Install missing plugins and themes on ${site.host}`, site.host);
+  },
+  'site.updatePlugins': async (ctx, input) => {
+    const site = siteFor(ctx.config, input.domain, input.path);
+    const deps = { exec: ctx.exec, docroot: site.docroot, host: site.host, trash: fileTrashDir(dirname(ctx.uploadsDir)), site: siteKey(input.domain, input.path), files: filesOf(ctx, input.domain, input.path) };
+    const steps: JobStep[] = [];
+    // The database as it was, for the changes an update makes on the next page load; Snapshots puts it back.
+    if (input.snapshot) steps.push(...planSnapshot(ctx, { domain: input.domain, path: input.path, label: 'before-updates' }));
+    for (const [kind, slugs] of [['plugin', input.plugins], ['theme', input.themes]] as const) {
+      if (!slugs.length) continue;
+      steps.push({
+        id: `${kind}s`,
+        label: `Update ${slugs.length} ${kind}${slugs.length === 1 ? '' : 's'} from WordPress.org`,
+        run: async (job) => {
+          const out = await updateItems(deps, kind, slugs);
+          if (out.updated.length) job.onUndo(`Put back the ${kind}s from before (${out.updated.length})`, async () => undoUpdates(deps, out.updated));
+          return out.results;
+        },
+      });
+    }
+    const n = input.plugins.length + input.themes.length;
+    return startJob(ctx, steps, `Update ${n === 1 ? (input.plugins[0] ?? input.themes[0]) : `${n} plugins and themes`} on ${site.host}`, site.host);
   },
   'site.copyUploads': async (ctx, input) => {
     const site = siteFor(ctx.config, input.domain, input.path);

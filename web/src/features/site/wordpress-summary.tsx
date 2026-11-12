@@ -36,7 +36,8 @@ export function WordPressSummary({ site }: { site: Site }) {
       ? null
       : {
           key: 'plugins',
-          href: base,
+          // With updates, straight to them on the Plugins view.
+          href: plugins?.plugins.some((p) => p.update) ? `${base}&show=updates` : base,
           icon: Plug,
           loading: plugins === undefined,
           parts: plugins

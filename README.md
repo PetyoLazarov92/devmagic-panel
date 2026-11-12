@@ -56,6 +56,7 @@ listens on localhost.
 - ✅ **Files**: browse, edit, upload, zip and find in a site's folder, with Undo for deletes, git changes and uploads from production. [More](docs/files.md)
 - ✅ **Databases**: browse and edit rows, run SQL, clean up WordPress, snapshot, import and export, each change saved first for Undo. [More](docs/databases.md)
 - ✅ **Import a database**: from production over SSH in one click, or any dump, as it is or cleaned of private data, with your old tables kept. [More](docs/databases.md#backups-and-tools)
+- ✅ **Plugin and theme updates**: one or all at once from WordPress.org, a snapshot first, each folder kept for Undo. [More](docs/sites.md#plugins)
 - ✅ **Performance**: a tab per site with Xdebug profiles by plugin and function, and the top queries of its database. [More](docs/sites.md#performance)
 - ✅ **Command palette**: Ctrl+K jumps to any site or page and runs its quick actions. [More](docs/pages.md#command-palette)
 - ✅ **Cron**: your crontab's tasks and each site's WP-Cron events, with history and Undo; only the panel's block is written. [More](docs/services.md#cron-servicescron)

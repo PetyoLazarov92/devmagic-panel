@@ -237,7 +237,14 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       `sites/server-files.ts`): what arrives is checked before it is
       unpacked (nothing outside its one folder, no hard links, links
       dropped), never written over a folder that exists, and kept out of git
-      locally; never mu-plugins, drop-ins or core. No other file goes into a
+      locally; never mu-plugins, drop-ins or core. Plugins and themes with an
+      update WordPress already found are updated only when you ask
+      (`site.updatePlugins`, `sites/update-plugins.ts`): `wp plugin update`
+      and `wp theme update` as you, one at a time, each folder copied into
+      the file trash first for Undo and put back when the update fails or a
+      plugin's checksums do not match; only real folders in
+      `wp-content/plugins` and `wp-content/themes`, never a link, a
+      one-file plugin, mu-plugins or drop-ins. No other file goes into a
       site.
     - **Repos go where you place them**: each repo of an install has a folder
       of the site and a folder name (`dir`, `folder` in `site.create`),

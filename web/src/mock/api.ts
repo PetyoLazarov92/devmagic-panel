@@ -44,6 +44,13 @@ const MOCK_VULNERABILITIES: SiteVulnerabilities = {
 
 /** The mock scan for missing plugins and themes: it runs a few seconds the first time, then its result is kept. */
 const mockScans = new Map<string, { startedAt: number; checkedAt?: string }>();
+/** Plugins and themes the mockup's update jobs updated: they show the new version and no update. */
+const mockUpdated = new Set<string>();
+function updatedInMockup<T extends { name: string; version?: string; update?: string }>(item: T): T {
+  if (!mockUpdated.has(item.name) || !item.update) return item;
+  const { update, ...rest } = item;
+  return { ...rest, version: update } as T;
+}
 /** Servers' SSH passwords saved in the mockup (only that one is), and the sign-in answers kept, as the server keeps them. */
 const mockSavedSsh = new Set<string>(['spellbook-prod']);
 const mockSignIns = new Map<string, ServerSignIn>();
@@ -654,6 +661,11 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     'site.copyUploads': Array.isArray(input.folders) ? [{ id: 'bring', label: `Bring the uploads of ${input.folders.length === 1 ? '1 folder' : `${input.folders.length} folders`} from ${String(input.host)}` }] : [{ id: 'uploads', label: `Copy ${input.months ? `the last ${String(input.months)} months of uploads` : 'the uploads'} from ${String(input.host)}` }],
     'site.copyFromServer': [{ id: 'copy', label: `Copy ${((input.plugins as unknown[] | undefined)?.length ?? 0) + ((input.themes as unknown[] | undefined)?.length ?? 0)} plugins and themes from ${String(input.host)}` }],
     'site.installPlugins': [{ id: 'plugins', label: `Install ${(input.plugins as unknown[] | undefined)?.length ?? 0} plugins from WordPress.org` }],
+    'site.updatePlugins': [
+      ...(input.snapshot ? [{ id: 'snapshot', label: 'Snapshot the database (before-updates)' }] : []),
+      ...((input.plugins as unknown[] | undefined)?.length ? [{ id: 'plugins', label: `Update ${(input.plugins as unknown[]).length} plugin${(input.plugins as unknown[]).length === 1 ? '' : 's'} from WordPress.org` }] : []),
+      ...((input.themes as unknown[] | undefined)?.length ? [{ id: 'themes', label: `Update ${(input.themes as unknown[]).length} theme${(input.themes as unknown[]).length === 1 ? '' : 's'} from WordPress.org` }] : []),
+    ],
     'site.takeOver': [
       { id: 'cert', label: 'Issue a certificate for 2 names from the local CA' },
       { id: 'vhost', label: "Put the panel's vhost in place of the site's own" },
@@ -1763,14 +1775,14 @@ export const mockApi: Api = {
   },
   plugins: async (domain) => {
     await wait(400);
-    return { plugins: structuredClone(mockPlugins), network: Boolean(sites.find((s) => s.domain === domain)?.network) };
+    return { plugins: structuredClone(mockPlugins).map(updatedInMockup), network: Boolean(sites.find((s) => s.domain === domain)?.network) };
   },
   themes: async (domain) => {
     await wait(350);
     return {
       themes: [
         { name: 'wandworks', title: 'Wandworks', status: 'active' as const, version: '2.1.0', folder: 'wp-content/repos/theme-kit/wandworks', inRepo: true as const },
-        { name: 'twentytwentyfive', title: 'Twenty Twenty-Five', status: 'inactive' as const, version: '1.2', update: '1.3', folder: 'wp-content/themes/twentytwentyfive' },
+        updatedInMockup({ name: 'twentytwentyfive', title: 'Twenty Twenty-Five', status: 'inactive' as const, version: '1.2', update: '1.3', folder: 'wp-content/themes/twentytwentyfive' }),
         { name: 'twentytwentyfour', title: 'Twenty Twenty-Four', status: 'inactive' as const, version: '1.3', folder: 'wp-content/themes/twentytwentyfour' },
       ],
       network: Boolean(sites.find((s) => s.domain === domain)?.network),
@@ -1837,6 +1849,8 @@ export const mockApi: Api = {
     await wait(300);
     if (id === 'org.readProject') return mockProjectJob(input);
     if (id === 'org.readRepo' || id === 'org.checkAccess') return mockClaudeJob(id, input);
+    // The mockup's updates land with the job: once it ends, the plugins and themes read again show their new version.
+    if (id === 'site.updatePlugins') [...((input.plugins as string[] | undefined) ?? []), ...((input.themes as string[] | undefined) ?? [])].forEach((slug) => mockUpdated.add(slug));
     // The mockup's Mailpit "runs" once its install job has had time to finish.
     if (id === 'mailpit.install') window.setTimeout(() => (mailpitRunning = true), 3500);
     if (id === 'nginx.setup' || id === 'nginx.teardown') window.setTimeout(() => (mockNginxSetUp = id === 'nginx.setup'), 3500);

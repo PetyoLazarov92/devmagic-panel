@@ -1619,6 +1619,15 @@ export const actions = {
       .object({ domain: localName, path: sitePath, plugins: z.array(pluginInstall).max(100).default([]), themes: z.array(pluginInstall).max(20).default([]) })
       .refine((v) => v.plugins.length + v.themes.length > 0, { path: ['plugins'], message: 'Name a plugin or a theme to install' }),
   },
+  'site.updatePlugins': {
+    title: 'Update plugins and themes from WordPress.org',
+    description:
+      "Updates the plugins and themes you name to the version WordPress already found, with wp plugin update and wp theme update, as you, one at a time: one that fails is noted and put back as it was, and the rest go on. Each folder is copied into the Files tab's file trash first, so Undo puts the versions from before back; a plugin is checked against WordPress.org's checksums after and put back when it does not match. A database snapshot first when you ask. Only folders in wp-content/plugins and wp-content/themes: never a link, a one-file plugin, a must-use plugin or a drop-in. One in a git repo is updated too, and the result says to commit it there. Starts a job.",
+    changesSystem: true,
+    input: z
+      .object({ domain: localName, path: sitePath, plugins: z.array(wpSlug).max(100).default([]), themes: z.array(wpSlug).max(50).default([]), snapshot: z.boolean().default(false) })
+      .refine((v) => v.plugins.length + v.themes.length > 0, { path: ['plugins'], message: 'Name a plugin or a theme to update' }),
+  },
   'site.copyUploads': {
     title: 'Copy uploads from the server',
     description:

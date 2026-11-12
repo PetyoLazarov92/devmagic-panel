@@ -117,6 +117,18 @@ advisory. A long list shows its first rows,
 with **Show more** and **Show all**. **Open folder** goes to the plugin's
 folder on the Files tab, or **Open file** for a plugin that is one file.
 
+**Updates**: a plugin or theme with an update WordPress already found has
+**Update to** its new version on its row, and a bar above the list has
+**Update all**, with **Snapshot the database first** ticked. They are
+updated from WordPress.org with WP-CLI, as you, one at a time: one that
+fails is noted, put back as it was, and the rest go on. Each folder is
+copied into the Files tab's file trash first, so **Undo** on the job (or the
+Files tab) puts the version from before back, and a plugin whose files do
+not match WordPress.org's checksums after is put back too. One in a git
+repo is updated, and the job says to commit it there. Must-use plugins,
+drop-ins, one-file plugins, links and themes kept in a repo are left to
+you. The Overview's "3 updates" opens the list on them.
+
 **Missing plugins**, one row under the search and filters (and **missing
 themes**, one row in the Themes view): plugins the
 database names that the site's files lack, after a database import or a pull.
