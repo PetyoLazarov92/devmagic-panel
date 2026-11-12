@@ -1,7 +1,7 @@
 /**
  * How wide a page's content runs, by its type (ui-ux.mdc, One layout per page type): every page
- * stops at about 1600px (the Sites list, a site, Activity, Services, WP Cores), and settings and
- * flows stay narrow enough to read. The top bar always runs the whole width.
+ * stops at about 1600px (the Sites list, a site, the new site wizard, Activity, Services, WP
+ * Cores), and Settings and Update stay narrow enough to read. The top bar always runs the whole width.
  */
 export type PageWidth = 'page' | 'narrow';
 
@@ -9,7 +9,7 @@ const NARROW = new Set(['/settings', '/update']);
 
 export function pageWidth(path: string): PageWidth {
   const clean = path.length > 1 ? path.replace(/\/+$/, '') : path;
-  if (NARROW.has(clean) || clean === '/sites/new' || clean.startsWith('/sites/new/')) return 'narrow';
+  if (NARROW.has(clean)) return 'narrow';
   return 'page';
 }
 

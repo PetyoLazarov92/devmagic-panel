@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.42.1 (2026-11-13)
+* **Sites:** the Sites list shows its cards two per row again on a wide screen, as in v1.41.0, with a wide card's facts in two columns so it has no empty half. The server a site runs on (Apache, nginx in front, nginx) is one of those facts instead of a badge. **Grid** and **List** have their icons back
+* **New site:** the wizard has the width of the other pages
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.42.0 (2026-11-13)
 * **Look:** the top bar runs the whole width, with the search on the left and what changes while you work on the right. Pages run up to 1600px, the Sites list with three site cards per row from about 1440px of content, and Settings, Update and the new site wizard stay narrow enough to read
 * **Sites:** the side menu sits in a frame like the cards, each section with its icon and a little taller; the open view under a section is marked in darker text only. The tiles fill their row. Git takes the first row across, its recent commits beside the branch, and the cards below come in pairs of a kind, each pair as tall as each other. The Database's Overview and Backups and tools do the same, Import a database and Search and replace across their row, and a view's note sits on one line with Check again

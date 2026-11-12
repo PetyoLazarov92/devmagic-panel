@@ -1,6 +1,6 @@
 import type { InstallHow, Preferences, Site, SiteGit } from '@devmagic-panel/shared';
 import { branchWebUrl, INSTALL_HOW_LABELS, INSTALL_HOWS, repoWeb, SITE_SERVER_LABEL, siteRepoLabel, SITES_SORT_LABELS, SITES_SORTS } from '@devmagic-panel/shared';
-import { Archive, ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LogIn, PackageOpen, Plus, Search } from 'lucide-react';
+import { Archive, ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LayoutGrid, List, LogIn, PackageOpen, Plus, Search, Server } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { SitesSkeleton } from '@/components/layout/skeletons';
 import { BriefingCard } from '@/features/assistant/briefing-card';
@@ -164,7 +164,7 @@ export function SitesPage() {
           <Select value={sort} onChange={(e) => savePreferences({ sitesSort: e.target.value as Preferences['sitesSort'] })} aria-label="Sort sites" className="h-9">
             {SITES_SORTS.map((s) => <option key={s} value={s}>{SITES_SORT_LABELS[s]}</option>)}
           </Select>
-          <Segmented label="View" value={view} onChange={(v) => savePreferences({ sitesView: v })} options={[['grid', 'Grid'], ['list', 'List']]} />
+          <Segmented label="View" value={view} onChange={(v) => savePreferences({ sitesView: v })} options={[['grid', 'Grid', LayoutGrid], ['list', 'List', List]]} />
         </div>
       </div>
 
@@ -182,7 +182,7 @@ export function SitesPage() {
         />
       )}
       {filter !== 'removed' && shown.length > 0 && view === 'grid' && (
-        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2 @min-[90rem]:grid-cols-3">
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2">
           {shown.map((site) => <SiteCard key={siteName(site)} site={site} />)}
         </div>
       )}
@@ -215,7 +215,7 @@ function SiteCard({ site }: { site: Site }) {
   const href = site.installing ? `/jobs/${encodeURIComponent(site.installing)}` : siteHref(site);
   const held = Boolean(site.installing || site.busy);
   return (
-    <Card role="article" className="group relative flex flex-col transition-shadow hover:shadow-md">
+    <Card role="article" className="group @container relative flex flex-col transition-shadow hover:shadow-md">
       <div className="flex items-start gap-3 px-5 pt-4">
         <StatusDot status={site.health} className="mt-1.5" />
         <div className="min-w-0 flex-1">
@@ -226,13 +226,14 @@ function SiteCard({ site }: { site: Site }) {
             </Link>
           </h2>
           {siteSubtitle(site) && <p className="truncate text-sm text-muted-foreground">{siteSubtitle(site)}</p>}
-          {/* One row of badges with room between them, wrapping on a narrow card. Every site says which server answers it: Apache in grey, nginx in front or alone in blue. */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {site.network && <NetworkBadge site={site} />}
-            <Badge tone={site.server === 'apache' ? 'neutral' : 'primary'} title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</Badge>
-            {site.install?.takenOver && <Badge title={`Made by hand, managed by the panel since ${shortDate(site.install.takenOver.at)}`}>Taken over</Badge>}
-            {site.installing && <Badge tone="warning"><Spinner className="size-3" />Installing: see progress</Badge>}
-          </div>
+          {/* One row of badges with room between them, wrapping on a narrow card; the server it runs on is a fact below. */}
+          {(site.network || site.install?.takenOver || site.installing) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {site.network && <NetworkBadge site={site} />}
+              {site.install?.takenOver && <Badge title={`Made by hand, managed by the panel since ${shortDate(site.install.takenOver.at)}`}>Taken over</Badge>}
+              {site.installing && <Badge tone="warning"><Spinner className="size-3" />Installing: see progress</Badge>}
+            </div>
+          )}
           {site.busy && (
             <Link href={site.busy.jobId ? `/jobs/${encodeURIComponent(site.busy.jobId)}` : href} className="relative z-10 mt-1.5 block w-fit">
               <Badge tone="warning"><Spinner className="size-3" />Busy: {site.busy.title}</Badge>
@@ -244,9 +245,11 @@ function SiteCard({ site }: { site: Site }) {
         </div>
       </div>
 
-      <dl className="mt-4 grid gap-2 px-5 text-sm">
+      {/* Two columns of facts once the card is wide, so a wide card has no empty half. */}
+      <dl className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-x-6 gap-y-2 px-5 text-sm @xl:grid-cols-2">
         <Meta icon={<Layers />} label="Core">{coreLabel(site)}</Meta>
         {site.php && <Meta icon={<Code2 />} label="PHP"><PhpLabel php={site.php} /></Meta>}
+        <Meta icon={<Server />} label="Server"><span className="truncate" title={SERVER_TITLE[site.server]}>{SITE_SERVER_LABEL[site.server]}</span></Meta>
         <Meta icon={<PackageOpen />} label="Installed"><span className="truncate">{installLabel(site.install)}</span></Meta>
         {(() => {
           const main = mainRepo(site);
