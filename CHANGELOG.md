@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.44.1 (2026-11-13)
+* **Aura:** the vulnerability check runs again on the first visit after an update that keeps more in its results, instead of a day after its last round. Results from before v1.44.0 lack what **Update** needs, so Aura showed no Update until the next day; **Check now** did it at once. It asks WPVulnerability nothing new: its answers are still kept a day
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.44.0 (2026-11-13)
 * **Aura:** a plugin or theme with a known vulnerability and a fixed version has **Update** on its line. It says first what happens (the newest version from WordPress.org with WP-CLI, a database snapshot first, the old folder kept so Undo puts it back), then starts the same job as the Plugins tab, with **Show progress** in the toast. One-file and must-use plugins and themes kept in a repo keep the hint to update them by hand. **Fix all** and the login briefing leave updates out, so they never start in bulk
 * **Plugins:** the details window is wider and keeps one height from the start: the text scrolls and the facts stay in view

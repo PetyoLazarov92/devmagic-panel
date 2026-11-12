@@ -101,5 +101,12 @@ describe('known vulnerabilities', () => {
     // Once a day, unless asked.
     watch.maybeStart(sites);
     expect(watch.running()).toBe(false);
+    // A result kept by an older release (without each hit's folder) is checked again at once.
+    store.setMeta('vulns-format', '1');
+    watch.maybeStart(sites);
+    expect(watch.running()).toBe(true);
+    await watch.settled();
+    watch.maybeStart(sites);
+    expect(watch.running()).toBe(false);
   });
 });

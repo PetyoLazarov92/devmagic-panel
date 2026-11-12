@@ -19,6 +19,12 @@ import type { FetchJson } from './wporg-plugins.js';
 const KEEP_MS = 24 * 3_600_000;
 const SOURCE = 'https://www.wpvulnerability.net';
 const META = 'vulns:';
+/**
+ * What a site's result holds, in a number: a release that keeps more in it (2: each hit's folder,
+ * for Aura's Update) raises it, and the next read of Aura checks again at once instead of a day
+ * after the last round. The answers per slug are still kept a day, so that round asks nobody.
+ */
+const FORMAT = '2';
 
 const fetchJson: FetchJson = async (url) => {
   const res = await fetch(url, { signal: AbortSignal.timeout(10_000), headers: { 'user-agent': 'devmagic-panel' } });
@@ -211,12 +217,14 @@ export class VulnerabilityWatch {
     return at ? new Date(at).toISOString() : undefined;
   }
 
-  /** Starts a round when it is on, none runs and the last is a day old (or now, when forced). */
+  /** Starts a round when it is on, none runs and the last is a day old or kept less than this release keeps (or now, when forced). */
   maybeStart(sites: () => Promise<Site[]>, force = false): void {
     if (!this.enabled() || this.round) return;
     const last = Number(this.store.getMeta('vulns-round') ?? 0);
-    if (!force && this.now() - last < KEEP_MS) return;
+    const current = this.store.getMeta('vulns-format') === FORMAT;
+    if (!force && current && this.now() - last < KEEP_MS) return;
     this.store.setMeta('vulns-round', String(this.now()));
+    this.store.setMeta('vulns-format', FORMAT);
     this.round = (async () => {
       for (const site of await sites()) {
         if (site.core.kind === 'none') continue;
