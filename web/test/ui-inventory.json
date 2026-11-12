@@ -445,7 +445,12 @@
   "button: Plugins and themes",
   "button: Reissue cert",
   "button: Server and PHP",
+  "button: Update Cloudflare to #",
+  "button: Update Gravity Forms to #",
+  "button: Update Rank Math SEO to #",
+  "button: Update all #",
   "button: wp-admin",
+  "checkbox: Snapshot the database first",
   "h1: local.spellbook.example",
   "link: /learn",
   "link: Open the file of Hello Wands",
@@ -856,7 +861,10 @@
   "button: Plugins and themes",
   "button: Reissue cert",
   "button: Server and PHP",
+  "button: Update Twenty Twenty-Five to #",
+  "button: Update it",
   "button: wp-admin",
+  "checkbox: Snapshot the database first",
   "h1: local.spellbook.example",
   "link: /learn",
   "link: Open the folder of Twenty Twenty-Five",
@@ -877,6 +885,7 @@
  ],
  "/sites/local.spellbook.example?tab=files&view=uploads": [
   "button: Change",
+  "button: Check connection",
   "button: Compare",
   "button: Config#",
   "button: Cron#",
@@ -884,6 +893,7 @@
   "button: Domains and SSL",
   "button: Files",
   "button: Forget",
+  "button: Forget password",
   "button: Logs#",
   "button: More actions",
   "button: More tabs: Browse",
@@ -894,6 +904,7 @@
   "button: Plugins and themes",
   "button: Reissue cert",
   "button: Server and PHP",
+  "button: Show it",
   "button: wp-admin",
   "h1: local.spellbook.example",
   "h2: Here",
@@ -908,7 +919,8 @@
   "menu More actions: Remove site",
   "menu More actions: VS Code",
   "tab: Files",
-  "tab: Uploads from production"
+  "tab: Uploads from production",
+  "textbox: Password on the server"
  ],
  "/sites/local.spellbook.example?tab=database&view=tables": [
   "button: Actions for old_wp_options",
@@ -1074,6 +1086,7 @@
  "/sites/local.spellbook.example?tab=database&view=tools": [
   "button: Change",
   "button: Check again",
+  "button: Check connection",
   "button: Clean spellbookdb",
   "button: Config#",
   "button: Cron#",
@@ -1085,6 +1098,7 @@
   "button: Export clean copy",
   "button: Files",
   "button: Forget",
+  "button: Forget password",
   "button: Logs#",
   "button: More actions",
   "button: More tabs: Overview, Logs (#), Files, Plugins and themes, Performance, Cron (#), Config (#), Server and PHP, Domains and",
@@ -1130,6 +1144,7 @@
   "textbox: Keep this user",
   "textbox: Label (optional)",
   "textbox: Password",
+  "textbox: Password on the server",
   "textbox: Replace with"
  ],
  "/sites/local.spellbook.example?tab=php&view=htaccess": [

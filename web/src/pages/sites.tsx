@@ -182,7 +182,7 @@ export function SitesPage() {
         />
       )}
       {filter !== 'removed' && shown.length > 0 && view === 'grid' && (
-        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2 @min-[96rem]:grid-cols-3 @min-[110rem]:grid-cols-4">
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4 @4xl:grid-cols-2 @min-[90rem]:grid-cols-3">
           {shown.map((site) => <SiteCard key={siteName(site)} site={site} />)}
         </div>
       )}

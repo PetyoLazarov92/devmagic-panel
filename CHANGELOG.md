@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.42.0 (2026-11-13)
+* **Look:** the top bar runs the whole width, with the search on the left and what changes while you work on the right. Pages run up to 1600px, the Sites list with three site cards per row from about 1440px of content, and Settings, Update and the new site wizard stay narrow enough to read
+* **Sites:** the side menu sits in a frame like the cards, each section with its icon and a little taller; the open view under a section is marked in darker text only. The tiles fill their row. Git takes the first row across, its recent commits beside the branch, and the cards below come in pairs of a kind, each pair as tall as each other. The Database's Overview and Backups and tools do the same, Import a database and Search and replace across their row, and a view's note sits on one line with Check again
+* **SSH:** a server's password can be saved in the panel for that host, in `secrets.json` (readable by you only). It is never shown back: the field says one is saved, empty uses it, a new one replaces it, and **Forget password** removes it. A run that starts without a typed password uses it, a Retry too. How a server signs you in is asked when you type a host or press **Check connection**, not when you open a view, and the answer is kept for an hour
+* **Plugins:** plugins and themes with an update WordPress already found have **Update to** on their row and **Update all** above the list, with **Snapshot the database first** ticked. Each is updated from WordPress.org with WP-CLI, one at a time; its folder is kept in the Files tab's file trash first, so **Undo** puts the version from before back, and one that fails or does not match WordPress.org's checksums is put back at once. The Overview's updates count opens the list on them
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.41.0 (2026-11-12)
 * **Sites:** the open section's own views (the Database's Overview, Tables, SQL and Backups and tools; Plugins and Themes; Browse and Uploads from production) are listed under it in the side menu, which stays in view as you scroll, and the breadcrumbs name the view. On a narrower screen they stay small tabs
 * **Sites:** the cards of a site's sections lay out by the room next to the side menu, not by the window: one column until there is room for two, so no card is squeezed. The Files card keeps the folder on one line, and Quick actions fits its buttons

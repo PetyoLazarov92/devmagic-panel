@@ -195,12 +195,11 @@ Every page is made of the pieces in `web/src/components/layout/page.tsx` and
 `web/src/components/layout/skeletons.tsx`, and follows the layout of its type.
 
 - **Width by page type** (`lib/page-width.ts`): the top bar runs the whole
-  width (search left, what changes while you work right). Lists and grids of
-  like items (Sites, Services, Activity, WP Cores) run up to 120rem and add
-  columns (three from 96rem of content, four from 110rem); detail pages (a
-  site, a job, a run, a section of Services) stop at 100rem and keep their
-  cards in pairs; settings and flows (Settings, Update, the new site wizard)
-  stop at 64rem. Never the whole screen for text or forms.
+  width (search left, what changes while you work right). Every page (the
+  Sites list, a site, a job, a run, Activity, Services, WP Cores) stops at
+  100rem, its cards in pairs, the site cards three per row from 90rem of
+  content; settings and flows (Settings, Update, the new site wizard) stop
+  at 64rem. Never the whole screen for text or forms.
 - **The pieces.** `PageHeader` (title and intro left, actions right, Check
   again last) tops a page; `ViewBar` (a picker or filters left, Check again
   right, "Read 2 min ago" and a short note under it, or in the picker's place

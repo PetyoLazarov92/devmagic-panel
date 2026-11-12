@@ -87,7 +87,7 @@ function ServicesOverview({ refresh, onLoading }: { refresh: number; onLoading: 
       {!report && loading && <CardsSkeleton reading="Checking services..." cards={[3, 3, 3, 3, 3, 3]} />}
 
       {report && (
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @2xl:grid-cols-2 @min-[96rem]:grid-cols-3">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @2xl:grid-cols-2">
           {report.services.map((s) => {
             const link = SERVICE_LINK[s.id];
             return (
