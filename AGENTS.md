@@ -84,6 +84,10 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    same way (`server/src/repo-hosts/`): GitHub through gh, GitLab (gitlab.com
    and your own hosts) through `glab api --hostname` only; the panel never
    reads glab's config, keyring or token either, and never sets one.
+   A plugin's or theme's details (`server/src/wporg-details.ts`, the
+   dialog wp-admin calls "View version details") are asked of WordPress.org
+   by slug only, when you open them, and read into plain blocks on the
+   server, so none of its HTML reaches the browser.
    The vulnerability check (`server/src/vulnerabilities.ts`, off until
    switched on in Aura) sends WPVulnerability only slugs WordPress's own update
    check found on WordPress.org, never a version, a site name or a custom

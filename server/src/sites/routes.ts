@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { AuraReport, CompatScan, FileDiff, FileFindResult, FileGitStatus, FileSize, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, GitTidyPreview, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, MissingScanState, VulnerabilityState } from '@devmagic-panel/shared';
+import type { AuraReport, CompatScan, FileDiff, FileFindResult, FileGitStatus, FileSize, CleanCopyInfo, CleanPreview, CoresReport, HtaccessReport, KeptDatabaseInfo, GitDetails, GitPullRequest, GitTidyPreview, NetworkAdmins, RemovalInfo, FileListing, FileTrashEntry, FileView, RepoInspection, RepoLookup, RunDetail, RunPage, RunSummary, Site, UploadsCompare, UploadsHere, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TakeoverPreview, TrashEntry, MissingScanState, VulnerabilityState, WporgDetails } from '@devmagic-panel/shared';
 import { FILE_TEXT_MAX, actions, sshHost, serverPath, wpCliCommand, branchName, cleanCopyName, gitUrl, isActionId, isSitePath, localName, mountPath, productionSettings, wpSlug, repoFolder, repoKey, repoPreset, snapshotName } from '@devmagic-panel/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { SystemConfig } from '../config.js';
@@ -19,6 +19,7 @@ import { listKept } from './kept.js';
 import { takeoverPreview, TakeoverRefused } from './takeover.js';
 import { MissingScans } from './missing-scan.js';
 import { VulnerabilityWatch, vulnerabilityItems } from '../vulnerabilities.js';
+import { wporgDetails, WporgDetailsMissing } from '../wporg-details.js';
 import { wporgPlugins, wporgThemes } from '../wporg-plugins.js';
 import { z } from 'zod';
 import { cleanPreview } from './clean-current.js';
@@ -512,6 +513,18 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     const body = z.object({ slugs: z.array(z.string().max(200)).max(100) }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'Plugin slugs like wp-rocket' });
     return wporgPlugins(body.data.slugs, deps.store);
+  });
+
+  // A plugin's or theme's details from WordPress.org for its details dialog: by slug only, kept six hours. Read only.
+  api.post<{ Body: unknown }>('/api/wporg/details', async (request, reply): Promise<WporgDetails | undefined> => {
+    const body = z.object({ kind: z.enum(['plugin', 'theme']), slug: wpSlug }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'A plugin or theme slug like wp-rocket' });
+    try {
+      return await wporgDetails(body.data.kind, body.data.slug, deps.store);
+    } catch (error) {
+      if (error instanceof WporgDetailsMissing) return reply.code(404).send({ error: error.message });
+      return reply.code(502).send({ error: `WordPress.org did not answer: ${(error as Error).message}` });
+    }
   });
 
   // What taking over a site made by hand would do: read by dmp-root, which changes nothing with --check.

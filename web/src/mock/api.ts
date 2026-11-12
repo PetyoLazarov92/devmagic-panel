@@ -1,4 +1,4 @@
-import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, WporgDetails, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
@@ -152,12 +152,12 @@ const mockPlugins: SitePlugin[] = [
   { name: 'advanced-cache.php', title: 'advanced-cache.php', status: 'dropin', version: '' },
   { name: 'advanced-custom-fields-pro', title: 'Advanced Custom Fields PRO', status: 'active', version: '6.4.2', requiredBy: ['ACF Blocks for Wandworks'], path: 'wp-content/plugins/advanced-custom-fields-pro', description: 'Custom fields and field groups for posts, pages and options.', author: 'Sam Lee' },
   { name: 'wandworks-acf-blocks', title: 'ACF Blocks for Wandworks', status: 'active', version: '1.3.0', authorUri: 'https://wandworks.example/', requires: ['advanced-custom-fields-pro'], path: 'wp-content/plugins/wandworks-acf-blocks', description: 'The block library of the Wandworks theme, built on ACF.', author: 'Wandworks' },
-  { name: 'cloudflare', title: 'Cloudflare', status: 'inactive', version: '4.14.4', update: '4.14.5', productionOnly: true, path: 'wp-content/plugins/cloudflare', description: 'Cache purging and settings for the Cloudflare in front of the site.', author: 'Alex Morgan' },
+  { name: 'cloudflare', title: 'Cloudflare', status: 'inactive', version: '4.14.4', update: '4.14.5', productionOnly: true, wporg: 'cloudflare', path: 'wp-content/plugins/cloudflare', description: 'Cache purging and settings for the Cloudflare in front of the site.', author: 'Alex Morgan' },
   { name: 'wp-rocket', title: 'WP Rocket', status: 'inactive', version: '3.19.1', productionOnly: true, path: 'wp-content/plugins/wp-rocket', description: 'Page cache, file minification and lazy loading.', author: 'Sam Lee' },
   { name: 'gravityforms', title: 'Gravity Forms', status: 'active', version: '2.9.8', update: '2.9.9', path: 'wp-content/plugins/gravityforms', description: 'Forms with conditional fields and entries kept in the database.', author: 'Wandworks' },
   { name: 'query-monitor', title: 'Query Monitor', status: 'active', version: '3.17.0', localHelper: true, wporg: 'query-monitor', pluginUri: 'https://wordpress.org/plugins/query-monitor/', authorUri: 'https://wandworks.example/team/alex-morgan/', path: 'wp-content/plugins/query-monitor', description: 'The developer tools panel: queries, hooks, HTTP calls and errors.', author: 'Alex Morgan' },
   { name: 'user-switching', title: 'User Switching', status: 'inactive', version: '1.9.1', localHelper: true, path: 'wp-content/plugins/user-switching', description: 'Switch between user accounts with one click.', author: 'Sam Lee' },
-  { name: 'seo-by-rank-math', title: 'Rank Math SEO', status: 'active', version: '1.0.279', update: '1.0.280', path: 'wp-content/plugins/seo-by-rank-math', description: 'Titles, sitemaps and schema for search engines.', author: 'Wandworks' },
+  { name: 'seo-by-rank-math', title: 'Rank Math SEO', status: 'active', version: '1.0.279', update: '1.0.280', wporg: 'seo-by-rank-math', path: 'wp-content/plugins/seo-by-rank-math', description: 'Titles, sitemaps and schema for search engines.', author: 'Wandworks' },
   { name: 'stream', title: 'Stream', status: 'active', version: '4.1.1', path: 'wp-content/plugins/stream', description: 'A log of what users do in wp-admin.', author: 'Alex Morgan' },
   { name: 'wp-mail-smtp-pro', title: 'WP Mail SMTP Pro', status: 'active', version: '4.8.0', path: 'wp-content/plugins/wp-mail-smtp-pro', description: 'Sends WordPress mail through an SMTP server or a mail service.', author: 'Sam Lee' },
   { name: 'hello-wands', title: 'Hello Wands', status: 'inactive', version: '1.7.2', wporg: 'hello-wands', pluginUri: 'https://wandworks.example/plugins/hello-wands/', path: 'wp-content/plugins/hello-wands.php', oneFile: true, description: 'A spell of the day in the top corner of every admin page.', author: 'Wandworks' },
@@ -1782,7 +1782,7 @@ export const mockApi: Api = {
     return {
       themes: [
         { name: 'wandworks', title: 'Wandworks', status: 'active' as const, version: '2.1.0', folder: 'wp-content/repos/theme-kit/wandworks', inRepo: true as const },
-        updatedInMockup({ name: 'twentytwentyfive', title: 'Twenty Twenty-Five', status: 'inactive' as const, version: '1.2', update: '1.3', folder: 'wp-content/themes/twentytwentyfive' }),
+        updatedInMockup({ name: 'twentytwentyfive', title: 'Twenty Twenty-Five', status: 'inactive' as const, version: '1.2', update: '1.3', wporg: 'twentytwentyfive', folder: 'wp-content/themes/twentytwentyfive' }),
         { name: 'twentytwentyfour', title: 'Twenty Twenty-Four', status: 'inactive' as const, version: '1.3', folder: 'wp-content/themes/twentytwentyfour' },
       ],
       network: Boolean(sites.find((s) => s.domain === domain)?.network),
@@ -2257,6 +2257,33 @@ export const mockApi: Api = {
   wporgThemes: async (slugs) => {
     await wait(200);
     return Object.fromEntries(slugs.map((slug) => [slug, slug === 'twentytwentyfive' ? { name: 'Twenty Twenty-Five', version: '1.3' } : null]));
+  },
+  // Made-up details in the shape WordPress.org gives them, read by the server (wporg-details.ts): a changelog with the
+  // entries of the version after the installed one, and the facts the dialog compares with the site.
+  wporgDetails: async (kind, slug) => {
+    await wait(350);
+    const plugin = mockPlugins.find((p) => p.wporg === slug);
+    const next = kind === 'theme' ? '1.3' : plugin?.update ?? plugin?.version ?? '1.0.0';
+    const now = plugin?.version ?? '1.2';
+    const item = (text: string) => [{ text }];
+    return {
+      kind, slug, name: plugin?.title ?? (kind === 'theme' ? 'Twenty Twenty-Five' : slug), version: next,
+      requires: '6.3', tested: kind === 'theme' ? '7.1' : '6.8', requiresPhp: '7.4', lastUpdated: '2026-11-10 3:22pm GMT',
+      activeInstalls: kind === 'theme' ? 1_000_000 : 3_000_000, rating: 96, numRatings: 7_000, page: `https://wordpress.org/${kind}s/${slug}/`,
+      changelog: kind === 'theme' ? [] : [
+        { version: next, note: '2026-11-10', blocks: [{ kind: 'ul', items: [item('Fixed: the sitemap left out posts saved in the last hour'), item('Improved: faster loading of the redirections list'), [{ text: 'Added: a filter for ' }, { text: 'breadcrumb_separator', code: true }]] }] },
+        { version: now, note: '2026-10-28', blocks: [{ kind: 'ul', items: [item('Fixed: a notice on the settings page with PHP 8.3'), item('Improved: schema output for local businesses')] }] },
+        { version: '1.0.0', blocks: [{ kind: 'p', parts: [{ text: 'The first release.' }] }] },
+      ],
+      description: [
+        { kind: 'p', parts: [{ text: kind === 'theme' ? 'A block theme with a clean layout for writing, made from styles and patterns.' : 'Does what its name says, with settings under ' }, ...(kind === 'theme' ? [] : [{ text: 'Settings', bold: true as const }, { text: '. Read more on ' }, { text: 'its site', href: 'https://wandworks.example/' }, { text: '.' }])] },
+        { kind: 'h', parts: [{ text: 'Features' }] },
+        { kind: 'ul', items: [item('Works with every theme'), item('No setup needed')] },
+      ],
+      installation: kind === 'theme' ? [] : [{ kind: 'ol', items: [item('Upload the folder to wp-content/plugins'), item('Turn it on under Plugins')] }, { kind: 'pre', text: 'wp plugin install ' + slug + ' --activate' }],
+      faq: kind === 'theme' ? [] : [{ kind: 'h', parts: [{ text: 'Does it work on a network?' }] }, { kind: 'p', parts: [{ text: 'Yes, turned on network-wide or per site.' }] }],
+      readAt: new Date().toISOString(),
+    } satisfies WporgDetails;
   },
   wporgPlugins: async (slugs) => {
     await wait(250);

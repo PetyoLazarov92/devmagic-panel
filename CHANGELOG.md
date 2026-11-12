@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.43.0 (2026-11-13)
+* **Plugins:** **View details** on a plugin or theme with an update opens what wp-admin calls "View version details": the changelog first, the versions this update brings in a box of their own, then the description, installation and FAQ. Beside them, the version, last update, installs and rating, and what it needs next to what the site has: PHP and WordPress below what it needs in red, a WordPress newer than it was tested with in amber. **Update to** sits at the bottom
+* **Plugins:** the panel asks WordPress.org by slug only, when you open the details, and keeps the answer six hours. Its HTML is read on the server into plain paragraphs, lists, code and links, so nothing of it runs in the panel
+* **Plugins:** the updates bar has its icon and reads like the missing plugins row above it
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.42.1 (2026-11-13)
 * **Sites:** the Sites list shows its cards two per row again on a wide screen, as in v1.41.0, with a wide card's facts in two columns so it has no empty half. The server a site runs on (Apache, nginx in front, nginx) is one of those facts instead of a badge. **Grid** and **List** have their icons back
 * **New site:** the wizard has the width of the other pages

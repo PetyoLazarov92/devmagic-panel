@@ -423,6 +423,59 @@ export interface WporgPlugin {
   version: string;
 }
 
+/**
+ * A run of text in a plugin's or theme's details from WordPress.org, as the panel keeps it: the
+ * text and how it is set (bold, italic, code), and a link only when it is http(s). Nothing of
+ * WordPress.org's HTML reaches the browser; the panel draws these itself.
+ */
+export interface WporgInline {
+  text: string;
+  bold?: true;
+  italic?: true;
+  code?: true;
+  href?: string;
+}
+
+/** A paragraph, a heading, a list (its items, each a run of text) or preformatted text. */
+export type WporgBlock =
+  | { kind: 'p' | 'h'; parts: WporgInline[] }
+  | { kind: 'ul' | 'ol'; items: WporgInline[][] }
+  | { kind: 'pre'; text: string };
+
+/** One version of a changelog: its number, what follows it on its heading (a date), and its entries. Version '' holds what comes before the first. */
+export interface WporgChangelogVersion {
+  version: string;
+  note?: string;
+  blocks: WporgBlock[];
+}
+
+/** What WordPress.org says of a plugin or theme, for its details dialog (wporg-details.ts on the server). */
+export interface WporgDetails {
+  kind: 'plugin' | 'theme';
+  slug: string;
+  name: string;
+  /** The newest version on WordPress.org. */
+  version: string;
+  /** The WordPress version it needs, the one it was tested up to, and the PHP version it needs. */
+  requires?: string;
+  tested?: string;
+  requiresPhp?: string;
+  /** When it was last updated, as WordPress.org writes it (2026-11-10 3:22pm GMT). */
+  lastUpdated?: string;
+  activeInstalls?: number;
+  /** Out of 100, and how many rated it. */
+  rating?: number;
+  numRatings?: number;
+  /** Its page on WordPress.org. */
+  page: string;
+  changelog: WporgChangelogVersion[];
+  description: WporgBlock[];
+  installation: WporgBlock[];
+  faq: WporgBlock[];
+  /** When the panel read it, as an ISO time; answers are kept six hours. */
+  readAt: string;
+}
+
 /** A theme a dump names: the active one of a site, or the parent a child theme needs. */
 export interface DumpTheme {
   /** Its folder in wp-content/themes. */

@@ -3,9 +3,10 @@ import { CheckAgain } from '@/components/layout/page';
 import type { Site, SitePlugin, SitePlugins, SiteThemes, VulnerabilityState } from '@devmagic-panel/shared';
 import { MissingPluginsCard } from '@/features/site/missing-plugins-card';
 import { JobFooter } from '@/features/jobs/job-box';
+import { type DetailsTarget, PluginDetailsDialog } from '@/features/site/plugin-details';
 import { settled, useJob } from '@/features/jobs/job-steps';
 import { Checkbox } from '@/components/ui/field';
-import { ArrowUpCircle, Lock, Palette, Plug, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
+import { ArrowUpCircle, Info, Lock, Palette, Plug, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ import { siteTarget } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
+import { compareVersions } from '@/lib/version-compare';
 
 type Filter = 'all' | 'on' | 'off' | 'updates' | 'always';
 
@@ -102,21 +104,27 @@ function useUpdates(site: Site, kind: 'plugins' | 'themes', onDone: () => void) 
 function UpdatesBar({ kind, names, updates }: { kind: 'plugins' | 'themes'; names: string[]; updates: ReturnType<typeof useUpdates> }) {
   if (names.length === 0 && !updates.job.job && !updates.job.error) return null;
   const noun = kind === 'plugins' ? 'plugin' : 'theme';
+  // Drawn like the missing row above it: its icon in amber while there is something to do, the count in bold, then what it means.
   return (
-    <Card>
-      {names.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <p className="min-w-0 flex-[1_1_18rem] text-sm">
-            <span className="font-medium">{names.length} {noun}{names.length === 1 ? '' : 's'}</span> with an update WordPress found.{' '}
-            <span className="text-muted-foreground">Each folder is kept first, so Undo puts the version from before back.</span>
-          </p>
-          <Checkbox id={`${kind}-update-snapshot`} checked={updates.snapshot} onChange={updates.setSnapshot} disabled={updates.running} label="Snapshot the database first" />
-          <Button size="sm" disabled={updates.running} onClick={() => updates.start(names)}>
-            <ArrowUpCircle />
-            {names.length === 1 ? 'Update it' : `Update all ${names.length}`}
-          </Button>
-        </div>
-      )}
+    <Card role="region" className="overflow-hidden text-sm" aria-label={`Updates of ${kind}`}>
+      <div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
+        <span className="flex min-w-0 flex-[1_1_18rem] items-center gap-2.5">
+          <ArrowUpCircle className={cn('size-4 shrink-0', names.length > 0 ? 'text-warning' : 'text-muted-foreground')} />
+          <span className="min-w-0">
+            <span className="font-medium">{names.length === 0 ? `Every ${noun} is up to date` : `${names.length} ${noun}${names.length === 1 ? ' has' : 's have'} an update`}</span>
+            {names.length > 0 && <span className="text-muted-foreground">: found by WordPress; each folder is kept first, so Undo puts the version from before back</span>}
+          </span>
+        </span>
+        {names.length > 0 && (
+          <>
+            <Checkbox id={`${kind}-update-snapshot`} checked={updates.snapshot} onChange={updates.setSnapshot} disabled={updates.running} label="Snapshot the database first" />
+            <Button size="sm" disabled={updates.running} onClick={() => updates.start(names)}>
+              <ArrowUpCircle />
+              {names.length === 1 ? 'Update it' : `Update all ${names.length}`}
+            </Button>
+          </>
+        )}
+      </div>
       <JobFooter job={updates.job.job} error={updates.job.error} onRetry={() => void updates.job.retry()} />
     </Card>
   );
@@ -149,6 +157,7 @@ function ThemesView({ site }: { site: Site }) {
   // As on Plugins: Details adds what each theme says it is and who made it; it starts compact every time.
   const [details, setDetails] = useState(false);
   const updates = useUpdates(site, 'themes', reload);
+  const [viewing, setViewing] = useState<DetailsTarget | null>(null);
   if (error && !data) {
     return (
       <Notice action={<Button size="sm" variant="outline" onClick={reload}><RefreshCw />Try again</Button>}>{error}</Notice>
@@ -217,6 +226,12 @@ function ThemesView({ site }: { site: Site }) {
                     </p>
                   )}
                 </div>
+                {t.update && t.wporg && (
+                  <Button size="xs" variant="soft" className="shrink-0" onClick={() => setViewing({ kind: 'theme', slug: t.wporg as string, title: t.title, installed: t.version ?? '', update: t.update })} aria-label={`View the details of ${t.title} ${t.update}`}>
+                    <Info />
+                    View details
+                  </Button>
+                )}
                 {canUpdateTheme(t) && (
                   <Button size="xs" variant="outline" className="shrink-0" disabled={updates.running} onClick={() => updates.start([t.name])} aria-label={`Update ${t.title} to ${t.update}`}>
                     <ArrowUpCircle />
@@ -229,6 +244,13 @@ function ThemesView({ site }: { site: Site }) {
         </Card>
       )}
       <p className="text-xs text-muted-foreground">The theme is switched in wp-admin, under Appearance: the panel only lists them.</p>
+      <PluginDetailsDialog
+        site={site}
+        target={viewing}
+        onClose={() => setViewing(null)}
+        updating={updates.running}
+        {...(viewing && data.themes.some((t) => t.wporg === viewing.slug && canUpdateTheme(t)) ? { onUpdate: () => { const t = data.themes.find((x) => x.wporg === viewing.slug); setViewing(null); if (t) updates.start([t.name]); } } : {})}
+      />
     </div>
   );
 }
@@ -250,6 +272,7 @@ function PluginsView({ site }: { site: Site }) {
   // The Overview's "3 updates" opens the list on them (show=updates).
   const [filter, setFilter] = useState<Filter>(useQueryParam('show') === 'updates' ? 'updates' : 'all');
   const updates = useUpdates(site, 'plugins', reload);
+  const [viewing, setViewing] = useState<DetailsTarget | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [asking, setAsking] = useState<SitePlugin | null>(null);
   // Details adds what each plugin says it does and who made it; it starts compact every time.
@@ -391,6 +414,12 @@ function PluginsView({ site }: { site: Site }) {
                     </p>
                   )}
                 </div>
+                {p.update && p.wporg && (
+                  <Button size="xs" variant="soft" className="shrink-0" onClick={() => setViewing({ kind: 'plugin', slug: p.wporg as string, title: p.title, installed: p.version, update: p.update })} aria-label={`View the details of ${p.title} ${p.update}`}>
+                    <Info />
+                    View details
+                  </Button>
+                )}
                 {canUpdate(p) && (
                   <Button size="xs" variant="outline" className="shrink-0" disabled={updates.running} onClick={() => updates.start([p.name])} aria-label={`Update ${p.title} to ${p.update}`}>
                     <ArrowUpCircle />
@@ -403,6 +432,14 @@ function PluginsView({ site }: { site: Site }) {
           <ShowMore {...more.footer} noun="plugins" />
         </Card>
       )}
+
+      <PluginDetailsDialog
+        site={site}
+        target={viewing}
+        onClose={() => setViewing(null)}
+        updating={updates.running}
+        {...(viewing && plugins.some((p) => p.wporg === viewing.slug && canUpdate(p)) ? { onUpdate: () => { const p = plugins.find((x) => x.wporg === viewing.slug); setViewing(null); if (p) updates.start([p.name]); } } : {})}
+      />
 
       <Dialog
         open={asking !== null}
@@ -478,13 +515,3 @@ function VulnerableBadge({ hit }: { hit: Hit | undefined }) {
 }
 
 /** Version order, part by part, as the server compares them. */
-function compareVersions(a: string, b: string): number {
-  const x = a.split(/[.+-]/);
-  const y = b.split(/[.+-]/);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const p = Number(x[i] ?? 0);
-    const q = Number(y[i] ?? 0);
-    if (p !== q && Number.isFinite(p) && Number.isFinite(q)) return p < q ? -1 : 1;
-  }
-  return 0;
-}

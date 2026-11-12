@@ -129,6 +129,20 @@ repo is updated, and the job says to commit it there. Must-use plugins,
 drop-ins, one-file plugins, links and themes kept in a repo are left to
 you. The Overview's "3 updates" opens the list on them.
 
+**View details**, on a row whose plugin or theme is on WordPress.org, opens
+what wp-admin calls "View version details": the **Changelog** first, with
+the versions this update brings in a box of their own and the installed one
+marked, then **Description**, **Installation** and **FAQ**. Beside them are
+the version, when it was last updated, active installs and rating, and what
+it needs next to what the site has: the PHP and WordPress versions it needs
+(in red when the site is below either) and the WordPress it was tested up to
+(in amber when the site is on a newer one). **Update to** is at the bottom.
+The panel asks WordPress.org by slug only, never a version or a site's name,
+when you open it, and keeps the answer six hours. Its text is read on the
+server into paragraphs, headings, lists, code and links, so none of
+WordPress.org's HTML runs in the panel. A paid plugin that updates itself is
+not on WordPress.org and has no details here.
+
 **Missing plugins**, one row under the search and filters (and **missing
 themes**, one row in the Themes view): plugins the
 database names that the site's files lack, after a database import or a pull.
