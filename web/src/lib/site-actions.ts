@@ -1,4 +1,5 @@
 import type { ActionId, ActionRunResult } from '@devmagic-panel/shared';
+import { navigate } from '@/lib/router';
 import { api, isMockup } from '@/lib/api';
 import { lastLine } from '@/lib/output';
 import { toast } from '@/lib/toast';
@@ -9,7 +10,13 @@ export { lastLine };
 export async function runWithToast(id: ActionId, input: Record<string, unknown>, label: string): Promise<ActionRunResult | null> {
   try {
     const result = await api.runAction(id, input);
-    toast(result.ok ? { tone: 'success', title: label } : { tone: 'danger', title: `${label} failed`, detail: lastLine(result.output) });
+    // An action that starts a job (an update) has only started: the toast says so and opens its progress.
+    const jobId = result.ok ? result.data?.jobId : undefined;
+    toast(
+      jobId ? { tone: 'success', title: `${label}: started`, action: { label: 'Show progress', run: () => navigate(`/jobs/${encodeURIComponent(jobId)}`) } }
+      : result.ok ? { tone: 'success', title: label }
+      : { tone: 'danger', title: `${label} failed`, detail: lastLine(result.output) },
+    );
     return result;
   } catch (error) {
     toast({ tone: 'danger', title: `${label} failed`, detail: (error as Error).message });

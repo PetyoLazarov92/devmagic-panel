@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.44.0 (2026-11-13)
+* **Aura:** a plugin or theme with a known vulnerability and a fixed version has **Update** on its line. It says first what happens (the newest version from WordPress.org with WP-CLI, a database snapshot first, the old folder kept so Undo puts it back), then starts the same job as the Plugins tab, with **Show progress** in the toast. One-file and must-use plugins and themes kept in a repo keep the hint to update them by hand. **Fix all** and the login briefing leave updates out, so they never start in bulk
+* **Plugins:** the details window is wider and keeps one height from the start: the text scrolls and the facts stay in view
+* **Look:** every dialog has × in its top right corner to close it. Full screen, where a dialog has it, sits just left of ×, so the two are no longer mistaken for each other
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.43.1 (2026-11-13)
 * **Dependencies:** `@hono/node-server` 2.1.8, which the MCP SDK brings for its HTTP transport (security fixes in 2.1.6 and 2.1.7). The panel's MCP server uses the SDK's stdio transport, so the panel never loads it; this clears the alerts
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

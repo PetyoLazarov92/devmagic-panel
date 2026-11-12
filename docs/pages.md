@@ -54,7 +54,13 @@ problem in one list, with one-click fixes and **Fix all**:
   asked about, never a version: the answer lists every known vulnerability with
   its version range, and the panel compares the installed version here. A high
   or critical one fails, the others warn, each with the fixed version and its
-  advisory. Answers are kept a day per slug.
+  advisory. Answers are kept a day per slug. When a fixed version exists and
+  the plugin or theme is a folder the panel updates (not one file, must-use or
+  a theme kept in a repo), the line has **Update**: it says first what happens
+  (the newest version from WordPress.org, a database snapshot first, the old
+  folder kept for Undo) and then starts the same job as the Plugins tab, with
+  **Show progress** in the toast. **Fix all** and the login briefing leave
+  these out, so updates are never started in bulk.
 
 **Machine checks** (`/aura/machine`): every check of this machine, passing or
 not. The panel's own installation (files, root scripts, build), Apache,

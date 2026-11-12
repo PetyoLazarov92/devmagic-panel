@@ -57,7 +57,7 @@ export function PluginDetailsDialog({ site, target, onClose, onUpdate, updating 
     <Dialog
       open={target !== null}
       onClose={onClose}
-      size="lg"
+      size="xl"
       title={target ? data?.name ?? target.title : ''}
       description={target ? `${target.installed} installed${target.update ? ` · ${target.update} available` : ''}` : undefined}
       footer={
@@ -77,8 +77,9 @@ export function PluginDetailsDialog({ site, target, onClose, onUpdate, updating 
       {data && target && (
         <div className="grid gap-4">
           {sections.length > 1 && <Tabs size="sm" label="Details" value={tab} onChange={setTab} items={sections.map((s) => ({ value: s, label: SECTION_LABEL[s] }))} />}
-          <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_12rem]">
-            <div className="min-w-0">
+          {/* One height from the start, whatever the tab: the text scrolls, the facts stay in view. */}
+          <div className="grid gap-6 sm:h-[min(60dvh,34rem)] sm:grid-cols-[minmax(0,1fr)_14rem]">
+            <div className="min-w-0 sm:overflow-y-auto sm:pr-2">
               {tab === 'changelog' && sections.includes('changelog') ? (
                 <Changelog details={data} installed={target.installed} update={target.update} />
               ) : (

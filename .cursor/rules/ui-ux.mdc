@@ -126,6 +126,10 @@ lowers one lowers the baseline there too.
   through **Import a database** (production's saved server, or a dump from
   any source), and whether it is cleaned is **The copy** (`CopyChoice`, As it
   is or Cleaned), the same control in the new site wizard.
+- **Every dialog has × in its top right corner** (`Dialog` draws it), as
+  Escape does; one that must stay open while it runs says why instead of
+  closing. A dialog that can fill the screen has that button just left of ×,
+  with its own icon, never in ×'s place. The Parts page shows one.
 - **Dialogs with long content** pass their buttons as `footer`, so the
   content scrolls between the title and them; a row's dialogs also pass
   `fullScreen` (`useRowDialogFull`), remembered as a preference. Confirm

@@ -76,7 +76,7 @@ export function BriefingCard() {
               <p>{point.text}</p>
               {point.items.some((i) => i.fix) && (
                 <div className="flex flex-wrap gap-2">
-                  {point.items.filter((i, idx, all) => i.fix && all.findIndex((x) => JSON.stringify(x.fix) === JSON.stringify(i.fix)) === idx).map((item) => (
+                  {point.items.filter((i, idx, all) => i.fix && !i.fix.confirm && all.findIndex((x) => JSON.stringify(x.fix) === JSON.stringify(i.fix)) === idx).map((item) => (
                     <FixButton key={`${item.id}:${item.domain ?? ''}`} item={item} />
                   ))}
                 </div>

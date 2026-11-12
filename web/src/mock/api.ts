@@ -39,6 +39,14 @@ const MOCK_VULNERABILITIES: SiteVulnerabilities = {
       version: '1.7.2',
       vulnerabilities: [{ title: 'Hello Wands < 1.7.3: reflected cross-site scripting in its settings page', severity: 'medium', score: 6.1, fixedIn: '1.7.3', link: 'https://www.cve.org/' }],
     },
+    {
+      kind: 'plugin',
+      slug: 'seo-by-rank-math',
+      title: 'Rank Math SEO',
+      version: '1.0.279',
+      name: 'seo-by-rank-math',
+      vulnerabilities: [{ title: 'Rank Math SEO < 1.0.280: missing authorization on a settings route', severity: 'high', score: 7.5, fixedIn: '1.0.280', link: 'https://www.cve.org/' }],
+    },
   ],
 };
 
@@ -1169,6 +1177,11 @@ export const mockApi: Api = {
     return { ...environment, checkedAt: new Date().toISOString() };
   },
   runAction: async (id, input): Promise<ActionRunResult> => {
+    // An update started from Aura's fix runs as the job the Plugins tab starts, and says which.
+    if (id === 'site.updatePlugins') {
+      const jobId = await mockApi.startJob(id, input);
+      return { runId: 42, ok: true, exitCode: 0, output: `started ${jobId}`, data: { jobId } };
+    }
     await wait(700);
     const cron = mockCronAction(id, input);
     if (cron) return cron;
@@ -1653,6 +1666,23 @@ export const mockApi: Api = {
         hint: 'Hello Wands < 1.7.3: reflected cross-site scripting in its settings page. Update it with WP-CLI or in wp-admin, the way production updates it. From WPVulnerability.',
         domain: sites[0]?.domain ?? 'local.spellbook.example',
       });
+      // A plugin folder with a fixed version: Update, asked first, as the server offers it.
+      if (!mockUpdated.has('seo-by-rank-math')) {
+        const domain = 'local.spellbook.example';
+        items.push({
+          id: 'site.vulnerable',
+          status: 'fail',
+          text: 'Rank Math SEO 1.0.279 has 1 known vulnerability, the worst high: fixed in 1.0.280',
+          hint: 'Rank Math SEO < 1.0.280: missing authorization on a settings route (https://www.cve.org/). Update takes the newest version from WordPress.org. From WPVulnerability.',
+          domain,
+          fix: {
+            action: 'site.updatePlugins',
+            input: { domain, plugins: ['seo-by-rank-math'], themes: [], snapshot: true },
+            label: 'Update Rank Math SEO',
+            confirm: 'Updates Rank Math SEO from 1.0.279 to the newest version on WordPress.org (fixed in 1.0.280) with WP-CLI, after a snapshot of the database. Its folder is kept in the file trash first, so Undo on the job puts 1.0.279 back.',
+          },
+        });
+      }
     }
     items.sort((a, b) => (a.status === b.status ? 0 : a.status === 'fail' ? -1 : 1));
     return { checkedAt: new Date().toISOString(), items };

@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 import { createContext, type ReactNode, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DIALOG_SIZES, type DialogSize } from '@/lib/dialog-sizes';
@@ -90,6 +90,9 @@ export function Dialog({ open, onClose, title, description, children, size = 'md
     if (!open && full.on) full.onChange(false);
   }, [open]);
 
+  // The ×: as Escape, so a dialog that must stay open (a run in progress) says why instead of closing.
+  const closeAsked = () => (closeOnEscape ? onClose() : onKeptOpen?.());
+
   return (
     <dialog
       ref={ref}
@@ -123,14 +126,14 @@ export function Dialog({ open, onClose, title, description, children, size = 'md
       {open &&
         (footer === undefined ? (
           <div className={cn(!bare && 'p-5')}>
-            <Heading id={titleId} title={title} bare={bare} fullScreen={fullScreen} />
+            <Heading id={titleId} title={title} bare={bare} fullScreen={fullScreen} onClose={closeAsked} />
             {description && !bare && <div className="mt-1 text-sm text-muted-foreground">{description}</div>}
             <div className={cn(!bare && 'mt-4')}>{children}</div>
           </div>
         ) : (
           <div className={cn('flex max-h-[calc(100dvh-2rem)] flex-col', full.on && 'h-full')}>
             <div className="shrink-0 px-5 pt-5">
-              <Heading id={titleId} title={title} bare={bare} fullScreen={fullScreen} />
+              <Heading id={titleId} title={title} bare={bare} fullScreen={fullScreen} onClose={closeAsked} />
               {description && !bare && <div className="mt-1 text-sm text-muted-foreground">{description}</div>}
             </div>
             {/* Room on every side, so a focused field's ring is never cut off. */}
@@ -143,21 +146,33 @@ export function Dialog({ open, onClose, title, description, children, size = 'md
   );
 }
 
-function Heading({ id, title, bare, fullScreen }: { id: string; title: string; bare: boolean | undefined; fullScreen: Props['fullScreen'] }) {
+/**
+ * The title, and in the top right corner × to close, where every app has it. A dialog that can
+ * fill the screen has its button just left of ×, with its own icon and name, so the two are
+ * never taken for each other.
+ */
+function Heading({ id, title, bare, fullScreen, onClose }: { id: string; title: string; bare: boolean | undefined; fullScreen: Props['fullScreen']; onClose: () => void }) {
   const h2 = (
     <h2 id={id} className={cn('text-base font-semibold tracking-tight', bare && 'sr-only')}>
       {title}
     </h2>
   );
-  if (!fullScreen || bare) return h2;
-  const Icon = fullScreen.on ? Minimize2 : Maximize2;
-  const label = fullScreen.on ? 'Back to the usual size' : 'Full screen';
+  if (bare) return h2;
+  const Icon = fullScreen?.on ? Minimize2 : Maximize2;
+  const label = fullScreen?.on ? 'Back to the usual size' : 'Full screen';
   return (
     <div className="flex items-start gap-2">
       <div className="min-w-0 flex-1">{h2}</div>
-      <Button variant="ghost" size="icon" onClick={() => fullScreen.onChange(!fullScreen.on)} aria-label={label} title={label} className="-mt-1.5 -mr-2 size-8 text-muted-foreground hover:text-foreground">
-        <Icon />
-      </Button>
+      <div className="-mt-1.5 -mr-2 flex shrink-0 items-center gap-0.5">
+        {fullScreen && (
+          <Button variant="ghost" size="icon" onClick={() => fullScreen.onChange(!fullScreen.on)} aria-label={label} title={label} className="size-8 text-muted-foreground hover:text-foreground">
+            <Icon />
+          </Button>
+        )}
+        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close" title="Close" className="size-8 text-muted-foreground hover:text-foreground">
+          <X />
+        </Button>
+      </div>
     </div>
   );
 }

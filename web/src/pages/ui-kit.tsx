@@ -5,6 +5,7 @@ import { ScopeLabel } from '@/components/layout/scope-label';
 import { Badge, CountBadge, StatusBadge } from '@/components/ui/badge';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { Card, CardBody, CardFooter, CardHeader, CardSection } from '@/components/ui/card';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { FilterBar, FilterChips } from '@/components/ui/filter-chips';
@@ -30,6 +31,7 @@ import { TextLink } from '@/components/ui/text-link';
 export function UiKitPage() {
   const [tab, setTab] = useState<'overview' | 'logs' | 'files'>('overview');
   const [view, setView] = useState<'overview' | 'tables' | 'sql'>('tables');
+  const [dialog, setDialog] = useState(false);
   const [filter, setFilter] = useState<'all' | 'on' | 'off' | 'updates'>('all');
   const [mode, setMode] = useState<'compact' | 'details'>('compact');
   const [on, setOn] = useState(true);
@@ -206,6 +208,21 @@ export function UiKitPage() {
         <Notice tone="success">The database is imported.</Notice>
         <Notice tone="info">Tables WordPress makes that this database lacks: wp_termmeta.</Notice>
         <EmptyState icon={Server} title="No sites on nginx" action={<Button variant="outline">Set up nginx</Button>}>Sites move to nginx from their Server tab once nginx runs next to Apache.</EmptyState>
+      </Section>
+
+      <Section title="Dialogs" rule="Every dialog has × in its top right corner, as Escape and Cancel do. One that can fill the screen (a file, a long review) has that button just left of ×, with its own icon. Buttons sit in the footer: the way out first, the main action last.">
+        <Button variant="outline" className="justify-self-start" onClick={() => setDialog(true)}>Open a dialog</Button>
+        <Dialog
+          open={dialog}
+          onClose={() => setDialog(false)}
+          title="Web server for local.spellbook.example"
+          description="Pick the setup the site runs on in production."
+          size="lg"
+          expandable
+          footer={<><Button variant="soft" onClick={() => setDialog(false)}>Cancel</Button><Button onClick={() => setDialog(false)}>Switch</Button></>}
+        >
+          <p className="text-sm">The dialog's content. Full screen makes room for a long review; × or Escape closes it.</p>
+        </Dialog>
       </Section>
 
       <Section title="Bars" rule="A view's bar: what it is about on the left, Check again on the right, when it was read under it.">

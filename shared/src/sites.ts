@@ -522,7 +522,8 @@ export interface SiteVulnerabilities {
   checkedAt: string;
   /** How many plugins and themes were looked up: only ones WordPress.org has. */
   checked: number;
-  hits: Array<{ kind: 'plugin' | 'theme'; slug: string; title: string; version: string; vulnerabilities: KnownVulnerability[] }>;
+  /** name: its folder in wp-content/plugins or wp-content/themes, when the panel can update it there (site.updatePlugins); none for a one-file or must-use plugin or a theme in a repo. */
+  hits: Array<{ kind: 'plugin' | 'theme'; slug: string; title: string; version: string; name?: string; vulnerabilities: KnownVulnerability[] }>;
 }
 
 /** Whether the vulnerability check is on, runs now, and what it last found for a site. */

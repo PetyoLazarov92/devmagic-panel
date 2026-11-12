@@ -118,8 +118,9 @@ export async function vulnerabilitiesOf(kind: 'plugin' | 'theme', slug: string, 
 export async function checkSite(exec: Executor, site: ReturnType<typeof siteFor>, store: Pick<RunStore, 'getMeta' | 'setMeta'>, fetcher: FetchJson = fetchJson, now = Date.now()): Promise<SiteVulnerabilities> {
   const [plugins, themes] = await Promise.all([readPlugins(exec, site), readThemes(exec, site)]);
   const items = [
-    ...plugins.plugins.flatMap((p) => (p.wporg && p.version ? [{ kind: 'plugin' as const, slug: p.wporg, title: p.title, version: p.version }] : [])),
-    ...themes.themes.flatMap((t) => (t.wporg && t.version ? [{ kind: 'theme' as const, slug: t.wporg, title: t.title, version: t.version }] : [])),
+    // Its folder too when the panel can update it there: a plugin folder (not one file, must-use or a drop-in), a theme right in wp-content/themes.
+    ...plugins.plugins.flatMap((p) => (p.wporg && p.version ? [{ kind: 'plugin' as const, slug: p.wporg, title: p.title, version: p.version, ...(!p.oneFile && p.status !== 'must-use' && p.status !== 'dropin' ? { name: p.name } : {}) }] : [])),
+    ...themes.themes.flatMap((t) => (t.wporg && t.version ? [{ kind: 'theme' as const, slug: t.wporg, title: t.title, version: t.version, ...(!t.inRepo && t.folder === `wp-content/themes/${t.name}` ? { name: t.name } : {}) }] : [])),
   ];
   const hits: SiteVulnerabilities['hits'] = [];
   for (const item of items) {
@@ -141,13 +142,26 @@ export function vulnerabilityItems(sites: readonly Site[], kept: (site: string) 
       const serious = top?.severity === 'high' || top?.severity === 'critical';
       const fixed = hit.vulnerabilities.map((v) => v.fixedIn).filter((v): v is string => Boolean(v)).sort(compareVersions).at(-1);
       const count = hit.vulnerabilities.length;
+      // A fixed version and a folder the panel updates: Update, from WordPress.org, a snapshot first, asked first.
+      const canUpdate = Boolean(fixed && hit.name);
+      const what = `${hit.kind === 'theme' ? 'the theme ' : ''}${hit.title}`;
       return {
         id: 'site.vulnerable',
         status: serious ? 'fail' : 'warn',
         text: `${hit.kind === 'theme' ? 'The theme ' : ''}${hit.title} ${hit.version} has ${count} known vulnerabilit${count === 1 ? 'y' : 'ies'}${top?.severity ? `, the worst ${top.severity}` : ''}${fixed ? `: fixed in ${fixed}` : hit.vulnerabilities.some((v) => v.unfixed) ? ': not fixed yet' : ''}`,
-        hint: `${top?.title ?? ''}${top?.link ? ` (${top.link})` : ''}. Update it with WP-CLI or in wp-admin, the way production updates it. From WPVulnerability, checked ${found?.checkedAt.slice(0, 10)}.`,
+        hint: `${top?.title ?? ''}${top?.link ? ` (${top.link})` : ''}. ${canUpdate ? 'Update takes the newest version from WordPress.org' : 'Update it with WP-CLI or in wp-admin, the way production updates it'}. From WPVulnerability, checked ${found?.checkedAt.slice(0, 10)}.`,
         domain: site.domain,
         ...(site.path ? { path: site.path } : {}),
+        ...(canUpdate && hit.name
+          ? {
+              fix: {
+                action: 'site.updatePlugins' as const,
+                input: { domain: site.domain, ...(site.path ? { path: site.path } : {}), plugins: hit.kind === 'plugin' ? [hit.name] : [], themes: hit.kind === 'theme' ? [hit.name] : [], snapshot: true },
+                label: `Update ${hit.title}`,
+                confirm: `Updates ${what} from ${hit.version} to the newest version on WordPress.org (fixed in ${fixed}) with WP-CLI, after a snapshot of the database. Its folder is kept in the file trash first, so Undo on the job puts ${hit.version} back.`,
+              },
+            }
+          : {}),
       };
     });
   });

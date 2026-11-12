@@ -76,10 +76,18 @@ describe('known vulnerabilities', () => {
     // The custom plugin is never named outside.
     expect(asked).toEqual(['https://www.wpvulnerability.net/plugin/hello-wands/']);
     expect(found.checked).toBe(1);
-    expect(found.hits).toEqual([{ kind: 'plugin', slug: 'hello-wands', title: 'Hello Wands', version: '1.7.2', vulnerabilities: [expect.objectContaining({ fixedIn: '1.7.3', severity: 'medium' })] }]);
+    expect(found.hits).toEqual([{ kind: 'plugin', slug: 'hello-wands', title: 'Hello Wands', version: '1.7.2', name: 'hello-wands', vulnerabilities: [expect.objectContaining({ fixedIn: '1.7.3', severity: 'medium' })] }]);
 
     const items = vulnerabilityItems([{ domain: 'local.shop.com' } as Site], () => found);
     expect(items[0]).toMatchObject({ id: 'site.vulnerable', status: 'warn', domain: 'local.shop.com', text: 'Hello Wands 1.7.2 has 1 known vulnerability, the worst medium: fixed in 1.7.3' });
+    // A fixed version and a plugin folder: Update, a snapshot first, asked first.
+    expect(items[0]?.fix).toMatchObject({ action: 'site.updatePlugins', input: { domain: 'local.shop.com', plugins: ['hello-wands'], themes: [], snapshot: true }, label: 'Update Hello Wands' });
+    expect(items[0]?.fix?.confirm).toContain('Undo on the job puts 1.7.2 back');
+    // Nothing fixed yet, or no folder the panel updates (a must-use plugin, a theme in a repo): no Update.
+    const unfixed = { ...found, hits: found.hits.map((h) => ({ ...h, vulnerabilities: h.vulnerabilities.map(({ fixedIn: _f, ...v }) => ({ ...v, unfixed: true as const })) })) };
+    expect(vulnerabilityItems([{ domain: 'local.shop.com' } as Site], () => unfixed)[0]?.fix).toBeUndefined();
+    const noFolder = { ...found, hits: found.hits.map(({ name: _n, ...h }) => h) };
+    expect(vulnerabilityItems([{ domain: 'local.shop.com' } as Site], () => noFolder)[0]?.fix).toBeUndefined();
 
     const watch = new VulnerabilityWatch(store, fake.exec, t.config, fetcher);
     const sites = async () => [{ domain: 'local.shop.com', core: { kind: 'wpcore' } } as unknown as Site];

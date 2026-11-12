@@ -20,11 +20,11 @@ import { Spinner } from '@/components/ui/spinner';
 
 const MACHINE = 'This machine';
 
-/** One run per distinct fix: a cert reissue fixes every cert issue of its site. */
+/** One run per distinct fix: a cert reissue fixes every cert issue of its site. One that asks first (an update) is left to its own button. */
 function distinctFixes(items: AuraItem[]): CheckFix[] {
   const seen = new Map<string, CheckFix>();
   for (const item of items) {
-    if (item.fix) seen.set(`${item.fix.action}:${JSON.stringify(item.fix.input)}`, item.fix);
+    if (item.fix && !item.fix.confirm) seen.set(`${item.fix.action}:${JSON.stringify(item.fix.input)}`, item.fix);
   }
   return [...seen.values()];
 }
@@ -101,7 +101,7 @@ function Problems() {
           <>
             {failing > 0 && <Badge tone="danger">{failing} failing</Badge>}
             {items.length - failing > 0 && <Badge tone="warning">{items.length - failing === 1 ? '1 warning' : `${items.length - failing} warnings`}</Badge>}
-            <span className="text-xs text-muted-foreground">{fixes.length} with a one-click fix</span>
+            <span className="text-xs text-muted-foreground">{items.filter((i) => i.fix).length} with a one-click fix</span>
           </>
         ) : null}
         {report && <span className="text-xs text-muted-foreground">Checked {new Date(report.checkedAt).toLocaleTimeString()}</span>}

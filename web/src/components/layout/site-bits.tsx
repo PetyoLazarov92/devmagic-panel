@@ -3,6 +3,7 @@ import { INSTALL_HOW_LABELS, namespaceLabel, repoWeb } from '@devmagic-panel/sha
 import { CircleAlert, CircleX, Network, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
 import { shortDate } from '@/lib/format';
 import { runWithToast } from '@/lib/site-actions';
 import { cn } from '@/lib/utils';
@@ -38,10 +39,13 @@ export function IssueLine({ issue }: { issue: SiteIssue }) {
 /** An issue with its one-click fix, or what to do by hand when there is none. */
 export function IssueRow({ issue, domain, onFixed }: { issue: SiteIssue; domain?: string; onFixed?: () => void }) {
   const [busy, setBusy] = useState(false);
+  // A fix with words to read first (an update) asks inline before it runs.
+  const [asking, setAsking] = useState(false);
   const fix = issue.fix;
 
   async function runFix() {
     if (!fix) return;
+    setAsking(false);
     setBusy(true);
     const result = await runWithToast(fix.action, fix.input, domain ? `${fix.label} (${domain})` : fix.label);
     setBusy(false);
@@ -55,10 +59,19 @@ export function IssueRow({ issue, domain, onFixed }: { issue: SiteIssue; domain?
         {issue.hint && <p className="mt-0.5 pl-5 text-xs text-muted-foreground">{issue.hint}</p>}
       </div>
       {fix && (
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void runFix()}>
+        <Button size="sm" variant="outline" disabled={busy || asking} onClick={() => (fix.confirm ? setAsking(true) : void runFix())}>
           {busy ? <Spinner /> : <Wrench />}
           {fix.label}
         </Button>
+      )}
+      {fix?.confirm && asking && (
+        <Notice tone="warning" size="inline" className="basis-full">
+          <p>{fix.confirm}</p>
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" onClick={() => void runFix()}>{fix.label}</Button>
+            <Button size="sm" variant="soft" onClick={() => setAsking(false)}>Cancel</Button>
+          </div>
+        </Notice>
       )}
     </div>
   );
