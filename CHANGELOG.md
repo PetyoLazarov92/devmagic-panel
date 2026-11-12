@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.43.1 (2026-11-13)
+* **Dependencies:** `@hono/node-server` 2.1.8, which the MCP SDK brings for its HTTP transport (security fixes in 2.1.6 and 2.1.7). The panel's MCP server uses the SDK's stdio transport, so the panel never loads it; this clears the alerts
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.43.0 (2026-11-13)
 * **Plugins:** **View details** on a plugin or theme with an update opens what wp-admin calls "View version details": the changelog first, the versions this update brings in a box of their own, then the description, installation and FAQ. Beside them, the version, last update, installs and rating, and what it needs next to what the site has: PHP and WordPress below what it needs in red, a WordPress newer than it was tested with in amber. **Update to** sits at the bottom
 * **Plugins:** the panel asks WordPress.org by slug only, when you open the details, and keeps the answer six hours. Its HTML is read on the server into plain paragraphs, lists, code and links, so nothing of it runs in the panel
