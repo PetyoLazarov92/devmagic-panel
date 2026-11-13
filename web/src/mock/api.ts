@@ -176,6 +176,8 @@ const mockProduction: Record<string, ProductionSettings> = {
   'local.spellbook.example': { host: 'spellbook-prod', folder: '/var/www/spellbook/public', excludeRows: ['wp_actionscheduler_logs', 'wp_redirection_404'], clean: true },
 };
 const mockJobs = new Map<string, JobView>();
+// The kinds Clean up now emptied in this visit.
+const mockCleaned = new Set<string>();
 // The panel's own timed work, as the running panel lists it.
 const mockTasks: Array<Omit<BackgroundTask, 'lastRunAt' | 'nextRunAt'> & { lastAgo: number }> = [
   { id: 'drafts', label: 'Remove expired install drafts', what: 'Removes drafts of the new site wizard that ran out, and their dumps.', everyMs: 10 * 60_000, running: false, lastOk: true, lastAgo: 4 * 60_000 },
@@ -1195,6 +1197,12 @@ export const mockApi: Api = {
     return { ...environment, checkedAt: new Date().toISOString() };
   },
   runAction: async (id, input): Promise<ActionRunResult> => {
+    // Clean up now on Sanctum: that kind reads empty afterwards.
+    if (id === 'storage.clean') {
+      mockCleaned.add(input.kind as string);
+      await wait(500);
+      return { runId: 0, ok: true, exitCode: 0, output: `removed everything of ${String(input.kind)}` };
+    }
     // An update started from Aura's fix runs as the job the Plugins tab starts, and says which.
     if (id === 'site.updatePlugins') {
       const jobId = await mockApi.startJob(id, input);
@@ -2267,19 +2275,20 @@ export const mockApi: Api = {
     await wait(500);
     const MB = 1024 * 1024;
     const rows: PanelStorage['rows'] = [
-      { id: 'snapshots', label: 'Database snapshots', what: "Copies of a site's database: yours, and the ones the panel takes before an import, a restore, a search and replace or updates.", bytes: 1240 * MB, kept: "Yours until you delete them. The panel's own: the newest 3 per site and every one from the last 30 days", task: 'snapshots', where: ['/home/wandworksco/devmagic-panel-backups/snapshots'] },
+      { id: 'snapshots', label: 'Database snapshots', what: "Copies of a site's database: yours, and the ones the panel takes before an import, a restore, a search and replace or updates.", bytes: 1240 * MB, kept: "Yours until you delete them. The panel's own: the newest 3 per site and every one from the last 30 days", clean: { kind: 'snapshots', goes: 'Every snapshot the panel took before a change. The ones you took stay.' }, where: ['/home/wandworksco/devmagic-panel-backups/snapshots'] },
       { id: 'clean', label: 'Clean copies', what: 'Databases exported without personal data, to share.', bytes: 86 * MB, kept: 'Until you delete them', manage: { note: "Delete one on its site's Database tab, under Backups and tools", label: 'Sites', href: '/sites' }, where: ['/home/wandworksco/devmagic-panel-backups/clean'] },
       { id: 'undo', label: 'Backups for Undo', what: "What a change replaced: config files before a root change, clean-ups, row edits, crontabs and removed sites' extras.", bytes: 3.4 * MB, kept: 'Clean-ups and row edits 14 days; the backups dmp-restore restores a change from stay until you remove them', where: ['/home/wandworksco/devmagic-panel-backups'] },
-      { id: 'trash', label: 'Deleted sites', what: 'Sites you deleted or replaced, archived with their files, config and database, to restore.', bytes: 412 * MB, kept: '14 days', task: 'trash', where: ['$STATE_DIR/trash (root)'] },
-      { id: 'downloads', label: 'Remove old downloaded dumps', what: 'Database dumps you uploaded or the panel downloaded, and files staged for the Files tab.', bytes: 312 * MB, kept: 'A day, unless a job or a draft still uses one', task: 'downloads', where: ['/home/wandworksco/.local/share/devmagic-panel/uploads'] },
-      { id: 'file-trash', label: 'Empty old Files tab deletes', what: 'Files and folders deleted in the Files tab, for Undo.', bytes: 2.1 * MB, kept: '14 days, 1 GB at most', task: 'file-trash', where: ['/home/wandworksco/.local/share/devmagic-panel/file-trash'] },
-      { id: 'mysql-backups', label: 'Remove old MySQL settings backups', what: "MySQL's settings before the panel changed them.", bytes: 48 * 1024, kept: '14 days', task: 'mysql-backups', where: ['/home/wandworksco/.local/share/devmagic-panel/mysql-backups'] },
+      { id: 'trash', label: 'Deleted sites', what: 'Sites you deleted or replaced, archived with their files, config and database, to restore.', bytes: 412 * MB, kept: '14 days', manage: { note: 'Delete one sooner in Removed sites', label: 'Removed sites', href: '/sites?show=removed' }, where: ['$STATE_DIR/trash (root)'] },
+      { id: 'downloads', label: 'Downloaded dumps', what: 'Database dumps you uploaded or the panel downloaded, and files staged for the Files tab.', bytes: 312 * MB, kept: 'A day, unless a job or a draft still uses one', clean: { kind: 'downloads', goes: 'Every downloaded dump, except one a job or a draft still uses.' }, where: ['/home/wandworksco/.local/share/devmagic-panel/uploads'] },
+      { id: 'file-trash', label: 'Files tab deletes', what: 'Files and folders deleted in the Files tab, for Undo.', bytes: 2.1 * MB, kept: '14 days, 1 GB at most', clean: { kind: 'file-trash', goes: 'Every file and folder deleted in the Files tab, and with them their Undo.' }, where: ['/home/wandworksco/.local/share/devmagic-panel/file-trash'] },
+      { id: 'mysql-backups', label: 'MySQL settings backups', what: "MySQL's settings before the panel changed them.", bytes: 48 * 1024, kept: '14 days', clean: { kind: 'mysql-backups', goes: "Every backup of MySQL's settings." }, where: ['/home/wandworksco/.local/share/devmagic-panel/mysql-backups'] },
       { id: 'releases', label: 'Panel versions', what: 'The running version of the panel and the ones before it, to switch back to.', bytes: 257 * MB, kept: 'Three in all', manage: { note: 'Each update removes the oldest', label: 'Updates', href: '/update' }, where: ['/home/wandworksco/.local/share/devmagic-panel/releases'] },
       { id: 'tools', label: 'Mailpit and tools', what: 'Mailpit with the mail it caught, and tools the panel downloaded, like the PHP compatibility check.', bytes: 47 * MB, kept: 'Until you remove Mailpit; mail as Mailpit keeps it', manage: { note: 'Delete caught mail in Mail', label: 'Mail', href: '/mail' }, where: ['/home/wandworksco/.local/share/devmagic-panel/mailpit'] },
-      { id: 'panel', label: 'Run history and logs', what: "The panel's database (Run history, drafts, settings) and its logs.", bytes: 2.3 * MB, kept: 'Runs 90 days, 2000 at most', task: 'runs', where: ['/home/wandworksco/.local/share/devmagic-panel/panel.db'] },
-      { id: 'kept', label: 'Kept databases', what: "A site's database as it was before a swap or a refresh, kept in MySQL to switch back.", bytes: null, count: 2, kept: '7 days', task: 'kept', where: ['MySQL'] },
+      { id: 'panel', label: 'Run history and logs', what: "The panel's database (Run history, drafts, settings) and its logs.", bytes: 2.3 * MB, kept: 'Runs 90 days, 2000 at most', clean: { kind: 'runs', goes: 'Every finished run in Run history. Runs still going and the logs stay.' }, where: ['/home/wandworksco/.local/share/devmagic-panel/panel.db'] },
+      { id: 'kept', label: 'Kept databases', what: "A site's database as it was before a swap or a refresh, kept in MySQL to switch back.", bytes: null, count: 2, items: [{ name: 'spellbook_example__keep261109222729', domain: 'local.spellbook.example', goesAt: '2026-11-16T22:27:33.000Z' }, { name: 'spellbook_learn__keep261110000235', domain: 'local.spellbook.example', path: '/learn', goesAt: '2026-11-17T00:02:39.000Z' }], kept: '7 days (the oldest goes on 16 Nov)', clean: { kind: 'kept', goes: 'Every kept database, except one of a site a job works on. You can no longer switch back to them.' }, where: ['MySQL'] },
     ];
-    return { measuredAt: new Date().toISOString(), rows, totalBytes: rows.reduce((sum, r) => sum + (r.bytes ?? 0), 0) };
+    const shown = rows.map((r) => (r.clean && mockCleaned.has(r.clean.kind) ? { ...r, bytes: r.bytes === null ? null : 0, ...(r.count !== undefined ? { count: 0, items: [] } : {}) } : r));
+    return { measuredAt: new Date().toISOString(), rows: shown, totalBytes: shown.reduce((sum, r) => sum + (r.bytes ?? 0), 0) };
   },
   runPanelTask: async (id) => {
     await wait(700);
@@ -2287,7 +2296,7 @@ export const mockApi: Api = {
     if (!task) throw new Error('No such task');
     task.lastAgo = 0;
     task.lastOk = true;
-    task.lastNote = id === 'downloads' ? 'removed 2 dumps' : '';
+    task.lastNote = id === 'downloads' ? 'removed 2 dumps' : id === 'kept' ? 'none past its 7 days; 2 kept, the oldest goes on 16 Nov' : 'nothing was past its time';
     return { ...task, lastRunAt: new Date().toISOString(), nextRunAt: new Date(Date.now() + task.everyMs).toISOString(), lastAgo: undefined };
   },
   serverSignIn: async (host, how = {}) => {

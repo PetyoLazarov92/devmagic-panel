@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.45.3 (2026-11-13)
+* **Sanctum:** **Clean up now** on a storage row removes all of that kind now, after a confirmation that says what goes: the snapshots the panel took before a change (yours stay), downloaded dumps, the Files tab's deletes, MySQL settings backups, every finished run, or every kept database, listed with its site. What a job or a draft still uses stays. Deleted sites open Removed sites, where each can be deleted. The background tasks' **Run now** still removes only what is past its time
+* **Sanctum:** a background task that found nothing past its time says so, and Drop expired kept databases says how many are kept and when the oldest goes; a kept database that cannot be dropped now shows the task as failed, with why, instead of passing it by each hour. The Kept databases row says when the oldest goes
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.45.2 (2026-11-13)
 * **Updates:** the cards line up as in Settings. With nothing new, the installed releases and how updates arrive are one height, their notes at the bottom, and opening a release's changes grows both. With a release to install, its notes reach down to meet the right column; opened further, only they grow, and the installed releases stay in view as you scroll
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

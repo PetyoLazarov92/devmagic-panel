@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ActionInputError, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs, type JobView } from '../src/jobs.js';
-import { listKept, purgeKept } from '../src/sites/kept.js';
+import { keptItems, keptLeft, listKept, purgeKept } from '../src/sites/kept.js';
 import { RunStore } from '../src/store.js';
 import { DMP, fakeExec, fakeMysql, wpSiteTree } from './helpers.js';
 
@@ -101,5 +101,17 @@ describe('kept databases', () => {
     expect(dropped).toEqual([KEPT]);
     expect(Object.keys(s.server.state()).sort()).toEqual(['other_com__keep261019090000', 'shop_com', 'shop_com__keep261027090000']);
     expect(await purgeKept(s.store, s.exec, null, () => false, now)).toEqual([]);
+    // What is left is said with when the oldest goes: 7 days after it was kept.
+    expect(keptLeft(s.store)).toBe('2 kept, the oldest goes on 26 Oct');
+    s.store.addKeptDatabase({ name: 'shop_com__keep261028090000', site: 'local.shop.com@learn@docs', db: 'shop_com', reason: 'under a path', createdAt: '2026-10-28T09:00:00.000Z' });
+    expect(keptItems(s.store).find((k) => k.name === 'shop_com__keep261028090000')).toEqual({ name: 'shop_com__keep261028090000', domain: 'local.shop.com', path: '/learn/docs', goesAt: '2026-11-04T09:00:00.000Z' });
+  });
+
+  it('says which could not be dropped and why, instead of passing them by each hour', async () => {
+    const s = setup();
+    const exec: typeof s.exec = (file, args, options) => (file === 'mysql' && options?.input?.includes('DROP DATABASE') ? Promise.resolve({ code: 1, stdout: '', stderr: "ERROR 1044 (42000): Access denied for user 'devmagic_panel'@'localhost' to database 'shop_com__keep261020090500'" }) : s.exec(file, args, options));
+    const now = new Date('2026-10-28T10:00:00.000Z').getTime();
+    await expect(purgeKept(s.store, exec, s.mysql, () => false, now)).rejects.toThrow(`could not drop ${KEPT}: ERROR 1044`);
+    expect(s.store.keptDatabases().map((k) => k.name)).toContain(KEPT);
   });
 });

@@ -95,14 +95,15 @@ describe('what the panel keeps on disk', () => {
         stdout: call.args.filter((a) => a.startsWith('/')).map((p) => `${p === backup ? 5000 : p.endsWith('snapshots') ? 3000 : p.endsWith('clean') ? 500 : p.endsWith('releases') ? 9000 : 0}\t${p}`).join('\n'),
       }),
     });
-    const storage = await panelStorage({ config: t.config, exec: fake.exec, dataDir, uploadsDir: join(dataDir, 'uploads'), logsDir: join(t.root, 'logs'), trashBytes: async () => 7000, keptDatabases: () => 2 });
+    const storage = await panelStorage({ config: t.config, exec: fake.exec, dataDir, uploadsDir: join(dataDir, 'uploads'), logsDir: join(t.root, 'logs'), trashBytes: async () => 7000, keptDatabases: () => ({ count: 2, note: '2 kept, the oldest goes on 16 Nov', items: [] }) });
     const row = (id: string) => storage.rows.find((r) => r.id === id);
     expect(row('snapshots')?.bytes).toBe(3000);
     expect(row('clean')?.bytes).toBe(500);
     expect(row('undo')?.bytes).toBe(1500);
     expect(row('releases')?.bytes).toBe(9000);
-    expect(row('trash')).toMatchObject({ bytes: 7000, task: 'trash' });
-    expect(row('kept')).toMatchObject({ bytes: null, count: 2 });
+    expect(row('trash')).toMatchObject({ bytes: 7000, manage: { href: '/sites?show=removed' } });
+    expect(row('kept')?.clean?.kind).toBe('kept');
+    expect(row('kept')).toMatchObject({ bytes: null, count: 2, kept: '7 days (the oldest goes on 16 Nov)' });
     expect(storage.totalBytes).toBe(3000 + 500 + 1500 + 9000 + 7000);
     // One du, only over folders that are there, counting a folder inside another in full.
     const du = fake.calls.filter((c) => c.file === 'du');

@@ -219,6 +219,9 @@ const filePaths = z.array(filePath).min(1).max(500);
 /** A snapshot file in the site's snapshot folder: `20261024-091500-before-import.sql.gz`. */
 export const snapshotName = z.string().regex(/^\d{8}-\d{6}(-[a-z0-9-]{1,40})?\.sql\.gz$/, 'A snapshot file name');
 /** A kept database: a site's tables from before a swap, like shop_com__keep261028143012. */
+/** What Clean up now on the Sanctum page can remove all of at once: storage.clean's kinds. */
+export const STORAGE_CLEAN_KINDS = ['snapshots', 'downloads', 'file-trash', 'mysql-backups', 'kept', 'runs'] as const;
+export type StorageCleanKind = (typeof STORAGE_CLEAN_KINDS)[number];
 export const keptDatabaseName = z.string().regex(/^[A-Za-z0-9_$]{1,46}__keep\d{12}$/, 'A kept database name');
 /** A clean copy's file name: wandworks.example-local-clean-2026.10.28.sql.gz, with -2 and up for another the same day. */
 export const cleanCopyName = z.string().regex(/^[a-z0-9][a-z0-9.-]{0,200}-local-clean-\d{4}\.\d{2}\.\d{2}(-\d{1,3})?\.sql\.gz$/, 'A clean copy file name');
@@ -1361,6 +1364,13 @@ export const actions = {
       "Takes a step skipped when the site was installed (Skip and continue) off the site's page, once you did it yourself, like running the build. Only that step goes; how the site was installed stays, and the job and Run history keep the step as skipped. Nothing on the machine changes.",
     changesSystem: false,
     input: z.object({ domain: localName, path: sitePath, label: z.string().min(1).max(200) }),
+  },
+  'storage.clean': {
+    title: 'Clean up storage now',
+    description:
+      "Removes everything of one kind the panel keeps, now instead of when its time is over: the snapshots it took before a change (the ones you took stay), downloaded dumps, the Files tab's deletes (their Undo goes with them), MySQL settings backups, kept databases (switching back to them is no longer possible) or finished runs of Run history. A dump that a job or a draft still uses, and a kept database of a site a job works on, stay. Needs confirm set to clean.",
+    changesSystem: false,
+    input: z.object({ kind: z.enum(STORAGE_CLEAN_KINDS), confirm: z.literal('clean', 'Confirm with clean') }),
   },
   'history.clear': {
     title: 'Clear run history',

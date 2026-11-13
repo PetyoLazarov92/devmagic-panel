@@ -108,15 +108,22 @@ and its storage in all. Under them, one list at a time:
   long it stays (point at a name for what it is): database snapshots, clean
   copies, backups for Undo, deleted sites, downloaded dumps, the Files tab's
   deletes, MySQL settings backups, panel versions, Mailpit and tools, Run
-  history and logs, and kept databases. **Clean up now** runs that kind's own
-  task, so only what is past its time goes. The kinds no task clears say why
-  and open where you manage them: clean copies on a site's Database tab,
-  panel versions on Updates (three are kept), caught mail in Mail; backups
-  for Undo stay for `dmp-restore`. Snapshots the panel takes before a change
+  history and logs, and kept databases. **Clean up now** removes all of that
+  kind now, after a confirmation that says what goes (and, for kept
+  databases, lists them): the snapshots the panel took before a change (yours
+  stay), downloaded dumps (except one a job or a draft uses), the Files tab's
+  deletes with their Undo, MySQL settings backups, every finished run, or
+  every kept database (except one of a site a job works on). It is the
+  `storage.clean` action, so Run history has it. The other kinds open where
+  you manage them: clean copies on a site's Database tab, deleted sites in
+  Removed sites, panel versions on Updates (three are kept), caught mail in
+  Mail; backups for Undo stay for `dmp-restore`. Snapshots the panel takes before a change
   (`before-import` and the like) keep the newest 3 per site and every one
   from the last 30 days; the ones you take stay until you delete them.
 - **Background tasks** (`?view=tasks`): the work the panel does on its own,
-  how often, what each last did and when it runs next, with **Run now**:
+  how often, what each last did and when it runs next, with **Run now**,
+  which like the timer removes only what is past its time and says so when
+  nothing was:
   remove expired install drafts (every 10 minutes); trim Run history, remove
   old downloaded dumps, Files tab deletes and MySQL settings backups, drop
   expired kept databases (hourly); remove old automatic snapshots (daily);

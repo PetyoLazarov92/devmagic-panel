@@ -1,3 +1,5 @@
+import type { StorageCleanKind } from './actions.js';
+
 /**
  * What the panel itself is doing, for the status in the top bar and the
  * Sanctum page: since when it runs, the programs it has running, and the
@@ -51,10 +53,12 @@ export interface StorageRow {
   count?: number;
   /** How long it stays, said plainly. */
   kept: string;
-  /** The background task that clears what is past its time, for Clean up now. */
-  task?: string;
+  /** Clean up now: the kind storage.clean removes all of, and what goes, said for the confirmation. */
+  clean?: { kind: StorageCleanKind; goes: string };
   /** For a kind no task clears: why, and where you manage it. */
   manage?: { note: string; label?: string; href?: string };
+  /** Kept databases one by one, for Drop all now: the database, its site and when it would go by itself. */
+  items?: Array<{ name: string; domain: string; path?: string; goesAt: string }>;
   /** Where it is, for Developer mode only. */
   where: string[];
 }

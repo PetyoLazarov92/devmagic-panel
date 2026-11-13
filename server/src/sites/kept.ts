@@ -136,12 +136,42 @@ export async function deleteKept(ctx: KeptContext, { domain, path, name }: Actio
 export async function purgeKept(store: RunStore, exec: Executor, mysql: MysqlAccount | null | undefined, busy: (site: string) => boolean, now = Date.now()): Promise<string[]> {
   if (!mysql) return [];
   const dropped: string[] = [];
+  const failed: string[] = [];
+  let why = '';
   for (const k of store.keptDatabases()) {
     if (new Date(purgeAt(k.createdAt)).getTime() > now || busy(k.site) || !keptDatabaseName.safeParse(k.name).success) continue;
     const r = await sql({ exec, mysql }, [`DROP DATABASE IF EXISTS \`${k.name}\`;`]);
-    if (r.code !== 0) continue;
+    if (r.code !== 0) {
+      failed.push(k.name);
+      why ||= r.stderr.trim().split('\n').at(-1) ?? '';
+      continue;
+    }
     store.removeKeptDatabase(k.name);
     dropped.push(k.name);
   }
+  // The others went: say which could not, so the task shows it failed instead of passing them by each hour.
+  if (failed.length) throw new Error(`${dropped.length ? `dropped ${dropped.join(', ')}; ` : ''}could not drop ${failed.join(', ')}${why ? `: ${why}` : ''}`);
   return dropped;
+}
+
+/** The kept databases with their site as an action takes it (local.shop.com@learn is local.shop.com and /learn), for Drop all now. */
+export function keptItems(store: Pick<RunStore, 'keptDatabases'>): Array<{ name: string; domain: string; path?: string; goesAt: string }> {
+  return store
+    .keptDatabases()
+    .filter((k) => keptDatabaseName.safeParse(k.name).success)
+    .map((k) => {
+      const [domain = '', ...rest] = k.site.split('@');
+      return { name: k.name, domain, ...(rest.length ? { path: `/${rest.join('/')}` } : {}), goesAt: purgeAt(k.createdAt) };
+    });
+}
+
+/** "16 Nov": a day said short, for when a kept database goes. */
+const shortDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+/** The kept databases still waiting their days, said for the task's note and the storage row: how many, and when the oldest goes. */
+export function keptLeft(store: Pick<RunStore, 'keptDatabases'>): string {
+  const left = store.keptDatabases().filter((k) => keptDatabaseName.safeParse(k.name).success);
+  if (left.length === 0) return '';
+  const next = left.map((k) => purgeAt(k.createdAt)).sort()[0] as string;
+  return `${left.length} kept, the oldest goes on ${shortDay(next)}`;
 }

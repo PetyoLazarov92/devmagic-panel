@@ -73,6 +73,7 @@ import { runCronTask, taskRefusal } from './cron-run.js';
 import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } from './sites/wp-cron.js';
 import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
+import { cleanStorage } from './storage-clean.js';
 
 export interface ActionContext {
   config: SystemConfig;
@@ -608,6 +609,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     if (!ctx.store.skippedDone(input.domain, input.path, input.label)) throw new ActionInputError(`${site} has no skipped step called ${input.label}`);
     return [{ code: 0, stdout: `${input.label}: marked done on ${site}`, stderr: '' }];
   },
+  'storage.clean': async (ctx, { kind }) => [await cleanStorage(ctx, kind)],
   'history.clear': async (ctx) => [{ code: 0, stdout: `deleted ${ctx.store.clearRuns()} runs`, stderr: '' }],
   'cron.add': async (ctx, input) => {
     await checkTask(ctx, input.task);

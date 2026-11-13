@@ -44,7 +44,7 @@ import { defaultConventions, readConventions } from './assistant/conventions.js'
 import { readLocalConstants, saveLocalConstants } from './local-constants.js';
 import { registerAssistantRoutes } from './assistant/routes.js';
 import { registerCreateRoutes } from './sites/create-routes.js';
-import { purgeKept } from './sites/kept.js';
+import { keptItems, keptLeft, purgeKept } from './sites/kept.js';
 import { registerSiteRoutes } from './sites/routes.js';
 import { fileTrashDir, pruneFileTrash } from './sites/file-changes.js';
 import { pruneStaged, stagedDir } from './sites/file-transfer.js';
@@ -193,9 +193,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // Uploads and downloads a stopped panel left half way go at start: nothing can still be writing them.
     const unfinished = removeUnfinishedUploads(deps.uploadsDir);
     if (unfinished.length) app.log.info(`housekeeping: removed ${unfinished.length} unfinished downloads`);
+    // What a run did, for the log and the Sanctum page; a run that found nothing past its time says so, so Clean up now never looks like it did nothing.
     const said = (note: string) => {
       if (note) app.log.info(`housekeeping: ${note}`);
-      return note;
+      return note || 'nothing was past its time';
     };
     chores.every('drafts', 'Remove expired install drafts', 'Removes drafts of the new site wizard that ran out, and their dumps.', 10 * 60_000, () => {
       const gone = drafts.sweep(running);
@@ -224,8 +225,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return said(gone.length ? `removed ${gone.length} automatic snapshots` : '');
     }, 5 * 60_000);
     chores.every('kept', 'Drop expired kept databases', 'Drops databases kept after a swap or a refresh once their 7 days are over.', 60 * 60_000, async () => {
-      const dropped = await purgeKept(deps.store, deps.exec, deps.secrets()?.mysql, (site) => jobs.busyFor(site.replaceAll('@', '/')) !== undefined);
-      return said(dropped.length ? `dropped ${dropped.length} kept databases: ${dropped.join(', ')}` : '');
+      const mysql = deps.secrets()?.mysql;
+      if (!mysql && deps.store.keptDatabases().length) throw new Error('the panel has no MySQL admin account to drop them with: add one on the Services page, MySQL tab');
+      const dropped = await purgeKept(deps.store, deps.exec, mysql, (site) => jobs.busyFor(site.replaceAll('@', '/')) !== undefined);
+      const left = keptLeft(deps.store);
+      if (dropped.length) app.log.info(`housekeeping: dropped ${dropped.length} kept databases: ${dropped.join(', ')}`);
+      return [dropped.length ? `dropped ${dropped.join(', ')}` : left ? 'none past its 7 days' : 'none kept', left].filter(Boolean).join('; ');
     });
     // Deleted sites older than TRASH_DAYS go for good; the panel's records of the archives that went go with them.
     chores.every('trash', 'Remove deleted sites for good', `Removes deleted and archived sites for good after ${TRASH_DAYS} days.`, 6 * 60 * 60_000, async () => {
@@ -611,7 +616,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         uploadsDir: deps.uploadsDir,
         logsDir,
         trashBytes: async () => (await listTrash(deps.exec, deps.dmpRoot)).reduce((sum, t) => sum + t.sizeBytes, 0),
-        keptDatabases: () => deps.store.keptDatabases().length,
+        keptDatabases: () => ({ count: deps.store.keptDatabases().length, note: keptLeft(deps.store), items: keptItems(deps.store) }),
       });
       measured = { at: Date.now(), storage };
       return storage;
