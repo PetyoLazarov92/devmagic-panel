@@ -201,9 +201,10 @@ Every page is made of the pieces in `web/src/components/layout/page.tsx` and
 - **Width by page type** (`lib/page-width.ts`): the top bar runs the whole
   width (search left, what changes while you work right). Every page (the
   Sites list, a site, the new site wizard, a job, a run, Activity, Services,
-  WP Cores) stops at 100rem, its cards in pairs (a wide site card puts its
-  facts in two columns); Settings and Update stop at 64rem. Never the whole
-  screen for text or forms.
+  WP Cores, Settings, Updates, Panel) stops at 100rem, its cards in pairs (a
+  wide site card puts its facts in two columns; Settings pairs cards of about
+  the same size, Updates puts the release and its notes left, the installed
+  releases right). Never the whole screen for text or forms.
 - **The pieces.** `PageHeader` (title and intro left, actions right, Check
   again last) tops a page; `ViewBar` (a picker or filters left, Check again
   right, "Read 2 min ago" and a short note under it, or in the picker's place

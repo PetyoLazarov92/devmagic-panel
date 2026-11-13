@@ -2,7 +2,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, PanelStatus, PanelStorage, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { FILE_TEXT_MAX, gitUrl, isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -54,7 +54,10 @@ import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/u
 import { readOrgSettings, registerOrgRoutes } from './org/routes.js';
 import { repoTrust } from './repo-trust.js';
 import { GitHostDetector, gitlabHostsInUse, remotesOf } from './repo-hosts/index.js';
-import { listTrash } from './sites/trash.js';
+import { listTrash, purgeTrash, sweepArchives, TRASH_DAYS } from './sites/trash.js';
+import { Chores } from './chores.js';
+import { AUTO_SNAPSHOT_DAYS, AUTO_SNAPSHOTS_KEPT, panelStorage, pruneAutoSnapshots } from './panel-storage.js';
+import type { RunningPrograms } from './running.js';
 import type { RunStore } from './store.js';
 import { installedCores, readWpcoreConfig } from './wpcore.js';
 import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPaths, readMail, unreadMail } from './mailpit.js';
@@ -98,6 +101,8 @@ export interface AppDeps {
   checkUpdates?: boolean;
   /** Prunes Run history (RUN_KEEP_DAYS, RUN_KEEP_MAX) and dumps nothing needs (a day old) at start and every hour. */
   housekeeping?: boolean;
+  /** The programs the executor has running, for the Panel status; the running panel passes the one its executor reports to. */
+  programs?: RunningPrograms;
   logger?: boolean;
   /** What the panel's crontab lines run, and /etc for the system cron; tests pass their own. */
   cron?: CronSetup;
@@ -172,16 +177,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
     app.addHook('onClose', async () => htaccessWatcher.close());
   }
+  // The panel's work on its own timers, listed on the Sanctum page with what each last did.
+  const chores = new Chores((id, message) => app.log.warn(`${id}: ${message}`));
   if (deps.housekeeping) {
     const running = (jobId: string) => ['running', 'queued', 'undoing'].includes(jobs.get(jobId)?.status ?? '');
-    const sweep = () => {
-      try {
-        const gone = drafts.sweep(running);
-        if (gone) app.log.info(`housekeeping: ${gone} install drafts ran out`);
-      } catch (error) {
-        app.log.warn(`housekeeping: ${(error as Error).message}`);
-      }
-    };
     // The panel may have just restarted in the middle of an install from the Updates page; its installer goes on for up to a minute.
     void install().catch(() => undefined);
     setTimeout(() => void install().catch(() => undefined), 90_000).unref();
@@ -194,39 +193,64 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // Uploads and downloads a stopped panel left half way go at start: nothing can still be writing them.
     const unfinished = removeUnfinishedUploads(deps.uploadsDir);
     if (unfinished.length) app.log.info(`housekeeping: removed ${unfinished.length} unfinished downloads`);
-    sweep();
-    setInterval(sweep, 10 * 60_000).unref();
-    const tidy = () => {
-      try {
-        const runs = deps.store.prune(RUN_KEEP_DAYS, RUN_KEEP_MAX);
-        const dumps = pruneUploads(deps.uploadsDir, UPLOAD_KEEP_MS, new Set([...jobs.uploadsInUse(), ...drafts.uploadsInUse()]));
-        if (runs || dumps.length) app.log.info(`housekeeping: pruned ${runs} runs and ${dumps.length} dumps`);
-        const saved = pruneMysqlBackups(mysqlBackupsDir(deps.uploadsDir));
-        if (saved.length) app.log.info(`housekeeping: removed ${saved.length} MySQL backups older than 14 days`);
-        const files = pruneFileTrash(fileTrashDir(dirname(deps.uploadsDir)));
-        if (files.length) app.log.info(`housekeeping: removed ${files.length} deletes of the Files tab older than 14 days`);
-        pruneStaged(stagedDir(dirname(deps.uploadsDir)));
-      } catch (error) {
-        app.log.warn(`housekeeping: ${(error as Error).message}`);
-      }
+    const said = (note: string) => {
+      if (note) app.log.info(`housekeeping: ${note}`);
+      return note;
     };
-    // Kept databases go after their 7 days, except a site's a job is working on.
-    const purge = () =>
-      // A record's site is its key (local.shop.com@learn); jobs lock local.shop.com/learn.
-      void purgeKept(deps.store, deps.exec, deps.secrets()?.mysql, (site) => jobs.busyFor(site.replaceAll('@', '/')) !== undefined)
-        .then((dropped) => dropped.length && app.log.info(`housekeeping: dropped ${dropped.length} kept databases: ${dropped.join(', ')}`))
-        .catch((error: Error) => app.log.warn(`housekeeping: ${error.message}`));
-    tidy();
-    purge();
-    setInterval(() => {
-      tidy();
-      purge();
-    }, 60 * 60_000).unref();
+    chores.every('drafts', 'Remove expired install drafts', 'Removes drafts of the new site wizard that ran out, and their dumps.', 10 * 60_000, () => {
+      const gone = drafts.sweep(running);
+      return said(gone ? `${gone} install drafts ran out` : '');
+    });
+    // One task per kind, so Clean up now on the Sanctum page clears that kind only.
+    chores.every('runs', 'Trim Run history', `Keeps Run history to ${RUN_KEEP_DAYS} days and ${RUN_KEEP_MAX} runs.`, 60 * 60_000, () => {
+      const runs = deps.store.prune(RUN_KEEP_DAYS, RUN_KEEP_MAX);
+      return said(runs ? `removed ${runs} runs` : '');
+    });
+    chores.every('downloads', 'Remove old downloaded dumps', 'Removes dumps and staged file uploads after a day, unless a job or a draft still uses one.', 60 * 60_000, () => {
+      const dumps = pruneUploads(deps.uploadsDir, UPLOAD_KEEP_MS, new Set([...jobs.uploadsInUse(), ...drafts.uploadsInUse()]));
+      pruneStaged(stagedDir(dirname(deps.uploadsDir)));
+      return said(dumps.length ? `removed ${dumps.length} dumps` : '');
+    });
+    chores.every('file-trash', 'Empty old Files tab deletes', "Removes the Files tab's deletes after 14 days, and the oldest past 1 GB.", 60 * 60_000, () => {
+      const files = pruneFileTrash(fileTrashDir(dirname(deps.uploadsDir)));
+      return said(files.length ? `removed ${files.length} Files tab deletes` : '');
+    });
+    chores.every('mysql-backups', 'Remove old MySQL settings backups', "Removes backups of MySQL's settings after 14 days.", 60 * 60_000, () => {
+      const saved = pruneMysqlBackups(mysqlBackupsDir(deps.uploadsDir));
+      return said(saved.length ? `removed ${saved.length} MySQL backups` : '');
+    });
+    chores.every('snapshots', 'Remove old automatic snapshots', `Removes the snapshots the panel took before a change once they are past their time: it keeps the newest ${AUTO_SNAPSHOTS_KEPT} per site and every one from the last ${AUTO_SNAPSHOT_DAYS} days. Yours stay.`, 24 * 60 * 60_000, () => {
+      const gone = pruneAutoSnapshots(deps.config.BACKUP_DIR);
+      return said(gone.length ? `removed ${gone.length} automatic snapshots` : '');
+    }, 5 * 60_000);
+    chores.every('kept', 'Drop expired kept databases', 'Drops databases kept after a swap or a refresh once their 7 days are over.', 60 * 60_000, async () => {
+      const dropped = await purgeKept(deps.store, deps.exec, deps.secrets()?.mysql, (site) => jobs.busyFor(site.replaceAll('@', '/')) !== undefined);
+      return said(dropped.length ? `dropped ${dropped.length} kept databases: ${dropped.join(', ')}` : '');
+    });
+    // Deleted sites older than TRASH_DAYS go for good; the panel's records of the archives that went go with them.
+    chores.every('trash', 'Remove deleted sites for good', `Removes deleted and archived sites for good after ${TRASH_DAYS} days.`, 6 * 60 * 60_000, async () => {
+      const r = await purgeTrash(deps.exec, deps.dmpRoot);
+      if (r.code !== 0) throw new Error(r.stderr.trim() || 'the trash purge failed');
+      sweepArchives(deps.store, await listTrash(deps.exec, deps.dmpRoot));
+      return r.stdout.trim().split('\n').filter(Boolean).at(-1) ?? '';
+    });
   }
   if (deps.checkUpdates) {
-    const check = () => void updates.status(true).catch((error: Error) => app.log.warn(`update check: ${error.message}`));
-    setTimeout(check, 30_000).unref();
-    setInterval(check, 6 * 60 * 60_000).unref();
+    chores.every('updates', 'Check for a new release', 'Looks for a new release of the panel.', 6 * 60 * 60_000, async () => {
+      const status = await updates.status(true);
+      return status.available && status.latest ? `${status.latest} is out` : 'up to date';
+    }, 30_000);
+  }
+  app.addHook('onClose', async () => chores.stop());
+  // How the panel's last run ended: a run that started and never wrote its stop ended unexpectedly. Only the running panel keeps this.
+  const startedAt = new Date().toISOString();
+  let before: PanelStatus['before'];
+  if (deps.housekeeping) {
+    const lastStart = deps.store.getMeta('panel-started-at');
+    const lastStop = deps.store.getMeta('panel-stopped-at');
+    if (lastStart) before = { startedAt: lastStart, ...(lastStop && lastStop >= lastStart ? { stoppedAt: lastStop, ended: 'stopped' as const } : { ended: 'unexpectedly' as const }) };
+    deps.store.setMeta('panel-started-at', startedAt);
+    app.addHook('onClose', async () => deps.store.setMeta('panel-stopped-at', new Date().toISOString()));
   }
 
   await app.register(cookie);
@@ -566,6 +590,38 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       runningJobs: () => jobs.list().filter((j) => j.status === 'running' || j.status === 'queued' || j.status === 'undoing').length,
     };
     api.get('/api/developer', async (): Promise<DeveloperReport> => developerReport(developer));
+    // The panel's own status for the top bar: since when it runs, how the last run ended, its programs and timed work. No paths or arguments.
+    api.get('/api/panel/status', async (): Promise<PanelStatus> => ({
+      version: deps.version,
+      startedAt,
+      ...(before ? { before } : {}),
+      memoryBytes: process.memoryUsage().rss,
+      jobs: jobs.list().filter((j) => ['running', 'queued', 'undoing'].includes(j.status)).length,
+      programs: deps.programs?.list() ?? [],
+      tasks: chores.list(),
+    }));
+    // What the panel keeps on disk, measured with du; kept ten minutes, as a big folder takes a moment.
+    let measured: { at: number; storage: PanelStorage } | null = null;
+    api.get<{ Querystring: { fresh?: string } }>('/api/panel/storage', async (request): Promise<PanelStorage> => {
+      if (measured && !request.query.fresh && Date.now() - measured.at < 10 * 60_000) return measured.storage;
+      const storage = await panelStorage({
+        config: deps.config,
+        exec: deps.exec,
+        dataDir: dirname(deps.uploadsDir),
+        uploadsDir: deps.uploadsDir,
+        logsDir,
+        trashBytes: async () => (await listTrash(deps.exec, deps.dmpRoot)).reduce((sum, t) => sum + t.sizeBytes, 0),
+        keptDatabases: () => deps.store.keptDatabases().length,
+      });
+      measured = { at: Date.now(), storage };
+      return storage;
+    });
+    // Runs one of the panel's timed chores now.
+    api.post<{ Params: { id: string } }>('/api/panel/tasks/:id/run', async (request, reply) => {
+      if (!chores.list().some((t) => t.id === request.params.id)) return reply.code(404).send({ error: 'No such task' });
+      await chores.run(request.params.id);
+      return chores.list().find((t) => t.id === request.params.id);
+    });
     api.get<{ Params: { name: string } }>('/api/developer/logs/:name', async (request, reply) => {
       const text = readLog(developer.logsDir, request.params.name);
       return text === null ? reply.code(404).send({ error: 'No such log' }) : { name: request.params.name, text };

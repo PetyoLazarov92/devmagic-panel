@@ -2,6 +2,7 @@ import type { CheckFix, CheckStatus } from './environment.js';
 import type { LocalHelperPlugin, WpDebugConstant } from './actions.js';
 import type { AccessResult, ReadResult } from './org.js';
 import type { SiteServer } from './nginx.js';
+import type { WpHeader } from './site-repos.js';
 
 /**
  * A local site as the panel shows it. Everything here is read from the system
@@ -1128,6 +1129,10 @@ export interface RepoLookup {
   kind?: 'site' | 'wp-content' | 'theme' | 'plugin' | 'other';
   /** The theme is this folder of the repo, not the repo itself: it goes to wp-content/repos, which Local mode makes a themes folder. */
   themeIn?: string;
+  /** A plugin is this folder of the repo, by its header: it shows as one, and where it goes is yours to pick. */
+  pluginIn?: string;
+  /** The theme or plugin by the header WordPress reads: its name, version and a child theme's parent. */
+  header?: WpHeader;
   /** It holds WordPress core (wp-admin and wp-includes), and the version its wp-includes/version.php names. */
   core?: { version?: string };
   /** It keeps media in wp-content/uploads. */

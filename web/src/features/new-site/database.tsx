@@ -1,7 +1,7 @@
 import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerSignIn, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
 import { defaultLeftOut, isWpCliCommand, knownLeftOut, splitSshHost } from '@devmagic-panel/shared';
 import { TablesPicker } from '@/features/database/tables-picker';
-import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, KeyRound, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
+import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, KeyRound, PlugZap, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { CopyChoice, findings } from '@/features/database/copy-choice';
 import { DumpFactsCard } from '@/features/new-site/dump-facts';
@@ -581,6 +581,8 @@ export function ServerPassword({ id, host, value, onChange, auto = true }: { id:
   const [answer, setAnswer] = useState<{ host: string; signIn: ServerSignIn | null } | null>(null);
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [tested, setTested] = useState<{ host: string; check: NonNullable<ServerSignIn['passwordCheck']> } | null>(null);
   useEffect(() => {
     if (!ok) return;
     let live = true;
@@ -600,6 +602,8 @@ export function ServerPassword({ id, host, value, onChange, auto = true }: { id:
   useEffect(() => {
     if (value !== '') onChange('');
   }, [host]);
+  // A test says what it tried: typing another password puts it away.
+  useEffect(() => setTested(null), [host, value]);
   if (!ok) return null;
 
   const check = () => {
@@ -608,6 +612,17 @@ export function ServerPassword({ id, host, value, onChange, auto = true }: { id:
       (signIn) => setAnswer({ host, signIn }),
       () => setAnswer({ host, signIn: null }),
     ).finally(() => setChecking(false));
+  };
+  // Signs in once with the typed password, or the saved one, and runs nothing there.
+  const test = () => {
+    setTesting(true);
+    api.serverSignIn(host, value !== '' ? { testPassword: value } : { testSaved: true }).then(
+      (signIn) => {
+        if (signIn.passwordCheck) setTested({ host, check: signIn.passwordCheck });
+        if (signIn.passwordCheck?.works) setAnswer({ host, signIn });
+      },
+      (error: Error) => setTested({ host, check: { with: value !== '' ? 'typed' : 'saved', works: false, problem: error.message } }),
+    ).finally(() => setTesting(false));
   };
   const save = async () => {
     setSaving(true);
@@ -673,10 +688,21 @@ export function ServerPassword({ id, host, value, onChange, auto = true }: { id:
                 {saved ? 'Replace saved' : `Save for ${host}`}
               </Button>
             )}
+            {(value !== '' || saved) && (
+              <Button variant="soft" className="h-10" disabled={testing || saving} onClick={test} title="Signs in once with this password and runs nothing on the server">
+                {testing ? <Spinner /> : <PlugZap />}
+                Test password
+              </Button>
+            )}
             {saved && value === '' && (
               <Button variant="soft" className="h-10" disabled={saving} onClick={() => void forget()}>Forget password</Button>
             )}
           </div>
+          {tested?.host === host && (
+            tested.check.works
+              ? <p role="status" className="flex items-center gap-1.5 text-success"><ShieldCheck className="size-3.5 shrink-0" />{host} took the {tested.check.with} password.</p>
+              : <p role="alert" className="flex items-start gap-1.5 text-warning"><CircleAlert className="mt-px size-3.5 shrink-0" />{tested.check.problem}</p>
+          )}
           <p className="text-muted-foreground">
             {saved
               ? `A password is saved for ${host}: leave this empty to use it. The panel never shows it back.`

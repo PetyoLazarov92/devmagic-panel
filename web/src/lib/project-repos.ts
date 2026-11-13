@@ -1,5 +1,5 @@
 import type { LocalHelperPlugin, OrgRepo, RepoBuild, RepoKind, RepoLookup, RepoPlacement } from '@devmagic-panel/shared';
-import { placementForKind, placementProblems, repoTarget, repoWeb, sameRepo } from '@devmagic-panel/shared';
+import { placementForKind, placementProblems, REPO_KIND_LABELS, repoTarget, repoWeb, sameRepo, THEME_REPOS_DIR } from '@devmagic-panel/shared';
 import type { WizardState } from '@/features/new-site/wizard-shared';
 import type { BuildPick } from './builds';
 
@@ -14,6 +14,10 @@ export interface RepoHelpers {
   kind?: RepoLookup['kind'];
   /** The theme is this folder of the repo. */
   themeIn?: string;
+  /** A plugin is this folder of the repo, by its header. */
+  pluginIn?: string;
+  /** The theme or plugin by its header: name, version, a child theme's parent. */
+  header?: RepoLookup['header'];
   core?: RepoLookup['core'];
   uploads?: boolean;
   /** Its plugin folders, as paths in the repo. */
@@ -61,6 +65,29 @@ export function rowPlacement(row: RepoRow): RepoPlacement {
   // An added repo is never the site root by default: the main repo is.
   const byKind = kind && kind !== 'site' ? placementForKind(kind, row.url, row.helpers?.themeIn) : null;
   return byKind ?? { dir: 'wp-content/plugins', folder: placementForKind('plugin', row.url)?.folder ?? '' };
+}
+
+/**
+ * What a picked repo is, for its badge: the theme or plugin WordPress would
+ * see by its header (name and version), else what its files hold, else where
+ * it goes. Null while nothing is known yet.
+ */
+export function repoKindLabel(helpers: RepoHelpers | null | undefined, kind: RepoKind | undefined, placement: RepoPlacement | null): string | null {
+  const header = helpers?.header;
+  if (header) {
+    const named = `${header.name}${header.version ? ` ${header.version}` : ''}`;
+    const what = header.kind === 'plugin' ? `Plugin: ${named}` : header.parent ? `Child theme of ${header.parent}: ${named}` : `Theme: ${named}`;
+    return header.folder ? `${what}, in the repo's ${header.folder} folder` : what;
+  }
+  const holds = helpers?.kind ?? kind;
+  if (holds === 'theme' && helpers?.themeIn) return `Theme, in the repo's ${helpers.themeIn} folder`;
+  if (holds && holds !== 'other') return REPO_KIND_LABELS[holds];
+  if (!placement) return null;
+  const dir = placement.dir.replace(/\/+$/, '');
+  if (dir === THEME_REPOS_DIR || dir.endsWith('themes')) return 'No theme header: goes in themes';
+  if (dir.endsWith('mu-plugins')) return 'Goes in mu-plugins';
+  if (dir.endsWith('plugins')) return 'No plugin header: goes in plugins';
+  return holds === 'other' ? 'Not a theme or plugin' : null;
 }
 
 /** Where the main repo goes: what you or a last install chose, else by what the repo holds, else the site root. */

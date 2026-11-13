@@ -76,6 +76,8 @@ export interface ServerSignIn {
   checkedAt?: string;
   /** A password is saved in the panel for this host (never the password itself). */
   saved?: boolean;
+  /** Test password: whether the server took the typed or the saved one, signing in once and running nothing. */
+  passwordCheck?: { with: 'typed' | 'saved'; works: boolean; problem?: string };
 }
 
 /** What a site keeps for Refresh from production: no secret, only where and how. */

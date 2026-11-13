@@ -25,6 +25,7 @@ import { NewSitePage } from '@/pages/new-site';
 import { RunPage } from '@/pages/run';
 import { phpSectionOf, ServicesPage } from '@/pages/services';
 import { SettingsPage } from '@/pages/settings';
+import { SanctumPage } from '@/pages/sanctum';
 import { SiteDetailPage } from '@/pages/site';
 import { SitesPage } from '@/pages/sites';
 import { UpdatePage } from '@/pages/update';
@@ -57,6 +58,7 @@ function Routes({ path }: { path: string }) {
   if (path === '/services/nginx') return <ServicesPage tab="nginx" />;
   if (path === '/services/cron') return <ServicesPage tab="cron" />;
   if (path === '/settings') return <SettingsPage />;
+  if (path === '/sanctum') return <SanctumPage />;
   if (path === '/activity') return <ActivityPage tab="jobs" />;
   if (path === '/activity/runs') return <ActivityPage tab="runs" />;
   const run = match('/runs/:id', path);
@@ -131,7 +133,7 @@ export function App() {
       navigate(moved, { replace: true });
       return;
     }
-    const known = ((path === '/mockup' || path === '/mockup/parts') && isMockup) || path === '/settings' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/aura/machine' || path === '/mail' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
+    const known = ((path === '/mockup' || path === '/mockup/parts') && isMockup) || path === '/settings' || path === '/sanctum' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/aura/machine' || path === '/mail' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
     // The password reset has its own address, but only while signed out (the effect below sends a signed-in browser on).
     if (!known && path !== RESET_PATH) navigate('/sites');
   }, [path]);

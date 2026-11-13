@@ -9,7 +9,7 @@ import { RepoRefused } from '../sites/repo.js';
 import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } from './claude-code.js';
 import { DumpRefused, listRemote, rcloneRemotes, recentDownloads, rcloneRemote } from './dumps.js';
 import { z } from 'zod';
-import { MoreDumpsRefused, readSignedIn, serverSignIn, serverTables } from '../sites/more-dumps.js';
+import { MoreDumpsRefused, passwordSignIn, readSignedIn, refusalWithPassword, refusalWithSaved, serverSignIn, serverTables } from '../sites/more-dumps.js';
 import type { Secrets } from '../secrets.js';
 import { forgetSshPassword, isSavablePassword, savedSshPassword, saveSshPassword, sshKey } from '../ssh-saved.js';
 import { serverFiles } from '../sites/server-files.js';
@@ -213,10 +213,21 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
   // `fresh` (Check connection) connects whatever is kept. An answer the panel could not get is not kept.
   const signIns = new Map<string, { answer: ServerSignIn; at: number }>();
   api.post<{ Body: unknown }>('/api/dumps/server-sign-in', async (request, reply) => {
-    const body = z.object({ host: sshHost, last: z.boolean().optional(), fresh: z.boolean().optional() }).safeParse(request.body);
+    const body = z.object({ host: sshHost, last: z.boolean().optional(), fresh: z.boolean().optional(), testPassword: z.string().refine(isSavablePassword).optional(), testSaved: z.boolean().optional() }).safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'An alias from ~/.ssh/config, or user@host' });
     const key = sshKey(body.data.host);
-    const saved = savedSshPassword(deps.secrets(), body.data.host) !== undefined;
+    const savedPassword = savedSshPassword(deps.secrets(), body.data.host);
+    const saved = savedPassword !== undefined;
+    // Test password: one sign-in with the typed password, or the saved one, running nothing but `true`. Never kept.
+    const test = body.data.testPassword || (body.data.testSaved ? savedPassword : undefined);
+    if (test !== undefined) {
+      const which = body.data.testPassword ? 'typed' : 'saved';
+      const tried = await passwordSignIn({ exec: deps.exec }, body.data.host, test);
+      const at = Date.now();
+      if (tried.works) signIns.set(key, { answer: { how: 'password' }, at });
+      const problem = tried.works ? undefined : which === 'typed' ? refusalWithPassword(body.data.host, tried.problem) : refusalWithSaved(body.data.host, tried.problem);
+      return { how: 'password', checkedAt: new Date(at).toISOString(), saved, passwordCheck: { with: which, works: tried.works, ...(problem ? { problem } : {}) } } satisfies ServerSignIn;
+    }
     const kept = signIns.get(key);
     if (kept && Date.now() - kept.at < SIGN_IN_KEPT_MS && !body.data.fresh) return { ...kept.answer, checkedAt: new Date(kept.at).toISOString(), saved };
     if (body.data.last) return { how: 'unchecked', saved } satisfies ServerSignIn;

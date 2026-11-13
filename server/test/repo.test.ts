@@ -99,6 +99,33 @@ describe('inspectRepo', () => {
     expect(readdirSync(work)).toEqual([]);
   });
 
+  it('tells a plugin with no readme.txt and a block theme in a folder by the headers WordPress reads', async () => {
+    const lookup = async (tree: Array<[string, string]>) => {
+      const work = join(wpSiteTree().root, 'tmp');
+      const blob = (n: number) => n.toString(16).padStart(40, '0');
+      const fake = fakeExec({
+        'git clone --depth=1 --filter=blob:none --no-checkout --single-branch --branch develop': { stdout: '' },
+        'git -C': (call) =>
+          call.args.includes('ls-tree')
+            ? { stdout: tree.map(([path], i) => `100644 blob ${blob(i + 1)}\t${path}`).join('\n') }
+            : call.args.includes('cat-file')
+              ? { stdout: tree[parseInt(call.args.at(-1) as string, 16) - 1]?.[1] ?? '' }
+              : { stdout: '' },
+        'npm --version': { stdout: '10.9.0' },
+        'composer --version': { stdout: 'Composer version 2.8.4' },
+      });
+      return repoLookup(fake.exec, work, URL, 'develop', work);
+    };
+    expect(await lookup([['wandworks-blocks.php', '<?php\n/*\n * Plugin Name: Wandworks Blocks\n * Version: 1.4.0\n */'], ['src/index.js', '']])).toMatchObject({ kind: 'plugin', header: { kind: 'plugin', name: 'Wandworks Blocks', version: '1.4.0' } });
+    const theme = await lookup([['package.json', '{}'], ['theme/style.css', '/*\nTheme Name: Wandworks\n*/'], ['theme/theme.json', '{}'], ['theme/templates/index.html', '']]);
+    expect(theme).toMatchObject({ kind: 'theme', themeIn: 'theme', header: { kind: 'theme', name: 'Wandworks', folder: 'theme' } });
+    const plugin = await lookup([['package.json', '{}'], ['plugin/wandworks-forms.php', '<?php /* Plugin Name: Wandworks Forms */']]);
+    expect(plugin).toMatchObject({ kind: 'other', pluginIn: 'plugin', header: { name: 'Wandworks Forms' } });
+    const none = await lookup([['README.md', '# Tools'], ['src/index.ts', '']]);
+    expect(none.kind).toBe('other');
+    expect(none.header).toBeUndefined();
+  });
+
   it('says the repo has too many files when even the larger file list overflows', async () => {
     const work = join(wpSiteTree().root, 'tmp');
     const fake = fakeExec({

@@ -20,7 +20,7 @@ import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { siteHref } from '@/lib/site-ref';
 import { pastedRepo } from '@/lib/org-repos';
-import { allRows, isPicked, makeMain, shownOrder, pickRepo, placementOf, planLines, type RepoRow, rowPlacement, rowsProblem, unpickRepo, updateRow } from '@/lib/project-repos';
+import { allRows, isPicked, makeMain, shownOrder, pickRepo, placementOf, planLines, repoKindLabel, type RepoRow, rowPlacement, rowsProblem, unpickRepo, updateRow } from '@/lib/project-repos';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './wizard-shared';
 import { cliSignedIn, CliHints, OrgPicker, RepoLink } from './org';
@@ -75,8 +75,8 @@ export function useRepoLookups(state: WizardState, setState: SetState) {
         busy.current.add(key);
         setState((s) => updateRow(s, row.url, (r) => ({ ...r, helpers: { key } })));
         api.repoHelpers(row.url, row.branch).then(
-          ({ helpers: list, mediaPlugin, builds, nodes, kind, themeIn, core, uploads, plugins, themes }) =>
-            setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, list, media: mediaPlugin, builds, ...(nodes ? { nodes } : {}), ...(kind ? { kind } : {}), ...(themeIn ? { themeIn } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}), ...(themes ? { themes } : {}) } }))),
+          ({ helpers: list, mediaPlugin, builds, nodes, kind, themeIn, pluginIn, header, core, uploads, plugins, themes }) =>
+            setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, list, media: mediaPlugin, builds, ...(nodes ? { nodes } : {}), ...(kind ? { kind } : {}), ...(themeIn ? { themeIn } : {}), ...(pluginIn ? { pluginIn } : {}), ...(header ? { header } : {}), ...(core ? { core } : {}), ...(uploads ? { uploads } : {}), ...(plugins ? { plugins } : {}), ...(themes ? { themes } : {}) } }))),
           (err: Error) => setState((s) => updateRow(s, row.url, (r) => (r.helpers?.key !== key ? r : { ...r, helpers: { key, error: err.message } }))),
         );
       }
@@ -194,7 +194,7 @@ function RepoCard({ row, main, state, setState, site, sites, onRemove, extras }:
   extras?: ReactNode;
 }) {
   const web = repoWeb(row.url);
-  const kind = row.helpers?.kind ?? row.kind;
+  const kindLabel = repoKindLabel(row.helpers, row.kind, row.placement);
   const usedBy = sitesUsing(sites, row.url);
   const trust = state.trust[row.url];
   const setBranch = (branch: string) => setState((s) => (main ? { ...s, branch } : updateRow(s, row.url, (r) => ({ ...r, branch }))));
@@ -208,7 +208,7 @@ function RepoCard({ row, main, state, setState, site, sites, onRemove, extras }:
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-dense font-medium break-all">{row.fullName ?? row.url}</span>
             {main && <Badge tone="primary">Main</Badge>}
-            {kind && kind !== 'other' && <Badge>{row.helpers?.themeIn ? `Theme, in the repo's ${row.helpers.themeIn} folder` : REPO_KIND_LABELS[kind]}</Badge>}
+            {kindLabel && <Badge title={row.helpers?.header ? 'From the header WordPress reads: style.css for a theme, a PHP file for a plugin' : undefined}>{kindLabel}</Badge>}
           </span>
           {row.fullName && <span className="font-mono text-xs break-all text-muted-foreground">{row.url}</span>}
         </div>

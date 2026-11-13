@@ -1,4 +1,4 @@
-import { CircleArrowUp, FlaskConical, Globe, KeyRound, Layers, ListChecks, LogOut, Mail, Menu, PanelLeftClose, PanelLeftOpen, Search, Server, Settings, Sparkles, Wrench, X } from 'lucide-react';
+import { CircleArrowUp, FlaskConical, Globe, HeartPulse, KeyRound, Layers, ListChecks, LogOut, Mail, Menu, PanelLeftClose, PanelLeftOpen, Search, Server, Settings, Sparkles, Wrench, X } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Logo } from '@/components/layout/logo';
 import { ChangePasswordDialog } from '@/features/settings/panel-password';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
 import { Notice } from '@/components/ui/notice';
 import { AssistantDrawer } from '@/features/assistant/assistant-drawer';
+import { PanelStatusIndicator } from '@/components/layout/panel-status-indicator';
 import { JobsIndicator } from '@/components/layout/jobs-indicator';
 import { UpdateIndicator, updateDot, useUpdateStatus } from '@/components/layout/update-indicator';
 import { QueuedProposals } from '@/features/assistant/queued-proposals';
@@ -21,7 +22,7 @@ import { loadPreferences, savePreferences, usePreferences } from '@/lib/preferen
 import { useAsync } from '@/lib/use-async';
 import { Link } from '@/lib/router';
 import { Toaster } from '@/lib/toast';
-import { PAGE_MAX_WIDTH, pageWidth } from '@/lib/page-width';
+import { PAGE_MAX_WIDTH } from '@/lib/page-width';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -55,6 +56,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     group: 'System',
     items: [
       { label: 'Activity', href: '/activity', icon: ListChecks, hint: 'jobs + runs', also: ['/jobs', '/runs'] },
+      { label: 'Sanctum', href: '/sanctum', icon: HeartPulse, hint: 'tasks, storage' },
       { label: 'Updates', href: '/update', icon: CircleArrowUp },
       { label: 'Settings', href: '/settings', icon: Settings, hint: 'AI, password' },
     ],
@@ -144,6 +146,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             <div className="hidden items-center gap-2 md:flex">
               <UpdateIndicator status={update} />
             </div>
+            <PanelStatusIndicator />
             <JobsIndicator />
             <QueuedProposals />
             <ThemeToggle className="hidden md:inline-flex" />
@@ -156,7 +159,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
           </div>
         </header>
         {/* The content's width follows the page type: wide lists, detail pages, narrow settings and flows. */}
-        <main className={cn('@container mx-auto w-full flex-1 px-4 pb-12 sm:px-6 md:px-10', PAGE_MAX_WIDTH[pageWidth(path)])}>{children}</main>
+        <main className={cn('@container mx-auto w-full flex-1 px-4 pb-12 sm:px-6 md:px-10', PAGE_MAX_WIDTH)}>{children}</main>
         <Toaster />
         {assistantOn && <AssistantDrawer />}
       </div>

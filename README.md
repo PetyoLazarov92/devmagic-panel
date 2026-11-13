@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.44.1-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.45.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -294,6 +294,7 @@ When the installer put Node.js in place for the panel, use
 | [Sites](docs/sites.md) | Your local sites, and a page per site with sections for logs, files, plugins, the database, cron, PHP and domains |
 | [New site](docs/new-site.md) | A wizard for a site from a repo and a dump, a fresh WordPress, an empty site or your organization |
 | [Activity](docs/pages.md#activity) | The jobs since the panel started, and every action it ran with its result, kept 90 days |
+| [Sanctum](docs/pages.md#sanctum) | The panel's inner workings: what it runs now, its background tasks with their last run, and the space its backups take |
 | [Removed sites](docs/pages.md#removed-sites) | A filter of Sites: copies of removed or replaced sites from the last 14 days, to restore or delete |
 
 The database tools (tables, rows, SQL, table health, clean-ups, plugin leftovers, MySQL settings, imports and exports) are in

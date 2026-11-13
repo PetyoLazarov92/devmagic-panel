@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { LocalHelperPlugin, RepoInspection, RepoLookup } from '@devmagic-panel/shared';
-import { classifyRepo, holdsCore, LOCAL_HELPER_PLUGINS, MEDIA_PLUGIN, themeFolderIn } from '@devmagic-panel/shared';
+import { classifyRepo, headerCandidate, holdsCore, LOCAL_HELPER_PLUGINS, MEDIA_PLUGIN, themeFolderIn, wpHeaderIn } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { BUILD_FILES, composerPlugins, planBuilds, SKIPPED_DIRS } from './builds.js';
 import { NO_PROMPTS } from './git.js';
@@ -10,6 +10,8 @@ import { installedNodes, nodeEnv, nodeFor, nodeForFiles } from './node.js';
 
 /** The most a repo's file list may take: about 1.8 million files. */
 const LIST_BYTES = 256 * 1024 * 1024;
+/** At most this many files are read for a theme's or plugin's header: the ones at the top come first. */
+const HEADER_FILES = 60;
 
 export class RepoRefused extends Error {}
 
@@ -115,8 +117,12 @@ export async function repoLookup(exec: Executor, workDir: string, url: string, b
     const paths = new Set(blobs.keys());
     const top = [...new Set([...paths].map((p) => p.split('/')[0] as string))];
     const withCore = holdsCore(top);
-    const wanted = [...blobs].filter(([path]) => (BUILD_FILES.test(path) && !SKIPPED_DIRS.test(path) && path.split('/').length <= 8) || (withCore && path === 'wp-includes/version.php')).slice(0, 301);
+    const topKind = classifyRepo(top);
+    // Not a whole site: the headers WordPress reads (style.css, the PHP files at the top and one folder down) say theme or plugin.
+    const headers = topKind === 'site' || topKind === 'wp-content' ? [] : [...blobs].filter(([path]) => headerCandidate(path)).sort(([a], [b]) => a.split('/').length - b.split('/').length).slice(0, HEADER_FILES);
+    const wanted = [...[...blobs].filter(([path]) => (BUILD_FILES.test(path) && !SKIPPED_DIRS.test(path) && path.split('/').length <= 8) || (withCore && path === 'wp-includes/version.php')).slice(0, 301), ...headers];
     const text = await readBlobs(git, tmp, wanted);
+    const header = wpHeaderIn(new Map(headers.flatMap(([path]) => (text.has(path) ? [[path, text.get(path) as string]] : []))));
     const files = { paths, text };
     const folders = new Set([...paths].map((p) => /(?:^|\/)plugins\/([^/]+)\//.exec(p)?.[1]).filter(Boolean));
     const fromComposer = new Set(composerPlugins(files));
@@ -127,9 +133,10 @@ export async function repoLookup(exec: Executor, workDir: string, url: string, b
     const tools = await Promise.all((['composer', 'npm', 'yarn', 'pnpm'] as const).map(async (tool) => ((await exec(tool, ['--version'], { timeoutMs: 15_000, env })).code === 0 ? [tool] : [])));
     const version = /\$wp_version\s*=\s*'([^']+)'/.exec(text.get('wp-includes/version.php') ?? '')?.[1];
     const nodes = installedNodes({ home });
-    const topKind = classifyRepo(top);
-    // Tooling on top and the theme in a folder of the repo.
-    const themeIn = topKind === 'other' ? themeFolderIn(paths) : undefined;
+    // Tooling on top and the theme in a folder of the repo: by its files, or by its header (a block theme has no functions.php).
+    const themeIn = topKind === 'other' ? (themeFolderIn(paths) ?? (header?.kind === 'theme' ? header.folder : undefined)) : undefined;
+    const kind = themeIn ? 'theme' : topKind === 'other' && header && !header.folder ? header.kind : topKind;
+    const pluginIn = topKind === 'other' && !themeIn && header?.kind === 'plugin' ? header.folder : undefined;
     return {
       helpers: (Object.keys(LOCAL_HELPER_PLUGINS) as LocalHelperPlugin[]).filter(has),
       mediaPlugin: has(MEDIA_PLUGIN),
@@ -140,8 +147,10 @@ export async function repoLookup(exec: Executor, workDir: string, url: string, b
         return 'error' in on ? on.error : on.note;
       }),
       ...(nodes.length ? { nodes } : {}),
-      kind: themeIn ? 'theme' : topKind,
+      kind,
       ...(themeIn ? { themeIn } : {}),
+      ...(pluginIn ? { pluginIn } : {}),
+      ...(header ? { header } : {}),
       ...(withCore ? { core: version ? { version } : {} } : {}),
       ...([...paths].some((p) => p.startsWith('wp-content/uploads/') || p.startsWith('uploads/')) ? { uploads: true } : {}),
       plugins: [...new Set([...paths].flatMap((p) => /^((?:.*?\/)?plugins\/[^/]+)/.exec(p)?.[1] ?? []))].filter((p) => !p.split('/').includes('node_modules') && !p.split('/').includes('vendor')).slice(0, 2000),

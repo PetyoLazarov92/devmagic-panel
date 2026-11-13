@@ -70,6 +70,16 @@ export async function serverSignIn(exec: Executor, host: string): Promise<Server
   return { how: 'unknown', problem: sshProblem(host, r.stderr, r.code) };
 }
 
+/**
+ * Whether a server takes a password: one connection that signs in with it
+ * through the askpass helper and runs nothing but `true`. One try, so a
+ * wrong password never locks the account. Nothing is kept or written there.
+ */
+export async function passwordSignIn(ctx: Pick<SshPasswordContext, 'exec' | 'runtimeDir' | 'feed'>, host: string, password: string): Promise<{ works: true } | { works: false; problem: string }> {
+  const r = await withSshPassword(ctx, password, (exec) => exec('ssh', [...SSH_OPTIONS, ...sshTarget(host), 'true'], { timeoutMs: 45_000 }));
+  return r.code === 0 ? { works: true } : { works: false, problem: sshProblem(host, r.stderr, r.code) };
+}
+
 /** The command to type for a host, with its port the way ssh takes it. */
 const sshCommand = (host: string) => {
   const parts = splitSshHost(host);
@@ -88,7 +98,8 @@ export const refusalWithSaved = (host: string, message: string) => (message === 
 
 export function sshProblem(host: string, stderr: string, code = 1, hint = ''): string {
   const last = stderr.trim().split('\n').filter(Boolean).at(-1) ?? '';
-  if (/Host key verification failed|No .* host key is known/i.test(stderr)) return `${host} is not in your known_hosts: connect once in a terminal with ${sshCommand(host)}, check its key, then try again`;
+  if (/Host key verification failed|No .* host key is known/i.test(stderr)) return `${host} is not in your known_hosts yet: run ${sshCommand(host)} in a terminal, check the key it shows and answer yes. When it then asks for a password you can close it there (Ctrl+C): the key is kept. Then try again here`;
+  if (/ssh_askpass|SSH_ASKPASS/i.test(stderr)) return `ssh could not ask the panel for the password (${last}): try again, and if it stays, see the panel's log`;
   if (/Permission denied/i.test(stderr)) return REFUSED(host);
   if (/Could not resolve hostname/i.test(stderr)) return `${host} is not a host your ssh knows: use an alias from ~/.ssh/config or user@host`;
   if (last) return last;
@@ -97,7 +108,7 @@ export function sshProblem(host: string, stderr: string, code = 1, hint = ''): s
 
 /** Why a quiet wp db export fails, and how to see it. */
 const exportHint = (host: string, path: string) =>
-  `WP-CLI on the server stopped without a word, as PHP does on a fatal error with display_errors off (shared hosts often block mysqldump this way). Run ${sshCommand(host)} wp --path=${path} db export - --debug > /dev/null in a terminal to see why, or take A dump file there instead`;
+  `WP-CLI on the server stopped without a word, as PHP does on a fatal error with display_errors off (shared hosts often block mysqldump this way). Run ${sshCommand(host)} wp --path=${path} db export - --debug > /dev/null in a terminal to see why (it asks for the server's password there when your key does not sign in), or take A dump file there instead`;
 
 /** The upload a dump job made, said for the wizard: "upload <id>". */
 const madeUpload = (info: UploadInfo, from: string) => ok(`took ${info.name} (${formatBytes(info.size)}) from ${from}: upload ${info.id}${info.facts.hosts[0] ? `, for ${info.facts.hosts[0]}` : ''}`);

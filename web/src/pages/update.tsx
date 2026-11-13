@@ -92,9 +92,10 @@ export function UpdatePage() {
   }
 
   const downloaded = status?.latest ? status.releases.find((r) => r.name === status.latest && !r.current) : undefined;
+  const hasNews = Boolean(status && ((status.available && status.latest) || status.changelog.length > 0));
 
   return (
-    <div className="mx-auto max-w-3xl pt-4">
+    <div className="pt-4">
       <PageHeader
         title="Updates"
         intro={
@@ -198,6 +199,10 @@ export function UpdatePage() {
             <Notice tone="success">{status.reason ?? 'You have the latest version.'}</Notice>
           )}
 
+          {/* Wide: the release to install and what it brings on the left, the installed ones and how updates arrive on the right. */}
+          <div className={cn('grid items-start gap-4', hasNews ? '@5xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]' : '@4xl:grid-cols-2')}>
+          {hasNews && (
+          <div className="grid min-w-0 gap-4">
           {status.available && status.latest && (
             <Card>
               <CardHeader title={<>{status.latest} is out</>} meta={<CircleArrowUp className="size-4 text-primary" />} />
@@ -259,7 +264,10 @@ export function UpdatePage() {
           )}
 
           {status.changelog.length > 0 && <WhatIsNew key={status.latest} current={status.current} changelog={status.changelog} />}
+          </div>
+          )}
 
+          <div className={cn('grid min-w-0 gap-4', !hasNews && 'contents')}>
           {status.releases.length > 0 && (
             <Card>
               <CardHeader title="Installed releases" meta={<History className="size-4 text-muted-foreground" />} />
@@ -322,6 +330,8 @@ export function UpdatePage() {
           )}
 
           <AccessCard status={status} />
+          </div>
+          </div>
         </div>
       )}
     </div>

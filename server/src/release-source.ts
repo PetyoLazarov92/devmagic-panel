@@ -208,7 +208,8 @@ export function ghSource(exec: Executor, repo: string): ReleaseSource {
  */
 export function gitSource(exec: Executor, url: string, cacheDir: string): ReleaseSource {
   if (!GIT_URL.test(url)) throw new Error(`not a git remote: ${url}`);
-  const git = (args: string[], timeoutMs = 120_000, env: Record<string, string> = {}) => exec('git', ['-C', cacheDir, ...args], { timeoutMs, env: { ...NO_PROMPTS, ...env } });
+  // --git-dir, not -C: git with safe.bareRepository=explicit (some setups, and the desktop app's terminal) refuses to find a bare repository from -C.
+  const git = (args: string[], timeoutMs = 120_000, env: Record<string, string> = {}) => exec('git', [`--git-dir=${cacheDir}`, ...args], { timeoutMs, env: { ...NO_PROMPTS, ...env } });
   const ref = (tag: string) => `refs/tags/pkg/${tag}`;
 
   const ensure = async () => {

@@ -103,7 +103,7 @@ describe('gitSource', () => {
     ]);
     expect(releases[0]?.sizes).toBeUndefined();
     // The tags came without the packages.
-    const missing = execFileSync('git', ['-C', cache, 'rev-list', '--objects', '--missing=print', '--all'], { encoding: 'utf8' });
+    const missing = execFileSync('git', [`--git-dir=${cache}`, 'rev-list', '--objects', '--missing=print', '--all'], { encoding: 'utf8' });
     expect(missing.split('\n').filter((l) => l.startsWith('?'))).toHaveLength(4);
 
     expect(JSON.parse(await source.text('v0.7.0', 'devmagic-panel-v0.7.0.json'))).toEqual({ name: 'v0.7.0' });

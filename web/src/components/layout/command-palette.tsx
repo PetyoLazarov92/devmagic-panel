@@ -1,6 +1,6 @@
 import type { ActionId, InstallDraft, Site } from '@devmagic-panel/shared';
 import { branchWebUrl, repoWeb } from '@devmagic-panel/shared';
-import { Activity, Archive, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, Folder, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
+import { Activity, Archive, HeartPulse, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, Folder, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { openInVSCode, siteUrl } from '@/components/layout/site-bits';
 import { Button } from '@/components/ui/button';
@@ -112,6 +112,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
       { id: 'services', label: 'Services', icon: <Server />, group: 'Go to', run: () => navigate('/services') },
       { id: 'machine', label: 'Machine checks', hint: 'Aura: Apache, MySQL, PHP, tools', icon: <Activity />, group: 'Go to', run: () => navigate('/aura/machine') },
       { id: 'settings', label: 'Settings', hint: 'password, AI assistant, Claude Code defaults', icon: <Settings />, group: 'Go to', run: () => navigate('/settings') },
+      { id: 'sanctum', label: 'Sanctum', hint: 'the panel: background tasks, storage, programs running', icon: <HeartPulse />, group: 'Go to', run: () => navigate('/sanctum') },
       { id: 'activity', label: 'Activity', hint: 'jobs since the panel started', icon: <ListChecks />, group: 'Go to', run: () => navigate('/activity') },
       { id: 'runs', label: 'Run history', hint: 'every action with its output', icon: <History />, group: 'Go to', run: () => navigate('/activity/runs') },
       { id: 'mail', label: 'Mail', hint: 'what Mailpit caught', icon: <Mail />, group: 'Go to', run: () => navigate('/mail') },

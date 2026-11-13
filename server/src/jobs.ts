@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { JobView, RunStep } from '@devmagic-panel/shared';
 import type { ExecResult } from './exec.js';
 import type { RunStore } from './store.js';
+import { inJob } from './running.js';
 
 /**
  * Long-running work (creating a site) as a list of steps. Each step runs in
@@ -270,7 +271,7 @@ export class Jobs {
       const started = Date.now();
       let results: ExecResult[];
       try {
-        results = asList(await step.run(runtime));
+        results = asList(await inJob({ id: job.view.id, title: job.view.title }, () => step.run(runtime)));
       } catch (error) {
         results = [{ code: 1, stdout: '', stderr: (error as Error).message }];
       }

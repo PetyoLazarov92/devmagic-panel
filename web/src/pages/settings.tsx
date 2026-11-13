@@ -10,11 +10,12 @@ export function SettingsPage() {
   return (
     <div className="pt-4">
       <PageHeader title="Settings" intro="The panel password, the AI assistant, the defaults Claude Code uses for installs, the constants new sites get, and what the wizard remembers per repo." />
-      <div className="mt-6 grid gap-4">
+      {/* In pairs of about the same size once there is room, each pair as tall as its taller card; a lone last card takes the row. */}
+      <div className="mt-6 grid items-stretch gap-4 @4xl:grid-cols-2 @4xl:[&>:last-child:nth-child(odd)]:col-span-2">
         <PanelPasswordCard />
+        <LocalConstantsCard />
         <AssistantCard />
         <ClaudeDefaultsCard />
-        <LocalConstantsCard />
         <RememberedCard />
         <TrustedOwnersCard />
       </div>

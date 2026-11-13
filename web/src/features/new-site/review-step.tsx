@@ -1,4 +1,5 @@
-import { addressSummary, repoTarget, mountFolder } from '@devmagic-panel/shared';
+import { addressSummary, repoTarget, mountFolder, sameRepo } from '@devmagic-panel/shared';
+import { allRows, repoKindLabel } from '@/lib/project-repos';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { JobScreen } from '@/features/jobs/job-screen';
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,12 @@ export function ReviewStep({ state, set, input, dbName, cores }: { state: Wizard
 /** What the install is about to do, as label and value: the rows the answers call for. */
 export function reviewRows(input: CreateSiteInput, state: WizardState, network: ReturnType<typeof networkFor>, summary: string | null | undefined, dbName: string): KeyValueRow[] {
   const when = (on: unknown, label: string, value: ReactNode): KeyValueRow[] => (on ? [{ label, value }] : []);
+  // What each repo is (a theme or plugin by its header), next to where it goes.
+  const rows = allRows(state);
+  const kindOf = (r: CreateSiteInput['repos'][number]) => {
+    const row = rows.find((x) => sameRepo(x.url, r.url));
+    return repoKindLabel(row?.helpers, row?.kind, { dir: r.dir, folder: r.folder });
+  };
   return [
     ...(input.path
       ? [
@@ -70,6 +77,7 @@ export function reviewRows(input: CreateSiteInput, state: WizardState, network: 
         <>
           <span className="font-mono break-all">{r.url}</span> <span className="text-muted-foreground">({r.branch}) into </span>
           <span className="font-mono break-all">{repoTarget(r) || 'the site root'}</span>
+          {kindOf(r) && <span className="block text-xs text-muted-foreground">{kindOf(r)}</span>}
         </>
       ),
     })),

@@ -1,4 +1,4 @@
-import type { HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, WporgDetails, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
+import type { BackgroundTask, PanelStorage, HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, WporgDetails, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
 import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
@@ -176,6 +176,18 @@ const mockProduction: Record<string, ProductionSettings> = {
   'local.spellbook.example': { host: 'spellbook-prod', folder: '/var/www/spellbook/public', excludeRows: ['wp_actionscheduler_logs', 'wp_redirection_404'], clean: true },
 };
 const mockJobs = new Map<string, JobView>();
+// The panel's own timed work, as the running panel lists it.
+const mockTasks: Array<Omit<BackgroundTask, 'lastRunAt' | 'nextRunAt'> & { lastAgo: number }> = [
+  { id: 'drafts', label: 'Remove expired install drafts', what: 'Removes drafts of the new site wizard that ran out, and their dumps.', everyMs: 10 * 60_000, running: false, lastOk: true, lastAgo: 4 * 60_000 },
+  { id: 'runs', label: 'Trim Run history', what: 'Keeps Run history to 90 days and 2000 runs.', everyMs: 60 * 60_000, running: false, lastOk: true, lastAgo: 14 * 60_000 },
+  { id: 'downloads', label: 'Remove old downloaded dumps', what: 'Removes dumps and staged file uploads after a day, unless a job or a draft still uses one.', everyMs: 60 * 60_000, running: false, lastOk: true, lastNote: 'removed 3 dumps', lastAgo: 14 * 60_000 },
+  { id: 'file-trash', label: 'Empty old Files tab deletes', what: "Removes the Files tab's deletes after 14 days, and the oldest past 1 GB.", everyMs: 60 * 60_000, running: false, lastOk: true, lastAgo: 14 * 60_000 },
+  { id: 'mysql-backups', label: 'Remove old MySQL settings backups', what: "Removes backups of MySQL's settings after 14 days.", everyMs: 60 * 60_000, running: false, lastOk: true, lastNote: 'removed 1 MySQL backups', lastAgo: 14 * 60_000 },
+  { id: 'snapshots', label: 'Remove old automatic snapshots', what: 'Removes the snapshots the panel took before a change once they are past their time: it keeps the newest 3 per site and every one from the last 30 days. Yours stay.', everyMs: 24 * 60 * 60_000, running: false, lastOk: true, lastAgo: 3 * 60 * 60_000 },
+  { id: 'kept', label: 'Drop expired kept databases', what: 'Drops databases kept after a swap or a refresh once their 7 days are over.', everyMs: 60 * 60_000, running: false, lastOk: true, lastAgo: 14 * 60_000 },
+  { id: 'trash', label: 'Remove deleted sites for good', what: 'Removes deleted and archived sites for good after 14 days.', everyMs: 6 * 60 * 60_000, running: false, lastOk: true, lastNote: 'removed local.old-shop.test', lastAgo: 2 * 60 * 60_000 },
+  { id: 'updates', label: 'Check for a new release', what: 'Looks for a new release of the panel.', everyMs: 6 * 60 * 60_000, running: false, lastOk: false, lastNote: 'github.com did not answer', lastAgo: 2 * 60 * 60_000 },
+];
 // An install that finished with its build skipped, as on local.wandworks.test's page and run 40.
 mockJobs.set('mock-done-skipped', {
   id: 'mock-done-skipped', title: 'Create site', target: 'local.wandworks.test', status: 'done', kind: 'site.create', runId: 40, progress: 1, undo: [], undoable: [],
@@ -1873,6 +1885,10 @@ export const mockApi: Api = {
     ];
     // A repo with tooling on top and its theme in a folder of its own.
     if (/theme-kit/i.test(url)) return { helpers: [], mediaPlugin: false, builds: [{ dir: '', tool: 'npm', scripts: ['build'], script: 'build', needed: true, why: 'wandworks/style.css is ignored by git', node: 'Node 22.23.4 from nvm (its default, 22)' }], nodes: ['24.22.2', '22.23.4', '16.20.2'], kind: 'theme', themeIn: 'wandworks' };
+    // A plugin with no readme.txt and a child theme, told by the headers WordPress reads; a repo with neither.
+    if (/blocks/i.test(url)) return { helpers: [], mediaPlugin: false, builds: [], kind: 'plugin', header: { kind: 'plugin', name: 'Wandworks Blocks', version: '1.4.0' } };
+    if (/child/i.test(url)) return { helpers: [], mediaPlugin: false, builds: [], kind: 'theme', header: { kind: 'theme', name: 'Spellbook Child', version: '2.0', parent: 'wandworks' } };
+    if (/tools/i.test(url)) return { helpers: [], mediaPlugin: false, builds: [], kind: 'other' };
     return { helpers: /spellbook/i.test(url) && branch === 'develop' ? ['query-monitor', 'user-switching'] : ['query-monitor'], mediaPlugin: true, builds, nodes: ['24.22.2', '22.23.4', '16.20.2'] };
   },
   startJob: async (id, input) => {
@@ -2222,16 +2238,69 @@ export const mockApi: Api = {
   },
   // In the mockup a host with "password" in its name asks for one, "locked" takes keys only, "new" is not in known_hosts.
   // spellbook-prod asks for one too and has one saved, to show that state; answers are kept as the server keeps them.
+  panelStatus: async () => {
+    await wait(200);
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+    const ahead = (ms: number) => new Date(Date.now() + ms).toISOString();
+    return {
+      version: '1.44.1',
+      startedAt: ago(2 * 60 * 60_000 + 14 * 60_000),
+      before: { startedAt: ago(14 * 60 * 60_000), stoppedAt: ago(2 * 60 * 60_000 + 15 * 60_000), ended: 'stopped' },
+      memoryBytes: 182 * 1024 * 1024,
+      jobs: 1,
+      programs: [
+        { program: 'ssh', startedAt: ago(42_000), job: { id: 'mock-running', title: 'Refresh the database from production' } },
+        { program: 'gzip', startedAt: ago(41_000), job: { id: 'mock-running', title: 'Refresh the database from production' } },
+        { program: 'dmp-root trash-purge', startedAt: ago(3_000), task: { id: 'trash', title: 'Remove deleted sites for good' } },
+        { program: 'wp', startedAt: ago(1_000) },
+      ],
+      tasks: mockTasks.map((t) => ({ ...t, lastRunAt: ago(t.lastAgo), nextRunAt: ahead(t.everyMs - t.lastAgo), lastAgo: undefined })),
+    };
+  },
+  panelStorage: async () => {
+    await wait(500);
+    const MB = 1024 * 1024;
+    const rows: PanelStorage['rows'] = [
+      { id: 'snapshots', label: 'Database snapshots', what: "Copies of a site's database: yours, and the ones the panel takes before an import, a restore, a search and replace or updates.", bytes: 1240 * MB, kept: "Yours until you delete them. The panel's own: the newest 3 per site and every one from the last 30 days", task: 'snapshots', where: ['/home/wandworksco/devmagic-panel-backups/snapshots'] },
+      { id: 'clean', label: 'Clean copies', what: 'Databases exported without personal data, to share.', bytes: 86 * MB, kept: 'Until you delete them', manage: { note: "Delete one on its site's Database tab, under Backups and tools", label: 'Sites', href: '/sites' }, where: ['/home/wandworksco/devmagic-panel-backups/clean'] },
+      { id: 'undo', label: 'Backups for Undo', what: "What a change replaced: config files before a root change, clean-ups, row edits, crontabs and removed sites' extras.", bytes: 3.4 * MB, kept: 'Clean-ups and row edits 14 days; the backups dmp-restore restores a change from stay until you remove them', where: ['/home/wandworksco/devmagic-panel-backups'] },
+      { id: 'trash', label: 'Deleted sites', what: 'Sites you deleted or replaced, archived with their files, config and database, to restore.', bytes: 412 * MB, kept: '14 days', task: 'trash', where: ['$STATE_DIR/trash (root)'] },
+      { id: 'downloads', label: 'Remove old downloaded dumps', what: 'Database dumps you uploaded or the panel downloaded, and files staged for the Files tab.', bytes: 312 * MB, kept: 'A day, unless a job or a draft still uses one', task: 'downloads', where: ['/home/wandworksco/.local/share/devmagic-panel/uploads'] },
+      { id: 'file-trash', label: 'Empty old Files tab deletes', what: 'Files and folders deleted in the Files tab, for Undo.', bytes: 2.1 * MB, kept: '14 days, 1 GB at most', task: 'file-trash', where: ['/home/wandworksco/.local/share/devmagic-panel/file-trash'] },
+      { id: 'mysql-backups', label: 'Remove old MySQL settings backups', what: "MySQL's settings before the panel changed them.", bytes: 48 * 1024, kept: '14 days', task: 'mysql-backups', where: ['/home/wandworksco/.local/share/devmagic-panel/mysql-backups'] },
+      { id: 'releases', label: 'Panel versions', what: 'The running version of the panel and the ones before it, to switch back to.', bytes: 257 * MB, kept: 'Three in all', manage: { note: 'Each update removes the oldest', label: 'Updates', href: '/update' }, where: ['/home/wandworksco/.local/share/devmagic-panel/releases'] },
+      { id: 'tools', label: 'Mailpit and tools', what: 'Mailpit with the mail it caught, and tools the panel downloaded, like the PHP compatibility check.', bytes: 47 * MB, kept: 'Until you remove Mailpit; mail as Mailpit keeps it', manage: { note: 'Delete caught mail in Mail', label: 'Mail', href: '/mail' }, where: ['/home/wandworksco/.local/share/devmagic-panel/mailpit'] },
+      { id: 'panel', label: 'Run history and logs', what: "The panel's database (Run history, drafts, settings) and its logs.", bytes: 2.3 * MB, kept: 'Runs 90 days, 2000 at most', task: 'runs', where: ['/home/wandworksco/.local/share/devmagic-panel/panel.db'] },
+      { id: 'kept', label: 'Kept databases', what: "A site's database as it was before a swap or a refresh, kept in MySQL to switch back.", bytes: null, count: 2, kept: '7 days', task: 'kept', where: ['MySQL'] },
+    ];
+    return { measuredAt: new Date().toISOString(), rows, totalBytes: rows.reduce((sum, r) => sum + (r.bytes ?? 0), 0) };
+  },
+  runPanelTask: async (id) => {
+    await wait(700);
+    const task = mockTasks.find((t) => t.id === id);
+    if (!task) throw new Error('No such task');
+    task.lastAgo = 0;
+    task.lastOk = true;
+    task.lastNote = id === 'downloads' ? 'removed 2 dumps' : '';
+    return { ...task, lastRunAt: new Date().toISOString(), nextRunAt: new Date(Date.now() + task.everyMs).toISOString(), lastAgo: undefined };
+  },
   serverSignIn: async (host, how = {}) => {
     const saved = mockSavedSsh.has(host.toLowerCase());
     const kept = mockSignIns.get(host.toLowerCase());
+    // Test password: "wrong" is refused, anything else signs in.
+    if (how.testPassword || how.testSaved) {
+      await wait(600);
+      const works = how.testPassword !== 'wrong';
+      const which = how.testPassword ? 'typed' : 'saved';
+      return { how: 'password', checkedAt: new Date().toISOString(), saved, passwordCheck: { with: which, works, ...(works ? {} : { problem: `${host} did not take the password, or it does not let you sign in with one. Nothing was kept` }) } };
+    }
     if (kept && !how.fresh) return { ...kept, saved };
     if (how.last) return { how: 'unchecked', saved };
     await wait(500);
     const checkedAt = new Date().toISOString();
     const answer: ServerSignIn = host.includes('password') || host.startsWith('spellbook-prod') ? { how: 'password', checkedAt }
       : host.includes('locked') ? { how: 'refused', checkedAt, problem: `${host} takes SSH keys only, and refused yours (the panel uses your ssh-agent and ~/.ssh/config)` }
-      : host.includes('new') ? { how: 'unknown', checkedAt, problem: `${host} is not in your known_hosts: connect once in a terminal with ssh ${host}, check its key, then try again` }
+      : host.includes('new') ? { how: 'unknown', checkedAt, problem: `${host} is not in your known_hosts yet: run ssh ${host} in a terminal, check the key it shows and answer yes. When it then asks for a password you can close it there (Ctrl+C): the key is kept. Then try again here` }
       : { how: 'key', checkedAt };
     if (answer.how !== 'unknown') mockSignIns.set(host.toLowerCase(), answer);
     return { ...answer, saved };

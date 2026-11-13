@@ -4,7 +4,7 @@ import { actions, isWpCliCommand, splitSshHost } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { withoutPasswords } from '../src/actions.js';
 import type { JobStep } from '../src/jobs.js';
-import { planServerDump, serverSignIn, serverTables, SSH_OPTIONS, sshTarget } from '../src/sites/more-dumps.js';
+import { passwordSignIn, planServerDump, serverSignIn, serverTables, SSH_OPTIONS, sshProblem, sshTarget } from '../src/sites/more-dumps.js';
 import { oncePassword, PASSWORD_OPTIONS, withSshPassword } from '../src/sites/ssh-password.js';
 import { DMP, fakeExec, type FakeResponse, wpSiteTree } from './helpers.js';
 
@@ -101,6 +101,27 @@ describe('a server that asks for a password', () => {
     expect(await ask({ code: 255, stderr: 'alex@www.spellbook.example: Permission denied (publickey).' })).toMatchObject({ how: 'refused', problem: expect.stringContaining('takes SSH keys only') });
     expect(await ask({ code: 255, stderr: 'Host key verification failed.' })).toMatchObject({ how: 'unknown', problem: expect.stringContaining('is not in your known_hosts') });
     expect(await ask({ code: 255, stderr: 'ssh: connect to host www.spellbook.example port 22: Connection refused' })).toMatchObject({ how: 'unknown', problem: expect.stringContaining('Connection refused') });
+  });
+
+  it('tests a password with one sign-in through the helper that runs only true, and says when the server did not take it', async () => {
+    const works = setup({ ssh: { stdout: '' } });
+    expect(await passwordSignIn({ exec: works.fake.exec, runtimeDir: works.runtimeDir, feed: works.feed }, 'spellbook-prod', SECRET)).toEqual({ works: true });
+    const ssh = works.fake.calls.find((c) => c.file === 'ssh');
+    expect(ssh?.args).toEqual([...PASSWORD_OPTIONS, ...SSH_OPTIONS, '--', 'spellbook-prod', 'true']);
+    expect(ssh?.env).toMatchObject({ SSH_ASKPASS_REQUIRE: 'force' });
+    expect(works.fed).toEqual([`${SECRET}\n`]);
+    expect(JSON.stringify(works.fake.calls)).not.toContain(SECRET);
+    expect(readdirSync(works.runtimeDir)).toEqual([]);
+    const refused = setup({ ssh: { code: 255, stderr: 'Permission denied, please try again.\nspellbook-prod: Permission denied (publickey,password).' } });
+    expect(await passwordSignIn({ exec: refused.fake.exec, runtimeDir: refused.runtimeDir, feed: refused.feed }, 'spellbook-prod', SECRET)).toMatchObject({ works: false, problem: expect.stringContaining('refused your SSH key') });
+  });
+
+  it('says how to add a host key in a terminal, and that the password prompt there can be closed', () => {
+    const said = sshProblem('spellbook-prod', 'No ED25519 host key is known for spellbook-prod and you have requested strict checking.\nHost key verification failed.');
+    expect(said).toContain('run ssh spellbook-prod in a terminal');
+    expect(said).toContain('answer yes');
+    expect(said).toContain('Ctrl+C');
+    expect(sshProblem('spellbook-prod', 'ssh_askpass: exec(/run/user/1000/x/askpass): Permission denied\nPermission denied (publickey,password).')).toContain('could not ask the panel for the password');
   });
 
   it('takes a port after the host and gives it to ssh and sftp as an option of its own', async () => {

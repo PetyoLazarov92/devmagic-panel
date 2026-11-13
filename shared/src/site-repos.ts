@@ -68,6 +68,67 @@ export function looksLikeTheme(names: readonly string[]): boolean {
 }
 
 /**
+ * One field of a WordPress file header, as get_file_data reads it: within
+ * the first 8 KB, a line like " * Plugin Name: Wandworks Blocks" (or right
+ * after <?php), without a comment's or PHP's closing after the value.
+ */
+export function headerField(text: string, field: string): string | undefined {
+  const m = new RegExp(`^(?:[ \\t]*<\\?php)?[ \\t/*#@]*${field}:(.*)$`, 'mi').exec(text.slice(0, 8192));
+  const value = m?.[1]?.replace(/\s*(?:\*\/|\?>).*$/, '').trim();
+  return value ? value.slice(0, 120) : undefined;
+}
+
+/** A theme or plugin as WordPress names it from its header, and the folder of the repo it is in when not the top. */
+export interface WpHeader {
+  kind: 'theme' | 'plugin';
+  name: string;
+  version?: string;
+  /** A child theme's parent, from its Template field. */
+  parent?: string;
+  /** The repo's folder it is in; none when it is the repo itself. */
+  folder?: string;
+}
+
+/** A header in one file: style.css for a theme, a .php file for a plugin. */
+function headerOf(path: string, text: string): WpHeader | undefined {
+  const name = path.split('/').at(-1) ?? '';
+  const field = name === 'style.css' ? 'Theme Name' : name.endsWith('.php') ? 'Plugin Name' : undefined;
+  const title = field ? headerField(text, field) : undefined;
+  if (!field || !title) return undefined;
+  const version = headerField(text, 'Version');
+  const parent = field === 'Theme Name' ? headerField(text, 'Template') : undefined;
+  return { kind: field === 'Theme Name' ? 'theme' : 'plugin', name: title, ...(version ? { version } : {}), ...(parent ? { parent } : {}) };
+}
+
+/** The files a header is read from: style.css and .php files at the top and one folder down, never in folders tools fill. */
+export function headerCandidate(path: string): boolean {
+  const parts = path.split('/');
+  if (parts.length > 2 || (parts.length === 2 && (!SEGMENT.test(parts[0] as string) || ['node_modules', 'vendor', 'bower_components'].includes(parts[0] as string)))) return false;
+  const name = parts.at(-1) ?? '';
+  return name === 'style.css' || name.endsWith('.php');
+}
+
+/**
+ * What WordPress would take a repo for, by the headers it reads: a theme by
+ * style.css's Theme Name, a plugin by a PHP file's Plugin Name, at the top
+ * first, else in the one folder below that has one. Undefined when none has,
+ * or several folders do.
+ */
+export function wpHeaderIn(files: ReadonlyMap<string, string>): WpHeader | undefined {
+  const found = [...files].filter(([path]) => headerCandidate(path)).flatMap(([path, text]) => {
+    const header = headerOf(path, text);
+    const parts = path.split('/');
+    return header ? [{ ...header, ...(parts.length === 2 ? { folder: parts[0] as string } : {}) }] : [];
+  });
+  // A theme's style.css wins over a PHP file of the same folder that happens to have a plugin's header.
+  const pick = (list: WpHeader[]) => list.find((h) => h.kind === 'theme') ?? list[0];
+  const top = found.filter((h) => !h.folder);
+  if (top.length) return pick(top);
+  const folders = [...new Set(found.map((h) => h.folder))];
+  return folders.length === 1 ? pick(found) : undefined;
+}
+
+/**
  * The one folder of a repo's top level that is a theme, from the repo's file
  * paths: wandworks for wandworks/functions.php and the rest. Undefined when
  * none or several are, or one is named like a folder tools fill.

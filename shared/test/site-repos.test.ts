@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { actions, legacyCreateInput, presetPlacement } from '../src/actions.js';
-import { cloneFolder, holdsCore, looksLikeTheme, placementForKind, themeFolderIn, placementForLayout, placementProblems, placementWarnings, repoBaseName, repoTarget, siteDir, throughCoreLink } from '../src/site-repos.js';
+import { cloneFolder, headerCandidate, headerField, holdsCore, looksLikeTheme, wpHeaderIn, placementForKind, themeFolderIn, placementForLayout, placementProblems, placementWarnings, repoBaseName, repoTarget, siteDir, throughCoreLink } from '../src/site-repos.js';
 
 const URL = 'git@github.com:wandworks/wandworks-blocks.git';
 const base = {
@@ -121,5 +121,33 @@ describe('remembered answers', () => {
     expect(presetPlacement({ layout: 'theme' }, 'git@github.com:wandworks/Wandworks.git')).toEqual({ dir: 'wp-content/themes', folder: 'Wandworks' });
     expect(presetPlacement({ placement: { dir: 'app', folder: '' }, layout: 'theme' }, URL)).toEqual({ dir: 'app', folder: '' });
     expect(presetPlacement({}, URL)).toEqual({ dir: '', folder: '' });
+  });
+});
+
+describe('a theme or plugin by the header WordPress reads', () => {
+  const plugin = "<?php\n/**\n * Plugin Name: Wandworks Blocks\n * Version: 1.4.0\n * Requires PHP: 8.1\n */\n";
+  const theme = '/*\nTheme Name: Spellbook Child\nTemplate: wandworks\nVersion: 2.0\n*/\nbody{}';
+
+  it('reads one field as get_file_data does, without a closing comment or PHP tag after it', () => {
+    expect(headerField(plugin, 'Plugin Name')).toBe('Wandworks Blocks');
+    expect(headerField(plugin, 'Version')).toBe('1.4.0');
+    expect(headerField('<?php /* Plugin Name: Wandworks Forms */ ?>', 'Plugin Name')).toBe('Wandworks Forms');
+    expect(headerField('# Template Name: Landing\n', 'Template')).toBeUndefined();
+    expect(headerField(`${'x'.repeat(9000)}\n * Plugin Name: Late`, 'Plugin Name')).toBeUndefined();
+  });
+
+  it('finds a plugin with no readme.txt and a child theme, at the top first, else in the one folder that has one', () => {
+    expect(wpHeaderIn(new Map([['wandworks-blocks.php', plugin], ['src/index.php', '<?php']]))).toEqual({ kind: 'plugin', name: 'Wandworks Blocks', version: '1.4.0' });
+    expect(wpHeaderIn(new Map([['style.css', theme], ['functions.php', plugin]]))).toEqual({ kind: 'theme', name: 'Spellbook Child', version: '2.0', parent: 'wandworks' });
+    expect(wpHeaderIn(new Map([['theme/style.css', theme], ['gulpfile.php', '<?php']]))).toMatchObject({ kind: 'theme', folder: 'theme' });
+    expect(wpHeaderIn(new Map([['plugin/wandworks-forms.php', plugin]]))).toMatchObject({ kind: 'plugin', folder: 'plugin' });
+    // Two folders with a header each: which one it is cannot be told.
+    expect(wpHeaderIn(new Map([['a/a.php', plugin], ['b/style.css', theme]]))).toBeUndefined();
+    expect(wpHeaderIn(new Map([['index.php', '<?php echo 1;']]))).toBeUndefined();
+  });
+
+  it('reads headers only at the top and one folder down, never in folders tools fill', () => {
+    for (const path of ['style.css', 'plugin.php', 'theme/style.css', 'plugin/plugin.php']) expect(headerCandidate(path)).toBe(true);
+    for (const path of ['vendor/x.php', 'node_modules/style.css', 'a/b/c.php', 'readme.txt', 'src/index.js']) expect(headerCandidate(path)).toBe(false);
   });
 });

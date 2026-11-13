@@ -1,6 +1,6 @@
 import type { OrgRepo } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { allRows, isPicked, makeMain, pickRepo, shownOrder, placementOf, planLines, rowPlacement, rowsProblem, unpickRepo } from '../src/lib/project-repos.js';
+import { allRows, isPicked, makeMain, pickRepo, repoKindLabel, shownOrder, placementOf, planLines, rowPlacement, rowsProblem, unpickRepo } from '../src/lib/project-repos.js';
 import type { WizardState } from '../src/features/new-site/wizard-shared.js';
 
 const repo = (fullName: string, kind: OrgRepo['kind'] = 'site'): OrgRepo => ({
@@ -77,5 +77,20 @@ describe('picking the repos of a site', () => {
       ['', 0, 'wandworks/site', true],
       ['wp-content/plugins/blocks', 3, 'wandworks/blocks', false],
     ]);
+  });
+});
+
+describe('what a picked repo is, on its badge', () => {
+  it('names a theme or plugin by its header, then by what it holds, then by where it goes', () => {
+    expect(repoKindLabel({ key: 'k', header: { kind: 'plugin', name: 'Wandworks Blocks', version: '1.4.0' } }, 'other', null)).toBe('Plugin: Wandworks Blocks 1.4.0');
+    expect(repoKindLabel({ key: 'k', header: { kind: 'theme', name: 'Spellbook Child', parent: 'wandworks' } }, undefined, null)).toBe('Child theme of wandworks: Spellbook Child');
+    expect(repoKindLabel({ key: 'k', header: { kind: 'plugin', name: 'Wandworks Forms', folder: 'plugin' } }, undefined, null)).toBe("Plugin: Wandworks Forms, in the repo's plugin folder");
+    expect(repoKindLabel({ key: 'k', kind: 'theme', themeIn: 'theme' }, undefined, null)).toBe("Theme, in the repo's theme folder");
+    expect(repoKindLabel(null, 'plugin', null)).toBe('Plugin');
+    expect(repoKindLabel({ key: 'k', kind: 'other' }, 'other', { dir: 'wp-content/themes', folder: 'wandworks' })).toBe('No theme header: goes in themes');
+    expect(repoKindLabel({ key: 'k', kind: 'other' }, 'other', { dir: 'wp-content/plugins', folder: 'wandworks-tools' })).toBe('No plugin header: goes in plugins');
+    expect(repoKindLabel({ key: 'k', kind: 'other' }, 'other', { dir: 'wp-content/mu-plugins', folder: 'x' })).toBe('Goes in mu-plugins');
+    expect(repoKindLabel({ key: 'k', kind: 'other' }, 'other', { dir: '', folder: 'tools' })).toBe('Not a theme or plugin');
+    expect(repoKindLabel(null, undefined, null)).toBeNull();
   });
 });

@@ -38,6 +38,15 @@ one first), where it goes in the site and the folder it is cloned into.
   folder itself. The wizard starts from what the repo holds: a whole site at
   the root, wp-content as `wp-content`, a theme or plugin in its folder named
   after the repo. The full path shows under the fields.
+- **What each repo is**: its badge names it the way WordPress would, from the
+  header it reads: `style.css`'s Theme Name for a theme (with its parent for a
+  child theme), a PHP file's Plugin Name for a plugin, with the version, at
+  the top of the repo or in the one folder below that has one ("Plugin:
+  Wandworks Blocks 1.4.0"). A plugin without a `readme.txt` and a block theme
+  without `functions.php` are found this way, and **Install to** follows:
+  Themes for a theme, Plugins for a plugin, until you pick another. A repo
+  with no header says where it goes ("No plugin header: goes in plugins"), or
+  that it is not a theme or plugin. Review lists each repo with what it is.
 - **A theme in a folder of its repo** (tooling on top, the theme in
   `wandworks/`): the wizard says so and places the repo in
   `wp-content/repos`. Local mode makes each repo there one more themes
@@ -164,7 +173,12 @@ against the free space.
   empty field then uses it, a new one replaces it, **Forget password** removes
   it, and it is never shown back. How a server signs you in is checked once
   you stop typing the host or press **Check connection**, and kept for an
-  hour; a site's saved server is not checked when you open a view. Nothing is written on the server, and no key is
+  hour; a site's saved server is not checked when you open a view. **Test
+  password** signs in once with the typed password, or the saved one, and
+  runs nothing there: it says whether the server took it before a run needs
+  it. A host not in your `known_hosts` yet says what to type in a terminal:
+  answer yes to its key, then close it at the password prompt (Ctrl+C), as the
+  key is kept by then. Nothing is written on the server, and no key is
   added to it. A wrong password is tried once. Paths take letters, digits and `. _ - /`
   only, as ssh hands the command to the server's shell.
   The export is compressed on the way, writes no file on the server and

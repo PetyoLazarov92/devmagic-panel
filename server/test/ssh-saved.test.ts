@@ -83,7 +83,7 @@ describe('the routes for a saved password and how a server signs you in', () => 
 
   async function start() {
     const { t, file } = await secretsFile();
-    const fake = fakeExec({ ...healthyResponses(), ssh: { code: 255, stderr: 'alex@www.spellbook.example: Permission denied (publickey,password).' } });
+    const fake = fakeExec({ ...healthyResponses(), mkfifo: { stdout: '' }, ssh: { code: 255, stderr: 'alex@www.spellbook.example: Permission denied (publickey,password).' } });
     app = await buildApp({ config: t.config, exec: fake.exec, store: new RunStore(':memory:'), secrets: () => readSecrets(file), secretsFile: file, hostPaths: t.hostPaths, dmpRoot: DMP, version: '9.9.9', uploadsDir: join(t.root, 'uploads'), production: true });
     const res = await app.inject({ method: 'POST', url: '/api/login', headers: { host: HOST, origin: ORIGIN }, payload: { password: 'correct horse' } });
     const cookie = `dmp_session=${res.cookies.find((c) => c.name === 'dmp_session')?.value}`;
@@ -115,5 +115,16 @@ describe('the routes for a saved password and how a server signs you in', () => 
     expect(ssh()).toBe(1);
     await s.call('POST', '/api/dumps/server-sign-in', { host: 'alex@www.spellbook.example', fresh: true });
     expect(ssh()).toBe(2);
+  });
+
+  it('tests the typed or the saved password once, says which one, and never answers with it', async () => {
+    const s = await start();
+    const typed = await s.call('POST', '/api/dumps/server-sign-in', { host: 'alex@www.spellbook.example', testPassword: SECRET });
+    expect(typed.json()).toMatchObject({ how: 'password', passwordCheck: { with: 'typed', works: false, problem: expect.stringContaining('did not take the password') } });
+    const call = s.fake.calls.filter((c) => c.file === 'ssh').at(-1);
+    expect(call?.args).toEqual(expect.arrayContaining(['BatchMode=no', 'NumberOfPasswordPrompts=1', 'true']));
+    expect(JSON.stringify(s.fake.calls) + typed.body).not.toContain(SECRET);
+    await s.call('PUT', '/api/ssh/saved', { host: 'alex@www.spellbook.example', password: SECRET });
+    expect((await s.call('POST', '/api/dumps/server-sign-in', { host: 'alex@www.spellbook.example', testSaved: true })).json()).toMatchObject({ passwordCheck: { with: 'saved', works: false, problem: expect.stringContaining('saved for it') } });
   });
 });

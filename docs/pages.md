@@ -20,7 +20,7 @@ right of each item:
 
 - **Work**: Sites (with the count), Aura, Mail (new messages).
 - **Server**: Services, WP Cores.
-- **System**: Activity, Updates (a newer release), Settings.
+- **System**: Activity, Sanctum, Updates (a newer release), Settings.
 
 The fold button at the bottom of the menu, or Ctrl+B, folds it to a rail of
 icons for a wider page; each icon names its page when you point at it, and a
@@ -94,6 +94,43 @@ installs use it, and the model, effort and cap of its one step), the constants n
 sites get, what the wizard remembers per repo (**Remembered for new
 installs**, to edit or forget), and the repo owners you trusted, to take back
 (`/settings`).
+
+## Sanctum
+
+The panel's inner workings (`/sanctum`), also from the heart icon in the top
+bar, whose card has the short version: a status line, what runs now and the
+next task. Four tiles give the short answer: the panel
+(version, memory, when it started, and a warning when the run before did not
+stop cleanly), what runs now, its background tasks (with any that failed),
+and its storage in all. Under them, one list at a time:
+
+- **Storage** (the default): what the panel keeps, each with its size and how
+  long it stays (point at a name for what it is): database snapshots, clean
+  copies, backups for Undo, deleted sites, downloaded dumps, the Files tab's
+  deletes, MySQL settings backups, panel versions, Mailpit and tools, Run
+  history and logs, and kept databases. **Clean up now** runs that kind's own
+  task, so only what is past its time goes. The kinds no task clears say why
+  and open where you manage them: clean copies on a site's Database tab,
+  panel versions on Updates (three are kept), caught mail in Mail; backups
+  for Undo stay for `dmp-restore`. Snapshots the panel takes before a change
+  (`before-import` and the like) keep the newest 3 per site and every one
+  from the last 30 days; the ones you take stay until you delete them.
+- **Background tasks** (`?view=tasks`): the work the panel does on its own,
+  how often, what each last did and when it runs next, with **Run now**:
+  remove expired install drafts (every 10 minutes); trim Run history, remove
+  old downloaded dumps, Files tab deletes and MySQL settings backups, drop
+  expired kept databases (hourly); remove old automatic snapshots (daily);
+  remove deleted sites for good and check for a new release (every 6 hours).
+- **Running now** (`?view=programs`): each program the panel has open
+  (`ssh`, `wp`, `dmp-root vhost-write`), since when, and what started it: a
+  job (a link to it), a background task, or a page's read. A job is what you
+  started; these are the programs behind it. Only their names, never their
+  arguments or output.
+
+When the panel does not answer (it restarts after an update, or Apache
+reloads), the heart icon says **Reconnecting...** until it is back. A page
+that reads asks once more after a second; a change that lost its answer
+says it is not known whether it ran, and Activity shows what did.
 
 ## Activity
 

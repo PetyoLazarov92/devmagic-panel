@@ -1,5 +1,6 @@
-import type { FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
+import type { BackgroundTask, PanelStatus, PanelStorage, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
+import { sendWithRetry, unreachableMessage } from '@/lib/connection';
 import { noteStatus, refused } from '@/lib/session-watch';
 import { mockApi } from '@/mock/api';
 import { mockFileUrl } from '@/mock/files';
@@ -23,13 +24,16 @@ const loggedOut = () => new ApiError(401, 'Log in first');
 
 async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   if (refused(url)) throw loggedOut();
-  const res = await fetch(url, {
-    method,
-    credentials: 'same-origin',
-    ...(signal ? { signal } : {}),
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const send = () =>
+    fetch(url, {
+      method,
+      credentials: 'same-origin',
+      ...(signal ? { signal } : {}),
+      headers: body === undefined ? {} : { 'content-type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const res = await sendWithRetry(send, method, signal);
+  if (res === 'unreachable') throw new ApiError(0, unreachableMessage(method), { unreachable: true });
   noteStatus(url, res.status);
   if (res.status === 204) return undefined as T;
   const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -245,7 +249,14 @@ export interface Api {
    * How a server signs you in over SSH: with your key, or with a password. Runs nothing there but true, and the
    * answer is kept an hour: `last` asks for the kept one only (connects to nothing), `fresh` connects again.
    */
-  serverSignIn: (host: string, how?: { last?: boolean; fresh?: boolean }) => Promise<ServerSignIn>;
+  /** testPassword or testSaved: signs in once with that password and says whether the server took it. */
+  /** The panel's own status: since when it runs, its programs and its timed work. */
+  panelStatus: () => Promise<PanelStatus>;
+  /** What the panel keeps on disk; fresh measures again instead of the last ten minutes' answer. */
+  panelStorage: (fresh?: boolean) => Promise<PanelStorage>;
+  /** Runs one of the panel's timed tasks now. */
+  runPanelTask: (id: string) => Promise<BackgroundTask>;
+  serverSignIn: (host: string, how?: { last?: boolean; fresh?: boolean; testPassword?: string; testSaved?: boolean }) => Promise<ServerSignIn>;
   /** Saves a server's SSH password in the panel; it is never sent back, only whether one is saved. */
   saveSshPassword: (host: string, password: string) => Promise<{ saved: true }>;
   forgetSshPassword: (host: string) => Promise<{ forgotten: boolean }>;
@@ -480,6 +491,9 @@ const realApi: Api = {
   orgRepos: (org, scan) => request('GET', `/api/org/repos?${new URLSearchParams({ org, scan })}`),
   downloads: () => request('GET', '/api/downloads'),
   rcloneRemotes: () => request('GET', '/api/dumps/remotes'),
+  panelStatus: () => request('GET', '/api/panel/status'),
+  panelStorage: (fresh) => request('GET', `/api/panel/storage${fresh ? '?fresh=1' : ''}`),
+  runPanelTask: (id) => request('POST', `/api/panel/tasks/${encodeURIComponent(id)}/run`, {}),
   serverSignIn: (host, how = {}) => request('POST', '/api/dumps/server-sign-in', { host, ...how }),
   saveSshPassword: (host, password) => request('PUT', '/api/ssh/saved', { host, password }),
   forgetSshPassword: (host) => request('DELETE', '/api/ssh/saved', { host }),
