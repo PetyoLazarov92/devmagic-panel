@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.45.1 (2026-11-13)
+* **Dependencies:** hono 4.13.18, which the MCP SDK brings along. Its security fixes are in parts the panel does not use (it serves itself with Fastify and runs its MCP server over stdio), so nothing changes in how it works
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.45.0 (2026-11-13)
 * **Sanctum:** a new page (`/sanctum`, and the heart icon in the top bar) shows the panel's inner workings, a short answer in four tiles and then one list at a time: the programs it has running for which job (names only, never their arguments), its background tasks with what each last did, when it runs next and **Run now**, and the space each kind of thing takes (snapshots, clean copies, backups for Undo, deleted sites, downloads, panel versions, Mailpit, Run history) with how long it stays and **Clean up now**; the kinds no task clears say why and link to where you manage them. It also says whether the run before stopped cleanly. The heart icon's card gives the short version: how the panel is (or what failed), what it works on by job or task, and its next task. Each background task is named by what it does (Remove expired install drafts, Check for a new release), one per kind, so Clean up now clears only its own row
 * **Backups:** snapshots the panel takes itself before an import, a restore, a search and replace or updates keep the newest 3 per site and every one from the last 30 days; the older ones go once a day. Snapshots you take, clean copies and the backups dmp-restore uses stay until you delete them
