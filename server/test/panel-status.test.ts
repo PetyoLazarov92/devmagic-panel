@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { Chores } from '../src/chores.js';
 import { panelStorage, pruneAutoSnapshots } from '../src/panel-storage.js';
-import { inJob, programName, RunningPrograms } from '../src/running.js';
+import { FINISHED_KEPT, inJob, inTask, notableLine, programName, RunningPrograms } from '../src/running.js';
+import type { FinishedProgram } from '@devmagic-panel/shared';
 import { hashPassword, readSecrets, writeSecrets } from '../src/secrets.js';
 import { RunStore } from '../src/store.js';
 import { DMP, fakeExec, healthyResponses, tempTree } from './helpers.js';
@@ -33,6 +34,56 @@ describe('the programs the panel has running', () => {
   });
 });
 
+describe('the programs that ended lately', () => {
+  it('keeps the last 50 worth a look with how long each took and how it ended, counts the page reads that went well, and never keeps arguments', async () => {
+    let clock = 1_000_000;
+    const programs = new RunningPrograms(() => undefined, () => clock);
+    const exec = programs.track(async (file, args) => {
+      if (!args.includes('quick')) clock += 1500;
+      if (args.includes('fail')) return { code: 2, stdout: '', stderr: 'no' };
+      if (args.includes('slow')) return { code: 1, stdout: '', stderr: 'stopped: it took longer than 30 s' };
+      return { code: 0, stdout: 'secret-output', stderr: '' };
+    });
+    await exec('/usr/bin/wp', ['--path=/var/www/local.spellbook.example', 'option', 'get', 'home']);
+    await inJob({ id: 'j1', title: 'Create site' }, () => exec('wp', ['core', 'install']));
+    await exec('ssh', ['spellbook-prod', 'fail']);
+    await exec('mysql', ['slow']);
+    // A page's read that went well is counted, not listed; a job's is listed, and so is a read that failed or ran out of time.
+    expect(programs.finished()).toEqual([
+      { program: 'mysql', startedAt: expect.any(String), durationMs: 1500, ended: 'timeout' },
+      { program: 'ssh', startedAt: expect.any(String), durationMs: 1500, ended: 'failed', code: 2 },
+      { program: 'wp', startedAt: expect.any(String), durationMs: 1500, ended: 'ok', job: { id: 'j1', title: 'Create site' } },
+    ]);
+    expect(programs.pageReads()).toEqual([{ program: 'wp', count: 1, totalMs: 1500 }]);
+    expect(JSON.stringify(programs.finished())).not.toMatch(/spellbook|secret-output|home/);
+    // A page that starts seven reads at once adds seven to the count and nothing to the list.
+    await Promise.all(Array.from({ length: 7 }, () => exec('wp', ['plugin', 'list', 'quick'])));
+    expect(programs.pageReads()[0]).toEqual({ program: 'wp', count: 8, totalMs: 1500 });
+    expect(programs.finished()).toHaveLength(3);
+    for (let i = 0; i < FINISHED_KEPT + 10; i += 1) await inTask({ id: 't', title: 'Trim Run history' }, () => exec('true', []));
+    expect(programs.finished()).toHaveLength(FINISHED_KEPT);
+  });
+
+  it('logs a slow program and a failed one a job or task ran, by name only; a failed page read is not logged', async () => {
+    let clock = 0;
+    const logged: FinishedProgram[] = [];
+    const programs = new RunningPrograms((p) => logged.push(p), () => clock);
+    const exec = programs.track(async (_file, args) => {
+      clock += args.includes('slow') ? 42_000 : 100;
+      return { code: args.includes('fail') ? 1 : 0, stdout: '', stderr: '' };
+    });
+    await exec('ssh', ['spellbook-prod', 'true', 'fail']);
+    await inJob({ id: 'j1', title: 'Refresh the database from production' }, () => exec('wp', ['db', 'export', 'fail']));
+    await inTask({ id: 'kept', title: 'Drop expired kept databases' }, () => exec('mysql', ['fail']));
+    await exec('gzip', ['slow']);
+    expect(logged.map(notableLine)).toEqual([
+      'wp ran 0 s for "Refresh the database from production" and ended with exit 1',
+      'mysql ran 0 s for the background task "Drop expired kept databases" and ended with exit 1',
+      'gzip ran 42 s and ended well',
+    ]);
+  });
+});
+
 describe('the work the panel does on its own', () => {
   afterEach(() => vi.useRealTimers());
 
@@ -54,6 +105,25 @@ describe('the work the panel does on its own', () => {
     expect(errors).toContain('check: offline');
     chores.stop();
   });
+
+  it('keeps the newest 20 runs of each task in the panel database, newest first', async () => {
+    const store = new RunStore(':memory:');
+    const chores = new Chores(() => undefined, Date.now, store);
+    let n = 0;
+    chores.every('tidy', 'Downloads', 'Removes old dumps.', 3_600_000, () => (++n === 3 ? Promise.reject(new Error('disk full')) : `removed ${n} dumps`), 3_600_000);
+    for (let i = 0; i < 25; i += 1) await chores.run('tidy');
+    const runs = store.choreRuns('tidy');
+    expect(runs).toHaveLength(20);
+    expect(runs[0]).toMatchObject({ ok: true, note: 'removed 25 dumps', durationMs: expect.any(Number) });
+    expect(runs.at(-1)?.note).toBe('removed 6 dumps');
+    chores.stop();
+    const failed = new RunStore(':memory:');
+    const once = new Chores(() => undefined, Date.now, failed);
+    once.every('check', 'Update check', 'Looks for a release.', 3_600_000, () => Promise.reject(new Error('offline')), 3_600_000);
+    await once.run('check');
+    expect(failed.choreRuns('check')).toEqual([{ startedAt: expect.any(String), durationMs: expect.any(Number), ok: false, note: 'offline' }]);
+    once.stop();
+  });
 });
 
 describe('the panel status route', () => {
@@ -73,7 +143,8 @@ describe('the panel status route', () => {
     const res = await app.inject({ method: 'POST', url: '/api/login', headers: { host: HOST, origin: ORIGIN }, payload: { password: 'correct horse' } });
     const cookie = `dmp_session=${res.cookies.find((c) => c.name === 'dmp_session')?.value}`;
     const status = (await app.inject({ method: 'GET', url: '/api/panel/status', headers: { host: HOST, cookie } })).json();
-    expect(status).toMatchObject({ version: '9.9.9', before: { startedAt: '2026-11-12T20:00:00.000Z', ended: 'unexpectedly' }, programs: [], jobs: 0 });
+    expect(status).toMatchObject({ version: '9.9.9', before: { startedAt: '2026-11-12T20:00:00.000Z', ended: 'unexpectedly' }, programs: [], finished: expect.any(Array), jobs: 0 });
+    expect((await app.inject({ method: 'GET', url: '/api/panel/tasks/runs/runs', headers: { host: HOST, cookie } })).json()).toEqual(expect.any(Array));
     expect(status.tasks.map((t: { id: string }) => t.id)).toEqual(['drafts', 'runs', 'downloads', 'file-trash', 'mysql-backups', 'snapshots', 'kept', 'trash']);
     const ran = await app.inject({ method: 'POST', url: '/api/panel/tasks/runs/run', headers: { host: HOST, origin: ORIGIN, cookie } });
     expect(ran.json()).toMatchObject({ id: 'runs', lastOk: true });

@@ -128,11 +128,22 @@ and its storage in all. Under them, one list at a time:
   old downloaded dumps, Files tab deletes and MySQL settings backups, drop
   expired kept databases (hourly); remove old automatic snapshots (daily);
   remove deleted sites for good and check for a new release (every 6 hours).
+  Click a task for its last runs: when, what it did or why it failed, and how
+  long it took. The newest 20 per task are kept in the panel's database.
 - **Running now** (`?view=programs`): each program the panel has open
   (`ssh`, `wp`, `dmp-root vhost-write`), since when, and what started it: a
   job (a link to it), a background task, or a page's read. A job is what you
-  started; these are the programs behind it. Only their names, never their
-  arguments or output.
+  started; these are the programs behind it. Page reads of one program
+  running at once share a line (`wp ×7`): a site's page starts several.
+  **Recently finished**, a card of its own, lists the last 50 of jobs and
+  background tasks, and page reads that failed or took 5 seconds or more,
+  with how long each took and whether it failed or was stopped by its
+  timeout. Page reads that went well are only counted per program, with
+  their time on average. All of it stays in memory until the panel restarts,
+  by name only, never arguments or output. A program that ran 30 seconds or
+  more, or failed for a job or a background task, also goes to the panel's
+  log (`journalctl --user -u devmagic-panel`), by name only; a page's read
+  that fails is often meant to (a sign-in check), so it is not logged.
 
 When the panel does not answer (it restarts after an update, or Apache
 reloads), the heart icon says **Reconnecting...** until it is back. A page

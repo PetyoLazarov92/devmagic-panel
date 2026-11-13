@@ -14,6 +14,22 @@ export interface RunningProgram {
   task?: { id: string; title: string };
 }
 
+/** A program that ended lately, kept in memory for Sanctum's Recently finished: how long it took and how it ended. */
+export interface FinishedProgram extends RunningProgram {
+  durationMs: number;
+  /** ok, failed (with its exit code), or stopped by the panel's timeout for it. */
+  ended: 'ok' | 'failed' | 'timeout';
+  code?: number;
+}
+
+/** One run of a background task, kept in the panel's database (the newest 20 per task). */
+export interface TaskRun {
+  startedAt: string;
+  durationMs: number;
+  ok: boolean;
+  note?: string;
+}
+
 /** Work the panel does on its own, on a timer. */
 export interface BackgroundTask {
   id: string;
@@ -38,6 +54,10 @@ export interface PanelStatus {
   /** Jobs running or waiting their turn. */
   jobs: number;
   programs: RunningProgram[];
+  /** The last programs worth a look that ended, newest first: a job's or a task's, and page reads that failed or were slow. Empty after a restart. */
+  finished: FinishedProgram[];
+  /** Page reads that went well since the panel started, counted per program instead of listed: a site's page starts several at once. */
+  pageReads: Array<{ program: string; count: number; totalMs: number }>;
   tasks: BackgroundTask[];
 }
 

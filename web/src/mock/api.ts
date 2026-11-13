@@ -2267,6 +2267,17 @@ export const mockApi: Api = {
         { program: 'gzip', startedAt: ago(41_000), job: { id: 'mock-running', title: 'Refresh the database from production' } },
         { program: 'dmp-root trash-purge', startedAt: ago(3_000), task: { id: 'trash', title: 'Remove deleted sites for good' } },
         { program: 'wp', startedAt: ago(1_000) },
+        { program: 'wp', startedAt: ago(1_000) },
+        { program: 'wp', startedAt: ago(900) },
+        { program: 'wp', startedAt: ago(900) },
+      ],
+      pageReads: [{ program: 'wp', count: 1204, totalMs: 1204 * 310 }, { program: 'git', count: 96, totalMs: 96 * 420 }, { program: 'ssh', count: 12, totalMs: 12 * 1800 }],
+      finished: [
+        { program: 'ssh', startedAt: ago(9_000), durationMs: 2100, ended: 'failed', code: 255 },
+        { program: 'dmp-root vhost-write', startedAt: ago(60_000), durationMs: 410, ended: 'ok', job: { id: 'mock-done-skipped', title: 'Create site' } },
+        { program: 'mysqldump', startedAt: ago(3 * 60_000), durationMs: 41_000, ended: 'ok', job: { id: 'mock-running', title: 'Refresh the database from production' } },
+        { program: 'git', startedAt: ago(14 * 60_000), durationMs: 30_000, ended: 'timeout' },
+        { program: 'du', startedAt: ago(14 * 60_000), durationMs: 380, ended: 'ok', task: { id: 'runs', title: 'Trim Run history' } },
       ],
       tasks: mockTasks.map((t) => ({ ...t, lastRunAt: ago(t.lastAgo), nextRunAt: ahead(t.everyMs - t.lastAgo), lastAgo: undefined })),
     };
@@ -2289,6 +2300,18 @@ export const mockApi: Api = {
     ];
     const shown = rows.map((r) => (r.clean && mockCleaned.has(r.clean.kind) ? { ...r, bytes: r.bytes === null ? null : 0, ...(r.count !== undefined ? { count: 0, items: [] } : {}) } : r));
     return { measuredAt: new Date().toISOString(), rows: shown, totalBytes: shown.reduce((sum, r) => sum + (r.bytes ?? 0), 0) };
+  },
+  panelTaskRuns: async (id) => {
+    await wait(250);
+    const task = mockTasks.find((t) => t.id === id);
+    if (!task) throw new Error('No such task');
+    // Hourly runs back from the last one, the update check failing the last two times.
+    return Array.from({ length: 8 }, (_, i) => ({
+      startedAt: new Date(Date.now() - task.lastAgo - i * task.everyMs).toISOString(),
+      durationMs: 40 + i * 7,
+      ok: !(id === 'updates' && i < 2),
+      note: id === 'updates' && i < 2 ? 'github.com did not answer' : id === 'downloads' && i % 3 === 0 ? `removed ${i + 1} dumps` : 'nothing was past its time',
+    }));
   },
   runPanelTask: async (id) => {
     await wait(700);

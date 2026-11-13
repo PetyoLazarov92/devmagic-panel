@@ -2,7 +2,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, PanelStatus, PanelStorage, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, PanelStatus, PanelStorage, TaskRun, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { FILE_TEXT_MAX, gitUrl, isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -178,7 +178,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     app.addHook('onClose', async () => htaccessWatcher.close());
   }
   // The panel's work on its own timers, listed on the Sanctum page with what each last did.
-  const chores = new Chores((id, message) => app.log.warn(`${id}: ${message}`));
+  const chores = new Chores((id, message) => app.log.warn(`${id}: ${message}`), Date.now, deps.store);
   if (deps.housekeeping) {
     const running = (jobId: string) => ['running', 'queued', 'undoing'].includes(jobs.get(jobId)?.status ?? '');
     // The panel may have just restarted in the middle of an install from the Updates page; its installer goes on for up to a minute.
@@ -603,6 +603,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       memoryBytes: process.memoryUsage().rss,
       jobs: jobs.list().filter((j) => ['running', 'queued', 'undoing'].includes(j.status)).length,
       programs: deps.programs?.list() ?? [],
+      finished: deps.programs?.finished() ?? [],
+      pageReads: deps.programs?.pageReads() ?? [],
       tasks: chores.list(),
     }));
     // What the panel keeps on disk, measured with du; kept ten minutes, as a big folder takes a moment.
@@ -620,6 +622,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       });
       measured = { at: Date.now(), storage };
       return storage;
+    });
+    // A background task's last runs, kept in the panel's database (the newest 20).
+    api.get<{ Params: { id: string } }>('/api/panel/tasks/:id/runs', async (request, reply): Promise<TaskRun[] | undefined> => {
+      if (!chores.list().some((t) => t.id === request.params.id)) return reply.code(404).send({ error: 'No such task' });
+      return deps.store.choreRuns(request.params.id);
     });
     // Runs one of the panel's timed chores now.
     api.post<{ Params: { id: string } }>('/api/panel/tasks/:id/run', async (request, reply) => {

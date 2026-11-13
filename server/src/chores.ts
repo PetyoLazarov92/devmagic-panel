@@ -1,4 +1,4 @@
-import type { BackgroundTask } from '@devmagic-panel/shared';
+import type { BackgroundTask, TaskRun } from '@devmagic-panel/shared';
 import { inTask } from './running.js';
 
 /**
@@ -19,7 +19,12 @@ export class Chores {
   private readonly chores = new Map<string, Chore>();
   private readonly timers: NodeJS.Timeout[] = [];
 
-  constructor(private readonly onError: (id: string, message: string) => void = () => undefined, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly onError: (id: string, message: string) => void = () => undefined,
+    private readonly now: () => number = Date.now,
+    /** Where each run is kept for the task's history: the panel's database. */
+    private readonly history?: { addChoreRun: (task: string, run: TaskRun) => void },
+  ) {}
 
   /** Runs work after firstMs (now by default), then every everyMs. */
   every(id: string, label: string, what: string, everyMs: number, work: ChoreWork, firstMs = 0): void {
@@ -52,6 +57,11 @@ export class Chores {
         chore.lastNote = (error as Error).message;
         this.onError(id, chore.lastNote);
       } finally {
+        try {
+          this.history?.addChoreRun(chore.id, { startedAt: new Date(started).toISOString(), durationMs: this.now() - started, ok: chore.lastOk === true, ...(chore.lastNote ? { note: chore.lastNote } : {}) });
+        } catch {
+          // The history is a nicety: a database that cannot take it never stops the work.
+        }
         chore.lastRunAt = new Date(started).toISOString();
         chore.nextRunAt = new Date(started + chore.everyMs).toISOString();
         chore.running = null;

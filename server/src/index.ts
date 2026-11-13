@@ -6,7 +6,7 @@ import { DMP_ROOT, loadConfig, userPaths } from './config.js';
 import { coreStatusSource } from './core-status.js';
 import { defaultHostPaths } from './environment.js';
 import { runCommand } from './exec.js';
-import { RunningPrograms } from './running.js';
+import { notableLine, RunningPrograms } from './running.js';
 import { putBackBeforeExit, putBackLeftRaised } from './mysql-limits.js';
 import { readSecrets, removeGithubToken } from './secrets.js';
 import { RunStore } from './store.js';
@@ -22,7 +22,9 @@ const production = process.env.NODE_ENV === 'production';
 if (removeGithubToken(paths.secretsFile, join(paths.dataDir, 'github-token-removed'))) console.log('deleted the GitHub token an older panel saved; updates need none');
 
 // Every program the panel runs is listed while it runs, for the status in the top bar.
-const programs = new RunningPrograms();
+// Slow ones, and failed ones a job or task ran, go to the log by name only; the panel's log (app) exists once it is built.
+let logNotable: (line: string) => void = (line) => console.warn(line);
+const programs = new RunningPrograms((p) => logNotable(notableLine(p)));
 const exec = programs.track(runCommand);
 const app = await buildApp({
   config,
@@ -43,6 +45,8 @@ const app = await buildApp({
   housekeeping: production,
   logger: true,
 });
+
+logNotable = (line) => app.log.warn(`program: ${line}`);
 
 // MySQL limits a job raised before the panel last stopped go back to what they were.
 const mysqlAccount = readSecrets(paths.secretsFile)?.mysql;

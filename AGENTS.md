@@ -296,9 +296,11 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       (`<stamp>-before-*.sql.gz`) keep the newest 3 per site and the last 30
       days (`panel-storage.ts`); yours, clean copies and dmp-restore's backups
       are never removed on a timer. The panel's timed work runs through
-      `Chores` (`chores.ts`) so the Sanctum page lists it, and the programs it
-      runs are listed by name and job only (`running.ts`), never their
-      arguments. The database is dropped last; a database user
+      `Chores` (`chores.ts`) so the Sanctum page lists it, each run kept in
+      `chore_runs` (the newest 20 per task), and the programs it runs are
+      listed by name and job only (`running.ts`, the last 50 worth a look in
+      memory, quick page reads only counted, slow or failed ones in the panel's log), never their arguments
+      or output. The database is dropped last; a database user
       is dropped only when it is the per-site user the panel made, never a
       shared account like `root`. Hosts lines outside the panel's block stay.
       Panel-made folders are listed in the root-owned registry

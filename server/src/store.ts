@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { CronRunStatus, CronRunView, InstallHow, Proposal, QueuedProposal, SiteInstall } from '@devmagic-panel/shared';
+import type { CronRunStatus, CronRunView, InstallHow, Proposal, QueuedProposal, SiteInstall, TaskRun } from '@devmagic-panel/shared';
 import { actions, isActionId, repoKey as repoKeyOf } from '@devmagic-panel/shared';
 
 /**
@@ -158,7 +158,16 @@ export class RunStore {
         exit_code INTEGER,
         output TEXT NOT NULL DEFAULT ''
       );
-      CREATE INDEX IF NOT EXISTS cron_runs_task ON cron_runs (task, id)
+      CREATE INDEX IF NOT EXISTS cron_runs_task ON cron_runs (task, id);
+      CREATE TABLE IF NOT EXISTS chore_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        ok INTEGER NOT NULL,
+        note TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS chore_runs_task ON chore_runs (task, id)
     `);
     this.addColumn('runs', 'skipped', 'INTEGER');
     this.addColumn('kept_databases', 'before_tables', 'TEXT');
@@ -614,6 +623,21 @@ export class RunStore {
     this.db.prepare('UPDATE cron_runs SET status = ?, exit_code = ?, duration_ms = ?, output = ? WHERE id = ?').run(status, exitCode, durationMs, output, id);
   }
 
+  /**
+   * One run of the panel's own background tasks (chores.ts), for Sanctum: when, how long, whether it
+   * worked and its short note. Only the newest CHORE_RUNS_KEPT per task stay, trimmed as each is added.
+   */
+  addChoreRun(task: string, run: TaskRun): void {
+    this.db.prepare('INSERT INTO chore_runs (task, started_at, duration_ms, ok, note) VALUES (?, ?, ?, ?, ?)').run(task, run.startedAt, run.durationMs, run.ok ? 1 : 0, run.note ?? '');
+    this.db.prepare('DELETE FROM chore_runs WHERE task = ? AND id NOT IN (SELECT id FROM chore_runs WHERE task = ? ORDER BY id DESC LIMIT ?)').run(task, task, CHORE_RUNS_KEPT);
+  }
+
+  /** A background task's last runs, newest first. */
+  choreRuns(task: string): TaskRun[] {
+    const rows = this.db.prepare('SELECT started_at, duration_ms, ok, note FROM chore_runs WHERE task = ? ORDER BY id DESC').all(task) as Array<{ started_at: string; duration_ms: number; ok: number; note: string }>;
+    return rows.map((r) => ({ startedAt: r.started_at, durationMs: r.duration_ms, ok: r.ok === 1, ...(r.note ? { note: r.note } : {}) }));
+  }
+
   /** A task's runs, newest first, without their output. */
   cronRuns(task: string, limit = 100): CronRunView[] {
     return (this.db.prepare(`SELECT ${CRON_COLUMNS} FROM cron_runs WHERE task = ? ORDER BY id DESC LIMIT ?`).all(task, limit) as unknown as CronRow[]).map(cronRun);
@@ -676,6 +700,8 @@ interface CronRow {
 
 const CRON_COLUMNS = 'id, task, trigger, status, started_at AS startedAt, duration_ms AS durationMs, exit_code AS exitCode';
 /** Runs kept per task, and how long a failed one or one of a removed task stays past those. */
+/** The runs kept per background task of the panel's own (Sanctum's history). */
+export const CHORE_RUNS_KEPT = 20;
 export const CRON_KEEP_RUNS = 100;
 export const CRON_KEEP_DAYS = 14;
 

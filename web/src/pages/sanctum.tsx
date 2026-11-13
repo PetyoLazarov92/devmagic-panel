@@ -1,18 +1,18 @@
-import type { BackgroundTask, PanelStatus, PanelStorage, StorageRow } from '@devmagic-panel/shared';
-import { Clock, Cpu, HardDrive, Play, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import type { BackgroundTask, PanelStatus, PanelStorage, RunningProgram, StorageRow } from '@devmagic-panel/shared';
+import { ChevronRight, Clock, Cpu, HardDrive, History, Play, Trash2 } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
 import { ProgramFrom } from '@/components/layout/panel-status-indicator';
 import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Segmented } from '@/components/ui/segmented';
 import { Spinner } from '@/components/ui/spinner';
 import { StatTile } from '@/components/ui/stat-tile';
 import { api } from '@/lib/api';
 import { useDeveloper } from '@/lib/developer';
-import { bytes, timeAgo } from '@/lib/format';
+import { bytes, dateTime, timeAgo } from '@/lib/format';
 import { lastLine } from '@/lib/output';
 import { navigate, useQueryParam } from '@/lib/router';
 import { toast } from '@/lib/toast';
@@ -77,15 +77,17 @@ export function SanctumPage() {
         <Segmented label="Show" value={view} onChange={show} options={VIEWS} />
         {view === 'storage' && storage.data && <span className="text-xs text-muted-foreground">Measured {timeAgo(storage.data.measuredAt)}</span>}
       </div>
-      <Card className="mt-3">
-        {view === 'storage' && <StorageList storage={storage.data} loading={storage.loading} error={storage.error} onCleaned={() => setFresh((n) => n + 1)} />}
-        {view === 'tasks' && s && (
-          s.tasks.length === 0
-            ? <p className="px-5 py-4 text-sm text-muted-foreground">This panel runs no background tasks (a development server).</p>
-            : <ul className="divide-y">{s.tasks.map((t) => <TaskRow key={t.id} task={t} busy={runningTask === t.id} onRun={() => void runTask(t.id, t.label)} />)}</ul>
-        )}
-        {view === 'programs' && s && <Programs status={s} />}
-      </Card>
+      {view !== 'programs' && (
+        <Card className="mt-3">
+          {view === 'storage' && <StorageList storage={storage.data} loading={storage.loading} error={storage.error} onCleaned={() => setFresh((n) => n + 1)} />}
+          {view === 'tasks' && s && (
+            s.tasks.length === 0
+              ? <p className="px-5 py-4 text-sm text-muted-foreground">This panel runs no background tasks (a development server).</p>
+              : <ul className="divide-y">{s.tasks.map((t) => <TaskRow key={t.id} task={t} busy={runningTask === t.id} onRun={() => void runTask(t.id, t.label)} />)}</ul>
+          )}
+        </Card>
+      )}
+      {view === 'programs' && s && <Programs status={s} />}
     </div>
   );
 }
@@ -126,41 +128,129 @@ function Tiles({ status: s, storage, onShow }: { status: PanelStatus; storage: P
   );
 }
 
+/** How long something took, short: "640 ms", "2.1 s", "3 min". */
+const took = (ms: number) => (ms < 1000 ? `${ms} ms` : ms < 60_000 ? `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s` : `${Math.round(ms / 60_000)} min`);
+
+/** A program's line: its name, what started it, then its time on the right. */
+function ProgramLine({ program: p, meta, tone, count = 1 }: { program: RunningProgram; meta: ReactNode; tone?: 'warning' | undefined; count?: number }) {
+  return (
+    <li className="flex min-w-0 items-baseline gap-3 px-5 py-2.5 text-dense">
+      <code className={cn('shrink-0 font-mono', tone === 'warning' && 'text-warning')}>{p.program}{count > 1 && <span className="text-muted-foreground"> ×{count}</span>}</code>
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">{count > 1 ? 'Page reads' : <ProgramFrom program={p} />}</span>
+      <span className={cn('shrink-0 text-xs', tone === 'warning' ? 'text-warning' : 'text-muted-foreground')}>{meta}</span>
+    </li>
+  );
+}
+
+/** Programs running now, a page's reads of one program folded into one line: a site's page starts several at once. */
+function runningLines(programs: readonly RunningProgram[]): Array<{ program: RunningProgram; count: number }> {
+  const reads = new Map<string, { program: RunningProgram; count: number }>();
+  const lines: Array<{ program: RunningProgram; count: number }> = [];
+  for (const p of programs) {
+    if (p.job || p.task) {
+      lines.push({ program: p, count: 1 });
+      continue;
+    }
+    const line = reads.get(p.program);
+    if (line) line.count += 1;
+    else {
+      const first = { program: p, count: 1 };
+      reads.set(p.program, first);
+      lines.push(first);
+    }
+  }
+  return lines;
+}
+
 function Programs({ status: s }: { status: PanelStatus }) {
-  if (s.programs.length === 0) return <p className="px-5 py-4 text-sm text-muted-foreground">No program is running{s.jobs ? `: ${s.jobs} job${s.jobs > 1 ? 's are' : ' is'} between steps` : ''}.</p>;
+  const lines = runningLines(s.programs);
+  const reads = s.pageReads.reduce((sum, r) => sum + r.count, 0);
   return (
     <>
-      <ul className="divide-y">
-        {s.programs.map((p, i) => (
-          <li key={`${p.program}-${p.startedAt}-${i}`} className="flex min-w-0 items-baseline gap-3 px-5 py-2.5 text-dense">
-            <code className="shrink-0 font-mono">{p.program}</code>
-            <span className="min-w-0 flex-1 truncate text-muted-foreground"><ProgramFrom program={p} /></span>
-            <span className="shrink-0 text-xs text-muted-foreground">{timeAgo(p.startedAt)}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="border-t px-5 py-3 text-xs text-muted-foreground">The programs behind the jobs, background tasks and page reads: only their names, never their arguments or output.</p>
+      <Card className="mt-3">
+        <CardHeader title="Running now" meta={<Cpu className="size-4 text-muted-foreground" />} />
+        {lines.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-muted-foreground">No program is running{s.jobs ? `: ${s.jobs} job${s.jobs > 1 ? 's are' : ' is'} between steps` : ''}.</p>
+        ) : (
+          <ul className="divide-y">
+            {lines.map(({ program: p, count }, i) => (
+              <ProgramLine key={`${p.program}-${p.startedAt}-${i}`} program={p} count={count} meta={`running ${timeAgo(p.startedAt).replace(/ ago$/, '')}`} />
+            ))}
+          </ul>
+        )}
+        <p className="border-t px-5 py-3 text-xs text-muted-foreground">The programs behind the jobs, background tasks and page reads: only their names, never their arguments or output.</p>
+      </Card>
+      <Card className="mt-4">
+        <CardHeader title="Recently finished" meta={<History className="size-4 text-muted-foreground" />} />
+        {s.finished.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-muted-foreground">Nothing yet since the panel started.</p>
+        ) : (
+          <ul className="divide-y">
+            {s.finished.map((p, i) => (
+              <ProgramLine
+                key={`${p.program}-${p.startedAt}-${i}`}
+                program={p}
+                tone={p.ended === 'ok' ? undefined : 'warning'}
+                meta={`${p.ended === 'timeout' ? 'stopped by its timeout after' : p.ended === 'failed' ? `failed (exit ${p.code ?? '?'}) after` : 'took'} ${took(p.durationMs)}, ${timeAgo(p.startedAt)}`}
+              />
+            ))}
+          </ul>
+        )}
+        <p className="border-t px-5 py-3 text-xs text-muted-foreground">
+          The last 50 of jobs and background tasks, and page reads that failed or took 5 seconds or more, until the panel restarts. A failed page read is often meant to fail, like a sign-in check.
+          {reads > 0 && <> Page reads that went well are only counted: {s.pageReads.map((r) => `${r.program} ${r.count.toLocaleString('en')} (${took(Math.round(r.totalMs / r.count))} on average)`).join(', ')}.</>}
+        </p>
+      </Card>
     </>
   );
 }
 
 function TaskRow({ task, busy, onRun }: { task: BackgroundTask; busy: boolean; onRun: () => void }) {
+  const [open, setOpen] = useState(false);
+  const runs = useAsync(() => (open ? api.panelTaskRuns(task.id) : Promise.resolve(null)), [open, task.lastRunAt]);
   const last = task.running ? 'Running now' : task.lastRunAt ? `${task.lastOk === false ? 'Failed' : 'Ran'} ${timeAgo(task.lastRunAt)}${task.lastNote ? `: ${task.lastNote}` : ''}` : 'Not run yet';
   return (
-    <li className="flex items-center gap-3 px-5 py-2.5 text-sm">
-      <div className="grid min-w-0 flex-1 gap-0.5">
-        <span className="truncate" title={task.what}>
-          <span className="font-medium">{task.label}</span>
-          <span className="text-muted-foreground"> · {every(task.everyMs)}</span>
-        </span>
-        <span className={cn('truncate text-xs', task.lastOk === false ? 'text-warning' : 'text-muted-foreground')} title={last}>
-          {last}{task.nextRunAt && !task.running ? `, next ${timeAgo(task.nextRunAt)}` : ''}
-        </span>
+    <li className="text-sm">
+      <div className="flex items-center gap-3 px-5 py-2.5">
+        <Button variant="ghost" className="grid h-auto min-w-0 flex-1 justify-stretch gap-0.5 px-0 py-0 text-left font-normal whitespace-normal hover:bg-transparent" aria-expanded={open} onClick={() => setOpen((o) => !o)} title={task.what}>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <ChevronRight className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
+            <span className="truncate">
+              <span className="font-medium">{task.label}</span>
+              <span className="text-muted-foreground"> · {every(task.everyMs)}</span>
+            </span>
+          </span>
+          <span className={cn('truncate pl-5.5 text-xs', task.lastOk === false ? 'text-warning' : 'text-muted-foreground')}>
+            {last}{task.nextRunAt && !task.running ? `, next ${timeAgo(task.nextRunAt)}` : ''}
+          </span>
+        </Button>
+        <Button size="sm" variant="soft" disabled={busy || task.running} onClick={onRun}>
+          {busy || task.running ? <Spinner /> : <Play />}
+          Run now
+        </Button>
       </div>
-      <Button size="sm" variant="soft" disabled={busy || task.running} onClick={onRun}>
-        {busy || task.running ? <Spinner /> : <Play />}
-        Run now
-      </Button>
+      {open && (
+        <div className="border-t bg-muted/30 px-5 py-2.5 pl-11">
+          {!runs.data ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">{runs.error ?? <><Spinner />Reading its runs...</>}</p>
+          ) : runs.data.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No runs kept yet.</p>
+          ) : (
+            <>
+              <ul className="grid gap-1">
+                {runs.data.map((r) => (
+                  <li key={r.startedAt} className="flex min-w-0 items-baseline gap-3 text-xs">
+                    <span className="w-28 shrink-0 text-muted-foreground" title={dateTime(r.startedAt)}>{timeAgo(r.startedAt)}</span>
+                    <span className={cn('min-w-0 flex-1 truncate', r.ok ? 'text-foreground' : 'text-warning')} title={r.note}>{r.ok ? r.note ?? 'done' : `failed${r.note ? `: ${r.note}` : ''}`}</span>
+                    <span className="shrink-0 text-muted-foreground tabular-nums">{took(r.durationMs)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-2xs text-muted-foreground">Its last {runs.data.length} runs; the newest 20 are kept.</p>
+            </>
+          )}
+        </div>
+      )}
     </li>
   );
 }

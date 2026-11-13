@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.46.0 (2026-11-13)
+* **Sanctum:** click a background task for its last runs: when, what it did or why it failed, and how long it took. The newest 20 per task are kept in the panel's database, so they are there after a restart too
+* **Sanctum:** Running now has a card of its own for **Recently finished**: the last 50 programs of jobs and background tasks, and page reads that failed or took 5 seconds or more, with how long each took, how it ended and what started it. Page reads that went well are only counted per program, so a site's page starting several at once never pushes a job's out, and those running at once share one line. All of it stays in memory until the panel restarts, by name only, never arguments or output
+* **Log:** a program that runs 30 seconds or more, or fails for a job or a background task, gets a line in the panel's log with its name, what it ran for and how it ended, for finding out later what was slow or failed
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.45.3 (2026-11-13)
 * **Sanctum:** **Clean up now** on a storage row removes all of that kind now, after a confirmation that says what goes: the snapshots the panel took before a change (yours stay), downloaded dumps, the Files tab's deletes, MySQL settings backups, every finished run, or every kept database, listed with its site. What a job or a draft still uses stays. Deleted sites open Removed sites, where each can be deleted. The background tasks' **Run now** still removes only what is past its time
 * **Sanctum:** a background task that found nothing past its time says so, and Drop expired kept databases says how many are kept and when the oldest goes; a kept database that cannot be dropped now shows the task as failed, with why, instead of passing it by each hour. The Kept databases row says when the oldest goes
