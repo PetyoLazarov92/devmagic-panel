@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.45.2 (2026-11-13)
+* **Updates:** the cards line up as in Settings. With nothing new, the installed releases and how updates arrive are one height, their notes at the bottom, and opening a release's changes grows both. With a release to install, its notes reach down to meet the right column; opened further, only they grow, and the installed releases stay in view as you scroll
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.45.1 (2026-11-13)
 * **Dependencies:** hono 4.13.18, which the MCP SDK brings along. Its security fixes are in parts the panel does not use (it serves itself with Fastify and runs its MCP server over stdio), so nothing changes in how it works
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

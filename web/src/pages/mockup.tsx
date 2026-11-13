@@ -108,6 +108,7 @@ const STATES: Array<[string, string, string]> = [
   ['proposals=none', '/sites', 'Nothing waits in the corner from an MCP client, as for screenshots.'],
   ['session=ends', '/sites', 'You are signed out after 15 seconds, as when the session runs out.'],
   ['panel=starting', '/sites', 'The panel answers only after 8 seconds, as right after a login.'],
+  ['update=latest', '/update', 'Nothing newer: only the installed releases and how updates arrive.'],
   ['terminal', '/update', 'The newest release changes the root scripts and needs the installer in a terminal.'],
   ['install=failed', '/update', 'The last install from the Updates page failed (also done or interrupted).'],
   ['claude=signed-out', '/settings', 'Claude Code is not signed in (also missing or api).'],

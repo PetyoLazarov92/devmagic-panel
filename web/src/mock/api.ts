@@ -1074,7 +1074,8 @@ const mockPreferences: Preferences = (() => {
 /**
  * The mockup's Updates page in other states, from the address:
  * ?terminal (the newest release changes the root scripts and is downloaded),
- * ?install=done|failed|interrupted (how the last install from the page went).
+ * ?install=done|failed|interrupted (how the last install from the page went),
+ * ?update=latest (nothing newer: the page shows only the installed releases and how updates arrive).
  */
 function mockUpdateVariant(): Partial<UpdateStatus> {
   const query = new URLSearchParams(window.location.search);
@@ -1087,6 +1088,11 @@ function mockUpdateVariant(): Partial<UpdateStatus> {
     variant.installerChanged = undefined as never;
     // ?terminal=new: not downloaded yet, so Install downloads it first in the same job.
     variant.releases = query.get('terminal') === 'new' ? mockUpdate.releases : [{ name: `v${AFTER}`, version: `${AFTER}`, current: false, installedAt: new Date().toISOString(), built: '2026-10-31T10:00:00Z', mode: 'terminal', command: variant.command, fromPanel: true }, ...mockUpdate.releases];
+  }
+  if (query.get('update') === 'latest') {
+    variant.available = false;
+    variant.changelog = [];
+    variant.latest = `v${CURRENT}`;
   }
   const install = query.get('install');
   if (install === 'done' || install === 'failed' || install === 'interrupted') {

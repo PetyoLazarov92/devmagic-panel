@@ -200,9 +200,12 @@ export function UpdatePage() {
           )}
 
           {/* Wide: the release to install and what it brings on the left, the installed ones and how updates arrive on the right. */}
-          <div className={cn('grid items-start gap-4', hasNews ? '@5xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]' : '@4xl:grid-cols-2')}>
+          {/* Nothing new: the two cards are a pair as in Settings, one height, each footer at its bottom, so opening a release's changes grows both.
+              A release to install: the notes on the left reach down to meet the right column; opened past it, only they grow,
+              and the right column keeps its size and stays in view. */}
+          <div className={cn('grid items-stretch gap-4', hasNews ? '@5xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]' : '@4xl:grid-cols-2')}>
           {hasNews && (
-          <div className="grid min-w-0 gap-4">
+          <div className="flex min-w-0 flex-col gap-4 [&>:last-child]:flex-1">
           {status.available && status.latest && (
             <Card>
               <CardHeader title={<>{status.latest} is out</>} meta={<CircleArrowUp className="size-4 text-primary" />} />
@@ -267,9 +270,9 @@ export function UpdatePage() {
           </div>
           )}
 
-          <div className={cn('grid min-w-0 gap-4', !hasNews && 'contents')}>
+          <div className={cn('grid min-w-0 content-start gap-4 @5xl:sticky @5xl:top-4 @5xl:self-start', !hasNews && 'contents')}>
           {status.releases.length > 0 && (
-            <Card>
+            <Card className="flex flex-col">
               <CardHeader title="Installed releases" meta={<History className="size-4 text-muted-foreground" />} />
               <ul className="divide-y">
                 {status.releases.map((r) => (
@@ -323,7 +326,7 @@ export function UpdatePage() {
                   </li>
                 ))}
               </ul>
-              <p className="border-t px-5 py-3 text-xs text-muted-foreground">
+              <p className="mt-auto border-t px-5 py-3 text-xs text-muted-foreground">
                 The running release and the newest others stay, three in all. Switching restarts the panel; a release with other root scripts than the installed ones switches through its own <code className="font-mono">install.sh</code>, with your sudo password.
               </p>
             </Card>
@@ -436,7 +439,7 @@ const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1
 function AccessCard({ status }: { status: UpdateStatus }) {
   if (!status.source && !status.access) return null;
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader title="How updates arrive" meta={<Badge tone={status.source ? 'success' : 'danger'}>{status.source ? UPDATE_WAY_LABELS[status.source] : 'no access'}</Badge>} />
       <ul className="divide-y">
         {UPDATE_WAYS.map((way) => {
@@ -456,7 +459,7 @@ function AccessCard({ status }: { status: UpdateStatus }) {
           );
         })}
       </ul>
-      <p className="border-t px-5 py-3 text-xs text-muted-foreground">
+      <p className="mt-auto border-t px-5 py-3 text-xs text-muted-foreground">
         The panel tries them in this order and keeps the first that can read the repository. Any one of them is enough, and none needs a token.
       </p>
     </Card>
