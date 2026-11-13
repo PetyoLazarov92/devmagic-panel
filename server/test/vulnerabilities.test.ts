@@ -52,6 +52,18 @@ describe('known vulnerabilities', () => {
     expect(asked).toEqual(['https://www.wpvulnerability.net/plugin/hello-wands/', 'https://www.wpvulnerability.net/plugin/down/']);
   });
 
+  it('asks again on Check now about an answer older than an hour, not one just read', async () => {
+    const store = new RunStore(':memory:');
+    const asked: string[] = [];
+    const fetcher = async (url: string) => (asked.push(url), { status: 200, body: answer([]) });
+    const now = Date.parse('2026-11-11T10:00:00Z');
+    await vulnerabilitiesOf('plugin', 'hello-wands', store, fetcher, now);
+    await vulnerabilitiesOf('plugin', 'hello-wands', store, fetcher, now + 10 * 60_000, 3_600_000);
+    expect(asked).toHaveLength(1);
+    await vulnerabilitiesOf('plugin', 'hello-wands', store, fetcher, now + 2 * 3_600_000, 3_600_000);
+    expect(asked).toHaveLength(2);
+  });
+
   it('checks only plugins and themes WordPress.org has, at the version installed, and only when switched on', async () => {
     const t = wpSiteTree();
     mkdirSync(join(t.docroot, 'wp-content/plugins/hello-wands'), { recursive: true });

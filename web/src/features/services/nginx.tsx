@@ -1,11 +1,11 @@
 import type { NginxConfig, NginxReport, Site, SiteServer } from '@devmagic-panel/shared';
-import { SITE_SERVER_LABEL, SITE_SERVERS } from '@devmagic-panel/shared';
-import { ArrowRightLeft, Check, Copy, FileCode2, Power, RefreshCw, ScrollText, Server, Split } from 'lucide-react';
+import { isLocalName, SITE_SERVER_LABEL, SITE_SERVERS } from '@devmagic-panel/shared';
+import { ArrowRightLeft, Check, Copy, ExternalLink, FileCode2, Power, RefreshCw, ScrollText, Server, Split } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { JobBox } from '@/features/jobs/job-box';
 import { settled, useJob } from '@/features/jobs/job-steps';
 import { LogView } from '@/components/layout/log-view';
-import { StatusDot } from '@/components/layout/site-bits';
+import { siteUrl, StatusDot } from '@/components/layout/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -14,6 +14,8 @@ import { Checkbox } from '@/components/ui/field';
 import { FilterChips } from '@/components/ui/filter-chips';
 import { KeyValue } from '@/components/ui/key-value';
 import { api } from '@/lib/api';
+import { Link } from '@/lib/router';
+import { siteHref } from '@/lib/site-ref';
 import { timeAgo } from '@/lib/format';
 import { runRestarting } from '@/lib/restarting';
 import { toast } from '@/lib/toast';
@@ -271,8 +273,11 @@ function GlanceCard({ report }: { report: NginxReport }) {
   );
 }
 
+/** Each config in sites-available; a name of a site the panel lists leads to its page, an enabled one opens the site. */
 function ConfigsCard({ report }: { report: NginxReport }) {
   const [filter, setFilter] = useState<ConfigFilter>('all');
+  const sites = useAsync(() => api.sites(), []);
+  const siteOf = (name: string | undefined) => (name ? (sites.data ?? []).find((s) => !s.path && s.domain === name) : undefined);
   const shown = report.configs.filter(FILTERS.find((f) => f.value === filter)?.test ?? (() => true));
   return (
     <Card className="lg:col-span-2">
@@ -285,10 +290,21 @@ function ConfigsCard({ report }: { report: NginxReport }) {
         options={FILTERS.map((f) => ({ value: f.value, label: f.label, count: report.configs.filter(f.test).length }))}
       />
       <ul className="mt-2 divide-y">
-        {shown.map((c) => (
+        {shown.map((c) => {
+          const site = siteOf(c.names[0]);
+          return (
           <li key={c.file} className="grid gap-1 px-5 py-3 text-sm">
             <p className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{c.names[0] ?? c.file}</span>
+              {site ? (
+                <Link href={siteHref(site)} className="font-medium hover:underline">{c.names[0]}</Link>
+              ) : (
+                <span className="font-medium">{c.names[0] ?? c.file}</span>
+              )}
+              {c.enabled && c.names[0] && isLocalName(c.names[0]) && (
+                <a href={siteUrl(c.names[0])} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" title={`Open ${c.names[0]}`} aria-label={`Open ${c.names[0]}`}>
+                  <ExternalLink className="size-3.5" />
+                </a>
+              )}
               <Badge tone={c.enabled ? 'success' : 'neutral'}>{c.enabled ? 'Enabled' : 'Not enabled'}</Badge>
               <Badge tone={c.managed ? 'primary' : 'neutral'}>{c.managed ? "The panel's" : 'By hand'}</Badge>
               {c.conflict && <Badge tone="warning">{c.conflict}</Badge>}
@@ -299,7 +315,8 @@ function ConfigsCard({ report }: { report: NginxReport }) {
               {c.listens.length > 0 && <> · listens on <span className="font-mono">{c.listens.join(', ')}</span></>}
             </p>
           </li>
-        ))}
+          );
+        })}
         {shown.length === 0 && <li className="px-5 py-4 text-sm text-muted-foreground">No configs here.</li>}
       </ul>
     </Card>

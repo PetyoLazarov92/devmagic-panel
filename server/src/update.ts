@@ -1,4 +1,7 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, utimesSync } from 'node:fs';
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { PassThrough } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createGzip } from 'node:zlib';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ChangelogSection, InstalledRelease, UpdateStatus, UpdateWay } from '@devmagic-panel/shared';
@@ -185,10 +188,29 @@ export function installedReleases(ctx: Pick<UpdateContext, 'dataDir' | 'dmpRoot'
         ...(installsFromPanel(join(dir, name)) ? { fromPanel: true as const } : {}),
       }];
     })
+    .concat(
+      packedNames(dir).flatMap((name): InstalledRelease[] => {
+        if (names.includes(name)) return [];
+        const packed = readPacked(dir, name);
+        if (!packed) return [];
+        const terminal = changedRootScripts(packed.release, ctx.dmpRoot).length > 0;
+        return [{
+          name,
+          version: packed.release.version,
+          current: false,
+          installedAt: packed.installedAt,
+          ...(packed.release.built ? { built: packed.release.built } : {}),
+          mode: terminal ? 'terminal' : 'panel',
+          ...(terminal ? { command: join(dir, name, 'install.sh') } : {}),
+          ...(packed.fromPanel ? { fromPanel: true as const } : {}),
+          packed: true as const,
+        }];
+      }),
+    )
     .sort((a, b) => b.installedAt.localeCompare(a.installedAt));
   // The newest release's changelog has every version of the others.
   const running = releases.find((r) => r.current)?.version;
-  const newest = [...releases].sort((a, b) => compareVersions(b.version, a.version))[0];
+  const newest = [...releases].filter((r) => !r.packed).sort((a, b) => compareVersions(b.version, a.version))[0];
   if (!running || !newest) return releases;
   let sections: ChangelogSection[] = [];
   try {
@@ -202,6 +224,132 @@ export function installedReleases(ctx: Pick<UpdateContext, 'dataDir' | 'dmpRoot'
   });
 }
 
+// ── packed releases ──────────────────────────────────────────
+
+/**
+ * A release the panel does not run is kept packed: its folder as
+ * <name>.tar.gz (gzip at its best, about a seventh of the folder, mostly
+ * node_modules) and what the Updates page lists of it in <name>.release.json
+ * beside it. Switching back to one unpacks it first.
+ */
+interface PackedRelease {
+  release: ReleaseInfo;
+  installedAt: string;
+  fromPanel: boolean;
+}
+
+const packedFile = (dir: string, name: string) => join(dir, `${name}.tar.gz`);
+const packedInfoFile = (dir: string, name: string) => join(dir, `${name}.release.json`);
+
+function readPacked(dir: string, name: string): PackedRelease | null {
+  if (!existsSync(packedFile(dir, name))) return null;
+  try {
+    const raw = JSON.parse(readFileSync(packedInfoFile(dir, name), 'utf8')) as { release?: unknown; installedAt?: unknown; fromPanel?: unknown };
+    const release = parseRelease(JSON.stringify(raw.release));
+    if (!release || release.name !== name || typeof raw.installedAt !== 'string') return null;
+    return { release, installedAt: raw.installedAt, fromPanel: raw.fromPanel === true };
+  } catch {
+    return null;
+  }
+}
+
+/** The packed releases by name. */
+function packedNames(dir: string): string[] {
+  try {
+    return readdirSync(dir).flatMap((f) => {
+      const name = f.endsWith('.tar.gz') ? f.slice(0, -'.tar.gz'.length) : '';
+      return name && releaseName.safeParse(name).success ? [name] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Packs one release folder into <name>.tar.gz with gzip at level 9, checks the archive reads back, then removes the folder. */
+export async function packRelease(exec: Executor, dir: string, name: string): Promise<{ before: number; after: number }> {
+  const folder = join(dir, name);
+  const info = readRelease(folder);
+  if (!info || info.name !== name) throw new Error(`${name} has no release.json of its own`);
+  const before = await folderBytes(exec, folder);
+  const part = join(dir, `.packing-${name}.tar.gz`);
+  const out = new PassThrough();
+  const written = pipeline(out, createGzip({ level: 9 }), createWriteStream(part, { mode: 0o600 }));
+  const r = await exec('tar', ['-cf', '-', '-C', dir, '--', name], { stdoutTo: out, timeoutMs: 10 * 60_000 });
+  if (r.code !== 0) out.destroy();
+  const failedWrite = await written.then(() => null, (error: Error) => error);
+  if (r.code !== 0 || failedWrite) {
+    rmSync(part, { force: true });
+    throw new Error(r.code !== 0 ? `tar could not pack ${name}: ${firstLine(r.stderr) || `exit ${r.code}`}` : `could not write ${part}: ${failedWrite?.message}`);
+  }
+  // The archive must read back whole before the folder goes.
+  const check = await exec('tar', ['-tzf', part], { timeoutMs: 5 * 60_000 });
+  if (check.code !== 0 || !check.stdout.split('\n').includes(`${name}/release.json`)) {
+    rmSync(part, { force: true });
+    throw new Error(`the packed ${name} did not read back, so its folder stays`);
+  }
+  writeFileSync(packedInfoFile(dir, name), `${JSON.stringify({ release: info, installedAt: statSync(folder).mtime.toISOString(), fromPanel: installsFromPanel(folder) } satisfies PackedRelease)}\n`, { mode: 0o600 });
+  renameSync(part, packedFile(dir, name));
+  rmSync(folder, { recursive: true, force: true });
+  return { before, after: statSync(packedFile(dir, name)).size };
+}
+
+async function folderBytes(exec: Executor, folder: string): Promise<number> {
+  const r = await exec('du', ['-s', '-B1', '--', folder], { timeoutMs: 60_000 });
+  return Number(r.stdout.split('\t')[0]) || 0;
+}
+
+/** Unpacks a packed release into its folder again, with the time it was installed; nothing to do when the folder is there. */
+export async function unpackRelease(exec: Executor, dir: string, name: string): Promise<boolean> {
+  if (existsSync(join(dir, name, 'release.json'))) return false;
+  const packed = readPacked(dir, name);
+  if (!packed) throw new Error(`${name} is neither in ${dir} nor packed there`);
+  const staging = join(dir, `.unpacking-${name}`);
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true, mode: 0o700 });
+  const r = await exec('tar', ['-xzf', packedFile(dir, name), '-C', staging, '--no-same-owner'], { timeoutMs: 10 * 60_000 });
+  if (r.code !== 0 || readRelease(join(staging, name))?.name !== name) {
+    rmSync(staging, { recursive: true, force: true });
+    throw new Error(r.code !== 0 ? `tar could not unpack ${name}: ${firstLine(r.stderr) || `exit ${r.code}`}` : `the packed ${name} holds another release`);
+  }
+  rmSync(join(dir, name), { recursive: true, force: true });
+  renameSync(join(staging, name), join(dir, name));
+  rmSync(staging, { recursive: true, force: true });
+  const at = new Date(packed.installedAt);
+  utimesSync(join(dir, name), at, at);
+  rmSync(packedFile(dir, name), { force: true });
+  rmSync(packedInfoFile(dir, name), { force: true });
+  return true;
+}
+
+/**
+ * Packs every release folder the panel neither runs nor points current at,
+ * and none newer than the running one (a release downloaded for a terminal
+ * install waits for its install.sh there). For the background task.
+ */
+export async function packOlderReleases(ctx: Pick<UpdateContext, 'exec' | 'dataDir' | 'appDir'>): Promise<string> {
+  const dir = releasesDir(ctx);
+  const current = currentRelease(ctx.dataDir);
+  const running = readRelease(ctx.appDir);
+  if (!current || !running) return 'the panel does not run from a release';
+  const keep = new Set([current, basename(ctx.appDir)]);
+  let names: string[];
+  try {
+    names = readdirSync(dir).filter((n) => releaseName.safeParse(n).success && !keep.has(n));
+  } catch {
+    return 'no releases folder';
+  }
+  const done: string[] = [];
+  let saved = 0;
+  for (const name of names) {
+    const info = readRelease(join(dir, name));
+    if (!info || compareVersions(info.version, running.version) >= 0) continue;
+    const { before, after } = await packRelease(ctx.exec, dir, name);
+    saved += Math.max(0, before - after);
+    done.push(name);
+  }
+  return done.length ? `packed ${done.join(', ')}, ${formatBytes(saved)} less` : 'every older version is packed';
+}
+
 /** Points current at a release in one rename, so the service starts it on its next start. */
 function pointCurrent(ctx: UpdateContext, name: string): void {
   const link = currentLink(ctx);
@@ -210,18 +358,33 @@ function pointCurrent(ctx: UpdateContext, name: string): void {
   renameSync(`${link}.new`, link);
 }
 
-/** Keeps the running release, the one before and the newest others, up to KEEP_RELEASES, and what an interrupted update left. */
+/** Keeps the running release, the one before and the newest others, up to KEEP_RELEASES, packed or not, and removes what an interrupted update left. */
 function pruneReleases(ctx: UpdateContext, keep: string[]): string[] {
   const dir = releasesDir(ctx);
   const removed: string[] = [];
-  const entries = readdirSync(dir).map((name) => ({ name, at: statSync(join(dir, name)).mtimeMs })).sort((a, b) => b.at - a.at);
+  const at = (name: string) => {
+    const packed = readPacked(dir, name);
+    if (packed) return Date.parse(packed.installedAt);
+    try {
+      return statSync(join(dir, name)).mtimeMs;
+    } catch {
+      return 0;
+    }
+  };
+  const files = readdirSync(dir);
+  const releases = [...new Set([...files.filter((n) => releaseName.safeParse(n).success), ...packedNames(dir)])].map((name) => ({ name, at: at(name) })).sort((a, b) => b.at - a.at);
   let kept = keep.length;
-  for (const { name } of entries) {
+  for (const { name } of releases) {
     if (keep.includes(name)) continue;
-    if (!name.startsWith('.') && kept < KEEP_RELEASES) {
+    if (kept < KEEP_RELEASES) {
       kept += 1;
       continue;
     }
+    for (const path of [join(dir, name), packedFile(dir, name), packedInfoFile(dir, name)]) rmSync(path, { recursive: true, force: true });
+    removed.push(name);
+  }
+  // What an interrupted download, unpack or pack left.
+  for (const name of files.filter((n) => n.startsWith('.'))) {
     rmSync(join(dir, name), { recursive: true, force: true });
     removed.push(name);
   }
@@ -361,6 +524,8 @@ function switchStep(ctx: UpdateContext, name: string): JobStep {
       pointCurrent(ctx, name);
       if (before && before !== name) {
         job.onUndo(`Switch back to ${before} and restart`, async () => {
+          // Packed meanwhile by the background task: unpacked again first.
+          await unpackRelease(ctx.exec, releasesDir(ctx), before);
           pointCurrent(ctx, before);
           return scheduleRestart(ctx, `back on ${before}; the panel restarts in a few seconds`);
         });
@@ -494,9 +659,20 @@ export function planSwitch(ctx: UpdateContext, name: string, now = () => new Dat
   const first = switchStep(ctx, name);
   const steps: JobStep[] = [
     {
+      id: 'unpack',
+      label: `Unpack ${name} if it is packed`,
+      run: async () => {
+        log(`devmagic-panel switch, ${now().toISOString()}, ${currentRelease(ctx.dataDir) ?? ctx.version} to ${name}`);
+        try {
+          return ok((await unpackRelease(ctx.exec, releasesDir(ctx), name)) ? `unpacked ${name}` : `${name} is unpacked already`);
+        } catch (error) {
+          return failed((error as Error).message);
+        }
+      },
+    },
+    {
       ...first,
       run: async (job) => {
-        log(`devmagic-panel switch, ${now().toISOString()}, ${currentRelease(ctx.dataDir) ?? ctx.version} to ${name}`);
         if (!existsSync(join(releasesDir(ctx), name, 'release.json'))) return failed(`${name} is not in ${releasesDir(ctx)}`);
         return first.run(job);
       },

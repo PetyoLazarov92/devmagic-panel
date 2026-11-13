@@ -128,8 +128,8 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             </a>
           </Notice>
         )}
-        {/* The whole width on every page: the search on the left, what changes while you work on the right, the room between. */}
-        <header className="flex w-full items-center gap-2 px-4 pt-4 sm:px-6 md:px-10">
+        {/* The page's width, so its edges meet the page's: the search on the left, what changes while you work on the right, the room between. */}
+        <header className={cn('mx-auto flex w-full items-center gap-2 px-4 pt-4 sm:px-6 md:px-10', PAGE_MAX_WIDTH)}>
           <IconButton icon={Menu} label="Open the menu" onClick={() => setMenuOpen(true)} className="shrink-0 md:hidden" aria-expanded={menuOpen} />
           {/* Drawn like a search field: it opens the command palette. */}
           <Button
@@ -158,7 +158,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             )}
           </div>
         </header>
-        {/* The content's width follows the page type: wide lists, detail pages, narrow settings and flows. */}
+        {/* One width for every page, the top bar's too. */}
         <main className={cn('@container mx-auto w-full flex-1 px-4 pb-12 sm:px-6 md:px-10', PAGE_MAX_WIDTH)}>{children}</main>
         <Toaster />
         {assistantOn && <AssistantDrawer />}

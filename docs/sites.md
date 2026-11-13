@@ -117,6 +117,10 @@ advisory. A long list shows its first rows,
 with **Show more** and **Show all**. **Open folder** goes to the plugin's
 folder on the Files tab, or **Open file** for a plugin that is one file.
 
+**Check again** reads the list anew and asks WordPress.org for updates,
+as WordPress's own update check does; other reads show what WordPress last
+found, so opening the tab sends nothing out.
+
 **Updates**: a plugin or theme with an update WordPress already found has
 **Update to** its new version on its row, and a bar above the list has
 **Update all**, with **Snapshot the database first** ticked. They are

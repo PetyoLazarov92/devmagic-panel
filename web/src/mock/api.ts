@@ -7,7 +7,7 @@ import { coreVersions, debugLog, runs, sites } from './fixtures';
 import { mockFileAction, mockFileCompare, mockFileDiff, mockFileFind, mockFileGit, mockFileSize, mockFileTrash, mockFileView, mockFiles, mockStageFile } from './files';
 import { mockUploadsCompare, mockUploadsCopied, mockUploadsHere } from './uploads';
 import { mockProfile, mockProfileFiles, mockProfiles } from './profiles';
-import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
+import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChangeDetail, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
 import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
@@ -188,6 +188,7 @@ const mockTasks: Array<Omit<BackgroundTask, 'lastRunAt' | 'nextRunAt'> & { lastA
   { id: 'snapshots', label: 'Remove old automatic snapshots', what: 'Removes the snapshots the panel took before a change once they are past their time: it keeps the newest 3 per site and every one from the last 30 days. Yours stay.', everyMs: 24 * 60 * 60_000, running: false, lastOk: true, lastAgo: 3 * 60 * 60_000 },
   { id: 'kept', label: 'Drop expired kept databases', what: 'Drops databases kept after a swap or a refresh once their 7 days are over.', everyMs: 60 * 60_000, running: false, lastOk: true, lastAgo: 14 * 60_000 },
   { id: 'trash', label: 'Remove deleted sites for good', what: 'Removes deleted and archived sites for good after 14 days.', everyMs: 6 * 60 * 60_000, running: false, lastOk: true, lastNote: 'removed local.old-shop.test', lastAgo: 2 * 60 * 60_000 },
+  { id: 'versions', label: 'Pack older panel versions', what: 'Packs the panel versions it does not run into gzip archives; switching back to one unpacks it first.', everyMs: 24 * 60 * 60_000, running: false, lastOk: true, lastNote: 'packed v1.44.1, 74 MB less', lastAgo: 5 * 60 * 60_000 },
   { id: 'updates', label: 'Check for a new release', what: 'Looks for a new release of the panel.', everyMs: 6 * 60 * 60_000, running: false, lastOk: false, lastNote: 'github.com did not answer', lastAgo: 2 * 60 * 60_000 },
 ];
 // An install that finished with its build skipped, as on local.wandworks.test's page and run 40.
@@ -1130,7 +1131,7 @@ const mockUpdate: UpdateStatus = {
       name: `v${CURRENT}`, version: `${CURRENT}`, current: true, installedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), built: '2026-10-25T09:03:09Z', mode: 'panel',
       changes: { kind: 'running', sections: [{ version: `v${CURRENT}`, date: '2026-10-25', items: ['**Panel:** runs from a release, with the newest others kept to switch back to', '**Updates:** a page for new releases'] }] },
     },
-    { name: `v${CURRENT}-dev.89b2be1`, version: `${CURRENT}`, current: false, installedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), built: '2026-10-25T08:40:00Z', mode: 'panel' },
+    { name: `v${CURRENT}-dev.89b2be1`, version: `${CURRENT}`, current: false, installedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), built: '2026-10-25T08:40:00Z', mode: 'panel', packed: true },
     {
       name: 'v0.5.2', version: '0.5.2', current: false, installedAt: new Date(Date.now() - 6 * 86_400_000).toISOString(), built: '2026-10-21T10:00:00Z', mode: 'terminal',
       command: '/home/alex/.local/share/devmagic-panel/releases/v0.5.2/install.sh',
@@ -1581,6 +1582,10 @@ export const mockApi: Api = {
     await wait(150);
     return mockRowChanges(database, table);
   },
+  rowChangeDetail: async (database, change) => {
+    await wait(150);
+    return mockRowChangeDetail(database, change);
+  },
   dbQuery: async (database, query) => {
     await wait(300);
     return mockDbQuery(database, query);
@@ -1649,6 +1654,7 @@ export const mockApi: Api = {
       configs: [
         { file: 'default', enabled: !mockNginxSetUp, managed: false, names: [], listens: ['80 default_server', '[::]:80 default_server'] },
         { file: 'local.legacy.test', enabled: false, managed: false, names: ['local.legacy.test'], listens: ['127.0.0.2:443 ssl'] },
+        { file: 'local.wandworks-brands.example.conf', enabled: true, managed: true, names: ['local.wandworks-brands.example', 'www.local.wandworks-brands.example'], listens: ['127.0.0.2:443 ssl', '127.0.0.2:80'] },
       ],
       errorLog: '/var/log/nginx/error.log',
     };
@@ -2266,17 +2272,24 @@ export const mockApi: Api = {
         { program: 'ssh', startedAt: ago(42_000), job: { id: 'mock-running', title: 'Refresh the database from production' } },
         { program: 'gzip', startedAt: ago(41_000), job: { id: 'mock-running', title: 'Refresh the database from production' } },
         { program: 'dmp-root trash-purge', startedAt: ago(3_000), task: { id: 'trash', title: 'Remove deleted sites for good' } },
-        { program: 'wp', startedAt: ago(1_000) },
-        { program: 'wp', startedAt: ago(1_000) },
-        { program: 'wp', startedAt: ago(900) },
-        { program: 'wp', startedAt: ago(900) },
+        { program: 'wp plugin list', startedAt: ago(1_000), page: { route: 'GET /api/sites/:domain/plugins', site: 'local.spellbook.example' } },
+        { program: 'wp plugin list', startedAt: ago(1_000), page: { route: 'GET /api/sites/:domain/plugins', site: 'local.spellbook.example' } },
+        { program: 'wp theme list', startedAt: ago(900), page: { route: 'GET /api/sites/:domain/themes', site: 'local.spellbook.example' } },
+        { program: 'git status', startedAt: ago(900), page: { route: 'GET /api/sites' } },
       ],
-      pageReads: [{ program: 'wp', count: 1204, totalMs: 1204 * 310 }, { program: 'git', count: 96, totalMs: 96 * 420 }, { program: 'ssh', count: 12, totalMs: 12 * 1800 }],
+      pageReads: [
+        { program: 'wp plugin list', count: 1204, totalMs: 1204 * 310, maxMs: 2900 },
+        { program: 'mysql', count: 317, totalMs: 317 * 183, maxMs: 1400 },
+        { program: 'git status', count: 96, totalMs: 96 * 420, maxMs: 1100 },
+        { program: 'gh api', count: 5, totalMs: 5 * 777, maxMs: 1300 },
+        { program: 'ssh', count: 12, totalMs: 12 * 1800, maxMs: 4100 },
+      ],
       finished: [
-        { program: 'ssh', startedAt: ago(9_000), durationMs: 2100, ended: 'failed', code: 255 },
-        { program: 'dmp-root vhost-write', startedAt: ago(60_000), durationMs: 410, ended: 'ok', job: { id: 'mock-done-skipped', title: 'Create site' } },
-        { program: 'mysqldump', startedAt: ago(3 * 60_000), durationMs: 41_000, ended: 'ok', job: { id: 'mock-running', title: 'Refresh the database from production' } },
-        { program: 'git', startedAt: ago(14 * 60_000), durationMs: 30_000, ended: 'timeout' },
+        { program: 'ssh', startedAt: ago(9_000), durationMs: 2100, ended: 'failed', code: 255, reason: 'permission denied', page: { route: 'POST /api/dumps/server-sign-in' } },
+        ...[100, 49, 284, 15].map((ms, i) => ({ program: 'mysql', startedAt: ago(2 * 60_000 + i * 1000), durationMs: ms, ended: 'failed' as const, code: 1, reason: 'table not there', page: { route: 'GET /api/sites' } })),
+        { program: 'dmp-root vhost-write', startedAt: ago(4 * 60_000), durationMs: 410, ended: 'ok', job: { id: 'mock-done-skipped', title: 'Create site' } },
+        { program: 'mysqldump', startedAt: ago(5 * 60_000), durationMs: 41_000, ended: 'ok', job: { id: 'mock-running', title: 'Refresh the database from production' } },
+        { program: 'git fetch', startedAt: ago(14 * 60_000), durationMs: 30_000, ended: 'timeout', page: { route: 'GET /api/sites/:domain/git', site: 'local.wandworks.example' } },
         { program: 'du', startedAt: ago(14 * 60_000), durationMs: 380, ended: 'ok', task: { id: 'runs', title: 'Trim Run history' } },
       ],
       tasks: mockTasks.map((t) => ({ ...t, lastRunAt: ago(t.lastAgo), nextRunAt: ahead(t.everyMs - t.lastAgo), lastAgo: undefined })),
@@ -2293,7 +2306,7 @@ export const mockApi: Api = {
       { id: 'downloads', label: 'Downloaded dumps', what: 'Database dumps you uploaded or the panel downloaded, and files staged for the Files tab.', bytes: 312 * MB, kept: 'A day, unless a job or a draft still uses one', clean: { kind: 'downloads', goes: 'Every downloaded dump, except one a job or a draft still uses.' }, where: ['/home/wandworksco/.local/share/devmagic-panel/uploads'] },
       { id: 'file-trash', label: 'Files tab deletes', what: 'Files and folders deleted in the Files tab, for Undo.', bytes: 2.1 * MB, kept: '14 days, 1 GB at most', clean: { kind: 'file-trash', goes: 'Every file and folder deleted in the Files tab, and with them their Undo.' }, where: ['/home/wandworksco/.local/share/devmagic-panel/file-trash'] },
       { id: 'mysql-backups', label: 'MySQL settings backups', what: "MySQL's settings before the panel changed them.", bytes: 48 * 1024, kept: '14 days', clean: { kind: 'mysql-backups', goes: "Every backup of MySQL's settings." }, where: ['/home/wandworksco/.local/share/devmagic-panel/mysql-backups'] },
-      { id: 'releases', label: 'Panel versions', what: 'The running version of the panel and the ones before it, to switch back to.', bytes: 257 * MB, kept: 'Three in all', manage: { note: 'Each update removes the oldest', label: 'Updates', href: '/update' }, where: ['/home/wandworksco/.local/share/devmagic-panel/releases'] },
+      { id: 'releases', label: 'Panel versions', what: 'The running version of the panel and the ones before it, to switch back to.', bytes: 257 * MB, kept: 'Three in all: the running one unpacked, the others packed', manage: { note: 'Each update removes the oldest, and a background task packs the ones the panel does not run', label: 'Updates', href: '/update' }, where: ['/home/wandworksco/.local/share/devmagic-panel/releases'] },
       { id: 'tools', label: 'Mailpit and tools', what: 'Mailpit with the mail it caught, and tools the panel downloaded, like the PHP compatibility check.', bytes: 47 * MB, kept: 'Until you remove Mailpit; mail as Mailpit keeps it', manage: { note: 'Delete caught mail in Mail', label: 'Mail', href: '/mail' }, where: ['/home/wandworksco/.local/share/devmagic-panel/mailpit'] },
       { id: 'panel', label: 'Run history and logs', what: "The panel's database (Run history, drafts, settings) and its logs.", bytes: 2.3 * MB, kept: 'Runs 90 days, 2000 at most', clean: { kind: 'runs', goes: 'Every finished run in Run history. Runs still going and the logs stay.' }, where: ['/home/wandworksco/.local/share/devmagic-panel/panel.db'] },
       { id: 'kept', label: 'Kept databases', what: "A site's database as it was before a swap or a refresh, kept in MySQL to switch back.", bytes: null, count: 2, items: [{ name: 'spellbook_example__keep261109222729', domain: 'local.spellbook.example', goesAt: '2026-11-16T22:27:33.000Z' }, { name: 'spellbook_learn__keep261110000235', domain: 'local.spellbook.example', path: '/learn', goesAt: '2026-11-17T00:02:39.000Z' }], kept: '7 days (the oldest goes on 16 Nov)', clean: { kind: 'kept', goes: 'Every kept database, except one of a site a job works on. You can no longer switch back to them.' }, where: ['MySQL'] },
@@ -2577,6 +2590,7 @@ export const mockApi: Api = {
       coresDir: '/var/www/wp-cores',
       ready: true,
       latest: '7.1.3',
+      statusAt: new Date().toISOString(),
       cores: coreVersions.map((version) => ({
         version,
         ...(status[version] ? { status: status[version] } : {}),

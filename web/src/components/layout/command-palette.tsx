@@ -13,6 +13,8 @@ import { filesHref } from '@/lib/file-links';
 import { navigate, usePath } from '@/lib/router';
 import { lastLine, openWpAdmin } from '@/lib/site-actions';
 import { siteHref, siteName } from '@/lib/site-ref';
+import { siteSections } from '@/lib/site-tabs';
+import { SITE_TAB_ICONS } from '@/features/site/site-shared';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
@@ -131,13 +133,40 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
         ...branchCommand(s),
       ];
     });
+    // The open site's tabs and views first; every other site's are found by typing, as "shop SQL".
+    const sections = sites.flatMap((s): Command[] => {
+      const isHere = Boolean(here && s.domain === here.domain && (s.path ?? '') === (here.path ?? ''));
+      const name = siteName(s);
+      return siteSections(s).map((sec) => {
+        const Icon = SITE_TAB_ICONS[sec.tab];
+        return {
+          id: `section:${name}:${sec.tab}:${sec.view ?? ''}`,
+          label: isHere ? sec.label : `${name}: ${sec.label}`,
+          icon: <Icon />,
+          group: isHere ? 'Sections' : 'Sections of other sites',
+          run: () => navigate(sec.href),
+        };
+      });
+    });
     const run = actionCommands(sites, here);
-    return [...run.filter((c) => c.group === 'This site'), ...pages, ...perSite, ...run.filter((c) => c.group !== 'This site')];
+    return [...sections.filter((c) => c.group === 'Sections'), ...run.filter((c) => c.group === 'This site'), ...pages, ...perSite, ...run.filter((c) => c.group !== 'This site'), ...sections.filter((c) => c.group !== 'Sections')];
   }, [sites, drafts, here]);
 
   const q = query.trim().toLowerCase();
-  // With nothing typed: the open site's first few actions, then the pages; typing searches everything.
-  const shown = (q ? commands.filter((c) => `${c.label} ${c.hint ?? ''}`.toLowerCase().includes(q)) : [...commands.filter((c) => c.group === 'This site').slice(0, 4), ...commands.filter((c) => c.group !== 'Open' && c.group !== 'Run' && c.group !== 'This site')]).slice(0, 12);
+  // With nothing typed: the open site's tabs and views and its first few actions, then the pages; typing searches everything, every word in any order.
+  const words = q.split(/\s+/).filter(Boolean);
+  const shown = (
+    q
+      ? commands.filter((c) => {
+          const text = `${c.label} ${c.hint ?? ''}`.toLowerCase();
+          return words.every((w) => text.includes(w));
+        })
+      : [
+          ...commands.filter((c) => c.group === 'Sections'),
+          ...commands.filter((c) => c.group === 'This site').slice(0, 4),
+          ...commands.filter((c) => !['Open', 'Run', 'This site', 'Sections', 'Sections of other sites'].includes(c.group)),
+        ]
+  ).slice(0, here ? 30 : 12);
 
   useEffect(() => setActive(0), [query]);
 
@@ -187,7 +216,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
                 if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
                 if (e.key === 'Enter') { e.preventDefault(); pick(shown[active]); }
               }}
-              placeholder="Jump to a site or run an action"
+              placeholder="Jump to a site, a tab or a view, or run an action"
               aria-label="Search commands"
               role="combobox"
               aria-expanded="true"

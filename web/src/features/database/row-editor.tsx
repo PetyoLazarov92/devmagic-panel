@@ -1,5 +1,5 @@
 import type { ActionId, DbCell, DbColumnHead, DbRow, RowChangeInfo } from '@devmagic-panel/shared';
-import { History, RotateCcw, TriangleAlert, Wand2 } from 'lucide-react';
+import { ChevronRight, History, RotateCcw, TriangleAlert, Wand2 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useId, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { fixSerializedLengths, looksSerialized, lostPropertyMarks, needsExactEdi
 import { lastLine } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
+import { cn } from '@/lib/utils';
 import { FieldsSkeleton } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
 
@@ -314,16 +315,69 @@ export async function deleteRowsNow(database: string, table: string, keys: strin
   return runRow('mysql.deleteRows', { database, table, rowKeys: keys });
 }
 
-const KIND: Record<RowChangeInfo['kind'], (n: number) => string> = {
-  update: () => 'Changed a row',
+const KIND: Record<RowChangeInfo['kind'], (c: RowChangeInfo) => string> = {
+  update: (c) => (c.columns?.length ? `Changed ${c.columns.join(', ')} of a row` : 'Changed a row'),
   insert: () => 'Added a row',
-  delete: (n) => (n === 1 ? 'Deleted a row' : `Deleted ${n} rows`),
+  delete: (c) => (c.rows === 1 ? 'Deleted a row' : `Deleted ${c.rows} rows`),
 };
 
-/** The table's row changes saved for Undo, newest first, until their copy goes after 14 days. */
+/** What Undo does to it, in a few words. */
+const UNDOES: Record<RowChangeInfo['kind'], string> = {
+  update: 'Undo puts the values before back',
+  insert: 'Undo deletes the row',
+  delete: 'Undo puts the rows back as they were',
+};
+
+/** A value as a cell shows it: NULL apart from an empty text. */
+function Value({ value, tone }: { value: string | null | undefined; tone?: 'before' | 'after' }) {
+  if (value === null) return <span className="text-muted-foreground italic">NULL</span>;
+  if (value === '') return <span className="text-muted-foreground italic">empty</span>;
+  return <span className={cn('font-mono break-all whitespace-pre-wrap', tone === 'before' && 'text-danger', tone === 'after' && 'text-success')}>{value}</span>;
+}
+
+/** What a saved change holds, read when you open it: each row by its key, the columns before and after. */
+function ChangeDetail({ database, change }: { database: string; change: string }) {
+  const detail = useAsync(() => api.rowChangeDetail(database, change), [database, change]);
+  if (detail.loading && !detail.data) return <p className="flex items-center gap-2 px-5 pb-3 text-xs text-muted-foreground"><Spinner />Reading the saved copy...</p>;
+  if (detail.error || !detail.data) return <p role="alert" className="px-5 pb-3 text-xs text-danger">{detail.error ?? 'The saved copy could not be read'}</p>;
+  const d = detail.data;
+  return (
+    <div className="grid gap-3 px-5 pb-3">
+      {d.rows.map((row, i) => (
+        <div key={i} className="overflow-hidden rounded-md border">
+          <p className="border-b bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+            {Object.entries(row.key).map(([k, v]) => <span key={k} className="mr-3">{k} <span className="font-mono text-foreground">{v ?? 'NULL'}</span></span>)}
+          </p>
+          <table className="w-full text-xs">
+            <thead className="text-left text-muted-foreground">
+              <tr>
+                <th className="w-40 px-3 py-1.5 font-medium">Column</th>
+                {d.kind !== 'insert' && <th className="px-3 py-1.5 font-medium">{d.kind === 'update' ? 'Before (Undo puts back)' : 'Value (Undo puts back)'}</th>}
+                {d.kind !== 'delete' && <th className="px-3 py-1.5 font-medium">{d.kind === 'update' ? 'After the change' : 'Value (Undo deletes)'}</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {row.cells.map((c) => (
+                <tr key={c.column} className="align-top">
+                  <td className="px-3 py-1.5 font-mono">{c.column}</td>
+                  {d.kind !== 'insert' && <td className="px-3 py-1.5"><Value value={c.before} {...(d.kind === 'update' ? { tone: 'before' as const } : {})} /></td>}
+                  {d.kind !== 'delete' && <td className="px-3 py-1.5"><Value value={c.after} {...(d.kind === 'update' ? { tone: 'after' as const } : {})} /></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {row.cells.some((c) => c.cut) && <p className="border-t px-3 py-1.5 text-xs text-muted-foreground">Long values are cut here; Undo puts back the whole value.</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The table's row changes saved for Undo, newest first, until their copy goes after 14 days; each shows what it changed on a click. */
 export function RowChangesCard({ database, table, refresh, onUndone }: { database: string; table: string; refresh: number; onUndone: () => void }) {
   const list = useAsync(() => api.rowChanges(database, table), [database, table, refresh]);
   const [undoing, setUndoing] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   const items = list.data ?? [];
   if (!items.length) return null;
 
@@ -342,15 +396,21 @@ export function RowChangesCard({ database, table, refresh, onUndone }: { databas
         <CardTitle>Changes you can undo</CardTitle>
         <History className="size-4 text-muted-foreground" />
       </CardHeader>
-      <p className="px-5 pt-3 text-xs text-muted-foreground">Each one is undone only while the rows still hold what it left. The newest first.</p>
+      <p className="px-5 pt-3 text-xs text-muted-foreground">Each one is undone only while the rows still hold what it left. The newest first. Open one to see what it changed and what Undo puts back.</p>
       <ul className="mt-2 divide-y">
         {items.map((c) => (
-          <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2 text-sm">
-            <span className="font-medium">{KIND[c.kind](c.rows)}</span>
-            <span className="flex-1 text-xs text-muted-foreground">{timeAgo(c.savedAt)}, kept until {shortDate(c.purgeAt)}</span>
-            <Button size="sm" variant="outline" disabled={undoing !== null} onClick={() => void undo(c.id)}>
-              {undoing === c.id ? <Spinner /> : <RotateCcw />}Undo
-            </Button>
+          <li key={c.id}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2 text-sm">
+              <Button variant="ghost" size="sm" className="-ml-2 min-w-0 justify-start" aria-expanded={open === c.id} onClick={() => setOpen((o) => (o === c.id ? null : c.id))}>
+                <ChevronRight className={cn('transition-transform', open === c.id && 'rotate-90')} />
+                <span className="truncate font-medium">{KIND[c.kind](c)}</span>
+              </Button>
+              <span className="flex-1 text-xs text-muted-foreground">{timeAgo(c.savedAt)}, kept until {shortDate(c.purgeAt)}</span>
+              <Button size="sm" variant="outline" disabled={undoing !== null} onClick={() => void undo(c.id)} title={UNDOES[c.kind]}>
+                {undoing === c.id ? <Spinner /> : <RotateCcw />}Undo
+              </Button>
+            </div>
+            {open === c.id && <ChangeDetail database={database} change={c.id} />}
           </li>
         ))}
       </ul>

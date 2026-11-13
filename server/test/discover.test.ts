@@ -228,6 +228,21 @@ describe('parseCertText', () => {
 });
 
 describe('discoverSites without a database', () => {
+  it('asks nothing of a database MySQL does not have, so no read of it fails', async () => {
+    const t = siteTree({ multisite: true, dbName: 'not_imported' });
+    const { exec, calls } = fakeExec(responses(t.docroot, t.cert));
+    const [site] = await discoverSites({ config: t.config, exec, secrets, wpcoreConf: join(t.root, 'wpcore.conf'), now: () => NOW });
+    expect(calls.filter((c) => c.file === 'mysql' && (c.args.at(-1) ?? '').includes('not_imported'))).toEqual([]);
+    expect(site?.network).toEqual({ mode: 'subdirectory', type: 'subdirectory', sites: [] });
+  });
+
+  it('still asks when the list of databases could not be read', async () => {
+    const t = siteTree({ dbName: 'shop_com' });
+    const { exec, calls } = fakeExec({ ...responses(t.docroot, t.cert), 'mysql --batch --skip-column-names --user root --host localhost --default-character-set=utf8mb4 -e SELECT table_schema,': { code: 1, stderr: 'ERROR 2002' } });
+    await discoverSites({ config: t.config, exec, secrets, wpcoreConf: join(t.root, 'wpcore.conf'), now: () => NOW });
+    expect(calls.some((c) => c.file === 'mysql' && (c.args.at(-1) ?? '').includes('blogname'))).toBe(true);
+  });
+
   it('still marks a multisite from wp-config.php, with no sites listed', async () => {
     const t = siteTree({ multisite: true });
     const { exec } = fakeExec(responses(t.docroot, t.cert));

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runAction, type ActionContext, withoutPasswords } from '../src/actions.js';
 import { Jobs } from '../src/jobs.js';
-import { deleteRows, insertRow, listRowChanges, pruneRowChanges, rowChangesDir, type RowsContext, undoRowChange, updateRow } from '../src/mysql-rows.js';
+import { deleteRows, insertRow, listRowChanges, pruneRowChanges, rowChangeDetail, rowChangesDir, type RowsContext, undoRowChange, updateRow } from '../src/mysql-rows.js';
 import { RunStore } from '../src/store.js';
 import { type FakeCall, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
@@ -115,6 +115,28 @@ describe('adding and deleting rows', () => {
     expect(r.stdout).toBe('deleted 1 row of wp_options (1 row had gone already); Undo puts them back');
     expect(writes(fake)[0]).toContain('DELETE FROM `shop_com`.`wp_options` WHERE (`option_id` <=> 7) OR (`option_id` <=> 9);');
     expect(saved(ctx, r.change as string)).toMatchObject({ kind: 'delete', rows: [{ option_id: '7' }] });
+  });
+});
+
+describe('what a saved change holds', () => {
+  it('shows an update by its key with each changed column before and after, and lists only the column names', async () => {
+    const ctx = ctxFor(fakeRows(() => ({ stdout: JSON.stringify(BEFORE) })));
+    const { change } = await updateRow(ctx, { database: 'shop_com', table: 'wp_options', rowKey: ['7'], rowValues: { option_value: 'New' }, rowWas: { option_value: 'Wandworks Bikes' } });
+    expect(listRowChanges(ctx.config, 'shop_com')[0]).toMatchObject({ kind: 'update', columns: ['option_value'] });
+    expect(JSON.stringify(listRowChanges(ctx.config, 'shop_com'))).not.toContain('Wandworks Bikes');
+    expect(rowChangeDetail(ctx.config, 'shop_com', change as string)).toEqual({
+      id: change, kind: 'update', table: 'wp_options', primaryKey: ['option_id'],
+      rows: [{ key: { option_id: '7' }, cells: [{ column: 'option_value', before: 'Wandworks Bikes', after: 'New' }] }],
+    });
+  });
+
+  it('shows deleted rows whole, binary values by size, and refuses another database', async () => {
+    const ctx = ctxFor(fakeRows(() => ({ stdout: JSON.stringify(BEFORE) })));
+    const { change } = await deleteRows(ctx, { database: 'shop_com', table: 'wp_options', rowKeys: [['7']] });
+    const detail = rowChangeDetail(ctx.config, 'shop_com', change as string);
+    expect(detail.rows[0]?.cells).toEqual(expect.arrayContaining([{ column: 'option_name', before: 'blogname' }, { column: 'hash', before: '(binary, 2 bytes)' }]));
+    expect(detail.rows[0]?.cells.every((c) => !('after' in c))).toBe(true);
+    expect(() => rowChangeDetail(ctx.config, 'other_db', change as string)).toThrow(/another database/);
   });
 });
 

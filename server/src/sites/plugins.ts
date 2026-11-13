@@ -96,15 +96,16 @@ function headerOf(file: string): string {
 /**
  * Every plugin of a site as WP-CLI lists it, with what the panel knows about
  * each: what it needs and what needs it, an update WordPress already found
- * (no check is made, so nothing goes out), and whether the install turned it
+ * (no check is made, so nothing goes out; with `check`, asked by Check
+ * again, WP-CLI asks WordPress.org as WordPress's own update check does), and whether the install turned it
  * off as production-only or it is a local helper. Plugins and the theme are
  * not loaded, so a broken one cannot stop the list.
  */
-export async function readPlugins(exec: Executor, site: SiteRef, productionOnly: readonly string[] = []): Promise<SitePlugins> {
+export async function readPlugins(exec: Executor, site: SiteRef, productionOnly: readonly string[] = [], options: { check?: boolean } = {}): Promise<SitePlugins> {
   const [result, wporg] = await Promise.all([
     exec(
       'wp',
-      [`--path=${site.docroot}`, `--url=https://${site.host}/`, 'plugin', 'list', '--format=json', '--fields=name,title,status,version,update,update_version,file', '--skip-update-check', '--skip-plugins', '--skip-themes'],
+      [`--path=${site.docroot}`, `--url=https://${site.host}/`, 'plugin', 'list', '--format=json', '--fields=name,title,status,version,update,update_version,file', ...(options.check ? [] : ['--skip-update-check']), '--skip-plugins', '--skip-themes'],
       { timeoutMs: 60_000 },
     ),
     wporgKnown(exec, site, 'plugins'),
@@ -201,9 +202,10 @@ function themeHeader(header: string): Pick<SiteTheme, 'description' | 'author' |
  * through Local mode and WP-CLI therefore does not list here: those are read
  * from their folders, with the name and version style.css gives.
  */
-export async function readThemes(exec: Executor, site: SiteRef): Promise<SiteThemes> {
+export async function readThemes(exec: Executor, site: SiteRef, options: { check?: boolean } = {}): Promise<SiteThemes> {
   const wp = (args: string[]) => exec('wp', [`--path=${site.docroot}`, `--url=https://${site.host}/`, ...args, '--skip-plugins', '--skip-themes'], { timeoutMs: 60_000 });
-  const [result, wporg] = await Promise.all([wp(['theme', 'list', '--format=json', '--fields=name,title,status,version,update,update_version', '--skip-update-check']), wporgKnown(exec, site, 'themes')]);
+  // Check again asks WordPress.org for updates, as WordPress's own check does; other reads take what it last found.
+  const [result, wporg] = await Promise.all([wp(['theme', 'list', '--format=json', '--fields=name,title,status,version,update,update_version', ...(options.check ? [] : ['--skip-update-check'])]), wporgKnown(exec, site, 'themes')]);
   if (result.code !== 0) throw new SiteActionRefused(`WP-CLI could not list the themes: ${(result.stderr || result.stdout).trim().split('\n').at(-1) ?? ''}`);
   let rows: WpThemeRow[];
   try {

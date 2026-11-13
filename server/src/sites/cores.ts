@@ -40,7 +40,7 @@ export function addableReleases(status: CoreStatusMap, installed: string[], bran
     .map((version) => ({ version, status: status[version] as CoresReport['available'][number]['status'] }));
 }
 
-export function coresReport(config: SystemConfig, wpcoreConf: string, status: CoreStatusMap | null): CoresReport {
+export function coresReport(config: SystemConfig, wpcoreConf: string, status: CoreStatusMap | null, statusAt?: string): CoresReport {
   const conf = readWpcoreConfig(wpcoreConf);
   const coresDir = conf?.coresDir ?? '';
   const installed = conf ? installedCores(conf.coresDir) : [];
@@ -51,6 +51,7 @@ export function coresReport(config: SystemConfig, wpcoreConf: string, status: Co
     coresDir,
     ready: conf !== null && installed.length > 0,
     ...(latest ? { latest } : {}),
+    ...(statusAt ? { statusAt } : {}),
     cores: installed.map((version) => ({
       version,
       ...statusOf(version),

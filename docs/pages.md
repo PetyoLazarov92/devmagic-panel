@@ -8,7 +8,10 @@
 site, wp-admin, VS Code or its branch, and run a quick action. On a site's
 page its own actions come first: clear the cache, flush rewrite rules, take a
 database snapshot, clear `debug.log`, open a terminal, fetch or pull, reissue
-the certificate. Reload Apache or nginx, restart a service and clear Mail are
+the certificate, and every tab and view of the site ("Database › SQL",
+"Database › Backups and tools", "Plugins and themes › Themes"), so any
+part of it is a few keys away; another site's are found by typing its name
+and the view ("brands sql"). Reload Apache or nginx, restart a service and clear Mail are
 there too; restarting MySQL, Apache or nginx and clearing Mail ask first. The
 outcome is a toast, with the job one click away. The actions it offers are
 the registry's (`palette` on an action in `shared/src/actions.ts`).
@@ -78,6 +81,8 @@ The shared wpcore cores with their WordPress.org status and the sites on each:
 
 - Add a release (one with known security issues only after a typed
   confirmation, for testing).
+- **Check again** asks WordPress.org now; when it does not answer, the page
+  says so and how old the statuses it shows are.
 - Switch sites to a safe core.
 - Remove cores no site uses.
 
@@ -116,7 +121,9 @@ and its storage in all. Under them, one list at a time:
   every kept database (except one of a site a job works on). It is the
   `storage.clean` action, so Run history has it. The other kinds open where
   you manage them: clean copies on a site's Database tab, deleted sites in
-  Removed sites, panel versions on Updates (three are kept), caught mail in
+  Removed sites, panel versions on Updates (three are kept: the running one
+  unpacked, the others packed with gzip at its best, about a seventh of the
+  room; switching back to one unpacks it first), caught mail in
   Mail; backups for Undo stay for `dmp-restore`. Snapshots the panel takes before a change
   (`before-import` and the like) keep the newest 3 per site and every one
   from the last 30 days; the ones you take stay until you delete them.
@@ -127,20 +134,28 @@ and its storage in all. Under them, one list at a time:
   remove expired install drafts (every 10 minutes); trim Run history, remove
   old downloaded dumps, Files tab deletes and MySQL settings backups, drop
   expired kept databases (hourly); remove old automatic snapshots (daily);
-  remove deleted sites for good and check for a new release (every 6 hours).
+  pack older panel versions (daily); remove deleted sites for good and check
+  for a new release (every 6 hours).
   Click a task for its last runs: when, what it did or why it failed, and how
   long it took. The newest 20 per task are kept in the panel's database.
-- **Running now** (`?view=programs`): each program the panel has open
-  (`ssh`, `wp`, `dmp-root vhost-write`), since when, and what started it: a
-  job (a link to it), a background task, or a page's read. A job is what you
-  started; these are the programs behind it. Page reads of one program
-  running at once share a line (`wp ×7`): a site's page starts several.
-  **Recently finished**, a card of its own, lists the last 50 of jobs and
-  background tasks, and page reads that failed or took 5 seconds or more,
-  with how long each took and whether it failed or was stopped by its
-  timeout. Page reads that went well are only counted per program, with
-  their time on average. All of it stays in memory until the panel restarts,
-  by name only, never arguments or output. A program that ran 30 seconds or
+- **Running now** (`?view=programs`): each program the panel has open, with
+  its command where it has one (`git status`, `wp plugin list`, `dmp-root
+  vhost-write`; only words that look like a command, never a value), since
+  when, and what started it: a job (a link to it), a background task, or the
+  page whose read it is ("Sites › local.spellbook.example › plugins", from
+  the server's route and the site it names, never the address asked, its
+  query or body). A job is what you started; these are the programs behind
+  it. Reads of one program for one page running at once share a line
+  (`wp plugin list ×7`). **Recently finished**, a card of its own, lists the
+  last 50 of jobs and background tasks, and page reads that failed or took
+  5 seconds or more, with how long each took, whether it failed or was
+  stopped by its timeout, and why it failed in a few words from a fixed list
+  ("table not there", "not a git repository", "printed nothing"), read from
+  its exit code and MySQL's error number, never its output. Alike ones share
+  a line (`mysql ×9`, with the range of their times). **Page reads that went
+  well** are a table: each program with how many times, its average and its
+  slowest. All of it stays in memory until the panel restarts, never
+  arguments or output. A program that ran 30 seconds or
   more, or failed for a job or a background task, also goes to the panel's
   log (`journalctl --user -u devmagic-panel`), by name only; a page's read
   that fails is often meant to (a sign-in check), so it is not logged.

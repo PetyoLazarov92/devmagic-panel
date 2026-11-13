@@ -68,6 +68,13 @@ describe('readPlugins', () => {
     expect(by['advanced-cache.php']).toEqual({ name: 'advanced-cache.php', title: 'advanced-cache.php', status: 'dropin', version: '1.0' });
   });
 
+  it('asks WordPress.org for updates only when Check again asks', async () => {
+    const { t, fake } = setup();
+    await readPlugins(fake.exec, siteFor(t.config, 'local.shop.com'), [], { check: true });
+    expect(fake.calls[0]?.args).not.toContain('--skip-update-check');
+    expect(fake.calls[0]?.args).toContain('--skip-plugins');
+  });
+
   it('says why when WP-CLI cannot list them', async () => {
     const { t, fake } = setup({ 'wp': { code: 1, stderr: 'Error: Error establishing a database connection.' } });
     await expect(readPlugins(fake.exec, siteFor(t.config, 'local.shop.com'))).rejects.toThrow('WP-CLI could not list the plugins: Error: Error establishing a database connection.');

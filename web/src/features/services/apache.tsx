@@ -1,8 +1,9 @@
 import type { ApacheModule, ApacheReport, ApacheVhost } from '@devmagic-panel/shared';
-import { FileCode2, Lock, Puzzle, RefreshCw, ScrollText, Server } from 'lucide-react';
+import { isLocalName } from '@devmagic-panel/shared';
+import { ExternalLink, FileCode2, Lock, Puzzle, RefreshCw, ScrollText, Server } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { LogView } from '@/components/layout/log-view';
-import { StatusDot } from '@/components/layout/site-bits';
+import { siteUrl, StatusDot } from '@/components/layout/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -109,6 +110,11 @@ export function ApacheTab({ refresh, onLoading }: { refresh: number; onLoading: 
                     <Link href={`/sites/${encodeURIComponent(v.site)}`} className="font-medium hover:underline">{v.names[0]}</Link>
                   ) : (
                     <span className="font-medium">{v.names[0] ?? v.file}</span>
+                  )}
+                  {v.enabled && v.names[0] && isLocalName(v.names[0]) && (
+                    <a href={siteUrl(v.names[0])} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" title={`Open ${v.names[0]}`} aria-label={`Open ${v.names[0]}`}>
+                      <ExternalLink className="size-3.5" />
+                    </a>
                   )}
                   <Badge tone={v.enabled ? 'success' : 'neutral'}>{v.enabled ? 'Enabled' : 'Not enabled'}</Badge>
                   <Badge tone={v.managed ? 'primary' : 'neutral'}>{v.managed ? "The panel's" : 'By hand'}</Badge>

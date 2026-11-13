@@ -1,5 +1,5 @@
-import { RefreshCw } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Check, RefreshCw } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -11,12 +11,48 @@ import { cn } from '@/lib/utils';
  * the one button that reads a page again.
  */
 
-/** Reads the page or view again: the same words and turning icon everywhere. */
+/** The least time the icon turns, so a read that answers at once still shows it ran. */
+const CHECK_MIN_MS = 600;
+/** How long "Checked" stays once the answer is in. */
+const CHECKED_MS = 2000;
+
+/**
+ * Reads the page or view again: the same words and turning icon everywhere.
+ * The icon turns until the answer is in (at least a moment), then the button
+ * says Checked for two seconds, so a read that found nothing new still shows
+ * it ran.
+ */
 export function CheckAgain({ onClick, loading = false, disabled = false, size }: { onClick: () => void; loading?: boolean; disabled?: boolean; size?: 'sm' }) {
+  const [phase, setPhase] = useState<'idle' | 'busy' | 'done'>('idle');
+  const started = useRef(0);
+
+  useEffect(() => {
+    if (phase === 'busy' && !loading) {
+      const t = window.setTimeout(() => setPhase('done'), Math.max(0, CHECK_MIN_MS - (Date.now() - started.current)));
+      return () => window.clearTimeout(t);
+    }
+    if (phase === 'done') {
+      const t = window.setTimeout(() => setPhase('idle'), CHECKED_MS);
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+  }, [phase, loading]);
+
+  const busy = loading || phase === 'busy';
   return (
-    <Button variant="outline" {...(size ? { size } : {})} onClick={onClick} disabled={disabled || loading}>
-      <RefreshCw className={cn(loading && 'animate-spin')} />
-      Check again
+    <Button
+      variant="outline"
+      {...(size ? { size } : {})}
+      onClick={() => {
+        started.current = Date.now();
+        setPhase('busy');
+        onClick();
+      }}
+      disabled={disabled || busy}
+      aria-live="polite"
+    >
+      {phase === 'done' && !loading ? <Check className="text-success" /> : <RefreshCw className={cn(busy && 'animate-spin')} />}
+      {phase === 'done' && !loading ? 'Checked' : 'Check again'}
     </Button>
   );
 }

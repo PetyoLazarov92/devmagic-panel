@@ -124,7 +124,10 @@ function CompatView({ site, compat, current, ask, onChanged }: { site: Site; com
     handled.current = ask.n;
     setVersion(ask.version);
     if (compat.scans.some((s) => s.version === ask.version)) setShown(ask.version);
-    if (ask.check && !busy && !blocked) start(ask.version);
+    // Check again says why when it cannot start, instead of only scrolling to the card.
+    if (ask.check && busy) toast({ tone: 'info', title: 'A check is running', detail: 'Check again once it finishes.' });
+    else if (ask.check && blocked) toast({ tone: 'info', title: 'The compatibility check is not installed', detail: 'The card below says what it needs.' });
+    else if (ask.check) start(ask.version);
     scrollToCard(card.current);
   });
 

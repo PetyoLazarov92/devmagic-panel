@@ -7,7 +7,7 @@ import { type DetailsTarget, PluginDetailsDialog } from '@/features/site/plugin-
 import { settled, useJob } from '@/features/jobs/job-steps';
 import { Checkbox } from '@/components/ui/field';
 import { ArrowUpCircle, Info, Lock, Palette, Plug, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -151,7 +151,17 @@ const lastThemes = new Map<string, SiteThemes>();
 /** A site's themes, read only: which one is on, the parent a child theme needs, and where each folder is. */
 function ThemesView({ site }: { site: Site }) {
   const key = `${site.domain}${site.path ?? ''}`;
-  const { data: fresh, error, loading, reload } = useAsync(() => api.themes(site.domain, site.path).then((list) => (lastThemes.set(key, list), list)), [site.domain, site.path]);
+  // Check again also asks WordPress.org for updates; other reads take what WordPress last found.
+  const asking = useRef(false);
+  const { data: fresh, error, loading, reload } = useAsync(() => {
+    const check = asking.current;
+    asking.current = false;
+    return api.themes(site.domain, site.path, check).then((list) => (lastThemes.set(key, list), list));
+  }, [site.domain, site.path]);
+  const checkAgain = () => {
+    asking.current = true;
+    reload();
+  };
   const data = fresh ?? lastThemes.get(key);
   const vulnerable = useVulnerabilities(site);
   // As on Plugins: Details adds what each theme says it is and who made it; it starts compact every time.
@@ -191,9 +201,10 @@ function ThemesView({ site }: { site: Site }) {
         </p>
         <div className="flex items-center gap-2">
           <Segmented label="How much each theme shows" className="text-xs" value={details ? 'details' : 'compact'} onChange={(v) => setDetails(v === 'details')} options={[['compact', 'Compact'], ['details', 'Details']]} />
-          <CheckAgain size="sm" onClick={reload} loading={loading} />
+          <CheckAgain size="sm" onClick={checkAgain} loading={loading} />
         </div>
       </div>
+      {error && <Notice tone="warning">Not read again: {error}. This is the list from before.</Notice>}
       <MissingPluginsCard site={site} show="themes" onChanged={reload} />
       <UpdatesBar kind="themes" names={themeUpdates} updates={updates} />
       {data.themes.length === 0 ? (
@@ -262,10 +273,17 @@ function ThemesView({ site }: { site: Site }) {
  */
 function PluginsView({ site }: { site: Site }) {
   const key = `${site.domain}${site.path ?? ''}`;
-  const { data: fresh, error, loading, reload } = useAsync(
-    () => api.plugins(site.domain, site.path).then((list) => (lastLists.set(key, list), list)),
-    [site.domain, site.path],
-  );
+  // Check again also asks WordPress.org for updates; other reads take what WordPress last found.
+  const checking = useRef(false);
+  const { data: fresh, error, loading, reload } = useAsync(() => {
+    const check = checking.current;
+    checking.current = false;
+    return api.plugins(site.domain, site.path, check).then((list) => (lastLists.set(key, list), list));
+  }, [site.domain, site.path]);
+  const checkAgain = () => {
+    checking.current = true;
+    reload();
+  };
   const data = fresh ?? lastLists.get(key);
   const vulnerable = useVulnerabilities(site);
   const [query, setQuery] = useState('');
@@ -329,9 +347,10 @@ function PluginsView({ site }: { site: Site }) {
         </p>
         <div className="flex items-center gap-2">
           <Segmented label="How much each plugin shows" className="text-xs" value={details ? 'details' : 'compact'} onChange={(v) => setDetails(v === 'details')} options={[['compact', 'Compact'], ['details', 'Details']]} />
-          <CheckAgain size="sm" onClick={reload} loading={loading} />
+          <CheckAgain size="sm" onClick={checkAgain} loading={loading} />
         </div>
       </div>
+      {error && <Notice tone="warning">Not read again: {error}. This is the list from before.</Notice>}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-52 flex-1">

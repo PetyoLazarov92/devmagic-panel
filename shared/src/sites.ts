@@ -767,6 +767,8 @@ export interface CoresReport {
   ready: boolean;
   /** The newest WordPress release, when WordPress.org could be asked. */
   latest?: string;
+  /** When WordPress.org last answered: older than the read means it did not answer this time, and the statuses are its last answer. */
+  statusAt?: string;
   /** Sites by name: local.shop.com, or local.spellbook.example/learn for one under a path. */
   cores: Array<{ version: string; status?: CoreSecurity; sites: string[] }>;
   /** Sites with their own copy of WordPress, which wpcore does not manage. */
@@ -1017,6 +1019,8 @@ export interface InstalledRelease {
   command?: string;
   /** Its install.sh has --from-panel (0.25.0 and later), so the Updates page can install it with your sudo password. */
   fromPanel?: true;
+  /** Kept packed to save room: switching to it unpacks it first, which takes a few seconds. */
+  packed?: true;
   /**
    * From the changelog of the newest release here: what switching to it adds
    * (a newer one) or removes (an older one), newest first, or what the

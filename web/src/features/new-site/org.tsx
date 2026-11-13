@@ -22,7 +22,7 @@ import { useAsync } from '@/lib/use-async';
 import type { RepoProgress } from '@/lib/org-repos';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './wizard-shared';
-import { Notice } from '@/components/layout/page';
+import { CheckAgain, Notice } from '@/components/layout/page';
 import { Spinner } from '@/components/ui/spinner';
 
 /** Installing from an organization: the repo picked, what Claude Code read, the links it checked and the dump. */
@@ -97,7 +97,7 @@ export function CliHints({ status, onRecheck }: { status: OrgStatus; onRecheck?:
   }
   if (lines.length === 0) return null;
   return (
-    <Notice tone="warning" size="inline" action={onRecheck && <Button size="xs" variant="soft" onClick={onRecheck}>Check again</Button>}>
+    <Notice tone="warning" size="inline" action={onRecheck && <CheckAgain size="sm" onClick={onRecheck} />}>
       <div className="grid gap-1.5">
         {lines.map((l) => (
           <p key={l.host}>

@@ -1,5 +1,17 @@
 # Changelog
 
+### v1.47.0 (2026-11-14)
+* **Storage:** the panel versions it does not run are kept packed, with gzip at its best: about 12 MB each instead of 86 MB. A daily background task packs them, and switching back to one unpacks it first, in a few seconds. Updates marks them packed, with Unpack it for one whose installer runs in a terminal
+* **Sanctum:** a program says its command (`git status`, `wp plugin list`), which page started it ("Sites › local.spellbook.example › plugins"), and why it failed in a few words ("table not there", "not a git repository"), from its exit code and MySQL's error number, never its arguments or output. Alike ones share a line, and the page reads that went well are a table with how many times, the average and the slowest
+* **Sites:** the sites list no longer asks MySQL about a site whose database is not there, which made several reads fail every time it refreshed
+* **Databases:** each change under Changes you can undo says what it changed, and opens to show the row's key and each column before and after, which is what Undo puts back. Read from the saved copy when you open it, in the browser only
+* **Check again:** turns until the answer is in, then says Checked. On Plugins and Themes it asks WordPress.org for updates; on Aura's vulnerability check it asks again about answers older than an hour; on WP Cores it says when WordPress.org did not answer. It now works on a MySQL database's page, reads the MySQL settings and Top queries too, the WordPress database view's time is right after it, the Developer page reads the open log again, and Plugins, Removed sites and Downloads say when a read failed instead of showing an empty list
+* **Command palette:** on a site's page Ctrl+K lists every tab and view of the site (Database › SQL, Backups and tools, Themes); another site's are found by its name and the view
+* **New site:** Test password, Save and Forget saved password sit on one row under the password field
+* **Services:** nginx's configs link to their site's page and open the site, as Apache's vhosts do now too
+* **Layout:** the top bar has the page's width, so the search and the buttons on the right line up with the page
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.46.0 (2026-11-13)
 * **Sanctum:** click a background task for its last runs: when, what it did or why it failed, and how long it took. The newest 20 per task are kept in the panel's database, so they are there after a restart too
 * **Sanctum:** Running now has a card of its own for **Recently finished**: the last 50 programs of jobs and background tasks, and page reads that failed or took 5 seconds or more, with how long each took, how it ended and what started it. Page reads that went well are only counted per program, so a site's page starting several at once never pushes a job's out, and those running at once share one line. All of it stays in memory until the panel restarts, by name only, never arguments or output

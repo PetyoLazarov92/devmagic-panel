@@ -11,6 +11,7 @@ import { shareUpdate } from '@/components/layout/update-indicator';
 import { api } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { navigate } from '@/lib/router';
+import { runWithToast } from '@/lib/site-actions';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { InstallForm, InstallProgress, LastInstall } from '@/features/updates/update-install';
@@ -78,6 +79,15 @@ export function UpdatePage() {
     setAsking(null);
     setInstalling({ jobId, release });
   };
+
+  // A packed release is unpacked for its installer to run in a terminal; the list reads again to show the command.
+  const [unpacking, setUnpacking] = useState<string | null>(null);
+  async function unpack(release: string) {
+    setUnpacking(release);
+    await runWithToast('panel.unpackRelease', { release }, `${release} is unpacked`);
+    setUnpacking(null);
+    setTick((t) => t + 1);
+  }
 
   async function start(id: 'panel.update' | 'panel.switchRelease', input: Record<string, string>) {
     setStarting(true);
@@ -280,6 +290,7 @@ export function UpdatePage() {
                   <div className="flex flex-wrap items-center gap-2 px-5 py-3">
                     <span className="font-mono text-dense font-medium">{r.name}</span>
                     {r.current && <Badge tone="success">running</Badge>}
+                    {r.packed && <span title="Kept packed to save room; switching to it unpacks it first, in a few seconds"><Badge tone="neutral">packed</Badge></span>}
                     <span className="text-xs text-muted-foreground">installed {timeAgo(r.installedAt)}</span>
                     {r.changes && (
                       <Button size="xs" variant="soft" aria-expanded={opened === r.name} onClick={() => setOpened(opened === r.name ? null : r.name)} className="text-muted-foreground hover:text-foreground">
@@ -314,7 +325,16 @@ export function UpdatePage() {
                         {r.name} has other root scripts (dmp-root) than the installed ones, which only its installer may put in place, with your sudo password.{' '}
                         {r.fromPanel ? 'Switch to it asks for it here, or run the installer in a terminal, where it asks itself.' : 'Its installer is older than installing from this page (v0.25.0), so run it in a terminal: it asks for the password itself.'}
                       </p>
-                      <Command command={r.command} />
+                      {r.packed ? (
+                        <p className="flex flex-wrap items-center gap-2">
+                          It is packed: unpack it first, so its installer is there to run.
+                          <Button size="xs" variant="outline" disabled={unpacking !== null} onClick={() => void unpack(r.name)}>
+                            {unpacking === r.name && <Spinner />}Unpack it
+                          </Button>
+                        </p>
+                      ) : (
+                        <Command command={r.command} />
+                      )}
                       {r.changes?.kind === 'removes' && (
                         <p>
                           An older release does not know what newer ones added. What they set up keeps working (a site&apos;s own PHP, PHP-FPM for every site), but {r.name} may not show or change it. To come back, run the newer release&apos;s install.sh the same way, or update from this page.

@@ -319,12 +319,12 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
       .send(stream);
   });
 
-  // Every theme of a site, with where its folder is. Read only.
-  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/themes', async (request, reply): Promise<SiteThemes | undefined> => {
+  // Every theme of a site, with where its folder is. Read only. ?check=1 (Check again) asks WordPress.org for updates too.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; check?: string } }>('/api/sites/:domain/themes', async (request, reply): Promise<SiteThemes | undefined> => {
     const { path } = request.query;
     if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
     try {
-      return await readThemes(deps.exec, siteFor(deps.config, request.params.domain, path));
+      return await readThemes(deps.exec, siteFor(deps.config, request.params.domain, path), { check: request.query.check === '1' });
     } catch (error) {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       if (error instanceof SiteActionRefused) return reply.code(502).send({ error: error.message });
@@ -332,14 +332,14 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     }
   });
 
-  // Every plugin of a site, with the ones its install turned off as production-only marked.
-  api.get<{ Params: { domain: string }; Querystring: { path?: string } }>('/api/sites/:domain/plugins', async (request, reply): Promise<SitePlugins | undefined> => {
+  // Every plugin of a site, with the ones its install turned off as production-only marked. ?check=1 (Check again) asks WordPress.org for updates too.
+  api.get<{ Params: { domain: string }; Querystring: { path?: string; check?: string } }>('/api/sites/:domain/plugins', async (request, reply): Promise<SitePlugins | undefined> => {
     const { domain } = request.params;
     const { path } = request.query;
     if (path !== undefined && !mountPath.safeParse(path).success) return reply.code(400).send({ error: 'path must be like /learn' });
     try {
       const site = siteFor(deps.config, domain, path);
-      return await readPlugins(deps.exec, site, productionOnlyFor(deps.store, site.host));
+      return await readPlugins(deps.exec, site, productionOnlyFor(deps.store, site.host), { check: request.query.check === '1' });
     } catch (error) {
       if (error instanceof SiteNotFoundError) return reply.code(404).send({ error: error.message });
       if (error instanceof SiteActionRefused) return reply.code(502).send({ error: error.message });
@@ -621,7 +621,7 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
   // Every shared core with its WordPress.org status and the sites on it, plus releases worth adding.
   // ?fresh=1 asks WordPress.org now instead of the hour-old copy.
   api.get<{ Querystring: { fresh?: string } }>('/api/cores/report', async (request): Promise<CoresReport> =>
-    coresReport(deps.config, deps.wpcoreConf, await deps.coreStatus({ fresh: request.query.fresh === '1' })),
+    coresReport(deps.config, deps.wpcoreConf, await deps.coreStatus({ fresh: request.query.fresh === '1' }), deps.coreStatus.answeredAt?.()),
   );
 
   // Installed cores in the folder shared with the wpcore CLI, newest first.

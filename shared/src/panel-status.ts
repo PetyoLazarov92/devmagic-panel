@@ -6,12 +6,35 @@ import type { StorageCleanKind } from './actions.js';
  * work it does on its own. No path, argument or output of a program.
  */
 
-/** A program the panel runs right now: its name (dmp-root with its command), since when, and what started it: a job, a background task, or else a page's read. */
+/** The request a page's read came from: its route as the server defines it (never the address asked, its query or body), and the site it names. */
+export interface ProgramPage {
+  /** Method and route, like "GET /api/sites/:domain/plugins". */
+  route: string;
+  site?: string;
+}
+
+/** A program the panel runs right now: its name (with its command for dmp-root, git, wp and the like), since when, and what started it: a job, a background task, or a page's read. */
 export interface RunningProgram {
   program: string;
   startedAt: string;
   job?: { id: string; title: string };
   task?: { id: string; title: string };
+  page?: ProgramPage;
+}
+
+/**
+ * A page's route in words: "Sites › local.shop.com › plugins" for
+ * GET /api/sites/:domain/plugins. The site fills :domain; other parameters
+ * are left out.
+ */
+export function pageLabel(page: ProgramPage): string {
+  const path = page.route.replace(/^[A-Z]+\s+/, '').replace(/^\/api\//, '');
+  const parts = path
+    .split('/')
+    .map((part) => (part === ':domain' ? (page.site ?? '') : part.startsWith(':') ? '' : part.replace(/-/g, ' ')))
+    .filter(Boolean);
+  const label = parts.join(' › ') || 'the panel';
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 /** A program that ended lately, kept in memory for Sanctum's Recently finished: how long it took and how it ended. */
@@ -20,6 +43,8 @@ export interface FinishedProgram extends RunningProgram {
   /** ok, failed (with its exit code), or stopped by the panel's timeout for it. */
   ended: 'ok' | 'failed' | 'timeout';
   code?: number;
+  /** Why it failed, in a few words from a fixed list ("table not there"), read from its exit code and error; never its output. */
+  reason?: string;
 }
 
 /** One run of a background task, kept in the panel's database (the newest 20 per task). */
@@ -57,7 +82,7 @@ export interface PanelStatus {
   /** The last programs worth a look that ended, newest first: a job's or a task's, and page reads that failed or were slow. Empty after a restart. */
   finished: FinishedProgram[];
   /** Page reads that went well since the panel started, counted per program instead of listed: a site's page starts several at once. */
-  pageReads: Array<{ program: string; count: number; totalMs: number }>;
+  pageReads: Array<{ program: string; count: number; totalMs: number; maxMs: number }>;
   tasks: BackgroundTask[];
 }
 

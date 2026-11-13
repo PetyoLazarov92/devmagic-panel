@@ -55,9 +55,9 @@ function changesOf(settings: MysqlSetting[], draft: Record<string, string>, init
  * what the panel suggests. A change is a job: applied at once with SET
  * GLOBAL, kept in the panel's file through dmp-root, and Undo puts it back.
  */
-export function MysqlSettingsCard() {
+export function MysqlSettingsCard({ refresh: outer = 0 }: { refresh?: number }) {
   const [refresh, setRefresh] = useState(0);
-  const report = useAsync(() => api.mysqlSettings(), [refresh]);
+  const report = useAsync(() => api.mysqlSettings(), [refresh, outer]);
   const runner = useJob();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});

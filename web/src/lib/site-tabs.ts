@@ -109,3 +109,27 @@ export function sectionViews(site: Site, tab: Tab, query: { view: string | null;
   }
   return null;
 }
+
+/** A place inside a site's page for the command palette: a tab, or a view inside one. */
+export interface SiteSection {
+  tab: Tab;
+  /** The view inside the tab, when it has views. */
+  view?: string;
+  /** "Database › SQL", or the tab's name alone. */
+  label: string;
+  href: string;
+}
+
+/**
+ * Every tab of a site and every view inside one, in the order the page
+ * shows them, so Ctrl+K reaches each: a tab with views is listed by its
+ * views ("Database › SQL"), one without by its name.
+ */
+export function siteSections(site: Site): SiteSection[] {
+  return siteTabItems(site).flatMap((item): SiteSection[] => {
+    const name = typeof item.label === 'string' ? item.label : item.value;
+    const views = sectionViews(site, item.value, { view: null, table: null });
+    if (views) return views.items.map((v) => ({ tab: item.value, view: v.value, label: `${name} › ${v.label}`, href: v.href }));
+    return [{ tab: item.value, label: name, href: item.value === 'overview' ? siteHref(site) : `${siteHref(site)}?tab=${item.value}` }];
+  });
+}

@@ -10,7 +10,7 @@ import { Jobs, type JobView } from '../src/jobs.js';
 import { httpsSource, type ReleaseSource } from '../src/release-source.js';
 import { RunStore } from '../src/store.js';
 import { type ActionContext, runAction } from '../src/actions.js';
-import { checkUpdate, compareVersions, installedReleases, notesItems, parseChangelog, planSwitch, planUpdate, type ReleaseInfo, UpdateChecker, type UpdateContext } from '../src/update.js';
+import { checkUpdate, compareVersions, installedReleases, notesItems, packOlderReleases, parseChangelog, planSwitch, planUpdate, type ReleaseInfo, UpdateChecker, type UpdateContext } from '../src/update.js';
 import { tempTree } from './helpers.js';
 
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
@@ -376,6 +376,40 @@ describe('planSwitch', () => {
     expect(m.calls).toHaveLength(1);
 
     const missing = await settle(jobs, jobs.start(planSwitch(m.ctx, 'v0.4.0'), { runId: 2, title: 'Switch' }).id);
-    expect(missing.steps[0]).toMatchObject({ status: 'failed', output: expect.stringContaining('v0.4.0 is not in') });
+    expect(missing.steps[0]).toMatchObject({ status: 'failed', output: expect.stringContaining('v0.4.0 is neither in') });
+  });
+});
+
+describe('packed releases', () => {
+  it('packs the older versions the panel does not run, never the running one or a newer one waiting for its installer', async () => {
+    const m = machine();
+    const dir = join(m.data, 'releases');
+    releaseFolder(join(dir, 'v0.5.0'), { name: 'v0.5.0', version: '0.5.0', commit: 'x', installer: 'x', scripts: m.scripts }, new Date(Date.now() - 3 * 86_400_000));
+    releaseFolder(join(dir, 'v0.8.0'), { name: 'v0.8.0', version: '0.8.0', commit: 'z', installer: 'z', scripts: m.scripts });
+    expect(await packOlderReleases(m.ctx)).toMatch(/^packed v0\.5\.0/);
+    expect(readdirSync(dir).sort()).toEqual(['v0.5.0.release.json', 'v0.5.0.tar.gz', 'v0.6.0', 'v0.8.0']);
+    expect(await packOlderReleases(m.ctx)).toBe('every older version is packed');
+    // Listed as before, marked packed, with the time it was installed.
+    const packed = installedReleases(m.ctx).find((r) => r.name === 'v0.5.0');
+    expect(packed).toMatchObject({ version: '0.5.0', current: false, mode: 'panel', packed: true });
+    expect(Date.parse(packed?.installedAt ?? '')).toBeLessThan(Date.now() - 2 * 86_400_000);
+  });
+
+  it('unpacks a packed release before switching to it, and keeps three releases counting the packed ones', async () => {
+    const m = machine();
+    const dir = join(m.data, 'releases');
+    releaseFolder(join(dir, 'v0.5.0'), { name: 'v0.5.0', version: '0.5.0', commit: 'x', installer: 'x', scripts: m.scripts }, new Date(Date.now() - 3 * 86_400_000));
+    releaseFolder(join(dir, 'v0.4.0'), { name: 'v0.4.0', version: '0.4.0', commit: 'w', installer: 'w', scripts: m.scripts }, new Date(Date.now() - 4 * 86_400_000));
+    await packOlderReleases(m.ctx);
+    const jobs = new Jobs(new RunStore(':memory:'));
+    const view = await settle(jobs, jobs.start(planSwitch(m.ctx, 'v0.5.0'), { runId: 1, title: 'Switch' }).id);
+    expect(view.status).toBe('done');
+    expect(view.steps[0]?.output).toBe('unpacked v0.5.0');
+    expect(current(m.data)).toBe(join('releases', 'v0.5.0'));
+    expect(readFileSync(join(dir, 'v0.5.0', 'server', 'dist', 'index.js'), 'utf8')).toBe('// v0.5.0\n');
+    expect(installedReleases(m.ctx).find((r) => r.name === 'v0.5.0')).toMatchObject({ current: true });
+    expect(installedReleases(m.ctx).find((r) => r.name === 'v0.5.0')?.packed).toBeUndefined();
+    // v0.4.0 stays packed: three in all with the running v0.5.0 and v0.6.0 before it.
+    expect(readdirSync(dir).sort()).toEqual(['v0.4.0.release.json', 'v0.4.0.tar.gz', 'v0.5.0', 'v0.6.0']);
   });
 });

@@ -1,4 +1,5 @@
-import type { BackgroundTask, PanelStatus, PanelStorage, RunningProgram, StorageRow } from '@devmagic-panel/shared';
+import type { BackgroundTask, FinishedProgram, PanelStatus, PanelStorage, RunningProgram, StorageRow } from '@devmagic-panel/shared';
+import { pageLabel } from '@devmagic-panel/shared';
 import { ChevronRight, Clock, Cpu, HardDrive, History, Play, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
@@ -131,13 +132,16 @@ function Tiles({ status: s, storage, onShow }: { status: PanelStatus; storage: P
 /** How long something took, short: "640 ms", "2.1 s", "3 min". */
 const took = (ms: number) => (ms < 1000 ? `${ms} ms` : ms < 60_000 ? `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s` : `${Math.round(ms / 60_000)} min`);
 
-/** A program's line: its name, what started it, then its time on the right. */
-function ProgramLine({ program: p, meta, tone, count = 1 }: { program: RunningProgram; meta: ReactNode; tone?: 'warning' | undefined; count?: number }) {
+/** A program's line: its name, what started it (and why it failed), then its time on the right. */
+function ProgramLine({ program: p, meta, tone, count = 1, reads = false, reason }: { program: RunningProgram; meta: ReactNode; tone?: 'warning' | undefined; count?: number; reads?: boolean; reason?: string | undefined }) {
   return (
     <li className="flex min-w-0 items-baseline gap-3 px-5 py-2.5 text-dense">
       <code className={cn('shrink-0 font-mono', tone === 'warning' && 'text-warning')}>{p.program}{count > 1 && <span className="text-muted-foreground"> ×{count}</span>}</code>
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">{count > 1 ? 'Page reads' : <ProgramFrom program={p} />}</span>
-      <span className={cn('shrink-0 text-xs', tone === 'warning' ? 'text-warning' : 'text-muted-foreground')}>{meta}</span>
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+        {reads && !p.page ? 'Page reads' : <ProgramFrom program={p} />}
+        {reason && <span className="text-warning"> · {reason}</span>}
+      </span>
+      <span className={cn('shrink-0 text-xs tabular-nums', tone === 'warning' ? 'text-warning' : 'text-muted-foreground')}>{meta}</span>
     </li>
   );
 }
@@ -151,20 +155,45 @@ function runningLines(programs: readonly RunningProgram[]): Array<{ program: Run
       lines.push({ program: p, count: 1 });
       continue;
     }
-    const line = reads.get(p.program);
+    const key = `${p.program}|${p.page ? pageLabel(p.page) : ''}`;
+    const line = reads.get(key);
     if (line) line.count += 1;
     else {
       const first = { program: p, count: 1 };
-      reads.set(p.program, first);
+      reads.set(key, first);
       lines.push(first);
     }
   }
   return lines;
 }
 
+/** Ended programs alike (the same program, from the same place, ending the same way for the same reason) in one line, at the place of the newest. */
+export function finishedLines(finished: readonly FinishedProgram[]): Array<{ program: FinishedProgram; count: number; minMs: number; maxMs: number }> {
+  const by = new Map<string, { program: FinishedProgram; count: number; minMs: number; maxMs: number }>();
+  const lines: Array<{ program: FinishedProgram; count: number; minMs: number; maxMs: number }> = [];
+  for (const p of finished) {
+    const from = p.job ? `job:${p.job.id}` : p.task ? `task:${p.task.id}` : p.page ? `page:${pageLabel(p.page)}` : '';
+    const key = [p.program, from, p.ended, p.code ?? '', p.reason ?? ''].join('|');
+    const line = by.get(key);
+    if (line) {
+      line.count += 1;
+      line.minMs = Math.min(line.minMs, p.durationMs);
+      line.maxMs = Math.max(line.maxMs, p.durationMs);
+    } else {
+      const first = { program: p, count: 1, minMs: p.durationMs, maxMs: p.durationMs };
+      by.set(key, first);
+      lines.push(first);
+    }
+  }
+  return lines;
+}
+
+/** How long, or the range for a folded line: "15 to 284 ms". */
+const tookRange = (min: number, max: number) => (min === max ? took(min) : max < 1000 ? `${min} to ${max} ms` : `${took(min)} to ${took(max)}`);
+
 function Programs({ status: s }: { status: PanelStatus }) {
   const lines = runningLines(s.programs);
-  const reads = s.pageReads.reduce((sum, r) => sum + r.count, 0);
+  const ended = finishedLines(s.finished);
   return (
     <>
       <Card className="mt-3">
@@ -174,33 +203,61 @@ function Programs({ status: s }: { status: PanelStatus }) {
         ) : (
           <ul className="divide-y">
             {lines.map(({ program: p, count }, i) => (
-              <ProgramLine key={`${p.program}-${p.startedAt}-${i}`} program={p} count={count} meta={`running ${timeAgo(p.startedAt).replace(/ ago$/, '')}`} />
+              <ProgramLine key={`${p.program}-${p.startedAt}-${i}`} program={p} count={count} reads={count > 1} meta={`running ${timeAgo(p.startedAt).replace(/ ago$/, '')}`} />
             ))}
           </ul>
         )}
-        <p className="border-t px-5 py-3 text-xs text-muted-foreground">The programs behind the jobs, background tasks and page reads: only their names, never their arguments or output.</p>
+        <p className="border-t px-5 py-3 text-xs text-muted-foreground">The programs behind jobs, background tasks and pages: their name and command, never their arguments or output.</p>
       </Card>
       <Card className="mt-4">
         <CardHeader title="Recently finished" meta={<History className="size-4 text-muted-foreground" />} />
-        {s.finished.length === 0 ? (
+        {ended.length === 0 ? (
           <p className="px-5 py-4 text-sm text-muted-foreground">Nothing yet since the panel started.</p>
         ) : (
           <ul className="divide-y">
-            {s.finished.map((p, i) => (
+            {ended.map(({ program: p, count, minMs, maxMs }, i) => (
               <ProgramLine
                 key={`${p.program}-${p.startedAt}-${i}`}
                 program={p}
+                count={count}
+                reason={p.reason}
                 tone={p.ended === 'ok' ? undefined : 'warning'}
-                meta={`${p.ended === 'timeout' ? 'stopped by its timeout after' : p.ended === 'failed' ? `failed (exit ${p.code ?? '?'}) after` : 'took'} ${took(p.durationMs)}, ${timeAgo(p.startedAt)}`}
+                meta={`${p.ended === 'timeout' ? 'stopped by its timeout after' : p.ended === 'failed' ? `failed (exit ${p.code ?? '?'}) after` : 'took'} ${tookRange(minMs, maxMs)}, ${count > 1 ? 'last ' : ''}${timeAgo(p.startedAt)}`}
               />
             ))}
           </ul>
         )}
         <p className="border-t px-5 py-3 text-xs text-muted-foreground">
-          The last 50 of jobs and background tasks, and page reads that failed or took 5 seconds or more, until the panel restarts. A failed page read is often meant to fail, like a sign-in check.
-          {reads > 0 && <> Page reads that went well are only counted: {s.pageReads.map((r) => `${r.program} ${r.count.toLocaleString('en')} (${took(Math.round(r.totalMs / r.count))} on average)`).join(', ')}.</>}
+          The last 50 of jobs and background tasks, and page reads that failed or took 5 seconds or more, until the panel restarts. Alike ones share a line. A page read can be meant to fail, like a check whether a table is there.
         </p>
       </Card>
+      {s.pageReads.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader title="Page reads that went well" meta={<span className="text-xs text-muted-foreground">counted, not listed, since the panel started</span>} />
+          <div className="overflow-x-auto">
+            <table className="w-full text-dense">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr className="border-b">
+                  <th className="px-5 py-2 font-medium">Program</th>
+                  <th className="px-3 py-2 text-right font-medium">Times</th>
+                  <th className="px-3 py-2 text-right font-medium">Average</th>
+                  <th className="px-5 py-2 text-right font-medium">Slowest</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {s.pageReads.map((r) => (
+                  <tr key={r.program}>
+                    <td className="px-5 py-2"><code className="font-mono">{r.program}</code></td>
+                    <td className="px-3 py-2 text-right tabular-nums">{r.count.toLocaleString('en')}</td>
+                    <td className="px-3 py-2 text-right text-muted-foreground tabular-nums">{took(Math.round(r.totalMs / r.count))}</td>
+                    <td className="px-5 py-2 text-right text-muted-foreground tabular-nums">{took(r.maxMs ?? 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </>
   );
 }

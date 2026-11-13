@@ -65,7 +65,8 @@ export function SitesPage() {
     if (f !== 'removed') setLiveFilter(f);
     navigate(f === 'removed' ? '/sites?show=removed' : '/sites', { replace: true, scroll: false });
   };
-  const trash = useAsync(() => api.trash().catch(() => null), []);
+  // An error shows in the Removed view, not as an empty list.
+  const trash = useAsync(() => api.trash(), []);
   const removed = trash.data ?? null;
   const removedMatching = (removed ?? []).filter((e) => removedMatches(e, query));
   // How installed; taken-over is the sites made by hand the panel took over.

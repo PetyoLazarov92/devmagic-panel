@@ -1,7 +1,7 @@
 import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerSignIn, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
 import { defaultLeftOut, isWpCliCommand, knownLeftOut, splitSshHost } from '@devmagic-panel/shared';
 import { TablesPicker } from '@/features/database/tables-picker';
-import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, KeyRound, PlugZap, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Upload } from 'lucide-react';
+import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, KeyRound, PlugZap, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Trash2, Upload } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { CopyChoice, findings } from '@/features/database/copy-choice';
 import { DumpFactsCard } from '@/features/new-site/dump-facts';
@@ -293,9 +293,15 @@ function UploadDump({ onUpload }: { onUpload: (up: UploadResult) => void }) {
 function FromDownloads({ working, onUse }: { working: boolean; onUse: (file: string) => void }) {
   const [list, setList] = useState<Awaited<ReturnType<typeof api.downloads>> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState<string | null>(null);
+  // A failed read says so, not "no dumps".
   const read = () => {
     setLoading(true);
-    api.downloads().then(setList, () => setList([])).finally(() => setLoading(false));
+    setFailed(null);
+    api.downloads().then(setList, (error: unknown) => {
+      setList([]);
+      setFailed((error as Error).message);
+    }).finally(() => setLoading(false));
   };
   useEffect(read, []);
   return (
@@ -304,7 +310,7 @@ function FromDownloads({ working, onUse }: { working: boolean; onUse: (file: str
         Dumps from the last three days
         <Button variant="soft" size="sm" onClick={read}><RefreshCw className={cn(loading && 'animate-spin')} />Look again</Button>
       </p>
-      {list && list.length === 0 && <p className="text-muted-foreground">No .sql, .sql.gz or .zip there yet. Download one in the browser, then look again.</p>}
+      {failed ? <p role="alert" className="text-warning">The Downloads folder could not be read: {failed}</p> : list && list.length === 0 && <p className="text-muted-foreground">No .sql, .sql.gz or .zip there yet. Download one in the browser, then look again.</p>}
       <ul className="grid gap-1.5">
         {(list ?? []).map((d) => (
           <li key={d.file} className="flex flex-wrap items-center gap-2">
@@ -678,30 +684,33 @@ export function ServerPassword({ id, host, value, onChange, auto = true }: { id:
       {field && (
         <div className="grid gap-1.5">
           <label htmlFor={id} className="text-sm font-medium text-foreground">Password on the server</label>
-          <div className="flex flex-wrap gap-2">
-            <div className="min-w-48 flex-1">
-              <SecretInput id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={saved ? 'Saved: type to replace' : undefined} />
-            </div>
-            {value !== '' && (
-              <Button variant="outline" className="h-10" disabled={saving} onClick={() => void save()}>
-                {saving ? <Spinner /> : <KeyRound />}
-                {saved ? 'Replace saved' : `Save for ${host}`}
-              </Button>
-            )}
-            {(value !== '' || saved) && (
-              <Button variant="soft" className="h-10" disabled={testing || saving} onClick={test} title="Signs in once with this password and runs nothing on the server">
+          <SecretInput id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={saved ? 'Saved: type to replace' : undefined} />
+          {/* One row under the field: what you do with the password on the left, forgetting the saved one apart on the right. */}
+          {(value !== '' || saved) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="soft" disabled={testing || saving} onClick={test} title="Signs in once with this password and runs nothing on the server">
                 {testing ? <Spinner /> : <PlugZap />}
                 Test password
               </Button>
-            )}
-            {saved && value === '' && (
-              <Button variant="soft" className="h-10" disabled={saving} onClick={() => void forget()}>Forget password</Button>
-            )}
-          </div>
-          {tested?.host === host && (
-            tested.check.works
-              ? <p role="status" className="flex items-center gap-1.5 text-success"><ShieldCheck className="size-3.5 shrink-0" />{host} took the {tested.check.with} password.</p>
-              : <p role="alert" className="flex items-start gap-1.5 text-warning"><CircleAlert className="mt-px size-3.5 shrink-0" />{tested.check.problem}</p>
+              {value !== '' && (
+                <Button size="sm" variant="outline" disabled={saving} onClick={() => void save()}>
+                  {saving ? <Spinner /> : <KeyRound />}
+                  {saved ? 'Replace saved' : `Save for ${host}`}
+                </Button>
+              )}
+              {tested?.host === host && tested.check.works && (
+                <span role="status" className="flex items-center gap-1.5 text-success"><ShieldCheck className="size-3.5 shrink-0" />{host} took the {tested.check.with} password.</span>
+              )}
+              {saved && value === '' && (
+                <Button size="sm" variant="ghost" className="ml-auto text-muted-foreground" disabled={saving} onClick={() => void forget()}>
+                  <Trash2 />
+                  Forget saved password
+                </Button>
+              )}
+            </div>
+          )}
+          {tested?.host === host && !tested.check.works && (
+            <p role="alert" className="flex items-start gap-1.5 text-warning"><CircleAlert className="mt-px size-3.5 shrink-0" />{tested.check.problem}</p>
           )}
           <p className="text-muted-foreground">
             {saved

@@ -2,8 +2,8 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, PanelStatus, PanelStorage, TaskRun, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { FILE_TEXT_MAX, gitUrl, isActionId, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
+import type { ActionRunResult, PanelStatus, PanelStorage, TaskRun, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import { FILE_TEXT_MAX, gitUrl, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -13,7 +13,7 @@ import { checkSystemPassword, newPasswordProblem, resetWays, type ResetWays, set
 import { WPCORE_BIN, type SystemConfig } from './config.js';
 import type { CoreStatusSource } from './core-status.js';
 import { defaultLogsDir, developerReport, type DeveloperContext, listFolder, readLog, REPO_DIR, startupLog } from './developer.js';
-import { panelCli, UpdateChecker, type UpdateContext } from './update.js';
+import { packOlderReleases, panelCli, UpdateChecker, type UpdateContext } from './update.js';
 import { installStillNews, settleInstall } from './update-install.js';
 import { DraftRefused, draftId, draftInput, Drafts } from './drafts.js';
 import { checkEnvironment, type HostPaths } from './environment.js';
@@ -34,7 +34,7 @@ import { listProfiles, ProfileError, profileFile, profileSummary } from './profi
 import { readSiteVhosts } from './sites/vhost.js';
 import { checkWrite, mysqlProcesses } from './mysql-write.js';
 import { exportDatabase } from './mysql-transfer.js';
-import { listRowChanges } from './mysql-rows.js';
+import { listRowChanges, rowChangeDetail } from './mysql-rows.js';
 import { databaseSummary, wordpressReport, wordpressTables } from './mysql-wordpress.js';
 import { MysqlRefused, mysqlBackupsDir, mysqlReport, pruneMysqlBackups } from './mysql-server.js';
 import { BrowseError } from './mysql-sql.js';
@@ -57,7 +57,7 @@ import { GitHostDetector, gitlabHostsInUse, remotesOf } from './repo-hosts/index
 import { listTrash, purgeTrash, sweepArchives, TRASH_DAYS } from './sites/trash.js';
 import { Chores } from './chores.js';
 import { AUTO_SNAPSHOT_DAYS, AUTO_SNAPSHOTS_KEPT, panelStorage, pruneAutoSnapshots } from './panel-storage.js';
-import type { RunningPrograms } from './running.js';
+import { inPage, type RunningPrograms } from './running.js';
 import type { RunStore } from './store.js';
 import { installedCores, readWpcoreConfig } from './wpcore.js';
 import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPaths, readMail, unreadMail } from './mailpit.js';
@@ -239,6 +239,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       sweepArchives(deps.store, await listTrash(deps.exec, deps.dmpRoot));
       return r.stdout.trim().split('\n').filter(Boolean).at(-1) ?? '';
     });
+    // The panel versions it does not run stay packed, a seventh of their room; switching back unpacks one first.
+    chores.every('versions', 'Pack older panel versions', 'Packs the panel versions it does not run into gzip archives; switching back to one unpacks it first.', 24 * 60 * 60_000, () => packOlderReleases(update), 2 * 60_000);
   }
   if (deps.checkUpdates) {
     chores.every('updates', 'Check for a new release', 'Looks for a new release of the panel.', 6 * 60 * 60_000, async () => {
@@ -259,6 +261,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
 
   await app.register(cookie);
+
+  // Each API request's programs say which route started them (Sanctum's Running now): the route as defined, and the site it names, never the address asked, its query or body.
+  app.addHook('onRequest', (request, _reply, done) => {
+    const route = request.routeOptions.url;
+    if (!route?.startsWith('/api/')) {
+      done();
+      return;
+    }
+    const domain = (request.params as { domain?: unknown } | undefined)?.domain;
+    inPage({ route: `${request.method} ${route}`, ...(typeof domain === 'string' && isLocalName(domain) ? { site: domain } : {}) }, done);
+  });
 
   app.addHook('onRequest', async (request, reply) => {
     const host = (request.headers.host ?? '').toLowerCase();
@@ -467,6 +480,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const { table } = request.query;
       if (!mysqlDatabaseName.safeParse(database).success || (table !== undefined && !mysqlIdentifier.safeParse(table).success)) return reply.code(400).send({ error: 'A database like wandworks_example and a table like wp_options' });
       return listRowChanges(deps.config, database, table);
+    });
+    // What one saved row change holds, before and after, on request: values go to the browser only, never to Run history or an AI.
+    api.get<{ Params: { database: string; change: string } }>('/api/mysql/databases/:database/row-changes/:change', async (request, reply): Promise<RowChangeDetail | undefined> => {
+      const { database, change } = request.params;
+      if (!mysqlDatabaseName.safeParse(database).success) return reply.code(400).send({ error: 'A database like wandworks_example' });
+      try {
+        return rowChangeDetail(deps.config, database, change);
+      } catch (error) {
+        return reply.code(404).send({ error: (error as Error).message });
+      }
     });
     // The clean-ups saved for Undo on a database (or one site of it, ?site=local.shop.com/learn), newest first, without their rows.
     api.get<{ Params: { database: string }; Querystring: { site?: string } }>('/api/mysql/databases/:database/cleanups', async (request, reply): Promise<CleanupInfo[] | undefined> => {

@@ -132,7 +132,11 @@ and tick rows on a page to delete them together.
 - A change applies only while the row still holds what you saw, so an edit
   made since is never overwritten.
 - Each change saves the rows as they were first, and **Undo** (in the toast or
-  under **Changes you can undo**) puts them back for 14 days.
+  under **Changes you can undo**) puts them back for 14 days. Each change
+  there says what it was ("Changed option_value of a row"); open it for the
+  row's key and each column before and after, which is what Undo puts back
+  (read from the saved copy when you open it, in the browser only, never
+  kept in Run history or sent to an AI; long values are cut there).
 - Views, tables without a primary key, binary and computed columns stay read
   only, and a site's rows wait while a job works on it.
 

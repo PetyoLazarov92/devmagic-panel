@@ -1,4 +1,4 @@
-import type { BackgroundTask, PanelStatus, PanelStorage, TaskRun, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
+import type { BackgroundTask, PanelStatus, PanelStorage, TaskRun, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeDetail, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { sendWithRetry, unreachableMessage } from '@/lib/connection';
 import { noteStatus, refused } from '@/lib/session-watch';
@@ -100,6 +100,8 @@ export interface Api {
   dbSchema: (database: string) => Promise<DbSchema>;
   /** The row changes saved for Undo on a table, newest first. */
   rowChanges: (database: string, table: string) => Promise<RowChangeInfo[]>;
+  /** What one saved row change holds, before and after: for the browser only. */
+  rowChangeDetail: (database: string, change: string) => Promise<RowChangeDetail>;
   /** One statement that reads, run as the read-only account. */
   dbQuery: (database: string, query: DbQuery) => Promise<DbQueryResult>;
   /** A WordPress site's database as WordPress sees it; blog picks a site of a network. */
@@ -152,8 +154,9 @@ export interface Api {
   /** What Clean this database would remove and who could stay, read from the site's live database. */
   cleanPreview: (domain: string, path?: string) => Promise<CleanPreview>;
   /** Every plugin of a site, read with WP-CLI. */
-  plugins: (domain: string, path?: string) => Promise<SitePlugins>;
-  themes: (domain: string, path?: string) => Promise<SiteThemes>;
+  /** check: ask WordPress.org for updates too, for Check again. */
+  plugins: (domain: string, path?: string, check?: boolean) => Promise<SitePlugins>;
+  themes: (domain: string, path?: string, check?: boolean) => Promise<SiteThemes>;
   /** One folder of a site's files; dir is relative to the site's folder. */
   files: (domain: string, dir: string, path?: string) => Promise<FileListing>;
   /** One file to look at: its text, or what it is. */
@@ -378,6 +381,7 @@ const realApi: Api = {
   cleanups: (database, site) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/cleanups${site ? `?site=${encodeURIComponent(site)}` : ''}`),
   dbSchema: (database) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/schema`),
   rowChanges: (database, table) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/row-changes?table=${encodeURIComponent(table)}`),
+  rowChangeDetail: (database, change) => request('GET', `/api/mysql/databases/${encodeURIComponent(database)}/row-changes/${encodeURIComponent(change)}`),
   dbQuery: (database, query) => request('POST', `/api/mysql/databases/${encodeURIComponent(database)}/query`, query),
   wordpressDb: (domain, path, blog, options = {}) => {
     const query = new URLSearchParams();
@@ -431,8 +435,8 @@ const realApi: Api = {
   cleanCopies: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/clean-copies${atPath(path, '?')}`),
   keptDatabases: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/kept-databases${atPath(path, '?')}`),
   cleanPreview: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/clean-preview${atPath(path, '?')}`),
-  plugins: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/plugins${atPath(path, '?')}`),
-  themes: (domain, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/themes${atPath(path, '?')}`),
+  plugins: (domain, path, check) => request('GET', `/api/sites/${encodeURIComponent(domain)}/plugins${atPath(path, '?')}${check ? `${path ? '&' : '?'}check=1` : ''}`),
+  themes: (domain, path, check) => request('GET', `/api/sites/${encodeURIComponent(domain)}/themes${atPath(path, '?')}${check ? `${path ? '&' : '?'}check=1` : ''}`),
   files: (domain, dir, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files?dir=${encodeURIComponent(dir)}${atPath(path, '&')}`),
   fileView: (domain, file, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/view?file=${encodeURIComponent(file)}${atPath(path, '&')}`),
   fileFind: (domain, dir, q, where, path) => request('GET', `/api/sites/${encodeURIComponent(domain)}/files/find?dir=${encodeURIComponent(dir)}&q=${encodeURIComponent(q)}&in=${where}${atPath(path, '&')}`),

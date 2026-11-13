@@ -13,10 +13,13 @@ import type { FetchJson } from './wporg-plugins.js';
  * about, so the name of a custom or client plugin never leaves the machine,
  * and never a version: the answer lists every vulnerability with its version
  * range, and the panel compares the installed version here. Answers are kept
- * a day per slug, and the sites are checked once a day, in the background.
+ * a day per slug, and the sites are checked once a day, in the background;
+ * Check now asks again about answers older than an hour.
  */
 
 const KEEP_MS = 24 * 3_600_000;
+/** Check now asks again about a slug whose answer is older than this: fresh, without asking WPVulnerability twice in a row. */
+const FORCED_KEEP_MS = 3_600_000;
 const SOURCE = 'https://www.wpvulnerability.net';
 const META = 'vulns:';
 /**
@@ -100,12 +103,12 @@ export function parseVulnerabilities(body: unknown): Range[] {
 }
 
 /** One slug's entries, kept a day in the panel's database; null when WPVulnerability did not answer. */
-export async function vulnerabilitiesOf(kind: 'plugin' | 'theme', slug: string, store: Pick<RunStore, 'getMeta' | 'setMeta'>, fetcher: FetchJson = fetchJson, now = Date.now()): Promise<Range[] | null> {
+export async function vulnerabilitiesOf(kind: 'plugin' | 'theme', slug: string, store: Pick<RunStore, 'getMeta' | 'setMeta'>, fetcher: FetchJson = fetchJson, now = Date.now(), keepMs = KEEP_MS): Promise<Range[] | null> {
   if (!wpSlug.safeParse(slug).success) return [];
   const key = `wpvuln-${kind}:${slug}`;
   try {
     const kept = JSON.parse(store.getMeta(key) ?? 'null') as { at: number; list: Range[] } | null;
-    if (kept && now - kept.at < KEEP_MS) return kept.list;
+    if (kept && now - kept.at < keepMs) return kept.list;
   } catch {
     // asked again
   }
@@ -121,7 +124,7 @@ export async function vulnerabilitiesOf(kind: 'plugin' | 'theme', slug: string, 
 }
 
 /** One site's check: its plugins and themes from WordPress.org, each at the version installed. */
-export async function checkSite(exec: Executor, site: ReturnType<typeof siteFor>, store: Pick<RunStore, 'getMeta' | 'setMeta'>, fetcher: FetchJson = fetchJson, now = Date.now()): Promise<SiteVulnerabilities> {
+export async function checkSite(exec: Executor, site: ReturnType<typeof siteFor>, store: Pick<RunStore, 'getMeta' | 'setMeta'>, fetcher: FetchJson = fetchJson, now = Date.now(), keepMs = KEEP_MS): Promise<SiteVulnerabilities> {
   const [plugins, themes] = await Promise.all([readPlugins(exec, site), readThemes(exec, site)]);
   const items = [
     // Its folder too when the panel can update it there: a plugin folder (not one file, must-use or a drop-in), a theme right in wp-content/themes.
@@ -130,7 +133,7 @@ export async function checkSite(exec: Executor, site: ReturnType<typeof siteFor>
   ];
   const hits: SiteVulnerabilities['hits'] = [];
   for (const item of items) {
-    const list = await vulnerabilitiesOf(item.kind, item.slug, store, fetcher, now);
+    const list = await vulnerabilitiesOf(item.kind, item.slug, store, fetcher, now, keepMs);
     const found = (list ?? []).filter((r) => affects(r, item.version)).map(({ min: _a, minOp: _b, max: _c, maxOp: _d, ...shown }) => shown);
     if (found.length) hits.push({ ...item, vulnerabilities: found.sort((a, b) => (b.score ?? 0) - (a.score ?? 0)) });
   }
@@ -217,7 +220,7 @@ export class VulnerabilityWatch {
     return at ? new Date(at).toISOString() : undefined;
   }
 
-  /** Starts a round when it is on, none runs and the last is a day old or kept less than this release keeps (or now, when forced). */
+  /** Starts a round when it is on, none runs and the last is a day old or kept less than this release keeps (or now, when forced, asking again about answers older than an hour). */
   maybeStart(sites: () => Promise<Site[]>, force = false): void {
     if (!this.enabled() || this.round) return;
     const last = Number(this.store.getMeta('vulns-round') ?? 0);
@@ -229,7 +232,8 @@ export class VulnerabilityWatch {
       for (const site of await sites()) {
         if (site.core.kind === 'none') continue;
         try {
-          const found = await checkSite(this.exec, siteFor(this.config, site.domain, site.path), this.store, this.fetcher, this.now());
+          // Check now asks about every answer older than an hour; the daily round takes the day's answers.
+          const found = await checkSite(this.exec, siteFor(this.config, site.domain, site.path), this.store, this.fetcher, this.now(), force ? FORCED_KEEP_MS : KEEP_MS);
           this.store.setMeta(`${META}${site.domain}${site.path ?? ''}`, JSON.stringify(found));
         } catch {
           // Its plugins could not be read: the last result stays.

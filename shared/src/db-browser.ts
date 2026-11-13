@@ -411,9 +411,38 @@ export interface RowChangeInfo {
   kind: 'update' | 'insert' | 'delete';
   table: string;
   rows: number;
+  /** For an update, the columns it changed: names only. */
+  columns?: string[];
   savedAt: string;
   purgeAt: string;
 }
+
+/** One column of a saved row change: its value before and after (null for NULL), as Undo would put it back. */
+export interface RowChangeCell {
+  column: string;
+  /** Not there for a row that was added. */
+  before?: string | null;
+  /** Not there for a row that was deleted. */
+  after?: string | null;
+  /** The value was cut at ROW_CHANGE_VALUE_MAX characters for showing. */
+  cut?: boolean;
+}
+
+/**
+ * What a saved row change holds, read on request for the browser only:
+ * each row by its key, with the columns it changed (an update) or all of
+ * them (a row added or deleted). Never kept in Run history or sent to an AI.
+ */
+export interface RowChangeDetail {
+  id: string;
+  kind: RowChangeInfo['kind'];
+  table: string;
+  primaryKey: string[];
+  rows: Array<{ key: Record<string, string | null>; cells: RowChangeCell[] }>;
+}
+
+/** How much of one value a row change's detail shows. */
+export const ROW_CHANGE_VALUE_MAX = 2000;
 
 /** A database's tables and their columns, names only, for the SQL editor's suggestions. */
 export interface DbSchema {

@@ -36,7 +36,8 @@ export interface CoreStatusOptions {
   fresh?: boolean;
 }
 
-export type CoreStatusSource = (options?: CoreStatusOptions) => Promise<CoreStatusMap | null>;
+/** The statuses, and when WordPress.org last answered: the copy's time, so an answer from the copy can say how old it is. */
+export type CoreStatusSource = ((options?: CoreStatusOptions) => Promise<CoreStatusMap | null>) & { answeredAt?: () => string | undefined };
 
 /**
  * Which WordPress versions are current, outdated or insecure, from
@@ -53,7 +54,7 @@ export function coreStatusSource(cacheFile: string, fetcher: FetchJson = fetchJs
       return null;
     }
   };
-  return (options = {}) => {
+  const source: CoreStatusSource = (options = {}) => {
     if (!options.fresh && existsSync(cacheFile) && Date.now() - statSync(cacheFile).mtimeMs < MAX_AGE_MS) {
       const cached = readCache();
       if (cached) return Promise.resolve(cached);
@@ -75,4 +76,12 @@ export function coreStatusSource(cacheFile: string, fetcher: FetchJson = fetchJs
     });
     return pending;
   };
+  source.answeredAt = () => {
+    try {
+      return statSync(cacheFile).mtime.toISOString();
+    } catch {
+      return undefined;
+    }
+  };
+  return source;
 }

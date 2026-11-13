@@ -109,9 +109,11 @@ function useWordpressReport(domain: string, path: string | undefined, blog: numb
   const load = useCallback(() => {
     begin();
     setState((s) => {
-      if (!s.report?.duplicates) return s;
+      if (!s.report?.duplicates && !s.report?.readAt?.duplicates) return s;
+      // The count and its time both go, or "Read X ago" stays at when repeats were last looked for.
       const { duplicates: _gone, ...rest } = s.report;
-      return { ...s, report: rest };
+      const { duplicates: _at, ...readAt } = rest.readAt ?? {};
+      return { ...s, report: { ...rest, readAt } };
     });
     ask(QUICK);
     for (const section of WP_DB_SLOW_SECTIONS) ask([section]);

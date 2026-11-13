@@ -39,8 +39,8 @@ const count = (n: number) => n.toLocaleString('en');
  * counting again empties the numbers, so a page loaded after it shows only
  * its own queries.
  */
-export function SlowQueries({ database, onExplain, inCard = false }: { database?: string; onExplain?: (sql: string, database: string | undefined) => void; inCard?: boolean }) {
-  const report = useAsync(() => api.slowQueries(database), [database]);
+export function SlowQueries({ database, onExplain, inCard = false, refresh = 0 }: { database?: string; onExplain?: (sql: string, database: string | undefined) => void; inCard?: boolean; refresh?: number }) {
+  const report = useAsync(() => api.slowQueries(database), [database, refresh]);
   const [resetting, setResetting] = useState(false);
   const [readAt, setReadAt] = useState<string | undefined>(undefined);
   const data = report.data;

@@ -81,7 +81,7 @@ export function SiteDetailPage({ domain, path }: { domain: string; path?: string
     return (
       <div className="grid gap-4 pt-2">
         <Breadcrumbs items={[{ label: 'Sites', href: '/sites' }, { label: siteName(site) }]} />
-        <Notice tone="warning" action={<CheckAgain size="sm" onClick={reload} />}>
+        <Notice tone="warning" action={<CheckAgain size="sm" onClick={reload} loading={loading} />}>
           {siteName(site)} is still being installed. Its actions open once the install finishes.
         </Notice>
         <JobScreen jobId={site.installing} />

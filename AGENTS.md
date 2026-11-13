@@ -298,9 +298,14 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
       are never removed on a timer. The panel's timed work runs through
       `Chores` (`chores.ts`) so the Sanctum page lists it, each run kept in
       `chore_runs` (the newest 20 per task), and the programs it runs are
-      listed by name and job only (`running.ts`, the last 50 worth a look in
-      memory, quick page reads only counted, slow or failed ones in the panel's log), never their arguments
-      or output. The database is dropped last; a database user
+      listed by name, command word and what started them only (`running.ts`:
+      a job, a task, or a page's route as the server defines it with the
+      local site it names; a failure's reason only from a fixed list or
+      MySQL's error number; the last 50 worth a look in memory, quick page
+      reads only counted, slow or failed ones in the panel's log), never
+      their arguments or output. Panel versions it does not run are kept
+      packed (`packOlderReleases` in `update.ts`) and unpacked before a
+      switch. The database is dropped last; a database user
       is dropped only when it is the per-site user the panel made, never a
       shared account like `root`. Hosts lines outside the panel's block stay.
       Panel-made folders are listed in the root-owned registry

@@ -79,7 +79,7 @@ function SiteLinks({ sites, tab }: { sites?: MysqlSiteRef[]; tab?: string }) {
  */
 export function MysqlTab({ refresh, onLoading }: { refresh: number; onLoading: (loading: boolean) => void }) {
   const database = useQueryParam('db');
-  return database ? <MysqlDatabaseView database={database} onLoading={onLoading} /> : <MysqlOverview refresh={refresh} onLoading={onLoading} />;
+  return database ? <MysqlDatabaseView database={database} refresh={refresh} onLoading={onLoading} /> : <MysqlOverview refresh={refresh} onLoading={onLoading} />;
 }
 
 /** The browser's address for a database no site's tab holds: /services/mysql?db=reports&table=t&show=structure. */
@@ -98,14 +98,15 @@ function browseHref(d: MysqlDatabase): string {
 }
 
 /** One database's tables, rows and structure, read only, under the MySQL tab. */
-function MysqlDatabaseView({ database, onLoading }: { database: string; onLoading: (loading: boolean) => void }) {
+/** Check again in the header reads the database again: its overview and the table browser, not the SQL you typed. */
+function MysqlDatabaseView({ database, refresh, onLoading }: { database: string; refresh: number; onLoading: (loading: boolean) => void }) {
   const table = useQueryParam('table');
   const show = useQueryParam('show') === 'structure' ? 'structure' : 'rows';
   const sql = useQueryParam('view') === 'sql';
   // MySQL's own databases and the ones kept for a site are only read.
-  const overview = useAsync(() => api.dbOverview(database), [database]);
+  const overview = useAsync(() => api.dbOverview(database), [database, refresh]);
   const canWrite = Boolean(overview.data && overview.data.kind !== 'system' && overview.data.kind !== 'kept');
-  useEffect(() => onLoading(false), [onLoading]);
+  useEffect(() => onLoading(overview.loading), [onLoading, overview.loading]);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -117,7 +118,7 @@ function MysqlDatabaseView({ database, onLoading }: { database: string; onLoadin
       {sql ? (
         <SqlRunner key={`${database}-${canWrite}`} database={database} placeholder="SELECT * FROM a_table LIMIT 50" canWrite={canWrite} seed={sqlSeed()} />
       ) : (
-        <DatabaseBrowser key={database} database={database} location={{ table, show }} onNavigate={(location) => navigate(mysqlDatabaseHref(database, location), { scroll: false })} />
+        <DatabaseBrowser key={`${database}-${refresh}`} database={database} location={{ table, show }} onNavigate={(location) => navigate(mysqlDatabaseHref(database, location), { scroll: false })} />
       )}
     </div>
   );
@@ -258,14 +259,14 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
         </CardBody>
       </Card>
 
-      <MysqlSettingsCard />
+      <MysqlSettingsCard refresh={refresh} />
 
       <ProcessesCard refresh={refresh} />
 
       <Card>
         <CardHeader title="Top queries" meta={<Gauge className="size-4 text-muted-foreground" />} />
         <CardBody>
-          <SlowQueries inCard onExplain={(sql, database) => database && navigate(mysqlDatabaseHref(database, undefined, true), { state: sqlSeedState(sql, true) })} />
+          <SlowQueries inCard refresh={refresh} onExplain={(sql, database) => database && navigate(mysqlDatabaseHref(database, undefined, true), { state: sqlSeedState(sql, true) })} />
         </CardBody>
       </Card>
 

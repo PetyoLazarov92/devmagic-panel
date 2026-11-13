@@ -1,4 +1,4 @@
-import type { MysqlProcess, SlowQuery, SlowQueryReport, WriteCheck, CleanupInfo, DbSchema, ActionRunResult, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport, WpDbSection } from '@devmagic-panel/shared';
+import type { MysqlProcess, SlowQuery, SlowQueryReport, WriteCheck, CleanupInfo, DbSchema, ActionRunResult, RowChangeDetail, RowChangeInfo, DbQuery, DbQueryResult, DbCell, DbCellValue, DbColumnHead, DbFilter, DbOverview, DbRow, DbRowsPage, DbRowsQuery, DbStructure, DbTable, MysqlDatabaseKind, WpDbReport, WpDbSection } from '@devmagic-panel/shared';
 import { DB_CELL_HEAD, isSystemDatabase, WP_AUTOLOAD_LIMIT, WP_DB_SECTIONS, WP_META_SIZE_ROWS } from '@devmagic-panel/shared';
 import { sites } from './fixtures';
 
@@ -486,6 +486,7 @@ export function mockDbQuery(database: string, query: DbQuery): DbQueryResult {
 interface MockChange extends RowChangeInfo {
   database: string;
   undo: () => string;
+  detail: RowChangeDetail['rows'];
 }
 const changes: MockChange[] = [];
 let changeNo = 0;
@@ -498,11 +499,13 @@ export function mockRowAction(id: string, input: Record<string, unknown>): Actio
   const t = find(database, table);
   const pk = t.columns.findIndex((c) => c.key === 'PRI');
   const index = (name: string) => t.columns.findIndex((c) => c.name === name);
-  const done = (output: string, kind?: MockChange['kind'], rows = 1, undo?: () => string): ActionRunResult => {
+  const keyOf = (row: Array<string | null>) => ({ [t.columns[pk]?.name ?? 'id']: row[pk] ?? null });
+  const whole = (row: Array<string | null>, side: 'before' | 'after') => t.columns.map((c, i) => ({ column: c.name, [side]: row[i] ?? null }));
+  const done = (output: string, kind?: MockChange['kind'], rows = 1, undo?: () => string, detail: RowChangeDetail['rows'] = [], columns?: string[]): ActionRunResult => {
     if (!kind || !undo) return { runId: 42, ok: true, exitCode: 0, output };
     const now = new Date();
     const change = `20261107-${String(101500 + changeNo).padStart(6, '0')}-mock${String(changeNo++).padStart(2, '0')}`;
-    changes.unshift({ id: change, kind, table, rows, savedAt: now.toISOString(), purgeAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(), database, undo });
+    changes.unshift({ id: change, kind, table, rows, ...(columns ? { columns } : {}), savedAt: now.toISOString(), purgeAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(), database, undo, detail });
     return { runId: 42, ok: true, exitCode: 0, output, data: { backup: change } };
   };
   const fail = (why: string): ActionRunResult => ({ runId: 42, ok: false, exitCode: 1, output: why });
@@ -522,7 +525,7 @@ export function mockRowAction(id: string, input: Record<string, unknown>): Actio
     return done(`changed ${Object.keys(values).length} columns of a row of ${table}; Undo puts it back`, 'update', 1, () => {
       row.splice(0, row.length, ...before);
       return `put a row of ${table} back as it was`;
-    });
+    }, [{ key: keyOf(before), cells: Object.entries(values).map(([column, after]) => ({ column, before: before[index(column)] ?? null, after })) }], Object.keys(values));
   }
   if (id === 'mysql.insertRow') {
     const values = input.rowValues as Record<string, string | null>;
@@ -532,7 +535,7 @@ export function mockRowAction(id: string, input: Record<string, unknown>): Actio
     return done(`added a row to ${table}; Undo deletes it`, 'insert', 1, () => {
       t.rows.splice(t.rows.indexOf(row), 1);
       return `deleted the row added to ${table}`;
-    });
+    }, [{ key: keyOf(row), cells: whole(row, 'after') }]);
   }
   const keys = new Set((input.rowKeys as string[][]).map((k) => k[0]));
   const gone = t.rows.filter((r) => keys.has(r[pk] ?? ''));
@@ -542,11 +545,18 @@ export function mockRowAction(id: string, input: Record<string, unknown>): Actio
     t.rows.push(...gone);
     t.rows.sort((a, b) => Number(a[pk]) - Number(b[pk]));
     return `put back ${gone.length} rows of ${table}`;
-  });
+  }, gone.map((r) => ({ key: keyOf(r), cells: whole(r, 'before') })));
 }
 
 export function mockRowChanges(database: string, table: string): RowChangeInfo[] {
-  return changes.filter((c) => c.database === database && c.table === table).map(({ id, kind, table: t, rows, savedAt, purgeAt }) => ({ id, kind, table: t, rows, savedAt, purgeAt }));
+  return changes.filter((c) => c.database === database && c.table === table).map(({ id, kind, table: t, rows, columns, savedAt, purgeAt }) => ({ id, kind, table: t, rows, ...(columns ? { columns } : {}), savedAt, purgeAt }));
+}
+
+export function mockRowChangeDetail(database: string, id: string): RowChangeDetail {
+  const c = changes.find((x) => x.id === id && x.database === database);
+  if (!c) throw new Error('That change is not saved any more: copies go after 14 days, and after their Undo');
+  const t = find(database, c.table);
+  return { id, kind: c.kind, table: c.table, primaryKey: t.columns.filter((col) => col.key === 'PRI').map((col) => col.name), rows: c.detail };
 }
 
 export function mockDbSchema(database: string): DbSchema {

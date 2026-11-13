@@ -1,4 +1,5 @@
 import type { PanelStatus, RunningProgram } from '@devmagic-panel/shared';
+import { pageLabel } from '@devmagic-panel/shared';
 import { CircleAlert, CircleCheck, HeartPulse } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -177,7 +178,7 @@ function elapsed(since: string): string {
   return s < 60 ? `${s} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
 }
 
-/** What started a program: its job (a link to it), a background task, or a page's read. */
+/** What started a program: its job (a link to it), a background task, or the page whose read it is. */
 export function ProgramFrom({ program, onGo }: { program: RunningProgram; onGo?: () => void }) {
   if (program.job) {
     return (
@@ -187,5 +188,6 @@ export function ProgramFrom({ program, onGo }: { program: RunningProgram; onGo?:
     );
   }
   if (program.task) return <>Background: {program.task.title}</>;
+  if (program.page) return <span title={program.page.route}>Page: {pageLabel(program.page)}</span>;
   return <>A page&apos;s read</>;
 }

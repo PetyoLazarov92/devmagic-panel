@@ -16,6 +16,7 @@ import { Link } from '@/lib/router';
 import { lastLine, runWithToast } from '@/lib/site-actions';
 import { siteFromName, siteHref as siteRefHref, siteTarget } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
+import { timeAgo } from '@/lib/format';
 import { useAsync } from '@/lib/use-async';
 import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
 import { CardSkeleton, ListSkeleton, Reading } from '@/components/layout/skeletons';
@@ -49,10 +50,14 @@ export function CoresPage() {
     fresh.current = false;
     return api.coresReport(ask);
   }, []);
+  // When Check again last asked WordPress.org: an answer older than that means it did not answer.
+  const [askedAt, setAskedAt] = useState<number | null>(null);
   const checkAgain = () => {
     fresh.current = true;
+    setAskedAt(Date.now());
     reload();
   };
+  const unanswered = Boolean(askedAt && !loading && report && (!report.statusAt || Date.parse(report.statusAt) < askedAt - 5000));
   const adding = useJob();
   const lastJob = useRef<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -83,6 +88,11 @@ export function CoresPage() {
       <PageHeader title="WP Cores" intro={<>Shared WordPress releases{report?.coresDir ? <> in <span className="font-mono">{report.coresDir}</span></> : ''}, linked into sites by wpcore. Status comes from WordPress.org.</>} actions={<CheckAgain onClick={checkAgain} loading={loading} />} />
 
       {error && <Notice className="mt-6">{error}</Notice>}
+      {unanswered && (
+        <Notice tone="warning" className="mt-6">
+          WordPress.org did not answer: {report?.statusAt ? `the statuses are from its last answer, ${timeAgo(report.statusAt)}` : 'no status is known yet'}. Check again later.
+        </Notice>
+      )}
       {!report && loading && (
         <div className="mt-6 grid gap-3" aria-busy="true">
           <Reading>Reading the cores folder...</Reading>

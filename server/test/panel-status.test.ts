@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { Chores } from '../src/chores.js';
 import { panelStorage, pruneAutoSnapshots } from '../src/panel-storage.js';
-import { FINISHED_KEPT, inJob, inTask, notableLine, programName, RunningPrograms } from '../src/running.js';
-import type { FinishedProgram } from '@devmagic-panel/shared';
+import { failureReason, FINISHED_KEPT, inJob, inPage, inTask, notableLine, programName, RunningPrograms } from '../src/running.js';
+import { pageLabel, type FinishedProgram } from '@devmagic-panel/shared';
 import { hashPassword, readSecrets, writeSecrets } from '../src/secrets.js';
 import { RunStore } from '../src/store.js';
 import { DMP, fakeExec, healthyResponses, tempTree } from './helpers.js';
@@ -21,12 +21,54 @@ describe('the programs the panel has running', () => {
     expect(programName('sudo', ['-n', '-S', '-v'])).toBe('sudo');
   });
 
+  it('adds the command of git, wp, gh and the like, and stops at the first word that is a value', () => {
+    expect(programName('git', ['-C', '/var/www/local.spellbook.example', 'status', '--porcelain'])).toBe('git status');
+    expect(programName('git', ['-C', '/var/www/x', 'checkout', 'feature/cart'])).toBe('git checkout');
+    expect(programName('wp', ['--path=/var/www/local.spellbook.example', '--url=https://local.spellbook.example/', 'plugin', 'list', '--format=json'])).toBe('wp plugin list');
+    expect(programName('wp', ['--path=/x', 'option', 'get', 'blogname'])).toBe('wp option get');
+    expect(programName('wp', ['--path=/x', 'eval', 'echo DB_NAME;'])).toBe('wp eval');
+    expect(programName('glab', ['api', '--hostname', 'gitlab.wandworks.example', 'projects?membership=true'])).toBe('glab api');
+    expect(programName('gh', ['api', 'repos/wandworks/site'])).toBe('gh api');
+    expect(programName('mysql', ['--user', 'root', '-e', 'SELECT 1'])).toBe('mysql');
+    expect(programName('systemctl', ['is-active', 'mysql'])).toBe('systemctl is-active');
+  });
+
+  it('says why a program failed from a fixed list, never with its output', () => {
+    const fail = (stderr: string, code = 1) => ({ code, stdout: '', stderr });
+    expect(failureReason('mysql', fail("ERROR 1146 (42S02) at line 1: Table 'spellbook.wp_options' doesn't exist"))).toBe('table not there');
+    expect(failureReason('mysql', fail("ERROR 1049 (42000): Unknown database 'spellbook'"))).toBe('database not there');
+    expect(failureReason('mysql', fail('ERROR 3159 (HY000): something about spellbook'))).toBe('MySQL error 3159');
+    expect(failureReason('git status', fail('fatal: not a git repository (or any of the parent directories): .git', 128))).toBe('not a git repository');
+    expect(failureReason('glab', fail('', 127))).toBe('could not start: not installed?');
+    expect(failureReason('wp db export', fail(''))).toBe('printed nothing');
+    expect(failureReason('ssh', fail('alex@www.spellbook.example: some other words'))).toBeUndefined();
+    expect(failureReason('git status', { code: 0, stdout: '', stderr: '' })).toBeUndefined();
+  });
+
+  it('says which page a read came from, by its route and site', async () => {
+    const programs = new RunningPrograms();
+    const exec = programs.track(async () => ({ code: 1, stdout: '', stderr: "ERROR 1049 (42000): Unknown database 'spellbook'" }));
+    await inPage({ route: 'GET /api/sites/:domain', site: 'local.spellbook.example' }, () => exec('mysql', ['-e', 'SELECT 1']));
+    expect(programs.finished()[0]).toMatchObject({ program: 'mysql', page: { route: 'GET /api/sites/:domain', site: 'local.spellbook.example' }, ended: 'failed', reason: 'database not there' });
+    expect(JSON.stringify(programs.finished())).not.toContain('SELECT');
+    // A job started from a page names the job.
+    await inPage({ route: 'POST /api/actions/:id' }, () => inJob({ id: 'j', title: 'Create site' }, () => exec('mysql', [])));
+    expect(programs.finished()[0]).toMatchObject({ job: { id: 'j' } });
+    expect(programs.finished()[0]?.page).toBeUndefined();
+  });
+
+  it('puts a page route into words', () => {
+    expect(pageLabel({ route: 'GET /api/sites/:domain/plugins', site: 'local.spellbook.example' })).toBe('Sites › local.spellbook.example › plugins');
+    expect(pageLabel({ route: 'GET /api/sites' })).toBe('Sites');
+    expect(pageLabel({ route: 'GET /api/mysql/databases/:database/row-changes' })).toBe('Mysql › databases › row changes');
+  });
+
   it('lists a program while it runs, with the job it runs for, and drops it when it ends, failed or not', async () => {
     const programs = new RunningPrograms();
     let finish: () => void = () => undefined;
     const exec = programs.track(() => new Promise((resolve) => (finish = () => resolve({ code: 1, stdout: '', stderr: 'no' }))));
     const running = inJob({ id: 'job-1', title: 'Create site' }, () => exec('wp', ['--path=/var/www/local.spellbook.example', 'db', 'export']));
-    expect(programs.list()).toEqual([{ program: 'wp', startedAt: expect.any(String), job: { id: 'job-1', title: 'Create site' } }]);
+    expect(programs.list()).toEqual([{ program: 'wp db export', startedAt: expect.any(String), job: { id: 'job-1', title: 'Create site' } }]);
     finish();
     await running;
     expect(programs.list()).toEqual([]);
@@ -52,13 +94,13 @@ describe('the programs that ended lately', () => {
     expect(programs.finished()).toEqual([
       { program: 'mysql', startedAt: expect.any(String), durationMs: 1500, ended: 'timeout' },
       { program: 'ssh', startedAt: expect.any(String), durationMs: 1500, ended: 'failed', code: 2 },
-      { program: 'wp', startedAt: expect.any(String), durationMs: 1500, ended: 'ok', job: { id: 'j1', title: 'Create site' } },
+      { program: 'wp core install', startedAt: expect.any(String), durationMs: 1500, ended: 'ok', job: { id: 'j1', title: 'Create site' } },
     ]);
-    expect(programs.pageReads()).toEqual([{ program: 'wp', count: 1, totalMs: 1500 }]);
+    expect(programs.pageReads()).toEqual([{ program: 'wp option get', count: 1, totalMs: 1500, maxMs: 1500 }]);
     expect(JSON.stringify(programs.finished())).not.toMatch(/spellbook|secret-output|home/);
     // A page that starts seven reads at once adds seven to the count and nothing to the list.
     await Promise.all(Array.from({ length: 7 }, () => exec('wp', ['plugin', 'list', 'quick'])));
-    expect(programs.pageReads()[0]).toEqual({ program: 'wp', count: 8, totalMs: 1500 });
+    expect(programs.pageReads()[0]).toEqual({ program: 'wp plugin list', count: 7, totalMs: 0, maxMs: 0 });
     expect(programs.finished()).toHaveLength(3);
     for (let i = 0; i < FINISHED_KEPT + 10; i += 1) await inTask({ id: 't', title: 'Trim Run history' }, () => exec('true', []));
     expect(programs.finished()).toHaveLength(FINISHED_KEPT);
@@ -77,8 +119,8 @@ describe('the programs that ended lately', () => {
     await inTask({ id: 'kept', title: 'Drop expired kept databases' }, () => exec('mysql', ['fail']));
     await exec('gzip', ['slow']);
     expect(logged.map(notableLine)).toEqual([
-      'wp ran 0 s for "Refresh the database from production" and ended with exit 1',
-      'mysql ran 0 s for the background task "Drop expired kept databases" and ended with exit 1',
+      'wp db export ran 0 s for "Refresh the database from production" and ended with exit 1 (printed nothing)',
+      'mysql ran 0 s for the background task "Drop expired kept databases" and ended with exit 1 (printed nothing)',
       'gzip ran 42 s and ended well',
     ]);
   });
@@ -138,14 +180,18 @@ describe('the panel status route', () => {
     // The run before started and never wrote its stop.
     store.setMeta('panel-started-at', '2026-11-12T20:00:00.000Z');
     const programs = new RunningPrograms();
-    const fake = fakeExec({ ...healthyResponses(), sudo: { stdout: '' } });
+    const fake = fakeExec({ ...healthyResponses(), sudo: { stdout: '' }, du: { code: 2, stdout: '', stderr: 'du: cannot read directory: Permission denied' } });
     app = await buildApp({ config: t.config, exec: programs.track(fake.exec), programs, store, secrets: () => readSecrets(file), secretsFile: file, hostPaths: t.hostPaths, dmpRoot: DMP, version: '9.9.9', uploadsDir: join(t.root, 'uploads'), production: true, housekeeping: true });
     const res = await app.inject({ method: 'POST', url: '/api/login', headers: { host: HOST, origin: ORIGIN }, payload: { password: 'correct horse' } });
     const cookie = `dmp_session=${res.cookies.find((c) => c.name === 'dmp_session')?.value}`;
     const status = (await app.inject({ method: 'GET', url: '/api/panel/status', headers: { host: HOST, cookie } })).json();
     expect(status).toMatchObject({ version: '9.9.9', before: { startedAt: '2026-11-12T20:00:00.000Z', ended: 'unexpectedly' }, programs: [], finished: expect.any(Array), jobs: 0 });
     expect((await app.inject({ method: 'GET', url: '/api/panel/tasks/runs/runs', headers: { host: HOST, cookie } })).json()).toEqual(expect.any(Array));
-    expect(status.tasks.map((t: { id: string }) => t.id)).toEqual(['drafts', 'runs', 'downloads', 'file-trash', 'mysql-backups', 'snapshots', 'kept', 'trash']);
+    // A page's read that failed says which route started it, and why in a few words.
+    mkdirSync(join(t.root, 'uploads'), { recursive: true });
+    await app.inject({ method: 'GET', url: '/api/panel/storage?fresh=1', headers: { host: HOST, cookie } });
+    expect(programs.finished().find((p) => p.program === 'du')).toMatchObject({ page: { route: 'GET /api/panel/storage' }, ended: 'failed', reason: 'permission denied' });
+    expect(status.tasks.map((t: { id: string }) => t.id)).toEqual(['drafts', 'runs', 'downloads', 'file-trash', 'mysql-backups', 'snapshots', 'kept', 'trash', 'versions']);
     const ran = await app.inject({ method: 'POST', url: '/api/panel/tasks/runs/run', headers: { host: HOST, origin: ORIGIN, cookie } });
     expect(ran.json()).toMatchObject({ id: 'runs', lastOk: true });
     expect((await app.inject({ method: 'POST', url: '/api/panel/tasks/nope/run', headers: { host: HOST, origin: ORIGIN, cookie } })).statusCode).toBe(404);

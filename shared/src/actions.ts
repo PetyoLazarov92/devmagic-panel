@@ -1351,6 +1351,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({ release: releaseName }),
   },
+  'panel.unpackRelease': {
+    title: 'Unpack a packed release',
+    description:
+      "Unpacks a release the panel keeps packed (the versions it does not run) back into its folder in the releases folder, so its install.sh is there to run in a terminal. Nothing else changes: the panel keeps running the version it runs.",
+    changesSystem: false,
+    input: z.object({ release: releaseName }),
+  },
   'panel.installRelease': {
     title: 'Install a release with your sudo password',
     description:

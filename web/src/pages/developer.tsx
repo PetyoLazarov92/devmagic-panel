@@ -160,7 +160,8 @@ function Settings({ report }: { report: DeveloperReport }) {
 /** The panel's startup journal and the installer's logs, one at a time. */
 function Logs({ report }: { report: DeveloperReport }) {
   const [shown, setShown] = useState<string>('startup');
-  const log = useAsync(() => (shown === 'startup' ? api.developerStartup() : api.developerLog(shown)), [shown]);
+  // Read again with the page: Check again gives a new report.
+  const log = useAsync(() => (shown === 'startup' ? api.developerStartup() : api.developerLog(shown)), [shown, report]);
   const choices = [{ name: 'startup', label: 'Startup', detail: 'the panel service' }, ...report.logs.map((l) => ({ name: l.name, label: l.name.startsWith('update') ? 'Update' : 'Install', detail: `${shortDate(l.modifiedAt)} · ${timeAgo(l.modifiedAt)} · ${bytes(l.sizeBytes)}` }))];
   return (
     <Card className="lg:col-span-2">

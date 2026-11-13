@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.46.0-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.47.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -58,7 +58,7 @@ listens on localhost.
 - ✅ **Import a database**: from production over SSH in one click, or any dump, as it is or cleaned of private data, with your old tables kept. [More](docs/databases.md#backups-and-tools)
 - ✅ **Plugin and theme updates**: read the changelog, then update one or all from WordPress.org, a snapshot first, each folder kept for Undo. [More](docs/sites.md#plugins)
 - ✅ **Performance**: a tab per site with Xdebug profiles by plugin and function, and the top queries of its database. [More](docs/sites.md#performance)
-- ✅ **Command palette**: Ctrl+K jumps to any site or page and runs its quick actions. [More](docs/pages.md#command-palette)
+- ✅ **Command palette**: Ctrl+K jumps to any site, page or site view (Database › SQL) and runs its quick actions. [More](docs/pages.md#command-palette)
 - ✅ **Cron**: your crontab's tasks and each site's WP-Cron events, with history and Undo; only the panel's block is written. [More](docs/services.md#cron-servicescron)
 - ✅ **Aura**: every problem on your sites and this machine in one list, with one-click fixes, Fix all and, when switched on, known plugin vulnerabilities. [More](docs/pages.md#aura)
 - ✅ **Undo and removed sites**: removed or replaced sites are kept 14 days, installs can be undone, system files are backed up first. [More](docs/undo-and-backups.md)

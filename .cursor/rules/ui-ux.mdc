@@ -210,7 +210,10 @@ Every page is made of the pieces in `web/src/components/layout/page.tsx` and
   right, "Read 2 min ago" and a short note under it, or in the picker's place
   when there is none, so the bar is one line) tops a tab or a view.
   The button that reads a page again is always `CheckAgain`: never Refresh or
-  Read again. Something the whole page or view should know is a `Notice` right
+  Read again. It turns until the answer is in, then says Checked for two
+  seconds, so a read that found nothing new still shows it ran; it reads
+  past the panel's own caches where it has one (`fresh`, `check`), and a
+  read that fails while the old data shows says so in a `Notice`. Something the whole page or view should know is a `Notice` right
   under its header or bar (danger, warning, info); a field's own error stays
   next to the field. Nothing yet is an `EmptyState`: what would be here and
   the way to get it.

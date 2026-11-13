@@ -194,13 +194,15 @@ function mysqlRunner(exec: Executor, secrets: Secrets | null): Mysql | null {
   };
 }
 
-async function databaseSizes(mysql: Mysql | null, fresh: () => Promise<string>): Promise<Map<string, { sizeBytes: number; tables: number }>> {
+/** Each database's size and table count; null when MySQL could not be read, which is not the same as no databases. */
+async function databaseSizes(mysql: Mysql | null, fresh: () => Promise<string>): Promise<Map<string, { sizeBytes: number; tables: number }> | null> {
   const sizes = new Map<string, { sizeBytes: number; tables: number }>();
   // Fresh, not the day-old sizes MySQL 8 keeps; MySQL's own databases are left out.
   const rows = mysql
     ? await mysql(`${await fresh()}SELECT table_schema, COALESCE(SUM(data_length + index_length), 0), COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN (${SYSTEM_DATABASES.map((d) => `'${d}'`).join(', ')}) GROUP BY table_schema`)
     : null;
-  for (const [schema, size, count] of rows ?? []) {
+  if (!rows) return null;
+  for (const [schema, size, count] of rows) {
     if (schema) sizes.set(schema, { sizeBytes: Number(size) || 0, tables: Number(count) || 0 });
   }
   return sizes;
@@ -406,7 +408,7 @@ export function folderTime(dir: string): string | undefined {
 }
 
 
-type Shared = { legacyIssuer: string | null; sizes: Map<string, { sizeBytes: number; tables: number }>; hosts: Set<string>; hostsText: string; cores: string[]; mysql: Mysql | null };
+type Shared = { legacyIssuer: string | null; sizes: Map<string, { sizeBytes: number; tables: number }>; /** Whether the sizes were read, so a database missing from them is missing from MySQL. */ read: boolean; hosts: Set<string>; hostsText: string; cores: string[]; mysql: Mysql | null };
 
 /** A mounted folder that is a WordPress install of its own: it shows as a site, not as a folder of its parent. */
 const isWordPressMount = (m: { docroot: string }) => existsSync(join(m.docroot, 'wp-config.php'));
@@ -433,14 +435,16 @@ async function discoverOne(ctx: DiscoverContext, vhost: VhostInfo, shared: Share
   const folders = mount ? [] : vhost.mounts.filter((m) => !isWordPressMount(m));
 
   const inner = findSiteRepos(docroot, ctx.repoPaths?.(`${domain}${path ?? ''}`) ?? []);
+  // A database MySQL does not have (a site whose dump is not imported yet) is not asked about: each read of it would fail.
+  const dbMysql = wp?.dbName && shared.read && !shared.sizes.has(wp.dbName) ? null : shared.mysql;
   const [cert, git, mountGits, innerGits, wpData, mediaActive] = await Promise.all([
     vhost.certFile && !mount ? readCert(ctx.exec, vhost.certFile, shared.legacyIssuer) : Promise.resolve(undefined),
     readGit(ctx.exec, docroot),
     Promise.all(folders.map((m) => readGit(ctx.exec, m.docroot))),
     Promise.all(inner.map((r) => readGit(ctx.exec, join(docroot, r.folder)))),
-    wp ? readWordPressData(shared.mysql, wp) : Promise.resolve<{ title?: string; network?: SiteNetwork }>({}),
+    wp ? readWordPressData(dbMysql, wp) : Promise.resolve<{ title?: string; network?: SiteNetwork }>({}),
     // Only asked when the site has the plugin; without the database it counts as on.
-    wp && hasMediaPlugin ? mediaPluginActive(shared.mysql, wp) : Promise.resolve(null),
+    wp && hasMediaPlugin ? mediaPluginActive(dbMysql, wp) : Promise.resolve(null),
   ]);
 
   const core = readCore(docroot);
@@ -741,11 +745,11 @@ export async function discoverSites(ctx: DiscoverContext): Promise<Site[]> {
   const vhosts = readSiteVhosts(ctx.config);
   const mysql = mysqlRunner(ctx.exec, ctx.secrets);
   const wpcore = readWpcoreConfig(ctx.wpcoreConf);
-  const [legacyIssuer, sizes] = await Promise.all([legacyIssuerOf(ctx.exec, ctx.config), databaseSizes(mysql, () => (ctx.secrets?.mysql ? freshStatsSql(ctx.exec, ctx.secrets.mysql) : Promise.resolve('')))]);
+  const [legacyIssuer, read] = await Promise.all([legacyIssuerOf(ctx.exec, ctx.config), databaseSizes(mysql, () => (ctx.secrets?.mysql ? freshStatsSql(ctx.exec, ctx.secrets.mysql) : Promise.resolve('')))]);
   const hostsText = existsSync(ctx.config.HOSTS_FILE) ? readFileSync(ctx.config.HOSTS_FILE, 'utf8') : '';
   const hosts = hostsNames(hostsText);
   const cores = wpcore ? installedCores(wpcore.coresDir) : [];
-  const shared = { legacyIssuer, sizes, hosts, hostsText, mysql, cores };
+  const shared = { legacyIssuer, sizes: read ?? new Map<string, { sizeBytes: number; tables: number }>(), read: read !== null, hosts, hostsText, mysql, cores };
   // Each vhost's own site, followed by the WordPress installs it serves under a path.
   const list = await Promise.all(vhosts.map((v) => Promise.all([discoverOne(ctx, v, shared), ...v.mounts.filter(isWordPressMount).map((m) => discoverOne(ctx, v, shared, m))])));
   return withPhp(ctx.config, list.flat());

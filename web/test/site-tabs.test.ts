@@ -1,6 +1,6 @@
 import type { Site, WpDebugConstant } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { debugLabel, sectionViews, siteTabItems, uncoveredNames } from '../src/lib/site-tabs.js';
+import { debugLabel, sectionViews, siteSections, siteTabItems, uncoveredNames } from '../src/lib/site-tabs.js';
 import { fittingTabs } from '../src/lib/tabs-fit.js';
 
 const OFF: Record<WpDebugConstant, boolean | null> = { WP_DEBUG: false, WP_DEBUG_LOG: null, WP_DEBUG_DISPLAY: null, SCRIPT_DEBUG: null, SAVEQUERIES: null };
@@ -117,5 +117,26 @@ describe('sectionViews', () => {
   it('has none for a section without views', () => {
     expect(sectionViews(site(), 'logs', none)).toBeNull();
     expect(sectionViews(site(), 'overview', none)).toBeNull();
+  });
+});
+
+describe('siteSections', () => {
+  it('lists a tab with views by its views and the others by name, in the page order', () => {
+    const labels = siteSections(site()).map((s) => s.label);
+    expect(labels[0]).toBe('Overview');
+    expect(labels).toEqual(expect.arrayContaining(['Database › SQL', 'Database › Tables', 'Database › Backups and tools', 'Plugins and themes › Themes', 'Files › Uploads from production']));
+    expect(labels).not.toContain('Database');
+    expect(labels.indexOf('Files › Browse')).toBeLessThan(labels.indexOf('Database › SQL'));
+  });
+
+  it('links each to its address', () => {
+    const sql = siteSections(site()).find((s) => s.label === 'Database › SQL');
+    expect(sql?.href).toContain('tab=database');
+    expect(sql?.href).toContain('view=sql');
+    expect(siteSections(site()).find((s) => s.tab === 'logs')?.href).toMatch(/\?tab=logs$/);
+  });
+
+  it('leaves out what the site lacks', () => {
+    expect(siteSections(site({ db: undefined })).some((s) => s.tab === 'database')).toBe(false);
   });
 });

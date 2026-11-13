@@ -66,7 +66,7 @@ import type { RunStore } from './store.js';
 import { clearMail, type Downloader, mailpitFetch, type MailpitFetch, planInstallMailpit } from './mailpit.js';
 import { writeAutostart } from './autostart.js';
 import { planTrashRestore, TrashRefused } from './sites/trash.js';
-import { checkUpdate, installedReleases, installerCheck, panelCli, planSwitch, planUpdate, type UpdateContext } from './update.js';
+import { checkUpdate, installedReleases, installerCheck, panelCli, planSwitch, planUpdate, unpackRelease, type UpdateContext } from './update.js';
 import { forgetOnFailure, type HeldPassword, installRunning, planInstallRelease } from './update-install.js';
 import { changeCrontab, type CronChange, type CronCommand, cronCommand, type CronContext, cronLockDir, CronRefused, findTask, newTaskId, type PanelTask, parseCrontab, readCrontab, taskArgs, tasksOf, undoCrontab } from './cron.js';
 import { runCronTask, taskRefusal } from './cron-run.js';
@@ -695,7 +695,23 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     const held: HeldPassword = { value: input.password };
     const before: JobStep[] = download.length ? [...download, installerCheck(input.release, dir)].map((step) => forgetOnFailure(held, step)) : [];
     const steps = planInstallRelease({ exec: ctx.exec, dataDir: ctx.update.dataDir, store: ctx.store }, { name: input.release, dir }, held, ctx.runId as number);
-    return startJob(ctx, [...before, ...steps], `${download.length ? 'Download and install' : 'Install'} ${input.release} with your sudo password`, 'panel');
+    // A packed release is unpacked first, so its install.sh is there to run.
+    const update = ctx.update;
+    const unpack: JobStep[] = release?.packed
+      ? [forgetOnFailure(held, { id: 'unpack', label: `Unpack ${input.release}`, run: async () => {
+          await unpackRelease(update.exec, join(update.dataDir, 'releases'), input.release);
+          return { code: 0, stdout: `unpacked ${input.release}`, stderr: '' };
+        } })]
+      : [];
+    return startJob(ctx, [...unpack, ...before, ...steps], `${download.length ? 'Download and install' : 'Install'} ${input.release} with your sudo password`, 'panel');
+  },
+  'panel.unpackRelease': async (ctx, input) => {
+    if (!ctx.update) throw new ActionInputError('updates are not set up in this panel');
+    const release = installedReleases(ctx.update).find((r) => r.name === input.release);
+    if (!release) throw new ActionInputError(`${input.release} is not installed`);
+    if (!release.packed) return [{ code: 0, stdout: `${input.release} is unpacked already`, stderr: '' }];
+    await unpackRelease(ctx.update.exec, join(ctx.update.dataDir, 'releases'), input.release);
+    return [{ code: 0, stdout: `unpacked ${input.release}: its install.sh is at ${join(ctx.update.dataDir, 'releases', input.release, 'install.sh')}`, stderr: '' }];
   },
   'panel.switchRelease': async (ctx, input) => {
     if (!ctx.update) throw new ActionInputError('updates are not set up in this panel');

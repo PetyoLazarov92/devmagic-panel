@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ActionInput, RowChangeInfo } from '@devmagic-panel/shared';
-import { isSystemDatabase, rowChangeId } from '@devmagic-panel/shared';
+import type { ActionInput, RowChangeCell, RowChangeDetail, RowChangeInfo } from '@devmagic-panel/shared';
+import { isSystemDatabase, ROW_CHANGE_VALUE_MAX, rowChangeId } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { ExecResult, Executor } from './exec.js';
 import type { MysqlAccount } from './mysql-limits.js';
@@ -192,12 +192,46 @@ export function listRowChanges(config: SystemConfig, database: string, table?: s
       const c = JSON.parse(readFileSync(join(dir, name), 'utf8')) as RowChange;
       if (c.database !== database || (table !== undefined && c.table !== table)) continue;
       const savedAt = c.savedAt;
-      out.push({ id: name.slice(0, -5), kind: c.kind, table: c.table, rows: c.rows.length, savedAt, purgeAt: new Date(Date.parse(savedAt) + ROW_CHANGE_DAYS * 86_400_000).toISOString() });
+      out.push({ id: name.slice(0, -5), kind: c.kind, table: c.table, rows: c.rows.length, ...(c.kind === 'update' && c.set ? { columns: Object.keys(c.set) } : {}), savedAt, purgeAt: new Date(Date.parse(savedAt) + ROW_CHANGE_DAYS * 86_400_000).toISOString() });
     } catch {
       // A copy that does not read is left for the prune.
     }
   }
   return out;
+}
+
+/** A value as the detail shows it: binary ones by size, long ones cut. */
+function shown(value: string | null | undefined, binary: boolean): { value: string | null; cut?: boolean } {
+  if (value === null || value === undefined) return { value: null };
+  if (binary) return { value: `(binary, ${Math.floor(value.length / 2).toLocaleString('en-US')} bytes)` };
+  return value.length > ROW_CHANGE_VALUE_MAX ? { value: value.slice(0, ROW_CHANGE_VALUE_MAX), cut: true } : { value };
+}
+
+/**
+ * What a saved change holds, for the browser only: each row by its key and
+ * the columns it changed, before and after, as Undo would put them back.
+ */
+export function rowChangeDetail(config: SystemConfig, database: string, id: string): RowChangeDetail {
+  const c = readChange(config, id);
+  if (c.database !== database) throw new MysqlRefused('That change is of another database');
+  const binary = new Set(c.binary);
+  const keyOf = (row: SavedRow) => Object.fromEntries(c.primaryKey.map((k) => [k, shown(row[k], binary.has(k)).value]));
+  const rows = c.rows.map((row) => {
+    const columns = c.kind === 'update' && c.set ? Object.keys(c.set) : Object.keys(row);
+    const cells: RowChangeCell[] = columns.map((column) => {
+      const isBinary = binary.has(column);
+      const before = c.kind === 'insert' ? undefined : shown(row[column], isBinary);
+      const after = c.kind === 'delete' ? undefined : shown(c.kind === 'update' ? c.set?.[column] : row[column], isBinary);
+      return {
+        column,
+        ...(before ? { before: before.value } : {}),
+        ...(after ? { after: after.value } : {}),
+        ...(before?.cut || after?.cut ? { cut: true } : {}),
+      };
+    });
+    return { key: keyOf(row), cells };
+  });
+  return { id, kind: c.kind, table: c.table, primaryKey: c.primaryKey, rows };
 }
 
 const ok = (stdout: string, change?: string): ExecResult & { change?: string } => ({ code: 0, stdout, stderr: '', ...(change ? { change } : {}) });
