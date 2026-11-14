@@ -226,11 +226,13 @@ number. A **Developer** page joins the menu with:
   never contents, at most 200 entries, and only the folders those lists
   name.
 
-- **Modes**: each mode's paths with their rule, progress and when they
-  started counting, with Reset per path, Complete (fills a path, to try the
-  real unlock and its dialog), Unlock and Seal (a sealed mode leaves the Modes
-  page, and the panel goes back to Classic if it was in use), Reset all paths,
-  and what the panel counts. An unlock from here shows the unlock dialog, as
-  any other. The only place the rules are shown.
+- **Modes**: each mode's name and whether it is unlocked. Behind a small
+  puzzle you have to find first, it shows each mode's paths with their rule,
+  progress and when they started counting, with Reset per path, Complete
+  (fills a path, to try the real unlock and its dialog), Unlock and Seal (a
+  sealed mode leaves the Modes page, and the panel goes back to Classic if it
+  was in use), Reset all paths, and what the panel counts. An unlock from here
+  shows the unlock dialog, as any other. The only place the rules are shown,
+  and switching Developer options off locks them again.
 
 A switch on that page turns it off again. It is remembered per browser.

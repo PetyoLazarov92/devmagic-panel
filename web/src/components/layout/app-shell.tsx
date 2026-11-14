@@ -17,7 +17,7 @@ import { useDeveloper, useVersionTaps } from '@/lib/developer';
 import { useMailUnread } from '@/lib/mail-unread';
 import { useHtaccessNotices } from '@/lib/htaccess-notices';
 import { navActive } from '@/lib/nav';
-import { refreshModes, useModeText, usePageName } from '@/lib/modes';
+import { refreshModes, useModeText, useModesEntry, usePageName } from '@/lib/modes';
 import { ModeEffects } from '@/features/modes/mode-effects';
 import { UnlockDialog } from '@/features/modes/unlock-dialog';
 import { navigate } from '@/lib/router';
@@ -214,6 +214,8 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
   onTapVersion: () => void;
   onLogout: () => void;
 }) {
+  // The way to the Modes page shows once a mode was earned (or one is on).
+  const showModes = useModesEntry();
   const rail = mode === 'rail';
   const name = usePageName();
   const fold = rail ? 'Show the menu labels' : 'Fold the menu to icons';
@@ -283,7 +285,7 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
           </div>
         )}
         <div className={cn('flex shrink-0', rail && 'flex-col items-center gap-1')}>
-          <IconButton icon={Palette} label={`${name('Modes')}: how the panel looks`} onClick={() => navigate('/modes')} aria-current={path === '/modes' ? 'page' : undefined} />
+          {showModes && <IconButton icon={Palette} label={`${name('Modes')}: how the panel looks`} onClick={() => navigate('/modes')} aria-current={path === '/modes' ? 'page' : undefined} />}
           <IconButton icon={LogOut} label="Log out" onClick={onLogout} />
           {/* Folding is for the sidebar beside the page; the drawer on a phone has no rail. */}
           <IconButton icon={FoldIcon} label={fold} onClick={() => toggleSidebar(mode)} title={`${fold} (Ctrl+B)`} className="hidden md:inline-flex" />

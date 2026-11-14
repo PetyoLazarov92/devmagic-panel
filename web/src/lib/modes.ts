@@ -30,6 +30,17 @@ export function useModesView(): ModesView | null {
   return useSyncExternalStore(subscribe, () => view);
 }
 
+/**
+ * Whether the way to the Modes page shows (the palette icon in the menu, Modes
+ * in Ctrl+K): only once a mode was earned by a path or a word, or while a mode
+ * other than Classic is on, so a mode switched on never strands you.
+ */
+export function useModesEntry(): boolean {
+  const view = useModesView();
+  const prefs = usePreferences();
+  return Boolean(view?.earned) || (prefs.mode !== undefined && prefs.mode !== 'classic');
+}
+
 let lastRead = 0;
 /** Asks the panel again, at most every few seconds unless `now`: after a page change, a job that ended, or on the Modes page. */
 export async function refreshModes(now = false): Promise<void> {

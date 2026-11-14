@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MODE_PUZZLES } from '@devmagic-panel/shared';
 import { buildApp } from '../src/app.js';
 import { Sessions } from '../src/auth.js';
 import { hashPassword, type Secrets } from '../src/secrets.js';
@@ -296,6 +297,7 @@ describe('modes', () => {
     expect(first.modes[10].riddles).toHaveLength(3);
     expect(first.modes[11].riddles).toHaveLength(3);
     expect(first.modes[12].riddles).toHaveLength(3);
+    expect(first.earned).toBe(false);
     expect(JSON.stringify(first)).not.toMatch(/abracadabra|overclock|ignite|bloom|dive|afterglow|calligraphy|sandstorm|extralife|brainfreeze|champagne|quicksilver/);
     expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard' } })).statusCode).toBe(400);
 
@@ -304,6 +306,8 @@ describe('modes', () => {
     expect(spoken.unlocked).toBe('wizard');
     expect(spoken.fresh).toEqual(['wizard']);
     expect(spoken.modes[1].unlockLine).toContain('You spoke the word.');
+    // A mode earned by its word shows the way to the Modes page.
+    expect(spoken.earned).toBe(true);
     expect(store.getMeta('modes')).not.toContain('abracadabra');
     expect((await app.inject({ method: 'POST', url: '/api/modes/wizard/seen', headers })).json().fresh).toEqual([]);
     expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard', effects: { wizard: { pointer: true, elements: true, background: false } } } })).statusCode).toBe(200);
@@ -312,6 +316,7 @@ describe('modes', () => {
     expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { modeNames: { wizard: 'no' } } })).statusCode).toBe(400);
 
     // Sealing the mode in use from Developer options puts the panel back on Classic.
+    await solvePuzzle(headers);
     const sealed = (await app.inject({ method: 'POST', url: '/api/modes/wizard/seal', headers })).json();
     expect(sealed.modes[0].unlocked).toBeUndefined();
     expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json().mode).toBe('classic');
@@ -322,6 +327,7 @@ describe('modes', () => {
     const headers = { host: HOST, origin: ORIGIN, cookie };
     expect((await app.inject({ method: 'POST', url: '/api/modes/events', headers, payload: { event: 'siteWizard' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'POST', url: '/api/modes/events', headers, payload: { event: 'auraFix' } })).statusCode).toBe(200);
+    await solvePuzzle(headers);
     const dev = (await app.inject({ method: 'GET', url: '/api/modes/developer', headers })).json();
     expect(dev.modes[0].paths.find((p: { id: string }) => p.id === 'wizard.aura').progress).toBe(1);
     expect((await app.inject({ method: 'POST', url: '/api/modes/paths/wizard.undo/complete', headers })).json().modes[0].unlocked.by).toBe('wizard.undo');
@@ -329,7 +335,35 @@ describe('modes', () => {
     expect((await app.inject({ method: 'POST', url: '/api/modes/paths/wizard.nothing/reset', headers })).statusCode).toBe(404);
     expect((await app.inject({ method: 'POST', url: '/api/modes/dragon/unlock', headers })).statusCode).toBe(404);
   });
+
+  it('keeps the paths, progress and words back until the puzzle is solved, and again once locked', async () => {
+    const cookie = await login();
+    const headers = { host: HOST, origin: ORIGIN, cookie };
+    expect((await app.inject({ method: 'GET', url: '/api/modes/developer/state', headers })).json()).toEqual({ open: false });
+    expect((await app.inject({ method: 'GET', url: '/api/modes/developer', headers })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/modes/wizard/unlock', headers })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/modes/paths/wizard.undo/complete', headers })).statusCode).toBe(403);
+    // The question comes without its answer; a wrong answer brings another question.
+    const asked = (await app.inject({ method: 'GET', url: '/api/modes/developer/puzzle', headers })).json();
+    expect(asked.answer).toBeUndefined();
+    const right = MODE_PUZZLES.find((p) => p.id === asked.id)!.answer;
+    const wrong = (await app.inject({ method: 'POST', url: '/api/modes/developer/puzzle', headers, payload: { id: asked.id, choice: (right + 1) % 4 } })).json();
+    expect(wrong.solved).toBe(false);
+    expect(wrong.next.id).not.toBe(asked.id);
+    expect((await app.inject({ method: 'GET', url: '/api/modes/developer', headers })).statusCode).toBe(403);
+    await solvePuzzle(headers);
+    expect((await app.inject({ method: 'GET', url: '/api/modes/developer', headers })).json().modes[0].word).toBe('abracadabra');
+    expect((await app.inject({ method: 'POST', url: '/api/modes/developer/lock', headers })).json()).toEqual({ open: false });
+    expect((await app.inject({ method: 'GET', url: '/api/modes/developer', headers })).statusCode).toBe(403);
+  });
 });
+
+/** Answers the Developer options' puzzle, as a person would after seven taps. */
+async function solvePuzzle(headers: Record<string, string>): Promise<void> {
+  const asked = (await app.inject({ method: 'GET', url: '/api/modes/developer/puzzle', headers })).json();
+  const choice = MODE_PUZZLES.find((p) => p.id === asked.id)!.answer;
+  expect((await app.inject({ method: 'POST', url: '/api/modes/developer/puzzle', headers, payload: { id: asked.id, choice } })).json()).toEqual({ solved: true });
+}
 
 describe('local constants', () => {
   it('starts from WP_ENVIRONMENT_TYPE local, keeps a saved list and refuses names the panel does not set', async () => {

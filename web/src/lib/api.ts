@@ -1,4 +1,4 @@
-import type { BrowserCounter, ModesDeveloperView, ModesView, SealedModeId, BackgroundTask, PanelStatus, PanelStorage, TaskRun, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeDetail, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
+import type { BrowserCounter, ModePuzzleQuestion, ModesDeveloperView, ModesView, SealedModeId, BackgroundTask, PanelStatus, PanelStorage, TaskRun, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeDetail, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { sendWithRetry, unreachableMessage } from '@/lib/connection';
 import { noteStatus, refused } from '@/lib/session-watch';
@@ -216,6 +216,11 @@ export interface Api {
   modesDeveloper: () => Promise<ModesDeveloperView>;
   modeDeveloper: (mode: SealedModeId, what: 'unlock' | 'seal' | 'reset') => Promise<ModesDeveloperView>;
   modePath: (path: string, what: 'reset' | 'complete') => Promise<ModesDeveloperView>;
+  /** Whether the modes' secrets are open in Developer options; a puzzle opens them, switching the options off closes them. */
+  modesDeveloperState: () => Promise<{ open: boolean }>;
+  modesPuzzle: () => Promise<ModePuzzleQuestion>;
+  modesPuzzleAnswer: (id: string, choice: number) => Promise<{ solved: true } | { solved: false; next: ModePuzzleQuestion }>;
+  modesLock: () => Promise<{ open: false }>;
   /** The constants every local site should have, from Settings. */
   localConstants: () => Promise<LocalConstant[]>;
   saveLocalConstants: (list: LocalConstant[]) => Promise<LocalConstant[]>;
@@ -484,6 +489,10 @@ const realApi: Api = {
   modesDeveloper: () => request('GET', '/api/modes/developer'),
   modeDeveloper: (mode, what) => request('POST', `/api/modes/${mode}/${what}`),
   modePath: (path, what) => request('POST', `/api/modes/paths/${encodeURIComponent(path)}/${what}`),
+  modesDeveloperState: () => request('GET', '/api/modes/developer/state'),
+  modesPuzzle: () => request('GET', '/api/modes/developer/puzzle'),
+  modesPuzzleAnswer: (id, choice) => request('POST', '/api/modes/developer/puzzle', { id, choice }),
+  modesLock: () => request('POST', '/api/modes/developer/lock'),
   localConstants: () => request('GET', '/api/local-constants'),
   saveLocalConstants: (list) => request('PUT', '/api/local-constants', list),
   rememberedRepos: () => request('GET', '/api/remembered/repos'),

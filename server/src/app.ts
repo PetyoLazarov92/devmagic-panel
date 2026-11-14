@@ -2,8 +2,8 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, TaskRun, ApacheReport, ModesDeveloperView, ModesView, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { browserCounter, FILE_TEXT_MAX, gitUrl, MODE_PATHS, sealedModeId, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
+import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, TaskRun, ApacheReport, ModesDeveloperView, ModePuzzleQuestion, ModesView, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import { browserCounter, FILE_TEXT_MAX, gitUrl, MODE_PATHS, nextPuzzle, puzzleQuestion, sealedModeId, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -796,9 +796,35 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const unlocked = typeof word === 'string' && word.length <= 40 ? modes.word(word) : null;
       return { ...modes.view(), unlocked };
     });
-    // Developer options: the rules and each path's progress, and the buttons to unlock, seal and start over.
-    api.get('/api/modes/developer', async (): Promise<ModesDeveloperView> => modes.developerView());
+    // Developer options: the rules, each path's progress and the words show only after the puzzle is solved, until
+    // Developer options are switched off (or the panel restarts). Kept in memory only.
+    let modesOpen = false;
+    let puzzle = nextPuzzle();
+    const locked = (reply: FastifyReply) => reply.code(403).send({ error: 'The modes are locked: solve the puzzle first' });
+    api.get('/api/modes/developer/state', async () => ({ open: modesOpen }));
+    api.get('/api/modes/developer/puzzle', async (): Promise<ModePuzzleQuestion> => {
+      puzzle = nextPuzzle(puzzle.id);
+      return puzzleQuestion(puzzle);
+    });
+    api.post<{ Body: unknown }>('/api/modes/developer/puzzle', async (request, reply) => {
+      const body = (request.body ?? {}) as { id?: unknown; choice?: unknown };
+      if (body.id !== puzzle.id || typeof body.choice !== 'number') return reply.code(409).send({ error: 'That question is no longer asked', next: puzzleQuestion((puzzle = nextPuzzle(puzzle.id))) });
+      if (body.choice === puzzle.answer) {
+        modesOpen = true;
+        puzzle = nextPuzzle(puzzle.id);
+        return { solved: true };
+      }
+      // A wrong answer gets a new question, never the same one again right away.
+      puzzle = nextPuzzle(puzzle.id);
+      return { solved: false, next: puzzleQuestion(puzzle) };
+    });
+    api.post('/api/modes/developer/lock', async () => {
+      modesOpen = false;
+      return { open: false };
+    });
+    api.get('/api/modes/developer', async (_request, reply): Promise<ModesDeveloperView | undefined> => (modesOpen ? modes.developerView() : locked(reply)));
     api.post<{ Params: { mode: string; what: string } }>('/api/modes/:mode/:what', async (request, reply): Promise<ModesDeveloperView | undefined> => {
+      if (!modesOpen) return locked(reply);
       const mode = sealedMode(request.params.mode);
       if (!mode) return reply.code(404).send({ error: 'No such mode' });
       const { what } = request.params;
@@ -813,6 +839,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return modes.developerView();
     });
     api.post<{ Params: { path: string; what: string } }>('/api/modes/paths/:path/:what', async (request, reply): Promise<ModesDeveloperView | undefined> => {
+      if (!modesOpen) return locked(reply);
       const { path, what } = request.params;
       if (!MODE_PATHS.some((p) => p.id === path)) return reply.code(404).send({ error: 'No such path' });
       if (what === 'reset') modes.resetPath(path);

@@ -1,4 +1,4 @@
-import { countMode, emptyModesState, MODE_PATHS, modesDeveloper, modesView, pathProgress, readModesState, speakWord } from '@devmagic-panel/shared';
+import { countMode, emptyModesState, MODE_PATHS, MODE_PUZZLES, MODE_WORDS, modesDeveloper, modesDeveloperView, modesView, nextPuzzle, pathProgress, readModesState, speakWord } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { countAction, ModeProgress, newerVersion } from '../src/modes.js';
 
@@ -31,7 +31,7 @@ describe('mode progress', () => {
     expect(JSON.stringify(wizard)).not.toMatch(/Aura|Undo|New site/);
   });
 
-  it('counts a site moved to nginx once, Undo actions, and nothing that failed or is unknown', () => {
+  it('counts every move between Apache and nginx, Undo actions, and nothing that failed or is unknown', () => {
     const progress = new ModeProgress(memory());
     countAction(progress, 'site.setServer', { domain: 'local.spellbook.example', server: 'nginx' });
     countAction(progress, 'site.setServer', { domain: 'local.spellbook.example', server: 'nginx-apache' });
@@ -39,7 +39,7 @@ describe('mode progress', () => {
     countAction(progress, 'cron.undo', {});
     countAction(progress, 'site.create', {});
     const counters = Object.fromEntries(progress.developerView().counters.map((c) => [c.id, c.count]));
-    expect(counters).toMatchObject({ nginxSite: 1, undo: 1, siteWizard: 0 });
+    expect(counters).toMatchObject({ serverMove: 3, undo: 1, siteWizard: 0 });
   });
 
   it('reports from the browser at most once a second', () => {
@@ -250,6 +250,33 @@ describe('mode progress', () => {
     expect([count('searchReplace'), count('serviceRestart')]).toEqual([1, 3]);
     for (let i = 0; i < 9; i++) countAction(progress, 'db.searchReplace', {});
     expect(progress.developerView().modes.find((m) => m.id === 'chrome')?.unlocked?.by).toBe('chrome.polish');
+  });
+
+  it('shows the way to the Modes page once a mode is earned, never for an unlock from Developer options', () => {
+    const state = emptyModesState();
+    modesDeveloper.unlock(state, 'forge');
+    expect(modesView(state).earned).toBe(false);
+    speakWord(state, 'abracadabra');
+    expect(modesView(state).earned).toBe(true);
+  });
+
+  it("keeps the line of Circuit's old servers path for a mode it opened", () => {
+    const state = emptyModesState();
+    state.unlocks.circuit = { at: '2026-11-01T00:00:00Z', by: 'circuit.servers', seen: false };
+    expect(modesView(state).modes.find((m) => m.id === 'circuit')?.unlockLine).toContain('you know your way around a server');
+    expect(modesDeveloperView(state).modes.find((m) => m.id === 'circuit')?.unlocked?.byLabel).toBe('the servers path');
+  });
+
+  it('asks puzzles that never hold a mode\'s word, each with one answer among four', () => {
+    const words = Object.values(MODE_WORDS);
+    for (const p of MODE_PUZZLES) {
+      expect(p.options).toHaveLength(4);
+      expect(p.answer).toBeGreaterThanOrEqual(0);
+      expect(p.answer).toBeLessThan(4);
+      const text = `${p.question} ${p.options.join(' ')}`.toLowerCase();
+      for (const w of words) expect(text).not.toContain(w);
+    }
+    expect(nextPuzzle('double').id).not.toBe('double');
   });
 
   it('tells a newer version from an older or the same one', () => {

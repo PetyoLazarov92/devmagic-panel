@@ -102,7 +102,7 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
-export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy', 'fileSave', 'certReissue', 'dbClean', 'usedDay', 'dbSnapshot', 'cronTask', 'modeEarned', 'jobContinue', 'itemInstall', 'cacheClear', 'pluginToggle', 'branchSwitch', 'aliasAdd', 'tablePolish', 'siteTakeOver', 'prodRefresh', 'searchReplace', 'serviceRestart'] as const;
+export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'serverMove', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy', 'fileSave', 'certReissue', 'dbClean', 'usedDay', 'dbSnapshot', 'cronTask', 'modeEarned', 'jobContinue', 'itemInstall', 'cacheClear', 'pluginToggle', 'branchSwitch', 'aliasAdd', 'tablePolish', 'siteTakeOver', 'prodRefresh', 'searchReplace', 'serviceRestart'] as const;
 export type ModeCounter = (typeof MODE_COUNTERS)[number];
 /** The counters the browser reports itself; the rest the server counts as things finish. */
 export const BROWSER_COUNTERS = ['auraFix', 'paletteCommand'] as const satisfies readonly ModeCounter[];
@@ -132,7 +132,7 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'wizard.undo', mode: 'wizard', counter: 'undo', goal: 3, riddle: 'Bend time three times.', line: 'Three times you turned back time.', rule: 'Use Undo 3 times' },
   { id: 'wizard.aura', mode: 'wizard', counter: 'auraFix', goal: 5, riddle: 'Mend five ailments.', line: 'Five ailments, mended.', rule: 'Apply 5 fixes from Aura' },
   { id: 'circuit.keyboard', mode: 'circuit', counter: 'paletteCommand', goal: 40, riddle: 'Forty orders, and never a click.', line: 'Forty commands from Ctrl+K: you clearly prefer the keyboard.', rule: 'Run 40 commands from Ctrl+K', startsFresh: true },
-  { id: 'circuit.servers', mode: 'circuit', counter: 'nginxSite', goal: 1, riddle: 'Two servers, one machine.', line: 'A site on nginx, next to Apache: you know your way around a server.', rule: 'Move a site to nginx, or put nginx in front of one', startsFresh: true },
+  { id: 'circuit.moves', mode: 'circuit', counter: 'serverMove', goal: 2, riddle: 'Two servers, one machine.', line: 'Two moves between Apache and nginx: you know your way around a server.', rule: 'Move a site between Apache and nginx 2 times, either way (nginx in front of Apache counts)', startsFresh: true },
   { id: 'circuit.queries', mode: 'circuit', counter: 'sqlQuery', goal: 25, riddle: 'Ask the database twenty-five questions.', line: 'Twenty-five questions for the database: you like to look under the hood.', rule: 'Run 25 queries in the SQL runner', startsFresh: true },
   { id: 'forge.updates', mode: 'forge', counter: 'panelUpdate', goal: 5, riddle: 'Rise from the ashes five times.', line: 'Five times the panel rose from the ashes.', rule: 'Update the panel 5 times', startsFresh: true },
   { id: 'forge.temper', mode: 'forge', counter: 'pluginUpdate', goal: 25, riddle: 'Temper twenty-five blades.', line: 'Twenty-five plugins and themes, tempered.', rule: 'Update 25 plugins or themes', startsFresh: true },
@@ -165,6 +165,14 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'chrome.polish', mode: 'chrome', counter: 'searchReplace', goal: 10, riddle: 'Buff out ten scratches.', line: 'Ten scratches, buffed out.', rule: "Run a search and replace on a site's database 10 times", startsFresh: true },
   { id: 'chrome.engine', mode: 'chrome', counter: 'serviceRestart', goal: 20, riddle: 'Rev the engine twenty times.', line: 'Twenty revs of the engine.', rule: 'Restart or reload a service (Apache, nginx, PHP-FPM, MySQL and the like) 20 times', startsFresh: true },
 ];
+
+/**
+ * Paths a release replaced: a mode one of them opened still says how, in its
+ * dialog and in Developer options.
+ */
+const RETIRED_PATHS: Record<string, { line: string; label: string }> = {
+  'circuit.servers': { line: 'A site on nginx, next to Apache: you know your way around a server.', label: 'servers' },
+};
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
 export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy', dune: 'sandstorm', pixel: 'extralife', sorbet: 'brainfreeze', deco: 'champagne', chrome: 'quicksilver' };
@@ -293,12 +301,14 @@ export interface ModeView {
 
 export interface ModesView {
   modes: ModeView[];
+  /** A mode was earned, by a path or a word (not opened from Developer options): the menu shows the way to the Modes page. */
+  earned: boolean;
   /** Unlocked, and the dialog has not been shown yet. */
   fresh: SealedModeId[];
 }
 
 function unlockLine(mode: SealedModeId, by: UnlockedBy): string {
-  const first = by === 'word' ? MODE_WORD_LINE[mode] : by === 'developer' ? 'Unlocked from Developer options.' : (MODE_PATHS.find((p) => p.id === by)?.line ?? '');
+  const first = by === 'word' ? MODE_WORD_LINE[mode] : by === 'developer' ? 'Unlocked from Developer options.' : (MODE_PATHS.find((p) => p.id === by)?.line ?? RETIRED_PATHS[by]?.line ?? '');
   return [first, MODE_UNLOCK_TAIL[mode]].filter(Boolean).join(' ');
 }
 
@@ -312,7 +322,8 @@ export function modesView(state: ModesState): ModesView {
     return { ...base, unlocked: false, riddles };
   });
   const fresh = (Object.keys(state.unlocks) as SealedModeId[]).filter((m) => state.unlocks[m]?.seen === false && (MODES as readonly string[]).includes(m));
-  return { modes, fresh };
+  const earned = Object.values(state.unlocks).some((u) => u !== undefined && u.by !== 'developer');
+  return { modes, fresh, earned };
 }
 
 /** Developer options' view: the rules, each path's progress, and the raw counters. */
@@ -332,7 +343,7 @@ export function modesDeveloperView(state: ModesState): ModesDeveloperView {
   return {
     modes: sealable.map((id) => {
       const done = state.unlocks[id];
-      const byLabel = !done ? '' : done.by === 'word' ? 'the word' : done.by === 'developer' ? 'you, from here' : `the ${MODE_PATHS.find((p) => p.id === done.by)?.id.split('.')[1] ?? done.by} path`;
+      const byLabel = !done ? '' : done.by === 'word' ? 'the word' : done.by === 'developer' ? 'you, from here' : `the ${MODE_PATHS.find((p) => p.id === done.by)?.id.split('.')[1] ?? RETIRED_PATHS[done.by]?.label ?? done.by} path`;
       return {
         id,
         title: MODE_INFO[id].title,

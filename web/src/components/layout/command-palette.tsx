@@ -17,7 +17,7 @@ import { siteSections } from '@/lib/site-tabs';
 import { SITE_TAB_ICONS } from '@/features/site/site-shared';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-import { reportModeEvent, speakModeWord, useActiveMode, useModeText, useModesView, usePageName } from '@/lib/modes';
+import { reportModeEvent, speakModeWord, useActiveMode, useModeText, useModesEntry, useModesView, usePageName } from '@/lib/modes';
 import { EFFECTS_ON, MODE_INFO, MODE_WORDS, type SealedModeId } from '@devmagic-panel/shared';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 
@@ -104,6 +104,8 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
   const name = usePageName();
   const text = useModeText();
   const { mode } = useActiveMode();
+  // Modes is listed once a mode was earned, as the menu's palette icon.
+  const showModes = useModesEntry();
   const commands = useMemo<Command[]>(() => {
     // A page's name in the mode on screen, with the Classic one in the hint so typing either finds it.
     const page = (id: string, classic: string, hint: string | undefined, icon: ReactNode, href: string): Command => {
@@ -125,7 +127,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
       page('services', 'Services', undefined, <Server />, '/services'),
       { id: 'machine', label: 'Machine checks', hint: 'Aura: Apache, MySQL, PHP, tools', icon: <Activity />, group: 'Go to', run: () => navigate('/aura/machine') },
       page('settings', 'Settings', 'password, AI assistant, Claude Code defaults', <Settings />, '/settings'),
-      page('modes', 'Modes', 'how the panel looks: themes and effects', <Palette />, '/modes'),
+      ...(showModes ? [page('modes', 'Modes', 'how the panel looks: themes and effects', <Palette />, '/modes')] : []),
       { id: 'password', label: 'Change the panel password', hint: 'on Settings', icon: <KeyRound />, group: 'Actions', run: () => navigate('/settings') },
       { id: 'sanctum', label: 'Sanctum', hint: 'the panel: programs running, background tasks, storage', icon: <HeartPulse />, group: 'Go to', run: () => navigate('/sanctum') },
       page('activity', 'Activity', 'jobs since the panel started', <ListChecks />, '/activity'),
@@ -164,7 +166,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
     const run = actionCommands(sites, here);
     return [...sections.filter((c) => c.group === 'Sections'), ...run.filter((c) => c.group === 'This site'), ...pages, ...perSite, ...run.filter((c) => c.group !== 'This site'), ...sections.filter((c) => c.group !== 'Sections')];
     // With the mode: the pages' names change with it.
-  }, [sites, drafts, here, mode]);
+  }, [sites, drafts, here, mode, showModes]);
 
   const q = query.trim().toLowerCase();
   // A mode's whole word, typed exactly, and nothing for part of a word, so typing gives no hints: sealed, a

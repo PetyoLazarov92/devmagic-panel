@@ -1,24 +1,142 @@
-import type { ModesDeveloperView, SealedModeId } from '@devmagic-panel/shared';
+import type { ModePuzzleQuestion, ModesDeveloperView, SealedModeId } from '@devmagic-panel/shared';
 import { Palette } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
+import { Dialog } from '@/components/ui/dialog';
+import { IconButton } from '@/components/ui/icon-button';
 import { Fold } from '@/components/ui/fold';
 import { Notice } from '@/components/ui/notice';
 import { api } from '@/lib/api';
 import { shortDate } from '@/lib/format';
 import { loadPreferences } from '@/lib/preferences';
-import { refreshModes } from '@/lib/modes';
+import { refreshModes, useModesView } from '@/lib/modes';
 import { useAsync } from '@/lib/use-async';
 
+/** Taps on the card's palette icon that open the puzzle; a pause of two seconds starts over. */
+const TAPS = 7;
+
 /**
- * Developer options' card for the modes: each mode's paths with their rule
- * and progress, and the buttons to unlock, seal, fill a path for a test,
- * start a path or a mode over, and show the unlock dialog again. Only here
- * are the rules shown.
+ * Developer options' card for the modes. Locked, it lists each mode's name and
+ * whether it is unlocked, nothing more. Seven taps on its palette icon ask a
+ * puzzle; solved, the paths, their progress, the words and the buttons show
+ * until Developer options are switched off. The panel itself keeps them back
+ * until then.
  */
 export function DeveloperModes() {
+  const { data: state, reload } = useAsync(() => api.modesDeveloperState(), []);
+  const [asking, setAsking] = useState(false);
+  const taps = useRef({ count: 0, last: 0 });
+  function tap() {
+    const now = Date.now();
+    const t = taps.current;
+    t.count = now - t.last > 2000 ? 1 : t.count + 1;
+    t.last = now;
+    if (t.count >= TAPS) {
+      t.count = 0;
+      setAsking(true);
+    }
+  }
+  if (state?.open) return <ModesSecrets />;
+  return (
+    <>
+      <ModesLocked onTap={tap} />
+      <ModesPuzzle
+        open={asking}
+        onClose={() => setAsking(false)}
+        onSolved={() => {
+          setAsking(false);
+          reload();
+        }}
+      />
+    </>
+  );
+}
+
+/** The locked card: each mode's name and status; its palette icon counts the taps. */
+function ModesLocked({ onTap }: { onTap: () => void }) {
+  const view = useModesView();
+  useEffect(() => void refreshModes(true), []);
+  const modes = view?.modes.filter((m) => m.id !== 'classic') ?? [];
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader
+        title="Modes"
+        description="Each mode and whether it is unlocked."
+        meta={
+          // Looks like the icon it always was; seven taps on it ask the puzzle.
+          <IconButton icon={Palette} label="Modes" size="icon-sm" onClick={onTap} className="cursor-default text-muted-foreground select-none hover:bg-transparent hover:text-muted-foreground" />
+        }
+      />
+      <CardBody>
+        <ul className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          {modes.map((m) => (
+            <li key={m.id} className="flex items-center justify-between gap-3">
+              <span className="font-medium">{m.title}</span>
+              {m.unlocked ? <Badge tone="success">Unlocked</Badge> : <Badge>Sealed</Badge>}
+            </li>
+          ))}
+        </ul>
+      </CardBody>
+    </Card>
+  );
+}
+
+/** One question at a time from the panel; a wrong answer brings a new one. */
+function ModesPuzzle({ open, onClose, onSolved }: { open: boolean; onClose: () => void; onSolved: () => void }) {
+  const [question, setQuestion] = useState<ModePuzzleQuestion | null>(null);
+  const [wrong, setWrong] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setWrong(false);
+    setFailed(null);
+    setQuestion(null);
+    api.modesPuzzle().then(setQuestion, (e: Error) => setFailed(e.message));
+  }, [open]);
+  async function answer(choice: number) {
+    if (!question) return;
+    setBusy(true);
+    setFailed(null);
+    try {
+      const result = await api.modesPuzzleAnswer(question.id, choice);
+      if (result.solved) onSolved();
+      else {
+        setWrong(true);
+        setQuestion(result.next);
+      }
+    } catch (e) {
+      setFailed((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog open={open} onClose={onClose} title="A question first" description="Answer it to see how each mode opens.">
+      <div className="grid gap-4">
+        {failed && <Notice size="inline">{failed}</Notice>}
+        {wrong && <Notice size="inline" tone="warning">Not that one. Here is another question.</Notice>}
+        {question && (
+          <>
+            <p className="text-base font-medium">{question.question}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {question.options.map((o, i) => (
+                <Button key={`${question.id}-${o}`} variant="outline" disabled={busy} onClick={() => void answer(i)}>
+                  {o}
+                </Button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
+/** Opened: each mode's paths with their rule and progress, its word, and the buttons to unlock, seal, fill or start over. */
+function ModesSecrets() {
   const { data, error, reload } = useAsync(() => api.modesDeveloper(), []);
   const [shown, setShown] = useState<ModesDeveloperView | null>(null);
   const [busy, setBusy] = useState(false);

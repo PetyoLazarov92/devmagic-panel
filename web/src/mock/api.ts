@@ -1,6 +1,6 @@
 import type { BackgroundTask, PanelStorage, HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, WporgDetails, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
-import { countMode, startFreshPaths, emptyModesState, isUnlocked, type ModesState, modesDeveloper, modesDeveloperView, modesView, readModesState, speakWord, accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
+import { nextPuzzle, type ModePuzzle, puzzleQuestion, countMode, startFreshPaths, emptyModesState, isUnlocked, type ModesState, modesDeveloper, modesDeveloperView, modesView, readModesState, speakWord, accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
@@ -1074,6 +1074,25 @@ const mockPreferences: Preferences = (() => {
   }
 })();
 
+// Developer options' puzzle in the demo: the question asked, and whether it was solved in this tab.
+let mockPuzzle: ModePuzzle | undefined;
+const MOCK_MODES_OPEN = 'dmp-mock-modes-open';
+function mockModesOpen(): boolean {
+  try {
+    return sessionStorage.getItem(MOCK_MODES_OPEN) === '1';
+  } catch {
+    return false;
+  }
+}
+function setMockModesOpen(open: boolean): void {
+  try {
+    if (open) sessionStorage.setItem(MOCK_MODES_OPEN, '1');
+    else sessionStorage.removeItem(MOCK_MODES_OPEN);
+  } catch {
+    // the demo forgets it then
+  }
+}
+
 // The modes' progress, kept in this browser: the same rules as the panel's, counted from what the demo can see.
 const MOCK_MODES_KEY = 'dmp-mock-modes';
 function mockModes(): ModesState {
@@ -1396,7 +1415,10 @@ export const mockApi: Api = {
     const state = changeMockModes((st) => { unlocked = speakWord(st, word); });
     return { ...modesView(state), unlocked };
   },
-  modesDeveloper: async () => modesDeveloperView(mockModes()),
+  modesDeveloper: async () => {
+    if (!mockModesOpen()) throw new Error('The modes are locked: solve the puzzle first');
+    return modesDeveloperView(mockModes());
+  },
   modeDeveloper: async (mode, what) => {
     const state = changeMockModes((st) => {
       if (what === 'unlock') modesDeveloper.unlock(st, mode);
@@ -1407,6 +1429,22 @@ export const mockApi: Api = {
     return modesDeveloperView(state);
   },
   modePath: async (path, what) => modesDeveloperView(changeMockModes((st) => void (what === 'reset' ? modesDeveloper.resetPath(st, path) : modesDeveloper.completePath(st, path)))),
+  // The puzzle as the panel asks it, the open state kept for this tab only.
+  modesDeveloperState: async () => ({ open: mockModesOpen() }),
+  modesPuzzle: async () => puzzleQuestion((mockPuzzle = nextPuzzle(mockPuzzle?.id))),
+  modesPuzzleAnswer: async (id, choice) => {
+    const asked = mockPuzzle;
+    mockPuzzle = nextPuzzle(asked?.id);
+    if (asked && asked.id === id && asked.answer === choice) {
+      setMockModesOpen(true);
+      return { solved: true };
+    }
+    return { solved: false, next: puzzleQuestion(mockPuzzle) };
+  },
+  modesLock: async () => {
+    setMockModesOpen(false);
+    return { open: false };
+  },
   savePreferences: async (update) => {
     if (update.mode && !isUnlocked(mockModes(), update.mode)) throw new Error('That mode is still sealed');
     Object.assign(mockPreferences, update);

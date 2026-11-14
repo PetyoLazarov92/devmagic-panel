@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.61.0 (2026-11-14)
+* **Modes:** the way to the Modes page appears in the menu and in Ctrl+K once you find your first mode. Developer options' Modes card lists each mode and its status, and keeps how they open behind a small puzzle; switching the options off locks it again
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.60.1 (2026-11-14)
 * **Modes:** outline, soft and danger buttons show their hover clearly in every mode that styles them its own way, the small ones too, and in Chrome the droplets in a card's corner flow together smoothly when you point at it, and the page you are on in a menu has a soft silver tint
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

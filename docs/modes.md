@@ -8,7 +8,8 @@ on purpose: finding it is part of the fun.
 ## The Modes page
 
 The palette icon at the bottom of the menu opens it (`/modes`), as does Modes
-in Ctrl+K. The mode you use is the wide card on top, with:
+in Ctrl+K. Both appear once you find your first mode, by one of its ways in or
+its word; a mode opened from Developer options does not show them. The mode you use is the wide card on top, with:
 
 - a small picture of the panel in that mode,
 - the theme switch (Light, Dark, System), the same as in the top bar,
@@ -430,8 +431,10 @@ and anything that removes something stay plain.
 
 ## Trying it out
 
-[Developer options](pages.md#developer-options) has a Modes card that unlocks
-and seals each mode and fills or resets its paths; an unlock from there shows
-the unlock dialog, as any other. The dialog opens with its Switch button
-ready, so Enter switches. To see it again, seal the mode and unlock it once
-more.
+[Developer options](pages.md#developer-options) has a Modes card. It lists
+each mode and whether it is unlocked, and keeps the rest to itself: how each
+mode opens, its progress and its word stay hidden behind a small puzzle you
+have to find first. Solved, the card shows them, with buttons to unlock and
+seal each mode and to fill or reset its paths; an unlock from there shows the
+unlock dialog, as any other. The dialog opens with its Switch button ready, so
+Enter switches. Switching Developer options off locks the card again.

@@ -33,6 +33,8 @@ export function DeveloperPage() {
 
   function turnOff() {
     setDeveloper(false);
+    // The modes' secrets close with the options: turned on again, it takes the taps and a puzzle again.
+    void api.modesLock().catch(() => undefined);
     toast({ tone: 'info', title: 'Developer options are off', detail: 'Tap the version seven times to turn them on again.' });
     navigate('/sites');
   }

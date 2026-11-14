@@ -169,6 +169,7 @@ export function countAction(progress: ModeProgress, id: string, input: unknown):
   if (id === 'mysql.undoRowChange' || id === 'mysql.undoCleanup' || id === 'cron.undo' || id === 'wpcron.undo') progress.count('undo');
   if (id === 'site.setServer' && input && typeof input === 'object') {
     const { domain, server } = input as { domain?: unknown; server?: unknown };
-    if (typeof domain === 'string' && (server === 'nginx' || server === 'nginx-apache')) progress.count('nginxSite', domain);
+    // Every move counts, either way: to nginx, to nginx in front of Apache, or back to Apache.
+    if (typeof domain === 'string' && typeof server === 'string') progress.count('serverMove');
   }
 }
