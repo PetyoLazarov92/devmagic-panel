@@ -72,6 +72,12 @@ describe('mode names and lines', () => {
     expect(modeText('allGood', 'deco')).toBe('All in order');
   });
 
+  it("gives pages Chrome's names", () => {
+    expect(pageName('Sites', 'chrome')).toBe('Fleet');
+    expect(pageName('Activity', 'chrome')).toBe('Telemetry');
+    expect(modeText('aiReading', 'chrome')).toBe('Running diagnostics...');
+  });
+
   it('says a line its own way in Wizard, and the plain one in Classic', () => {
     expect(modeText('newSite', 'wizard')).toBe('Conjure a site');
     expect(modeText('newSite', 'classic')).toBe('New site');

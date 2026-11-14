@@ -396,6 +396,37 @@ way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Chrome
+
+Liquid metal: cards of brushed metal with a highlight along their top edge,
+titles in polished chrome lettering, pills for buttons and chips, a metal
+gradient for the main button and whatever is chosen, and chrome droplets in one
+corner of each card, graphite in the dark theme and pale steel in the light
+one. A healthy site's dot is a small chrome bead. The effects add a few soft
+blobs of silver light drifting slowly behind the pages (Background, CSS only);
+a silver ripple like a drop into mercury, with a few droplets splashing, where
+you click a button or link, with nothing following the cursor (Pointer); and a
+reflection sweeping across each card now and then, cards out of step, a broken
+site's edge breathing red and the healthy bead glinting (Elements). A chrome
+ring turns where something runs. Pages it names its own way:
+
+| Classic | Chrome |
+| --- | --- |
+| Demo | Prototype |
+| Sites | Fleet |
+| Aura | Diagnostics |
+| Mail | Transmissions |
+| Services | Engine bay |
+| WP Cores | Alloys |
+| Activity | Telemetry |
+| Updates | Upgrades |
+| Settings | Controls |
+| Modes | Finishes |
+| Developer options | Lab |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks

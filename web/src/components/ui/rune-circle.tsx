@@ -163,3 +163,17 @@ export function Sunburst({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Chrome's turning icon: a ring of polished metal with a bright highlight
+ * running around it while something runs.
+ */
+export function ChromeRing({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} style={{ animationDuration: '1.2s' }} aria-hidden>
+      <circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" strokeOpacity="0.3" strokeWidth="8" />
+      <path d="M32 10a22 22 0 0 1 22 22" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" />
+      <circle cx="44" cy="14" r="3" fill="#fff" fillOpacity="0.8" />
+    </svg>
+  );
+}

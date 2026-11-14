@@ -9,6 +9,7 @@ import { DuneEffects } from '@/features/modes/dune-effects';
 import { PixelEffects } from '@/features/modes/pixel-effects';
 import { SorbetEffects } from '@/features/modes/sorbet-effects';
 import { DecoEffects } from '@/features/modes/deco-effects';
+import { ChromeEffects } from '@/features/modes/chrome-effects';
 import { useActiveMode } from '@/lib/modes';
 
 /** The most particles alive at once, so a long drag never piles them up. */
@@ -82,6 +83,8 @@ export function ModeEffects() {
   if (mode === 'sorbet') return effects.pointer ? <SorbetEffects /> : null;
   // Art Deco's pattern and shimmer are CSS; only a click's fan needs a canvas.
   if (mode === 'deco') return effects.pointer ? <DecoEffects /> : null;
+  // Chrome's drifting light is CSS; only a click's ripple needs a canvas.
+  if (mode === 'chrome') return effects.pointer ? <ChromeEffects /> : null;
   const on = mode === 'wizard' && (effects.pointer || effects.background || effects.elements);
   if (!on) return null;
   return <WizardCanvas pointer={effects.pointer} background={effects.background} elements={effects.elements} />;

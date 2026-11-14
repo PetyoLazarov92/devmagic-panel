@@ -240,6 +240,18 @@ describe('mode progress', () => {
     expect(progress.developerView().modes.find((m) => m.id === 'deco')?.unlocked?.by).toBe('deco.guests');
   });
 
+  it("counts Chrome's search and replace runs and its service restarts and reloads", () => {
+    const progress = new ModeProgress(memory());
+    const count = (id: string) => progress.developerView().counters.find((c) => c.id === id)?.count ?? 0;
+    countAction(progress, 'db.searchReplace', { domain: 'local.spellbook.example' });
+    countAction(progress, 'service.restart', {});
+    countAction(progress, 'apache.reload', {});
+    countAction(progress, 'nginx.reload', {});
+    expect([count('searchReplace'), count('serviceRestart')]).toEqual([1, 3]);
+    for (let i = 0; i < 9; i++) countAction(progress, 'db.searchReplace', {});
+    expect(progress.developerView().modes.find((m) => m.id === 'chrome')?.unlocked?.by).toBe('chrome.polish');
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);

@@ -8,7 +8,7 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink', 'dune', 'pixel', 'sorbet', 'deco'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink', 'dune', 'pixel', 'sorbet', 'deco', 'chrome'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
@@ -25,6 +25,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   pixel: { title: 'Pixel', description: 'Square edges and hard shadows: a pixel heart over stepped hills, a +1 where you click, and a few pages named for the game.' },
   sorbet: { title: 'Sorbet', description: 'Pastel mint, strawberry and lemon: rounded everything, three scoops in each corner, sprinkles where you click, and a few pages named for the ice cream parlor.' },
   deco: { title: 'Art Deco', description: 'Gold on black or ivory: a fine gold frame, a sunburst fan in each corner, a gold star where you click, and a few pages named for the grand hotel.' },
+  chrome: { title: 'Chrome', description: 'Liquid metal: chrome titles, a reflection sweeping across each card, chrome droplets in each corner, a ripple of mercury where you click, and a few pages named for the machine.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -93,10 +94,15 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: "A sheen passes over each card's sunburst now and then, a broken site's inner frame turns red and breathes, a healthy site's diamond glows gold, a sunburst turns where something runs.",
     background: 'A fine diagonal pattern behind the pages, and now and then a faint band of gold shimmer crossing it.',
   },
+  chrome: {
+    pointer: 'A click sends a silver ripple out like a drop into mercury, with a few droplets splashing.',
+    elements: "A reflection sweeps across each card now and then, a broken site's edge breathes red, a healthy site's bead glints, a chrome ring turns where something runs.",
+    background: 'Soft blobs of silver light drift slowly behind the pages, like light on liquid metal.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
-export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy', 'fileSave', 'certReissue', 'dbClean', 'usedDay', 'dbSnapshot', 'cronTask', 'modeEarned', 'jobContinue', 'itemInstall', 'cacheClear', 'pluginToggle', 'branchSwitch', 'aliasAdd', 'tablePolish', 'siteTakeOver'] as const;
+export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy', 'fileSave', 'certReissue', 'dbClean', 'usedDay', 'dbSnapshot', 'cronTask', 'modeEarned', 'jobContinue', 'itemInstall', 'cacheClear', 'pluginToggle', 'branchSwitch', 'aliasAdd', 'tablePolish', 'siteTakeOver', 'prodRefresh', 'searchReplace', 'serviceRestart'] as const;
 export type ModeCounter = (typeof MODE_COUNTERS)[number];
 /** The counters the browser reports itself; the rest the server counts as things finish. */
 export const BROWSER_COUNTERS = ['auraFix', 'paletteCommand'] as const satisfies readonly ModeCounter[];
@@ -155,13 +161,16 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'deco.guests', mode: 'deco', counter: 'aliasAdd', goal: 12, riddle: 'Put twelve names on the guest list.', line: 'Twelve names on the guest list.', rule: 'Add 12 aliases to sites (each alias counts)', startsFresh: true },
   { id: 'deco.brass', mode: 'deco', counter: 'tablePolish', goal: 10, riddle: 'Polish the brass ten times.', line: 'Ten times the brass, polished.', rule: 'Optimize, analyze or repair database tables, or convert them to InnoDB, 10 times', startsFresh: true },
   { id: 'deco.residents', mode: 'deco', counter: 'siteTakeOver', goal: 2, riddle: 'Welcome two old residents into the hotel.', line: 'Two old residents, welcomed into the hotel.', rule: 'Take over 2 sites made by hand', startsFresh: true },
+  { id: 'chrome.mirror', mode: 'chrome', counter: 'prodRefresh', goal: 5, riddle: 'Hold up the mirror five times.', line: 'Five times, a perfect reflection.', rule: "Refresh a site's database from production 5 times", startsFresh: true },
+  { id: 'chrome.polish', mode: 'chrome', counter: 'searchReplace', goal: 10, riddle: 'Buff out ten scratches.', line: 'Ten scratches, buffed out.', rule: "Run a search and replace on a site's database 10 times", startsFresh: true },
+  { id: 'chrome.engine', mode: 'chrome', counter: 'serviceRestart', goal: 20, riddle: 'Rev the engine twenty times.', line: 'Twenty revs of the engine.', rule: 'Restart or reload a service (Apache, nginx, PHP-FPM, MySQL and the like) 20 times', startsFresh: true },
 ];
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy', dune: 'sandstorm', pixel: 'extralife', sorbet: 'brainfreeze', deco: 'champagne' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.', ink: 'The ink took to the paper.', dune: 'The storm let you through.', pixel: 'One extra life.', sorbet: 'Brain freeze, worth it.', deco: 'Champagne for everyone.' };
+export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy', dune: 'sandstorm', pixel: 'extralife', sorbet: 'brainfreeze', deco: 'champagne', chrome: 'quicksilver' };
+export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.', ink: 'The ink took to the paper.', dune: 'The storm let you through.', pixel: 'One extra life.', sorbet: 'Brain freeze, worth it.', deco: 'Champagne for everyone.', chrome: 'Quicksilver, in your hands.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.', dune: 'The dunes are shifting.', pixel: 'Player one, ready.', sorbet: 'Help yourself to a scoop.', deco: 'The ballroom is open.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.', dune: 'The dunes are shifting.', pixel: 'Player one, ready.', sorbet: 'Help yourself to a scoop.', deco: 'The ballroom is open.', chrome: 'Polished to a mirror shine.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;

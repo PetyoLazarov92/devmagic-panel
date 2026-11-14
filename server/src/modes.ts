@@ -157,6 +157,8 @@ export function countAction(progress: ModeProgress, id: string, input: unknown):
     if (Array.isArray(aliases) && aliases.length > 0) progress.count('aliasAdd', undefined, aliases.length);
   }
   if (id === 'mysql.optimize' || id === 'mysql.analyze' || id === 'db.fixTables' || id === 'db.toInnodb') progress.count('tablePolish');
+  if (id === 'db.searchReplace') progress.count('searchReplace');
+  if (id === 'service.restart' || id === 'apache.reload' || id === 'nginx.reload') progress.count('serviceRestart');
   if (id === 'site.installPlugins' && input && typeof input === 'object') {
     const { plugins, themes } = input as { plugins?: unknown; themes?: unknown };
     const n = (Array.isArray(plugins) ? plugins.length : 0) + (Array.isArray(themes) ? themes.length : 0);

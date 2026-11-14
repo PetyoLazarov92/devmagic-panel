@@ -1,0 +1,477 @@
+/*
+ * Chrome: liquid metal. Graphite in dark and pale steel in light, cards of
+ * brushed metal, titles in polished chrome lettering, pills for buttons and
+ * chips, a metal gradient for the main button and what is chosen, and chrome
+ * droplets in each card's corner. data-mode="chrome" on the root, data-fx
+ * while Elements is on, data-fx-bg while Background is on (the drifting light
+ * is CSS); a click's mercury ripple on one canvas
+ * (features/modes/chrome-effects.tsx).
+ */
+:root[data-mode='chrome']:not(.dark) {
+  --background: #eef0f3;
+  --foreground: #1a1e24;
+  --card: #fbfcfd;
+  --muted: #e8ebef;
+  --muted-foreground: #56606c;
+  --border: #d4d9e0;
+  --input: #c0c7d0;
+  --ring: #3a4450;
+  --primary: #3a4450;
+  --primary-foreground: #fbfcfd;
+  --secondary: #e6e9ee;
+  --secondary-foreground: #2a323c;
+  --success: #1a7a58;
+  --warning: #8a6200;
+  --danger: #c0303a;
+  --cr-silver: #6a7480;
+  --cr-hi: #ffffff;
+  --cr-mid: #aab4c0;
+  --cr-lo: #5a6470;
+  --cr-brushed: linear-gradient(160deg, #ffffff, #f1f3f6 60%, #fbfcfd);
+  --cr-metal: linear-gradient(180deg, #f6f8fa, #c3cad3);
+  --cr-title: linear-gradient(180deg, #5a6470 15%, #1a1e24 55%, #6a7480 85%);
+  --cr-raised: #ffffff;
+  --cr-chosen-ink: #1a1e24;
+  --cr-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cdefs%3E%3CradialGradient id='m' cx='.35' cy='.3'%3E%3Cstop offset='0' stop-color='%23ffffff'/%3E%3Cstop offset='.4' stop-color='%23b8c2ce' stop-opacity='.75'/%3E%3Cstop offset='1' stop-color='%236a7480' stop-opacity='.55'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='166' cy='84' r='22' fill='url(%23m)'/%3E%3Ccircle cx='128' cy='102' r='10' fill='url(%23m)'/%3E%3Ccircle cx='186' cy='48' r='6.5' fill='url(%23m)'/%3E%3C/svg%3E");
+}
+:root[data-mode='chrome'].dark {
+  --background: #0d0f12;
+  --foreground: #eef2f6;
+  --card: #1a1d22;
+  --muted: #1f2328;
+  --muted-foreground: #9aa4b0;
+  --border: #30353d;
+  --input: #3a4049;
+  --ring: #c8d2de;
+  --primary: #c8d2de;
+  --primary-foreground: #0d0f12;
+  --secondary: #23272d;
+  --secondary-foreground: #e2e8ee;
+  --success: #9fe8c8;
+  --warning: #f0c86a;
+  --danger: #ff6f7a;
+  --cr-silver: #c8d2de;
+  --cr-hi: #ffffff;
+  --cr-mid: #b8c2ce;
+  --cr-lo: #3a4049;
+  --cr-brushed: linear-gradient(160deg, #20242a, #16191d 60%, #1c2026);
+  --cr-metal: linear-gradient(180deg, #4a515b, #2a2f36);
+  --cr-title: linear-gradient(180deg, #ffffff 15%, #9aa4b0 55%, #e8edf2 85%);
+  --cr-raised: #1f2329;
+  --cr-chosen-ink: #ffffff;
+  --cr-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cdefs%3E%3CradialGradient id='m' cx='.35' cy='.3'%3E%3Cstop offset='0' stop-color='%23ffffff' stop-opacity='.9'/%3E%3Cstop offset='.35' stop-color='%23b8c2ce' stop-opacity='.55'/%3E%3Cstop offset='1' stop-color='%233a4049' stop-opacity='.45'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='166' cy='84' r='22' fill='url(%23m)'/%3E%3Ccircle cx='128' cy='102' r='10' fill='url(%23m)'/%3E%3Ccircle cx='186' cy='48' r='6.5' fill='url(%23m)'/%3E%3C/svg%3E");
+}
+:root[data-mode='chrome'] {
+  --cr-chosen: color-mix(in srgb, var(--cr-silver) 16%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --cr-veil: 85%;
+  scrollbar-color: color-mix(in srgb, var(--cr-silver) 45%, var(--border)) transparent;
+}
+
+/* Names: titles in polished chrome lettering; one holding an icon or a badge keeps plain ink, so they still show. */
+:root[data-mode='chrome'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+:root[data-mode='chrome'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']):not(:has(svg, img, [data-ui='badge'])) {
+  background: var(--cr-title);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-mode='chrome'] [data-ui='tile'] > span:first-child {
+  font-weight: 650;
+  color: var(--primary);
+}
+
+/* Cards: brushed metal, rounded, a highlight along the top edge, chrome droplets in the bottom right corner (::after). */
+:root[data-mode='chrome'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 12px;
+  border-color: var(--border);
+  background-image: var(--cr-brushed);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 80%, transparent), 0 10px 24px -18px color-mix(in srgb, #1a1e24 50%, transparent);
+}
+:root[data-mode='chrome'].dark [data-ui='card'] {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 12%, transparent), 0 10px 26px -16px #000;
+}
+:root[data-mode='chrome'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 200px;
+  height: 120px;
+  max-width: 100%;
+  max-height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0 0 12px 0;
+  background: var(--cr-corner) right bottom / 200px 120px no-repeat;
+}
+/* The reflection: a soft band of light sweeping across each card now and then while Elements is on, cards out of step. */
+:root[data-mode='chrome'][data-fx] [data-ui='card']:not([data-health='fail'])::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 42%, color-mix(in srgb, #ffffff 12%, transparent) 50%, transparent 58%) 0 0 / 300% 100% no-repeat;
+  background-position: 100% 0;
+  animation: cr-sweep 10s ease-in-out infinite;
+}
+:root[data-mode='chrome']:not(.dark)[data-fx] [data-ui='card']:not([data-health='fail'])::before {
+  background-image: linear-gradient(110deg, transparent 42%, color-mix(in srgb, #ffffff 70%, transparent) 50%, transparent 58%);
+}
+:root[data-mode='chrome'][data-fx] [data-ui='card']:nth-of-type(2n):not([data-health='fail'])::before {
+  animation-delay: -3.3s;
+}
+:root[data-mode='chrome'][data-fx] [data-ui='card']:nth-of-type(3n):not([data-health='fail'])::before {
+  animation-delay: -6.6s;
+}
+@keyframes cr-sweep {
+  0%, 82% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+:root[data-mode='chrome'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='chrome'] dialog [data-ui='card']::after,
+:root[data-mode='chrome'] dialog [data-ui='card']::before {
+  display: none;
+}
+
+/* A broken site: a red edge that breathes slowly while Elements is on. */
+:root[data-mode='chrome'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+}
+:root[data-mode='chrome'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 12px;
+  box-shadow: inset 0 0 20px -6px color-mix(in srgb, var(--danger) 45%, transparent), 0 0 16px -8px var(--danger);
+}
+:root[data-mode='chrome'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: cr-breathe 6s ease-in-out infinite;
+}
+@keyframes cr-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+/* A healthy dot is a small chrome bead tinted green that glints now and then; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='chrome'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+  background-image: radial-gradient(circle at 35% 30%, color-mix(in srgb, #ffffff 85%, transparent), transparent 55%);
+}
+:root[data-mode='chrome'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--cr-hi) 55%, transparent);
+  opacity: 0;
+  animation: cr-glint 7s ease-in-out infinite;
+}
+@keyframes cr-glint {
+  0%, 85%, 100% { opacity: 0; }
+  92% { opacity: 1; }
+}
+
+/* Everything else with a frame: rounded. */
+:root[data-mode='chrome'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 10px;
+}
+:root[data-mode='chrome'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='chrome'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #1a1e24 40%, transparent);
+}
+:root[data-mode='chrome'] [data-ui='tile'] {
+  border-radius: 10px;
+}
+:root[data-mode='chrome']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='chrome'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 10px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--cr-veil), transparent);
+}
+:root[data-mode='chrome'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='chrome'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='chrome'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='chrome'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--cr-veil), transparent);
+}
+:root[data-mode='chrome'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--cr-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='chrome'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='chrome'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--cr-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #0d0f12 50%, transparent);
+}
+:root[data-mode='chrome'] [data-ui='dialog'] {
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--cr-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #0d0f12 60%, transparent);
+}
+:root[data-mode='chrome'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='chrome'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #0d0f12 50%, transparent);
+}
+:root[data-mode='chrome'] :is([role='menuitem'], [role='option']) {
+  border-radius: 10px;
+}
+:root[data-mode='chrome'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--cr-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='chrome'] select.dmp-select::picker(select) {
+    border-radius: 14px;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--cr-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #0d0f12 50%, transparent);
+  }
+  :root[data-mode='chrome'] select.dmp-select option {
+    border-radius: 14px;
+  }
+  :root[data-mode='chrome'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--cr-chosen);
+  }
+  :root[data-mode='chrome'] select.dmp-select option:checked {
+    background: var(--cr-chosen);
+    color: var(--cr-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, a silver edge while you type. */
+:root[data-mode='chrome'] [data-ui='input'] {
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='chrome'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='chrome'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: rounded; the main one a soft silver. */
+:root[data-mode='chrome'] [data-ui='button'],
+:root[data-mode='chrome'] [data-ui='chip'] {
+  border-radius: 10px;
+}
+:root[data-mode='chrome'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--cr-silver) 50%, transparent);
+  background-color: var(--cr-chosen);
+  color: var(--cr-chosen-ink);
+}
+:root[data-mode='chrome'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--cr-silver) 20%, var(--card));
+}
+:root[data-mode='chrome'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--cr-veil), transparent);
+}
+
+/* Whatever is chosen: a soft silver fill. */
+:root[data-mode='chrome'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--cr-silver) 50%, transparent);
+  background: var(--cr-chosen);
+  color: var(--cr-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='chrome'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 10px;
+  background: var(--cr-chosen);
+  color: var(--cr-chosen-ink);
+}
+:root[data-mode='chrome'] [data-ui='segmented'],
+:root[data-mode='chrome'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 10px;
+}
+:root[data-mode='chrome'] [role='tab'][aria-selected='true'] {
+  border-color: var(--cr-silver);
+  color: var(--cr-chosen-ink);
+}
+
+/* Switches: a soft silver when on. */
+:root[data-mode='chrome'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='chrome'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='chrome'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: rounded, a silver mark when ticked. */
+:root[data-mode='chrome'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='chrome'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='chrome'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--cr-silver);
+  background-color: var(--cr-chosen);
+}
+:root[data-mode='chrome'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--cr-silver);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='chrome'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--cr-silver);
+}
+:root[data-mode='chrome'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='chrome'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: polished metal with a bright edge. */
+:root[data-mode='chrome'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--cr-silver) 60%, var(--card)), color-mix(in oklab, var(--cr-hi) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint silver rule; the page you are on in a soft silver fill. */
+:root[data-mode='chrome'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='chrome'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 10px;
+  background: var(--cr-chosen);
+  color: var(--cr-chosen-ink);
+}
+
+/* Pills, and polished metal for the main button and whatever is chosen, a highlight along their top edge. */
+:root[data-mode='chrome'] :is([data-ui='button'], [data-ui='chip'], [data-ui='segmented'], [data-ui='segmented'] > [role='radio']) {
+  border-radius: 999px;
+}
+:root[data-mode='chrome'] [data-ui='button'].bg-primary,
+:root[data-mode='chrome'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']),
+:root[data-mode='chrome'] :is(nav[aria-label='Main'] a[aria-current='page'], [data-ui='section-nav'] [aria-current='page']) {
+  background: var(--cr-metal);
+  color: var(--cr-chosen-ink);
+  border-color: color-mix(in srgb, var(--cr-silver) 45%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 35%, transparent), 0 1px 2px color-mix(in srgb, #000 25%, transparent);
+}
+:root[data-mode='chrome'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+:root[data-mode='chrome'] [data-ui='switch'][aria-checked='true'] {
+  background: var(--cr-metal);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cr-silver) 45%, transparent);
+}
+:root[data-mode='chrome'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(180deg, var(--cr-hi), var(--cr-mid) 45%, var(--cr-lo));
+}
+
+/* The background effect, CSS only: a few soft blobs of silver light drifting slowly, moved by transform alone. */
+:root[data-mode='chrome'][data-fx-bg] body::before,
+:root[data-mode='chrome'][data-fx-bg] body::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+}
+:root[data-mode='chrome'][data-fx-bg] body::before {
+  top: -15vh;
+  left: -10vw;
+  width: 55vw;
+  height: 55vh;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--cr-hi) 7%, transparent), transparent);
+  animation: cr-drift-a 45s ease-in-out infinite alternate;
+}
+:root[data-mode='chrome'][data-fx-bg] body::after {
+  bottom: -20vh;
+  right: -10vw;
+  width: 60vw;
+  height: 60vh;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--cr-silver) 9%, transparent), transparent);
+  animation: cr-drift-b 55s ease-in-out infinite alternate;
+}
+:root[data-mode='chrome'][data-fx-bg]:not(.dark) body::before {
+  background: radial-gradient(closest-side, color-mix(in srgb, #ffffff 70%, transparent), transparent);
+}
+@keyframes cr-drift-a {
+  from { transform: translate(0, 0); }
+  to { transform: translate(35vw, 25vh); }
+}
+@keyframes cr-drift-b {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-30vw, -25vh); }
+}
+
+/* Chrome's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='chrome'] {
+  --t-bg: #eef0f3;
+  --t-side: #e6e9ee;
+  --t-line: #c0c7d0;
+  --t-accent: #6a7480;
+  --t-ink: #1a1e24;
+  --t-card: #fbfcfd;
+}
+.dark .mode-thumb[data-thumb='chrome'] {
+  --t-bg: #0d0f12;
+  --t-side: #121519;
+  --t-line: #30353d;
+  --t-accent: #c8d2de;
+  --t-ink: #eef2f6;
+  --t-card: #1a1d22;
+}
+.mode-thumb[data-thumb='chrome'] .mt-main i {
+  border-radius: 8px;
+  background-image: linear-gradient(160deg, color-mix(in srgb, #ffffff 30%, transparent), transparent 60%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='chrome'] :not(.rune-turning),
+  :root[data-mode='chrome'] *::before,
+  :root[data-mode='chrome'] *::after {
+    animation: none !important;
+  }
+}
