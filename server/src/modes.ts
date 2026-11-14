@@ -18,6 +18,9 @@ interface MetaStore {
   setMeta(key: string, value: string): void;
 }
 
+/** A late night runs from midnight to this hour, by this machine's clock. */
+const LATE_NIGHT_ENDS = 4;
+
 /** How often the browser may report the same thing: a burst of clicks counts once a second. */
 const BROWSER_EVENT_GAP_MS = 1000;
 
@@ -27,6 +30,8 @@ const BROWSER_EVENT_GAP_MS = 1000;
  */
 export class ModeProgress {
   private readonly lastBrowserEvent = new Map<BrowserCounter, number>();
+  /** The last late night counted, so the requests after it in the same night skip the database. */
+  private lastNight: string | undefined;
 
   constructor(private readonly store: MetaStore, private readonly now: () => Date = () => new Date()) {
     // A mode this release added starts its paths now, from what the counters hold.
@@ -48,6 +53,16 @@ export class ModeProgress {
   /** One more of something the server saw finish; `key` counts it once per key. */
   count(counter: ModeCounter, key?: string, amount = 1): SealedModeId[] {
     return this.change((state, now) => countMode(state, counter, now, key, amount));
+  }
+
+  /** Something done in the panel: between midnight and 4 in the morning by this machine's clock, that night counts once. */
+  noteLateNight(): SealedModeId[] {
+    const now = this.now();
+    if (now.getHours() >= LATE_NIGHT_ENDS) return [];
+    const night = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (night === this.lastNight) return [];
+    this.lastNight = night;
+    return this.count('lateNight', night);
   }
 
   /** The panel started on `version`: one panel update when it is newer than the one it ran before (a switch back is not one). */
@@ -119,6 +134,7 @@ export function countAction(progress: ModeProgress, id: string, input: unknown):
     if (n > 0) progress.count('pluginUpdate', undefined, n);
   }
   if (id === 'site.setPhp') progress.count('phpSwitch');
+  if (id === 'site.login') progress.count('wpLogin');
   if (id === 'db.restore' || id === 'db.restoreKept' || id === 'trash.restore' || id === 'file.restore') progress.count('restore');
   if (id === 'mysql.undoRowChange' || id === 'mysql.undoCleanup' || id === 'cron.undo' || id === 'wpcron.undo') progress.count('undo');
   if (id === 'site.setServer' && input && typeof input === 'object') {

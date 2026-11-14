@@ -78,3 +78,19 @@ export function Shell({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Neon's turning icon: a cassette reel, its hub and three spokes turning as
+ * one while something runs.
+ */
+export function Reel({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} style={{ animationDuration: '1.8s' }} aria-hidden>
+      <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" strokeWidth="5" strokeOpacity="0.45" />
+      <circle cx="32" cy="32" r="9" fill="none" stroke="currentColor" strokeWidth="5" />
+      {[0, 120, 240].map((a) => (
+        <path key={a} d="M32 23V10" stroke="currentColor" strokeWidth="5" strokeLinecap="round" transform={`rotate(${a} 32 32)`} />
+      ))}
+    </svg>
+  );
+}

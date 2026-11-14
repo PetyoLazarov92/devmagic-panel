@@ -76,6 +76,21 @@ const PAGE_NAMES: Partial<Record<ModeId, Record<string, string>>> = {
     Developer: 'Engine room',
     'Developer options': 'Engine room',
   },
+  neon: {
+    Demo: 'Showroom',
+    Mockup: 'Showroom',
+    Sites: 'Skyline',
+    Aura: 'Signal',
+    Mail: 'Pager',
+    Services: 'Power grid',
+    'WP Cores': 'Cartridges',
+    Activity: 'High scores',
+    Updates: 'Remix',
+    Settings: 'Mixing desk',
+    Modes: 'Jukebox',
+    Developer: 'Back room',
+    'Developer options': 'Back room',
+  },
 };
 
 export function pageName(classic: string, mode: ModeId): string {
@@ -84,12 +99,12 @@ export function pageName(classic: string, mode: ModeId): string {
 
 /** The few lines a mode says its own way. Errors, warnings, status labels and anything that removes something never change. */
 const TEXT = {
-  newSite: { classic: 'New site', wizard: 'Conjure a site', circuit: 'Deploy a site', forge: 'Forge a site', grove: 'Plant a site', abyss: 'Grow a reef' },
-  search: { classic: 'Search sites and actions', wizard: 'Search the portals', circuit: 'Search nodes and commands', forge: 'Search the foundry', grove: 'Search the gardens', abyss: 'Search the reefs' },
-  palette: { classic: 'Jump to a site, a tab or a view, or run an action', wizard: 'Cast a command...', circuit: 'Enter a command_', forge: 'Pick up a tool...', grove: 'What shall we tend?', abyss: 'Where to dive?' },
-  aiReading: { classic: 'Claude is reading your sites...', wizard: 'Scrying your sites...', circuit: 'Scanning your sites...', forge: 'Stoking the fire...', grove: 'Walking the gardens...', abyss: 'Sounding the depths...' },
-  allGood: { classic: 'All good', wizard: 'All wards hold', circuit: 'All systems nominal', forge: 'All fires lit', grove: 'All in bloom', abyss: 'Calm waters' },
-  noJobs: { classic: 'No jobs since the panel started', wizard: 'No quests since the panel woke', circuit: 'Log empty', forge: 'Nothing on the anvil', grove: 'Nothing growing yet', abyss: 'Still waters' },
+  newSite: { classic: 'New site', wizard: 'Conjure a site', circuit: 'Deploy a site', forge: 'Forge a site', grove: 'Plant a site', abyss: 'Grow a reef', neon: 'Light up a site' },
+  search: { classic: 'Search sites and actions', wizard: 'Search the portals', circuit: 'Search nodes and commands', forge: 'Search the foundry', grove: 'Search the gardens', abyss: 'Search the reefs', neon: 'Search the skyline' },
+  palette: { classic: 'Jump to a site, a tab or a view, or run an action', wizard: 'Cast a command...', circuit: 'Enter a command_', forge: 'Pick up a tool...', grove: 'What shall we tend?', abyss: 'Where to dive?', neon: 'Press start...' },
+  aiReading: { classic: 'Claude is reading your sites...', wizard: 'Scrying your sites...', circuit: 'Scanning your sites...', forge: 'Stoking the fire...', grove: 'Walking the gardens...', abyss: 'Sounding the depths...', neon: 'Rewinding the tape...' },
+  allGood: { classic: 'All good', wizard: 'All wards hold', circuit: 'All systems nominal', forge: 'All fires lit', grove: 'All in bloom', abyss: 'Calm waters', neon: 'All lights on' },
+  noJobs: { classic: 'No jobs since the panel started', wizard: 'No quests since the panel woke', circuit: 'Log empty', forge: 'Nothing on the anvil', grove: 'Nothing growing yet', abyss: 'Still waters', neon: 'Quiet night' },
 } satisfies Record<string, { classic: string } & Partial<Record<ModeId, string>>>;
 export type ModeTextKey = keyof typeof TEXT;
 

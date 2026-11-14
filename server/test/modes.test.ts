@@ -127,6 +127,30 @@ describe('mode progress', () => {
     expect(progress.developerView().modes.find((m) => m.id === 'abyss')?.unlocked?.by).toBe('abyss.salvage');
   });
 
+  it("counts Neon's late nights once a night, only before 4 in the morning, its logins and its copies from a server", () => {
+    let now = new Date(2026, 10, 15, 1, 30);
+    const progress = new ModeProgress(memory(), () => now);
+    const count = (id: string) => progress.developerView().counters.find((c) => c.id === id)?.count ?? 0;
+    progress.noteLateNight();
+    progress.noteLateNight();
+    now = new Date(2026, 10, 15, 3, 59);
+    progress.noteLateNight();
+    now = new Date(2026, 10, 15, 4, 0);
+    progress.noteLateNight();
+    now = new Date(2026, 10, 15, 23, 59);
+    progress.noteLateNight();
+    expect(count('lateNight')).toBe(1);
+    for (let d = 16; d <= 19; d++) {
+      now = new Date(2026, 10, d, 0, 5);
+      progress.noteLateNight();
+    }
+    expect(progress.developerView().modes.find((m) => m.id === 'neon')?.unlocked?.by).toBe('neon.nights');
+    countAction(progress, 'site.login', { domain: 'local.spellbook.example' });
+    expect(count('wpLogin')).toBe(1);
+    progress.count('serverCopy');
+    expect(count('serverCopy')).toBe(1);
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);

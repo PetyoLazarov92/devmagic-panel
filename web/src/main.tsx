@@ -10,6 +10,7 @@ import './styles/circuit.css';
 import './styles/forge.css';
 import './styles/grove.css';
 import './styles/abyss.css';
+import './styles/neon.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>

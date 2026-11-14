@@ -8,7 +8,7 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
@@ -19,6 +19,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   forge: { title: 'Forge', description: 'Iron plates with molten cracks, sparks and embers, and a few pages named for the work.' },
   grove: { title: 'Grove', description: 'Rounded leaves, fireflies and a falling leaf, and a few pages named like a garden.' },
   abyss: { title: 'Abyss', description: 'The deep sea: glowing coral, a jellyfish light and rising bubbles, and a few pages named for the ocean.' },
+  neon: { title: 'Neon', description: 'An 80s night: magenta and sunset orange, a light trail, a glowing grid, and a few pages named for the arcade.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -57,10 +58,15 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: 'The coral in each card breathes, a healthy site glows aqua, a broken one glows anemone red, a shell turns where something runs.',
     background: 'Bubbles rise slowly under light falling from the surface.',
   },
+  neon: {
+    pointer: 'A short light trail follows your cursor, and a click sends out a ring of light.',
+    elements: 'Card titles glow like neon, a healthy site glows like a tube, a broken one flickers like a failing sign, a cassette reel turns where something runs.',
+    background: 'A glowing grid drifts very slowly toward you along the bottom of the page, under a few stars.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
-export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay'] as const;
+export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy'] as const;
 export type ModeCounter = (typeof MODE_COUNTERS)[number];
 /** The counters the browser reports itself; the rest the server counts as things finish. */
 export const BROWSER_COUNTERS = ['auraFix', 'paletteCommand'] as const satisfies readonly ModeCounter[];
@@ -101,13 +107,16 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'abyss.salvage', mode: 'abyss', counter: 'restore', goal: 3, riddle: 'Bring three things back from the deep.', line: 'Three things, brought back from the deep.', rule: 'Restore 3 times: a database, kept tables, a removed site or a deleted file', startsFresh: true },
   { id: 'abyss.search', mode: 'abyss', counter: 'fileFind', goal: 20, riddle: 'Search the depths twenty times.', line: 'Twenty searches of the depths.', rule: "Search with the Files tab's find 20 times", startsFresh: true },
   { id: 'abyss.bottles', mode: 'abyss', counter: 'mailDay', goal: 10, riddle: 'Ten days of messages in bottles.', line: 'Ten days of messages in bottles.', rule: 'Open Mail on 10 different days', startsFresh: true },
+  { id: 'neon.nights', mode: 'neon', counter: 'lateNight', goal: 5, riddle: 'Five nights when only the signs are still awake.', line: 'Five nights awake with the signs.', rule: 'Do something in the panel between midnight and 4 in the morning on 5 different nights', startsFresh: true },
+  { id: 'neon.doors', mode: 'neon', counter: 'wpLogin', goal: 50, riddle: 'Fifty doors opened without a key.', line: 'Fifty doors, opened without a key.', rule: "Sign in to wp-admin with the panel's one-click login 50 times", startsFresh: true },
+  { id: 'neon.tapes', mode: 'neon', counter: 'serverCopy', goal: 5, riddle: 'Five tapes brought home from the city.', line: 'Five tapes, brought home from the city.', rule: "Copy plugins, themes or uploads from a site's server 5 times", startsFresh: true },
 ];
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.' };
+export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow' };
+export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;

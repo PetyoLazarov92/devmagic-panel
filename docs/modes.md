@@ -206,6 +206,37 @@ something runs. Pages it names its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Neon
+
+An 80s night: cards a little rounded, with a striped half sun over a glowing
+grid in one corner, deep purple in the dark theme and lilac white in the light
+one, magenta for whatever is chosen with sunset orange beside it, and names
+in a wide face in capitals. The effects add a perspective grid drifting very slowly
+toward you along the bottom of the page under a few still stars (Background,
+CSS only); a short light trail behind the cursor, magenta fading to orange,
+and a ring of light from a click (Pointer); and card titles glowing like neon,
+page titles warming up softly as a page opens, a healthy site's dot glowing like a
+small tube and a broken site's card flickering now and then like a failing
+sign (Elements). A cassette reel turns where something runs. Pages it names
+its own way:
+
+| Classic | Neon |
+| --- | --- |
+| Demo | Showroom |
+| Sites | Skyline |
+| Aura | Signal |
+| Mail | Pager |
+| Services | Power grid |
+| WP Cores | Cartridges |
+| Activity | High scores |
+| Updates | Remix |
+| Settings | Mixing desk |
+| Modes | Jukebox |
+| Developer options | Back room |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks
