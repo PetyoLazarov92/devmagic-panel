@@ -96,7 +96,7 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
   },
   chrome: {
     pointer: 'A click sends a silver ripple out like a drop into mercury, with a few droplets splashing.',
-    elements: "A reflection sweeps across each card now and then, a broken site's edge breathes red, a healthy site's bead glints, a chrome ring turns where something runs.",
+    elements: "A reflection sweeps across each card now and then, its droplets flow together while you point at it, a broken site's edge breathes red, a healthy site's bead glints, a chrome ring turns where something runs.",
     background: 'Soft blobs of silver light drift slowly behind the pages, like light on liquid metal.',
   },
 };

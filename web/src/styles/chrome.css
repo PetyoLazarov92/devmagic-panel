@@ -32,7 +32,8 @@
   --cr-title: linear-gradient(180deg, #5a6470 15%, #1a1e24 55%, #6a7480 85%);
   --cr-raised: #ffffff;
   --cr-chosen-ink: #1a1e24;
-  --cr-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cdefs%3E%3CradialGradient id='m' cx='.35' cy='.3'%3E%3Cstop offset='0' stop-color='%23ffffff'/%3E%3Cstop offset='.4' stop-color='%23b8c2ce' stop-opacity='.75'/%3E%3Cstop offset='1' stop-color='%236a7480' stop-opacity='.55'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='166' cy='84' r='22' fill='url(%23m)'/%3E%3Ccircle cx='128' cy='102' r='10' fill='url(%23m)'/%3E%3Ccircle cx='186' cy='48' r='6.5' fill='url(%23m)'/%3E%3C/svg%3E");
+  --cr-drop-strength: 0.75;
+  --cr-drop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3CradialGradient id='m' cx='.35' cy='.3' r='.75'%3E%3Cstop offset='0' stop-color='%23ffffff'/%3E%3Cstop offset='.4' stop-color='%23b8c2ce'/%3E%3Cstop offset='1' stop-color='%236a7480'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='49' fill='url(%23m)'/%3E%3C/svg%3E");
 }
 :root[data-mode='chrome'].dark {
   --background: #0d0f12;
@@ -59,7 +60,8 @@
   --cr-title: linear-gradient(180deg, #ffffff 15%, #9aa4b0 55%, #e8edf2 85%);
   --cr-raised: #1f2329;
   --cr-chosen-ink: #ffffff;
-  --cr-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cdefs%3E%3CradialGradient id='m' cx='.35' cy='.3'%3E%3Cstop offset='0' stop-color='%23ffffff' stop-opacity='.9'/%3E%3Cstop offset='.35' stop-color='%23b8c2ce' stop-opacity='.55'/%3E%3Cstop offset='1' stop-color='%233a4049' stop-opacity='.45'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='166' cy='84' r='22' fill='url(%23m)'/%3E%3Ccircle cx='128' cy='102' r='10' fill='url(%23m)'/%3E%3Ccircle cx='186' cy='48' r='6.5' fill='url(%23m)'/%3E%3C/svg%3E");
+  --cr-drop-strength: 0.6;
+  --cr-drop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3CradialGradient id='m' cx='.35' cy='.3' r='.75'%3E%3Cstop offset='0' stop-color='%23ffffff'/%3E%3Cstop offset='.35' stop-color='%23b8c2ce'/%3E%3Cstop offset='1' stop-color='%233a4049'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='49' fill='url(%23m)'/%3E%3C/svg%3E");
 }
 :root[data-mode='chrome'] {
   --cr-chosen: color-mix(in srgb, var(--cr-silver) 16%, var(--card));
@@ -84,7 +86,12 @@
   color: var(--primary);
 }
 
-/* Cards: brushed metal, rounded, a highlight along the top edge, chrome droplets in the bottom right corner (::after). */
+/*
+ * Cards: brushed metal, rounded, a highlight along the top edge, and three
+ * chrome droplets in the bottom right corner, cut to the card's height like
+ * the other modes' corners: the big one on ::after, the two small ones on
+ * ::before, so on hover each moves by transform alone.
+ */
 :root[data-mode='chrome'] [data-ui='card'] {
   position: relative;
   isolation: isolate;
@@ -108,32 +115,67 @@
   z-index: -1;
   pointer-events: none;
   border-radius: 0 0 12px 0;
-  background: var(--cr-corner) right bottom / 200px 120px no-repeat;
+  background: var(--cr-drop) right 12px bottom 14px / 46px 46px no-repeat;
+  opacity: var(--cr-drop-strength);
+  /* The big drop's middle: it swells from there, and the small ones flow into it. */
+  transform-origin: calc(100% - 35px) calc(100% - 37px);
 }
-/* The reflection: a soft band of light sweeping across each card now and then while Elements is on, cards out of step. */
-:root[data-mode='chrome'][data-fx] [data-ui='card']:not([data-health='fail'])::before {
+:root[data-mode='chrome'] [data-ui='card']::before {
   content: '';
   position: absolute;
-  inset: 0;
+  right: 0;
+  bottom: 0;
+  width: 200px;
+  height: 120px;
+  max-width: 100%;
+  max-height: 100%;
   z-index: -1;
   pointer-events: none;
-  border-radius: inherit;
-  background: linear-gradient(110deg, transparent 42%, color-mix(in srgb, #ffffff 12%, transparent) 50%, transparent 58%) 0 0 / 300% 100% no-repeat;
-  background-position: 100% 0;
+  border-radius: 0 0 12px 0;
+  background: var(--cr-drop), var(--cr-drop);
+  background-repeat: no-repeat;
+  background-size: 22px 22px, 14px 14px;
+  background-position: right 62px bottom 4px, right 6px bottom 66px;
+  opacity: var(--cr-drop-strength);
+  transform-origin: calc(100% - 35px) calc(100% - 37px);
+}
+/* On hover, while Elements is on: the small drops flow into the big one like mercury and it swells a little; they part again when you leave. */
+:root[data-mode='chrome'][data-fx] [data-ui='card']::after {
+  transition: transform 0.5s cubic-bezier(0.34, 1.4, 0.5, 1) 0.12s;
+}
+:root[data-mode='chrome'][data-fx] [data-ui='card']::before {
+  transition: transform 0.45s cubic-bezier(0.55, 0, 0.35, 1), opacity 0.4s ease;
+}
+:root[data-mode='chrome'][data-fx] [data-ui='card']:hover::after {
+  transform: scale(1.2);
+}
+:root[data-mode='chrome'][data-fx] [data-ui='card']:hover::before {
+  transform: scale(0.1);
+  opacity: 0;
+}
+/* The reflection: a soft band of light in the card's own background, sweeping across now and then while Elements is on, cards out of step. */
+:root[data-mode='chrome'] {
+  --cr-sweep: linear-gradient(110deg, transparent 42%, color-mix(in srgb, #ffffff 12%, transparent) 50%, transparent 58%);
+}
+:root[data-mode='chrome']:not(.dark) {
+  --cr-sweep: linear-gradient(110deg, transparent 42%, color-mix(in srgb, #ffffff 70%, transparent) 50%, transparent 58%);
+}
+:root[data-mode='chrome'][data-fx] [data-ui='card']:not([aria-label='Unsaved changes']) {
+  background-image: var(--cr-sweep), var(--cr-brushed);
+  background-repeat: no-repeat;
+  background-size: 300% 100%, 100% 100%;
+  background-position: 100% 0, 0 0;
   animation: cr-sweep 10s ease-in-out infinite;
 }
-:root[data-mode='chrome']:not(.dark)[data-fx] [data-ui='card']:not([data-health='fail'])::before {
-  background-image: linear-gradient(110deg, transparent 42%, color-mix(in srgb, #ffffff 70%, transparent) 50%, transparent 58%);
-}
-:root[data-mode='chrome'][data-fx] [data-ui='card']:nth-of-type(2n):not([data-health='fail'])::before {
+:root[data-mode='chrome'][data-fx] [data-ui='card']:nth-of-type(2n) {
   animation-delay: -3.3s;
 }
-:root[data-mode='chrome'][data-fx] [data-ui='card']:nth-of-type(3n):not([data-health='fail'])::before {
+:root[data-mode='chrome'][data-fx] [data-ui='card']:nth-of-type(3n) {
   animation-delay: -6.6s;
 }
 @keyframes cr-sweep {
-  0%, 82% { background-position: 100% 0; }
-  100% { background-position: 0 0; }
+  0%, 82% { background-position: 100% 0, 0 0; }
+  100% { background-position: 0 0, 0 0; }
 }
 :root[data-mode='chrome'] dialog [data-ui='card'] {
   box-shadow: none;
@@ -143,27 +185,19 @@
   display: none;
 }
 
-/* A broken site: a red edge that breathes slowly while Elements is on. */
+/* A broken site: a soft red glow inside its edge, and the edge breathing slowly while Elements is on. */
 :root[data-mode='chrome'] [data-health='fail'][data-ui='card'] {
   border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  box-shadow: inset 0 0 20px -6px color-mix(in srgb, var(--danger) 40%, transparent), 0 0 16px -8px var(--danger);
 }
-:root[data-mode='chrome'] [data-health='fail'][data-ui='card']::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  z-index: -1;
-  pointer-events: none;
-  border-radius: 12px;
-  box-shadow: inset 0 0 20px -6px color-mix(in srgb, var(--danger) 45%, transparent), 0 0 16px -8px var(--danger);
-}
-:root[data-mode='chrome'][data-fx] [data-health='fail'][data-ui='card']::before {
-  will-change: opacity;
-  animation: cr-breathe 6s ease-in-out infinite;
+:root[data-mode='chrome'][data-fx] [data-health='fail'][data-ui='card'] {
+  animation: cr-sweep 10s ease-in-out infinite, cr-breathe 6s ease-in-out infinite;
 }
 @keyframes cr-breathe {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%, 100% { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+  50% { border-color: var(--danger); }
 }
+
 /* A healthy dot is a small chrome bead tinted green that glints now and then; a broken one keeps its pulse ring right over the dot. */
 :root[data-mode='chrome'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
   position: relative;
@@ -391,8 +425,7 @@
   border-radius: 999px;
 }
 :root[data-mode='chrome'] [data-ui='button'].bg-primary,
-:root[data-mode='chrome'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']),
-:root[data-mode='chrome'] :is(nav[aria-label='Main'] a[aria-current='page'], [data-ui='section-nav'] [aria-current='page']) {
+:root[data-mode='chrome'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
   background: var(--cr-metal);
   color: var(--cr-chosen-ink);
   border-color: color-mix(in srgb, var(--cr-silver) 45%, transparent);
@@ -474,4 +507,23 @@
   :root[data-mode='chrome'] *::after {
     animation: none !important;
   }
+  :root[data-mode='chrome'] [data-ui='card']::after,
+  :root[data-mode='chrome'] [data-ui='card']::before {
+    transition: none !important;
+  }
+}
+
+/* The page or section you are on in a menu: a soft silver tint with a fine edge, quieter than the metal of a button. */
+:root[data-mode='chrome'] :is(nav[aria-label='Main'] a[aria-current='page'], [data-ui='section-nav'] [aria-current='page']) {
+  background: color-mix(in srgb, var(--cr-silver) 14%, var(--card));
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cr-silver) 30%, transparent);
+  border-radius: 10px;
+}
+
+/* A soft button turns polished metal on hover, as the main one is at rest. */
+:root[data-mode='chrome'] [data-ui='button'][class~='bg-foreground/4']:hover:not(:disabled) {
+  background-image: var(--cr-metal);
+  color: var(--cr-chosen-ink);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 35%, transparent), 0 1px 2px color-mix(in srgb, #000 25%, transparent);
 }

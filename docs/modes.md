@@ -406,7 +406,8 @@ one. A healthy site's dot is a small chrome bead. The effects add a few soft
 blobs of silver light drifting slowly behind the pages (Background, CSS only);
 a silver ripple like a drop into mercury, with a few droplets splashing, where
 you click a button or link, with nothing following the cursor (Pointer); and a
-reflection sweeping across each card now and then, cards out of step, a broken
+reflection sweeping across each card now and then, cards out of step, the
+droplets flowing into one like mercury while you point at a card, a broken
 site's edge breathing red and the healthy bead glinting (Elements). A chrome
 ring turns where something runs. Pages it names its own way:
 
