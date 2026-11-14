@@ -22,6 +22,7 @@ import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
 import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
 import { TextLink } from '@/components/ui/text-link';
+import { DeveloperModes } from '@/features/modes/developer-modes';
 
 const UNINSTALL_TONE = { remove: 'neutral', ask: 'warning', keep: 'success' } as const;
 const UNINSTALL_LABEL = { remove: 'removed', ask: 'asks you', keep: 'kept' } as const;
@@ -64,6 +65,7 @@ export function DeveloperPage() {
           <InstalledFiles report={report} />
           <PanelFiles report={report} />
           <RunHistory />
+          <DeveloperModes />
         </div>
       )}
     </div>

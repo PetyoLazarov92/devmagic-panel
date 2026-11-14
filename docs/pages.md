@@ -25,7 +25,8 @@ right of each item:
 - **Server**: Services, WP Cores.
 - **System**: Activity, Sanctum, Updates (a newer release), Settings.
 
-The fold button at the bottom of the menu, or Ctrl+B, folds it to a rail of
+At the bottom of the menu, next to Log out, the palette icon opens
+[Modes](modes.md). The fold button there, or Ctrl+B, folds the menu to a rail of
 icons for a wider page; each icon names its page when you point at it, and a
 dot marks news. The panel remembers which you chose. On a phone the menu is a
 drawer behind the button at the top left, with the theme switch.
@@ -99,7 +100,7 @@ The panel password, the AI assistant, Claude Code for installs (whether new
 installs use it, and the model, effort and cap of its one step), the constants new
 sites get, what the wizard remembers per repo (**Remembered for new
 installs**, to edit or forget), and the repo owners you trusted, to take back
-(`/settings`).
+(`/settings`). Ctrl+K's **Change the panel password** opens this page.
 
 ## Sanctum
 
@@ -224,5 +225,12 @@ number. A **Developer** page joins the menu with:
   start closed. Open one and the panel reads what it holds: names and sizes,
   never contents, at most 200 entries, and only the folders those lists
   name.
+
+- **Modes**: each mode's paths with their rule, progress and when they
+  started counting, with Reset per path, Complete (fills a path, to try the
+  real unlock and its dialog), Unlock and Seal (a sealed mode leaves the Modes
+  page, and the panel goes back to Classic if it was in use), Show the dialog
+  again, Reset all paths, and what the panel counts. The only place the rules
+  are shown.
 
 A switch on that page turns it off again. It is remembered per browser.

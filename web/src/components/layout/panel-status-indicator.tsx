@@ -10,6 +10,7 @@ import { isUnreachable, noteReached, onConnectionChange } from '@/lib/connection
 import { timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
 import { cn } from '@/lib/utils';
+import { useModeText } from '@/lib/modes';
 
 /** How often the status is read while its card is open, and while the panel does not answer. */
 const OPEN_POLL_MS = 3000;
@@ -17,12 +18,12 @@ const OPEN_POLL_MS = 3000;
 const QUIET_POLL_MS = 5 * 60_000;
 
 /** The one line that says how the panel is: what needs a look first, else that all is well. */
-function headline(s: PanelStatus): { text: string; warn: boolean; note?: string } {
+function headline(s: PanelStatus, allGood: string): { text: string; warn: boolean; note?: string } {
   const failed = s.tasks.filter((t) => t.lastOk === false);
   if (failed.length === 1) return { text: `${failed[0]?.label} failed`, warn: true, ...(failed[0]?.lastNote ? { note: failed[0].lastNote } : {}) };
   if (failed.length) return { text: `${failed.length} background tasks failed`, warn: true, note: failed.map((t) => t.label).join(', ') };
   if (s.before?.ended === 'unexpectedly') return { text: 'The last run stopped unexpectedly', warn: true, note: 'A crash, or the computer turned off' };
-  return { text: 'All good', warn: false, note: `Running since ${timeAgo(s.startedAt).replace(/ ago$/, '')}` };
+  return { text: allGood, warn: false, note: `Running since ${timeAgo(s.startedAt).replace(/ ago$/, '')}` };
 }
 
 /** The programs running now, one line per job or background task; a page's reads are only counted. */
@@ -86,7 +87,8 @@ export function PanelStatusIndicator() {
     return () => window.removeEventListener('mousedown', close);
   }, [open]);
 
-  const head = status ? headline(status) : null;
+  const text = useModeText();
+  const head = status ? headline(status, text('allGood')) : null;
   const warn = down || head?.warn === true;
   const busy = workingOn(status?.programs ?? []);
   const next = status?.tasks.filter((t) => t.nextRunAt && !t.running).sort((a, b) => (a.nextRunAt ?? '').localeCompare(b.nextRunAt ?? ''))[0];

@@ -1,4 +1,4 @@
-import type { BackgroundTask, PanelStatus, PanelStorage, TaskRun, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeDetail, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
+import type { BrowserCounter, ModesDeveloperView, ModesView, SealedModeId, BackgroundTask, PanelStatus, PanelStorage, TaskRun, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeDetail, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { sendWithRetry, unreachableMessage } from '@/lib/connection';
 import { noteStatus, refused } from '@/lib/session-watch';
@@ -209,6 +209,13 @@ export interface Api {
   /** How the panel looks, kept in its database: theme, the sites' view and order. */
   preferences: () => Promise<Preferences>;
   savePreferences: (update: PreferencesUpdate) => Promise<Preferences>;
+  modes: () => Promise<ModesView>;
+  modeSeen: (mode: SealedModeId) => Promise<ModesView>;
+  modeEvent: (event: BrowserCounter) => Promise<ModesView>;
+  modeWord: (word: string) => Promise<ModesView & { unlocked: string | null }>;
+  modesDeveloper: () => Promise<ModesDeveloperView>;
+  modeDeveloper: (mode: SealedModeId, what: 'unlock' | 'seal' | 'replay' | 'reset') => Promise<ModesDeveloperView>;
+  modePath: (path: string, what: 'reset' | 'complete') => Promise<ModesDeveloperView>;
   /** The constants every local site should have, from Settings. */
   localConstants: () => Promise<LocalConstant[]>;
   saveLocalConstants: (list: LocalConstant[]) => Promise<LocalConstant[]>;
@@ -470,6 +477,13 @@ const realApi: Api = {
   update: (refresh) => request('GET', refresh ? '/api/update?refresh=1' : '/api/update'),
   preferences: () => request('GET', '/api/preferences'),
   savePreferences: (update) => request('PUT', '/api/preferences', update),
+  modes: () => request('GET', '/api/modes'),
+  modeSeen: (mode) => request('POST', `/api/modes/${mode}/seen`),
+  modeEvent: (event) => request('POST', '/api/modes/events', { event }),
+  modeWord: (word) => request('POST', '/api/modes/word', { word }),
+  modesDeveloper: () => request('GET', '/api/modes/developer'),
+  modeDeveloper: (mode, what) => request('POST', `/api/modes/${mode}/${what}`),
+  modePath: (path, what) => request('POST', `/api/modes/paths/${encodeURIComponent(path)}/${what}`),
   localConstants: () => request('GET', '/api/local-constants'),
   saveLocalConstants: (list) => request('PUT', '/api/local-constants', list),
   rememberedRepos: () => request('GET', '/api/remembered/repos'),

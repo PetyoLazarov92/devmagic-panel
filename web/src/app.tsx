@@ -6,6 +6,7 @@ import { SessionDialog } from '@/components/layout/session-dialog';
 import { StartingScreen } from '@/components/layout/starting-screen';
 import { Button } from '@/components/ui/button';
 import { api, isMockup } from '@/lib/api';
+import { useApplyMode } from '@/lib/modes';
 import { movedTo } from '@/lib/moved';
 import { notePanelVersion } from '@/lib/restart';
 import { match, navigate, usePath } from '@/lib/router';
@@ -20,6 +21,7 @@ import { JobPage } from '@/pages/job';
 import { LoginPage, RESET_PATH } from '@/pages/login';
 import { MailPage } from '@/pages/mail';
 import { MockupPage } from '@/pages/mockup';
+import { ModesPage } from '@/pages/modes';
 import { UiKitPage } from '@/pages/ui-kit';
 import { NewSitePage } from '@/pages/new-site';
 import { RunPage } from '@/pages/run';
@@ -30,6 +32,7 @@ import { SiteDetailPage } from '@/pages/site';
 import { SitesPage } from '@/pages/sites';
 import { UpdatePage } from '@/pages/update';
 import { Spinner } from '@/components/ui/spinner';
+import { ModeDefs } from '@/features/modes/mode-defs';
 
 type Session = SessionInfo & { setupRequired: boolean };
 
@@ -58,6 +61,7 @@ function Routes({ path }: { path: string }) {
   if (path === '/services/nginx') return <ServicesPage tab="nginx" />;
   if (path === '/services/cron') return <ServicesPage tab="cron" />;
   if (path === '/settings') return <SettingsPage />;
+  if (path === '/modes') return <ModesPage />;
   if (path === '/sanctum') return <SanctumPage />;
   if (path === '/activity') return <ActivityPage tab="jobs" />;
   if (path === '/activity/runs') return <ActivityPage tab="runs" />;
@@ -80,6 +84,8 @@ export function App() {
   const [waiting, setWaiting] = useState<number | null>(null);
   const start = useRef<PanelStart | null>(null);
   const path = usePath();
+  // The mode's look, on the login page too: it comes from this browser's copy of the preferences.
+  useApplyMode();
 
   // Asks for the session until the panel answers: a tab restored after a reboot opens before the panel has started.
   const refresh = useCallback(() => {
@@ -133,7 +139,7 @@ export function App() {
       navigate(moved, { replace: true });
       return;
     }
-    const known = ((path === '/mockup' || path === '/mockup/parts') && isMockup) || path === '/settings' || path === '/sanctum' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/aura/machine' || path === '/mail' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
+    const known = ((path === '/mockup' || path === '/mockup/parts') && isMockup) || path === '/settings' || path === '/modes' || path === '/sanctum' || path === '/activity' || path === '/activity/runs' || path === '/sites' || path === '/aura' || path === '/cores' || path === '/services' || path === '/services/php' || match('/services/php/:version', path) !== null || match('/services/php/:version/:section', path) !== null || path === '/services/mysql' || path === '/services/apache' || path === '/services/nginx' || path === '/services/cron' || path === '/aura/machine' || path === '/mail' || path === '/developer' || path === '/update' || match('/sites/:domain', path) !== null || match('/sites/:domain/:path', path) !== null || match('/sites/new/:draft/:step', path) !== null || match('/jobs/:id', path) !== null || match('/runs/:id', path) !== null;
     // The password reset has its own address, but only while signed out (the effect below sends a signed-in browser on).
     if (!known && path !== RESET_PATH) navigate('/sites');
   }, [path]);
@@ -182,6 +188,7 @@ export function App() {
 
   return (
     <SignedIn path={path} user={session.user ?? ''} version={session.version} onLogout={() => void logout()}>
+      <ModeDefs />
       <Routes path={path} />
       {lost && (
         <SessionDialog

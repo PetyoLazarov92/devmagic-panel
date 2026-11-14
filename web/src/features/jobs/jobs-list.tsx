@@ -10,10 +10,12 @@ import { EmptyState, Notice, PageHeader } from '@/components/layout/page';
 import { Spinner } from '@/components/ui/spinner';
 import { Card } from '@/components/ui/card';
 import { TextLink } from '@/components/ui/text-link';
+import { useModeText } from '@/lib/modes';
 
 /** Every job since the panel started: running and queued first, then the newest. Bare: inside Activity, without its own header. */
 export function JobsPage({ bare = false }: { bare?: boolean }) {
   const { data: jobs, error, loading } = useAsync(() => api.jobs(), []);
+  const text = useModeText();
   return (
     <div className={bare ? '' : 'pt-4'}>
       {bare ? (
@@ -26,7 +28,7 @@ export function JobsPage({ bare = false }: { bare?: boolean }) {
       )}
       {error && <Notice className="mt-6">{error}</Notice>}
       {jobs && jobs.length === 0 && (
-        <EmptyState className="mt-6" icon={Layers} title="No jobs since the panel started">
+        <EmptyState className="mt-6" icon={Layers} title={text('noJobs')}>
           Installs, imports, restores and other long actions show here while they run, with their steps.
         </EmptyState>
       )}

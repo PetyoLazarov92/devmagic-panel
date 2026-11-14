@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { usePageName } from '@/lib/modes';
 
 /**
  * The pieces every page is made of, so pages of one type look and behave the
@@ -59,11 +60,14 @@ export function CheckAgain({ onClick, loading = false, disabled = false, size }:
 
 /** A page's title and what it is for on the left, its actions on the right, Check again last. */
 export function PageHeader({ title, intro, actions, className }: { title: ReactNode; intro?: ReactNode; actions?: ReactNode; className?: string }) {
+  // A mode may give the page a name of its own (Mail is Ravens in Wizard); the Classic one stays in the tooltip.
+  const name = usePageName();
+  const shown = typeof title === 'string' ? name(title) : title;
   return (
     <div className={cn('flex flex-wrap items-end justify-between gap-4', className)}>
       {/* A fixed basis: the text wraps its own lines, so the buttons stay beside it whatever it says. */}
       <div className="min-w-0 flex-[1_1_20rem]">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight" data-ui="page-title" title={shown !== title && typeof title === 'string' ? title : undefined}>{shown}</h1>
         {intro && <p className="mt-1 text-sm text-muted-foreground">{intro}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

@@ -264,15 +264,56 @@ describe('preferences', () => {
     const cookie = await login();
     const headers = { host: HOST, origin: ORIGIN, cookie };
     expect((await app.inject({ method: 'GET', url: '/api/preferences', headers: { host: HOST } })).statusCode).toBe(401);
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {} });
     const saved = await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { theme: 'dark', sitesView: 'list' } });
-    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false });
+    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {} });
     await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { sitesSort: 'newest', tablesSort: 'size', sidebar: 'rail' } });
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {} });
     for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }, { sidebar: 'hidden' }, { useClaude: 'sometimes' }]) {
       expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload })).statusCode).toBe(400);
     }
-    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false });
+    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {} });
+  });
+});
+
+describe('modes', () => {
+  it('lists Classic and the sealed riddles, unlocks on a word, shows the dialog once and refuses a sealed mode', async () => {
+    const cookie = await login();
+    const headers = { host: HOST, origin: ORIGIN, cookie };
+    expect((await app.inject({ method: 'GET', url: '/api/modes', headers: { host: HOST } })).statusCode).toBe(401);
+    const first = (await app.inject({ method: 'GET', url: '/api/modes', headers })).json();
+    expect(first.fresh).toEqual([]);
+    expect(first.modes.map((m: { id: string; unlocked: boolean }) => [m.id, m.unlocked])).toEqual([['classic', true], ['wizard', false]]);
+    expect(first.modes[1].riddles).toHaveLength(3);
+    expect(JSON.stringify(first)).not.toContain('abracadabra');
+    expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard' } })).statusCode).toBe(400);
+
+    expect((await app.inject({ method: 'POST', url: '/api/modes/word', headers, payload: { word: 'hocus' } })).json().unlocked).toBeNull();
+    const spoken = (await app.inject({ method: 'POST', url: '/api/modes/word', headers, payload: { word: ' Abracadabra ' } })).json();
+    expect(spoken.unlocked).toBe('wizard');
+    expect(spoken.fresh).toEqual(['wizard']);
+    expect(spoken.modes[1].unlockLine).toContain('You spoke the word.');
+    expect(store.getMeta('modes')).not.toContain('abracadabra');
+    expect((await app.inject({ method: 'POST', url: '/api/modes/wizard/seen', headers })).json().fresh).toEqual([]);
+    expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard', effects: { wizard: { pointer: true, elements: true, background: false } } } })).statusCode).toBe(200);
+
+    // Sealing the mode in use from Developer options puts the panel back on Classic.
+    const sealed = (await app.inject({ method: 'POST', url: '/api/modes/wizard/seal', headers })).json();
+    expect(sealed.modes[0].unlocked).toBeUndefined();
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json().mode).toBe('classic');
+  });
+
+  it('counts only the events the browser may report, and fills a path from Developer options', async () => {
+    const cookie = await login();
+    const headers = { host: HOST, origin: ORIGIN, cookie };
+    expect((await app.inject({ method: 'POST', url: '/api/modes/events', headers, payload: { event: 'siteWizard' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: '/api/modes/events', headers, payload: { event: 'auraFix' } })).statusCode).toBe(200);
+    const dev = (await app.inject({ method: 'GET', url: '/api/modes/developer', headers })).json();
+    expect(dev.modes[0].paths.find((p: { id: string }) => p.id === 'wizard.aura').progress).toBe(1);
+    expect((await app.inject({ method: 'POST', url: '/api/modes/paths/wizard.undo/complete', headers })).json().modes[0].unlocked.by).toBe('wizard.undo');
+    expect((await app.inject({ method: 'GET', url: '/api/modes', headers })).json().fresh).toEqual(['wizard']);
+    expect((await app.inject({ method: 'POST', url: '/api/modes/paths/wizard.nothing/reset', headers })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: '/api/modes/dragon/unlock', headers })).statusCode).toBe(404);
   });
 });
 

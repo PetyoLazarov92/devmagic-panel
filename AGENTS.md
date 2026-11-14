@@ -360,6 +360,15 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
     leftover email check needs addresses on an ordinary ending, since it skips
     `.example` on purpose; use a plain word there (`someone@supplier.net`).
 
+14. **Modes keep their secrets.** How a sealed mode opens (its paths, goals
+    and words, all in `shared/src/modes.ts`) is never written in the docs,
+    the changelog, the README, commit messages or UI text before it opens;
+    the Modes page shows riddles only, and Developer options the rules. Its
+    progress is counters in the panel's database (`server/src/modes.ts`),
+    never sent anywhere, and a word typed in Ctrl+K is compared and dropped.
+    A mode changes looks, names and a few lines, never errors, warnings,
+    status labels or anything that removes something.
+
 ## Commit messages
 
 `type(scope): lowercase imperative summary` on one line. No body, no version

@@ -24,6 +24,8 @@ The [README](../README.md) is the short tour. These pages hold the detail.
 - [Services](services.md): PHP, MySQL, Apache, nginx and cron.
 - [Other pages](pages.md): the menu, Aura and its machine checks, WP Cores,
   Mail, Settings, Activity, removed sites and Developer options.
+- [Modes](modes.md): looks on top of light and dark, their effects, and how
+  sealed modes open.
 - [AI assistant](ai-assistant.md): the briefing, the chat, the wizard's
   helper and the MCP server.
 

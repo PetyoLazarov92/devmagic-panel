@@ -28,6 +28,7 @@ import { ClaudeFill, ProjectStatus } from '@/features/new-site/claude-fill';
 import { DomainsStep } from '@/features/new-site/domains-step';
 import { WordPressStep } from '@/features/new-site/wordpress-step';
 import { ReviewStep, RunScreen } from '@/features/new-site/review-step';
+import { modeText, useActiveMode } from '@/lib/modes';
 
 /**
  * The new site wizard. /sites/new starts an install; continuing from Start
@@ -36,6 +37,7 @@ import { ReviewStep, RunScreen } from '@/features/new-site/review-step';
  * reload stays, and a link opens it again.
  */
 export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: string; step?: string }) {
+  const { mode } = useActiveMode();
   const [state, setState] = useState<WizardState>(initial);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const set = <K extends keyof WizardState>(key: K, value: WizardState[K]) => {
@@ -375,7 +377,8 @@ export function NewSitePage({ draft: routeDraft, step: routeStep }: { draft?: st
         ]}
       />
       <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 className={cn('min-w-0 truncate text-2xl font-semibold tracking-tight', named && 'font-mono')}>{named ? title : 'New site'}</h1>
+        {/* A draft named by its domain keeps the domain's own face; before that the mode may say it its way. */}
+        <h1 {...(named ? {} : { 'data-ui': 'page-title' })} className={cn('min-w-0 truncate text-2xl font-semibold tracking-tight', named && 'font-mono')}>{named ? title : modeText('newSite', mode)}</h1>
         {inDraft && <Badge tone="primary">{KIND_LABEL[kind]}</Badge>}
       </div>
       {inDraft && saved && <SavedLine saved={saved} discarding={discarding} onDiscarding={setDiscarding} onDiscard={() => void discard()} />}

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/field';
-import { FilterChips } from '@/components/ui/filter-chips';
+import { FilterChips, FILTER_ROW_HEIGHT } from '@/components/ui/filter-chips';
 import { Input } from '@/components/ui/input';
 import { Menu } from '@/components/ui/menu';
 import { RowList } from '@/components/ui/list-row';
@@ -28,6 +28,7 @@ import { EmptyState, Notice, PageHeader } from '@/components/layout/page';
 import { RemovedSites, removedMatches } from '@/features/sites/removed-sites';
 import { scrollToCard } from '@/lib/scroll-to';
 import { Spinner } from '@/components/ui/spinner';
+import { useModeText } from '@/lib/modes';
 
 type Filter = 'all' | 'attention' | 'removed';
 
@@ -53,6 +54,7 @@ function sortSites(list: Site[], sort: Preferences['sitesSort']): Site[] {
 
 export function SitesPage() {
   const { data: sites, error, loading, reload } = useAsync(() => api.sites(), []);
+  const text = useModeText();
   // Installs started in the wizard and left, so they are found without opening New site.
   const drafts = useAsync(() => api.drafts().catch(() => []), []);
   const unfinished = drafts.data?.length ?? 0;
@@ -117,7 +119,7 @@ export function SitesPage() {
         actions={
           <Button onClick={() => navigate('/sites/new')}>
             <Plus />
-            New site
+            {text('newSite')}
           </Button>
         }
       />
@@ -126,7 +128,7 @@ export function SitesPage() {
 
       <BriefingCard />
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className={cn('mt-6 flex flex-col gap-3 sm:flex-row sm:items-center', FILTER_ROW_HEIGHT)}>
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -216,7 +218,7 @@ function SiteCard({ site }: { site: Site }) {
   const href = site.installing ? `/jobs/${encodeURIComponent(site.installing)}` : siteHref(site);
   const held = Boolean(site.installing || site.busy);
   return (
-    <Card role="article" className="group @container relative flex flex-col transition-shadow hover:shadow-md">
+    <Card role="article" data-health={site.health} className="group @container relative flex flex-col transition-shadow hover:shadow-md">
       <div className="flex items-start gap-3 px-5 pt-4">
         <StatusDot status={site.health} className="mt-1.5" />
         <div className="min-w-0 flex-1">

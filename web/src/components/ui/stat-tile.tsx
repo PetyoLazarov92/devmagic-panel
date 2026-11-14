@@ -26,9 +26,9 @@ export function StatTile({ label, value, sub, tone = 'neutral', href, onClick, c
     </>
   );
   const box = cn('flex min-w-0 flex-col rounded-lg border bg-card px-3 py-2.5 text-left', (href || onClick) && 'transition-colors hover:border-ring/50 hover:bg-muted/40', tone === 'danger' && 'border-danger/30', tone === 'warning' && 'border-warning/30', className);
-  if (href) return <Link href={href} className={box}>{body}</Link>;
-  if (onClick) return <button type="button" onClick={onClick} className={box}>{body}</button>;
-  return <div className={box}>{body}</div>;
+  if (href) return <Link href={href} data-ui="tile" className={box}>{body}</Link>;
+  if (onClick) return <button type="button" data-ui="tile" onClick={onClick} className={box}>{body}</button>;
+  return <div data-ui="tile" className={box}>{body}</div>;
 }
 
 /** Tiles side by side: as many as fit, each at least 9rem wide. */

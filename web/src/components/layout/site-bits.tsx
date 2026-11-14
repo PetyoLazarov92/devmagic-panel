@@ -8,6 +8,7 @@ import { shortDate } from '@/lib/format';
 import { runWithToast } from '@/lib/site-actions';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
+import { reportModeEvent } from '@/lib/modes';
 
 const dotTone: Record<CheckStatus, string> = {
   ok: 'bg-success',
@@ -18,7 +19,7 @@ const dotLabel: Record<CheckStatus, string> = { ok: 'Healthy', warn: 'Needs atte
 
 export function StatusDot({ status, className }: { status: CheckStatus; className?: string }) {
   return (
-    <span className={cn('relative inline-flex size-2.5 shrink-0', className)} title={dotLabel[status]}>
+    <span data-ui="status-dot" data-status={status} className={cn('relative inline-flex size-2.5 shrink-0', className)} title={dotLabel[status]}>
       {status === 'fail' && <span className="absolute inline-flex size-full animate-ping rounded-full bg-danger opacity-40" />}
       <span className={cn('relative inline-flex size-2.5 rounded-full', dotTone[status])} />
       <span className="sr-only">{dotLabel[status]}</span>
@@ -49,7 +50,10 @@ export function IssueRow({ issue, domain, onFixed }: { issue: SiteIssue; domain?
     setBusy(true);
     const result = await runWithToast(fix.action, fix.input, domain ? `${fix.label} (${domain})` : fix.label);
     setBusy(false);
-    if (result?.ok) onFixed?.();
+    if (result?.ok) {
+      reportModeEvent('auraFix');
+      onFixed?.();
+    }
   }
 
   return (

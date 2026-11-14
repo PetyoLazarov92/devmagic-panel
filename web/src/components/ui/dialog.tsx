@@ -96,6 +96,7 @@ export function Dialog({ open, onClose, title, description, children, size = 'md
   return (
     <dialog
       ref={ref}
+      data-ui="dialog"
       aria-labelledby={titleId}
       onClose={onClose}
       // Escape's keydown, not the cancel event: Chrome closes a dialog anyway
@@ -153,7 +154,7 @@ export function Dialog({ open, onClose, title, description, children, size = 'md
  */
 function Heading({ id, title, bare, fullScreen, onClose }: { id: string; title: string; bare: boolean | undefined; fullScreen: Props['fullScreen']; onClose: () => void }) {
   const h2 = (
-    <h2 id={id} className={cn('text-base font-semibold tracking-tight', bare && 'sr-only')}>
+    <h2 id={id} data-ui="dialog-title" className={cn('text-base font-semibold tracking-tight', bare && 'sr-only')}>
       {title}
     </h2>
   );

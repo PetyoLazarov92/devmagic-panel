@@ -12,6 +12,7 @@ export function Switch({ checked, onChange, label, disabled }: Props) {
     <button
       type="button"
       role="switch"
+      data-ui="switch"
       aria-checked={checked}
       aria-label={label}
       disabled={disabled}

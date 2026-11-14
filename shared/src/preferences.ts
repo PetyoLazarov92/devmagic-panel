@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { modeEffects, modeId } from './modes.js';
 import { SITE_SERVERS } from './nginx.js';
 
 /** How the panel looks for you: kept in the panel's database, so every browser you sign in from gets them. */
@@ -29,7 +30,7 @@ export type WpDbList = (typeof WP_DB_LISTS)[number];
 /** How many rows a list of the WordPress view shows before Show all. */
 export const WP_DB_LIST_ROWS = 7;
 
-const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), /** The web server a new site of its own gets, once nginx runs next to Apache. */ newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS), sidebar: z.enum(SIDEBAR_MODES), /** Whether a new install from a project lets Claude Code read the repo and its links: always on, asked (off until you switch it on), or never offered. */ useClaude: z.enum(USE_CLAUDE), /** Aura checks the sites' plugins and themes for known vulnerabilities once a day, through WPVulnerability: off until you switch it on. */ checkVulnerabilities: z.boolean() };
+const fields = { theme: z.enum(THEMES), sitesView: z.enum(SITES_VIEWS), sitesSort: z.enum(SITES_SORTS), /** The web server a new site of its own gets, once nginx runs next to Apache. */ newSiteServer: z.enum(SITE_SERVERS), tablesSort: z.enum(TABLE_SORTS), sidebar: z.enum(SIDEBAR_MODES), /** Whether a new install from a project lets Claude Code read the repo and its links: always on, asked (off until you switch it on), or never offered. */ useClaude: z.enum(USE_CLAUDE), /** Aura checks the sites' plugins and themes for known vulnerabilities once a day, through WPVulnerability: off until you switch it on. */ checkVulnerabilities: z.boolean(), /** The look on top of the theme: Classic, or a mode once it is unlocked. */ mode: modeId, /** Each mode's effects, switched on and off apart. */ effects: z.object({ wizard: modeEffects }).partial() };
 
 export const preferences = z.object({
   theme: fields.theme.default('system'),
@@ -40,6 +41,8 @@ export const preferences = z.object({
   sidebar: fields.sidebar.default('full'),
   useClaude: fields.useClaude.default('always'),
   checkVulnerabilities: fields.checkVulnerabilities.default(false),
+  mode: fields.mode.default('classic'),
+  effects: fields.effects.default({}),
 });
 
 export type Preferences = z.infer<typeof preferences>;

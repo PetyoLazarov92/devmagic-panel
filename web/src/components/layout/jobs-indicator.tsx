@@ -11,6 +11,7 @@ import { onJobSeen, seenJobs } from '@/lib/seen-jobs';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
+import { refreshModes } from '@/lib/modes';
 
 const SHOWN = 6;
 
@@ -46,6 +47,8 @@ export function JobsIndicator() {
               });
             }
           }
+          // A job that ended may have opened a mode: the panel says so, and the unlock dialog follows.
+          if (list.some((j) => { const before = last.current.get(j.id); return before !== undefined && jobActive({ status: before } as JobView) && !jobActive(j); })) void refreshModes(true);
           last.current = new Map(list.map((j) => [j.id, j.status]));
           setJobs(list);
           // One timer only, even when a started job asked for an extra look while a poll was out.

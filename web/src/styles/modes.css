@@ -1,0 +1,617 @@
+/*
+ * Modes: looks on top of the light and dark theme, set by data-mode on the
+ * page's root (lib/modes.ts, and index.html before the first paint). A mode
+ * changes the tokens and a few shared parts (cards, buttons, the page title,
+ * the sidebar), never a page. data-fx is there while the Elements effect is
+ * on; the pointer and background effects draw on one canvas
+ * (features/modes/mode-effects.tsx).
+ *
+ * Wizard, Starlit: cool moon-white paper, indigo ink, violet, aurora teal
+ * sparks, gold for small metal details, ember only for a broken site.
+ */
+:root[data-mode='wizard']:not(.dark) {
+  --background: #e4e8f2;
+  --foreground: #1d1b33;
+  --card: #eff1f8;
+  --muted: #d5daeb;
+  --muted-foreground: #5d6182;
+  --border: #c1c7dd;
+  --input: #b3b9d3;
+  --ring: #5a3fd6;
+  --primary: #5a3fd6;
+  --primary-foreground: #f7f8fc;
+  --secondary: #e4e0f7;
+  --secondary-foreground: #3b2a8a;
+  --success: #1f7a4d;
+  --warning: #8a5200;
+  --danger: #a3261c;
+  --wz-paper-shade: #d0d6e8;
+  /* Sheets over the page (menus, dialogs, a select's list, the unsaved bar): a little lighter than a card. */
+  --wz-raised: #f6f7fc;
+  --wz-edge: #3b3570;
+  --wz-spark: #0f9488;
+  --wz-gold: #9a7b3a;
+  --wz-ember: #d0572a;
+  --wz-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .2 0 0 0 0 .35 0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-mode='wizard'].dark {
+  --background: #0b0d1c;
+  --foreground: #e7e9f7;
+  --card: #1a1d36;
+  --muted: #151832;
+  --muted-foreground: #9aa0c4;
+  --border: #2c3159;
+  --input: #363b66;
+  --ring: #a78bfa;
+  --primary: #a78bfa;
+  --primary-foreground: #0b0d1c;
+  --secondary: #241f45;
+  --secondary-foreground: #d6ccff;
+  --success: #6fd39a;
+  --warning: #f0b354;
+  --danger: #ff7d6b;
+  --wz-paper-shade: #10132a;
+  --wz-raised: #262a4e;
+  --wz-edge: #05060f;
+  --wz-spark: #5eead4;
+  --wz-gold: #e2c275;
+  --wz-ember: #ff8a4c;
+  --wz-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .85 0 0 0 0 .85 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-mode='wizard'] {
+  --font-wizard: 'Cinzel', 'Cormorant SC', 'Trajan Pro', 'Palatino Linotype', 'Book Antiqua', Palatino, 'URW Palladio L', P052, Georgia, serif;
+}
+
+/* Names: the page title, card titles and the sidebar's items in a carved capital face. */
+:root[data-mode='wizard'] [data-ui='page-title'] {
+  font-family: var(--font-wizard);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+:root[data-mode='wizard'] [data-ui='card-title'],
+:root[data-mode='wizard'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-wizard);
+  letter-spacing: 0.05em;
+}
+
+/*
+ * Cards: a loose sheet of paper with uneven edges. The edge is an SVG filter
+ * on the paper layer only, so the text stays sharp, and that layer is its own
+ * (will-change), so the filter is drawn once and not again each time
+ * something inside the card changes. The grain is part of the same layer.
+ */
+:root[data-mode='wizard'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-color: transparent;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+}
+:root[data-mode='wizard'] [data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border-radius: 3px;
+  pointer-events: none;
+  will-change: transform;
+  background:
+    var(--wz-grain),
+    radial-gradient(30px 22px at 100% 0%, color-mix(in srgb, var(--wz-edge) 30%, transparent), transparent 72%),
+    radial-gradient(130% 100% at 35% 25%, transparent 55%, color-mix(in srgb, var(--wz-paper-shade) 85%, transparent) 100%),
+    var(--card);
+  box-shadow:
+    inset 0 0 14px 2px color-mix(in srgb, var(--wz-edge) 22%, transparent),
+    inset 0 0 2px 1px color-mix(in srgb, var(--wz-edge) 45%, transparent),
+    0 1px 3px color-mix(in srgb, var(--wz-edge) 14%, transparent);
+  filter: url(#dmp-paper-edge);
+}
+:root[data-mode='wizard'] [data-ui='card']:nth-of-type(3n + 2)::before {
+  filter: url(#dmp-paper-edge-2);
+}
+:root[data-mode='wizard'] [data-ui='card']:nth-of-type(3n)::before {
+  filter: url(#dmp-paper-edge-3);
+}
+/* A card in a dialog, and the bar of unsaved changes, get no torn edge: the dialog has its own frame, and the bar sticks to the window. */
+:root[data-mode='wizard'] dialog [data-ui='card'] {
+  background: var(--wz-raised);
+  border-color: var(--border);
+}
+/* The bar of unsaved changes: a framed sheet like the menus', grain and a gold edge. */
+:root[data-mode='wizard'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--wz-gold) 55%, var(--border));
+  border-radius: 3px;
+  background:
+    var(--wz-grain),
+    radial-gradient(140% 160% at 30% 20%, transparent 55%, color-mix(in srgb, var(--wz-paper-shade) 70%, transparent) 100%),
+    var(--wz-raised);
+  box-shadow: 0 0 0 3px var(--wz-raised), 0 0 0 4px color-mix(in srgb, var(--wz-gold) 35%, transparent), 0 12px 30px -12px color-mix(in srgb, #05060f 45%, transparent);
+}
+:root[data-mode='wizard'] dialog [data-ui='card']::before,
+:root[data-mode='wizard'] dialog [data-ui='card']::after,
+:root[data-mode='wizard'] [aria-label='Unsaved changes'][data-ui='card']::before,
+:root[data-mode='wizard'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+
+/*
+ * A card is a layer of its own here (isolation), so what opens out of it (a
+ * menu, a list to pick from) would only be on top inside its own card, and the
+ * next card would cover it. The card with one open comes above the others.
+ */
+:root[data-mode='wizard'] [data-ui='card']:has([role='menu'], [role='listbox']) {
+  z-index: 30;
+}
+
+/*
+ * A broken site: an ember edge on a layer of its own over the sheet. Elements
+ * makes it smoulder by its opacity only, which the browser animates without
+ * drawing the edge again.
+ */
+:root[data-mode='wizard'] [data-health='fail'][data-ui='card']::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: 4px;
+  pointer-events: none;
+  will-change: opacity;
+  opacity: 0.6;
+  box-shadow:
+    inset 0 0 12px 2px color-mix(in srgb, var(--wz-ember) 70%, transparent),
+    inset 0 0 2px 1px var(--wz-ember),
+    0 0 12px -2px var(--wz-ember);
+  filter: url(#dmp-paper-edge);
+}
+:root[data-mode='wizard'][data-fx] [data-health='fail'][data-ui='card']::after {
+  animation: dmp-smolder 3.8s ease-in-out infinite;
+}
+@keyframes dmp-smolder {
+  0%, 100% { opacity: 0.35; }
+  40% { opacity: 0.95; }
+  60% { opacity: 0.6; }
+  78% { opacity: 1; }
+}
+/*
+ * The background effect's still part: a soft aurora at the page's edges,
+ * violet at the top left and teal at the bottom right, on a fixed layer
+ * of its own behind everything, so scrolling never draws it again.
+ */
+:root[data-mode='wizard'][data-fx-bg] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(55% 45% at 38% 0%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 70%),
+    radial-gradient(45% 40% at 95% 100%, color-mix(in srgb, var(--wz-spark) 6%, transparent), transparent 70%),
+    radial-gradient(30% 25% at 70% 15%, color-mix(in srgb, var(--wz-gold) 3%, transparent), transparent 70%);
+}
+:root[data-mode='wizard'][data-fx-bg].dark body::before {
+  background:
+    radial-gradient(55% 45% at 38% 0%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 70%),
+    radial-gradient(45% 40% at 95% 100%, color-mix(in srgb, var(--wz-spark) 8%, transparent), transparent 70%),
+    radial-gradient(30% 25% at 70% 15%, color-mix(in srgb, var(--wz-gold) 4%, transparent), transparent 70%);
+}
+
+/* A healthy site's dot breathes softly: a halo that fades in and out, by its opacity only. */
+:root[data-mode='wizard'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='wizard'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px 2px color-mix(in srgb, var(--success) 60%, transparent);
+  opacity: 0;
+  animation: dmp-aura 2.8s ease-in-out infinite;
+}
+@keyframes dmp-aura {
+  50% { opacity: 1; }
+}
+
+/*
+ * Everything else with a frame (tiles, panels inside a card, choices in the
+ * New site wizard, menus, notices, chips): squarer corners, and the boxes
+ * on a card's color a faint inked edge, as paper inside the sheet. No filter
+ * here: there are too many of them for that.
+ */
+:root[data-mode='wizard'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-full).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 2px;
+}
+:root[data-mode='wizard'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='wizard'] [data-ui='tile'] {
+  border-color: color-mix(in srgb, var(--wz-gold) 28%, var(--border));
+  background-image: radial-gradient(140% 120% at 30% 20%, transparent 60%, color-mix(in srgb, var(--wz-paper-shade) 55%, transparent) 100%);
+  box-shadow: inset 0 0 10px -2px color-mix(in srgb, var(--wz-edge) 16%, transparent);
+}
+:root[data-mode='wizard'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-wizard);
+  letter-spacing: 0.06em;
+}
+:root[data-mode='wizard'] [data-ui='badge'] {
+  border-radius: 2px;
+}
+
+/*
+ * Modals: one sheet at a time, so it gets the grain, the inked edge and a
+ * gilded double frame; its title in the carved face. The backdrop is night
+ * blue instead of black.
+ */
+:root[data-mode='wizard'] [data-ui='dialog'] {
+  border-radius: 3px;
+  border-color: color-mix(in srgb, var(--wz-gold) 70%, transparent);
+  background:
+    var(--wz-grain),
+    radial-gradient(40px 28px at 100% 0%, color-mix(in srgb, var(--wz-edge) 22%, transparent), transparent 72%),
+    radial-gradient(130% 100% at 35% 20%, transparent 55%, color-mix(in srgb, var(--wz-paper-shade) 80%, transparent) 100%),
+    var(--wz-raised);
+  box-shadow:
+    inset 0 0 18px 2px color-mix(in srgb, var(--wz-edge) 18%, transparent),
+    0 0 0 4px var(--wz-raised),
+    0 0 0 5px color-mix(in srgb, var(--wz-gold) 45%, transparent),
+    0 24px 60px -12px color-mix(in srgb, #05060f 55%, transparent);
+}
+:root[data-mode='wizard'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #0b0d1c 50%, transparent);
+}
+:root[data-mode='wizard'] [data-ui='dialog-title'] {
+  font-family: var(--font-wizard);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+:root[data-mode='wizard'] [data-ui='dialog'] .border-t {
+  border-top-color: color-mix(in srgb, var(--wz-gold) 35%, var(--border));
+}
+
+/*
+ * Light theme: boxes filled with the muted color (code, read-only values, a
+ * row's fields) get a faint inked edge, so they stand off the shaded paper.
+ */
+:root[data-mode='wizard']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wz-edge) 13%, transparent);
+}
+
+/* Fields: ink on paper, a gold line underneath, the spark color while you type. */
+:root[data-mode='wizard'] [data-ui='input'] {
+  border-radius: 2px;
+  background-color: color-mix(in srgb, var(--card) 62%, var(--wz-paper-shade));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--wz-edge) 12%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--wz-gold) 45%, transparent);
+}
+:root[data-mode='wizard'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--wz-gold) 55%, var(--input));
+}
+/*
+ * A select's open list. Where the browser lets a page draw it (Chrome and Edge,
+ * index.css), it is a small sheet like the menus: a gold edge and the grain,
+ * the row you point at lit, the picked one in the soft aurora. Elsewhere the
+ * system draws it, and its rows only take the paper and ink.
+ */
+@supports (appearance: base-select) {
+  :root[data-mode='wizard'] select.dmp-select::picker(select) {
+    border-color: color-mix(in srgb, var(--wz-gold) 55%, var(--border));
+    border-radius: 3px;
+    background:
+      var(--wz-grain),
+      radial-gradient(140% 120% at 30% 20%, transparent 60%, color-mix(in srgb, var(--wz-paper-shade) 60%, transparent) 100%),
+      var(--wz-raised);
+    box-shadow: 0 0 0 3px var(--wz-raised), 0 0 0 4px color-mix(in srgb, var(--wz-gold) 35%, transparent), 0 12px 30px -10px color-mix(in srgb, #05060f 45%, transparent);
+  }
+  :root[data-mode='wizard'] select.dmp-select option {
+    border-radius: 1px;
+  }
+  :root[data-mode='wizard'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    box-shadow: inset 2px 0 0 var(--wz-gold);
+  }
+  :root[data-mode='wizard'] select.dmp-select option:checked {
+    color: color-mix(in srgb, var(--primary) 80%, var(--foreground));
+    background: linear-gradient(120deg in oklab, color-mix(in oklab, var(--primary) 24%, var(--card)), color-mix(in oklab, var(--wz-spark) 20%, var(--card)));
+  }
+  :root[data-mode='wizard'].dark select.dmp-select option:checked {
+    color: var(--foreground);
+    background: linear-gradient(120deg in oklab, color-mix(in oklab, var(--primary) 34%, var(--card)), color-mix(in oklab, var(--wz-spark) 22%, var(--card)));
+  }
+  :root[data-mode='wizard'] select.dmp-select option::checkmark {
+    color: var(--wz-spark);
+  }
+}
+@supports not (appearance: base-select) {
+  :root[data-mode='wizard'] select[data-ui='input'] option {
+    background-color: var(--card);
+    color: var(--foreground);
+  }
+}
+:root[data-mode='wizard'] [data-ui='input']:focus-visible {
+  border-color: var(--wz-spark);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wz-spark) 22%, transparent), inset 0 -1px 0 var(--wz-gold);
+}
+
+/* Choices: the switch group and filter chips; the chosen one takes the soft aurora (below). */
+:root[data-mode='wizard'] [data-ui='segmented'] {
+  border-radius: 2px;
+  border-color: color-mix(in srgb, var(--wz-gold) 35%, var(--border));
+}
+:root[data-mode='wizard'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 1px;
+}
+
+:root[data-mode='wizard'] [data-ui='chip'] {
+  border-radius: 2px;
+  border-color: color-mix(in srgb, var(--wz-gold) 30%, var(--border));
+}
+:root[data-mode='wizard'] [data-ui='chip'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--card) 70%, var(--wz-paper-shade));
+}
+
+/*
+ * Switches: quiet, in the main button's soft colors. Off, a pale track with
+ * a thin edge; on, the soft aurora; the knob a plain round of paper.
+ */
+:root[data-mode='wizard'] [data-ui='switch'] {
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+}
+:root[data-mode='wizard'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--input) 45%, var(--card));
+}
+:root[data-mode='wizard'] [data-ui='switch'][aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--primary) 50%, var(--card)), color-mix(in oklab, var(--wz-spark) 45%, var(--card)));
+}
+:root[data-mode='wizard'] [data-ui='switch'] > span {
+  background: var(--card);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--wz-edge) 30%, transparent);
+}
+:root[data-mode='wizard'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 85%, var(--primary));
+}
+
+/*
+ * Checkboxes and radios: a small gilded box on paper; ticked, it fills with
+ * violet and glows faintly. A radio is round, its dot an orb.
+ */
+:root[data-mode='wizard'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--wz-gold) 60%, var(--input));
+  border-radius: 2px;
+  background-color: color-mix(in srgb, var(--card) 62%, var(--wz-paper-shade));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--wz-edge) 22%, transparent);
+  cursor: inherit;
+}
+:root[data-mode='wizard'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='wizard'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: color-mix(in srgb, var(--wz-gold) 70%, var(--primary));
+  background-color: var(--primary);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--wz-spark) 40%, transparent);
+}
+:root[data-mode='wizard'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--primary-foreground);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='wizard'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff, var(--wz-spark));
+}
+:root[data-mode='wizard'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--wz-spark);
+  outline-offset: 2px;
+}
+:root[data-mode='wizard'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Scrollbars: a quiet indigo thumb on no track, everywhere that scrolls. */
+:root[data-mode='wizard'] {
+  scrollbar-color: color-mix(in srgb, var(--primary) 26%, var(--border)) transparent;
+}
+
+/* Progress: a soft aurora like the main button's, in a track with an inked edge. Meters that compare sizes keep their color. */
+:root[data-mode='wizard'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--primary) 55%, var(--card)), color-mix(in oklab, var(--wz-spark) 55%, var(--card)));
+}
+:root[data-mode='wizard'] .bg-muted:has(> .bg-primary[style*='width']) {
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--wz-edge) 25%, transparent);
+}
+
+/* Dropdowns and menus: a small sheet with a gold edge; the row you point at is lit. */
+:root[data-mode='wizard'] :is([role='menu'], [role='listbox']).border {
+  border-color: color-mix(in srgb, var(--wz-gold) 55%, var(--border));
+  background:
+    var(--wz-grain),
+    radial-gradient(140% 120% at 30% 20%, transparent 60%, color-mix(in srgb, var(--wz-paper-shade) 60%, transparent) 100%),
+    var(--wz-raised);
+  box-shadow: 0 0 0 3px var(--wz-raised), 0 0 0 4px color-mix(in srgb, var(--wz-gold) 35%, transparent), 0 12px 30px -10px color-mix(in srgb, #05060f 45%, transparent);
+}
+:root[data-mode='wizard'] :is([role='menuitem'], [role='option']) {
+  border-radius: 1px;
+}
+:root[data-mode='wizard'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--wz-gold);
+}
+/*
+ * Whatever is chosen takes the main button's soft aurora, so they all read as
+ * one: a chip or toggle in the main color, the picked option of a switch
+ * group (like Sanctum's views), the section open in a page's side menu, and
+ * the step you are on in the New site wizard.
+ */
+:root[data-mode='wizard'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [data-ui='section-nav'] [aria-current='page'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  color: color-mix(in srgb, var(--primary) 80%, var(--foreground));
+  background-color: color-mix(in srgb, var(--primary) 20%, var(--card));
+  background-image: linear-gradient(120deg in oklab, color-mix(in oklab, var(--primary) 24%, var(--card)), color-mix(in oklab, var(--wz-spark) 20%, var(--card)));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 35%, transparent);
+}
+:root[data-mode='wizard'].dark :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [data-ui='section-nav'] [aria-current='page'], [aria-current='step']) {
+  color: var(--foreground);
+  background-color: color-mix(in srgb, var(--primary) 30%, var(--card));
+  background-image: linear-gradient(120deg in oklab, color-mix(in oklab, var(--primary) 34%, var(--card)), color-mix(in oklab, var(--wz-spark) 22%, var(--card)));
+}
+:root[data-mode='wizard'] :is([data-ui='segmented'] > [aria-checked='true'], [data-ui='section-nav'] [aria-current='page']) {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 35%, transparent), 0 0 0 1px color-mix(in srgb, var(--primary) 32%, transparent);
+}
+
+/* Tabs: the open one underlined in gold that fades at its ends. */
+:root[data-mode='wizard'] [role='tab'][aria-selected='true'] {
+  border-image: linear-gradient(90deg, transparent, var(--wz-gold) 20%, var(--primary) 50%, var(--wz-gold) 80%, transparent) 1;
+}
+:root[data-mode='wizard'] [role='tablist'] {
+  border-bottom-color: color-mix(in srgb, var(--wz-gold) 30%, var(--border));
+}
+
+/* Buttons: squarer; outlined ones on toned paper with a touch of gold, and a soft glow on hover while Elements is on. */
+:root[data-mode='wizard'] [data-ui='button'] {
+  border-radius: 3px;
+}
+:root[data-mode='wizard'] [data-ui='button'].border-input {
+  border-color: color-mix(in srgb, var(--wz-gold) 40%, var(--input));
+  background-color: color-mix(in srgb, var(--card) 70%, var(--wz-paper-shade));
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--card) 60%, transparent), transparent);
+}
+:root[data-mode='wizard'] [data-ui='button'].border-input:hover {
+  background-color: color-mix(in srgb, var(--primary) 10%, var(--card));
+}
+/* The main button: a soft aurora, pale violet into pale teal, with violet ink (pale ink in dark). */
+:root[data-mode='wizard'] [data-ui='button'].bg-primary {
+  color: color-mix(in srgb, var(--primary) 80%, var(--foreground));
+  background-color: color-mix(in srgb, var(--primary) 20%, var(--card));
+  background-image: linear-gradient(120deg in oklab, color-mix(in oklab, var(--primary) 24%, var(--card)), color-mix(in oklab, var(--wz-spark) 20%, var(--card)));
+}
+:root[data-mode='wizard'].dark [data-ui='button'].bg-primary {
+  color: var(--foreground);
+  background-color: color-mix(in srgb, var(--primary) 30%, var(--card));
+  background-image: linear-gradient(120deg in oklab, color-mix(in oklab, var(--primary) 34%, var(--card)), color-mix(in oklab, var(--wz-spark) 22%, var(--card)));
+}
+:root[data-mode='wizard'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+}
+
+:root[data-mode='wizard'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--primary) 38%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 35%, transparent), 0 1px 4px -2px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+:root[data-mode='wizard'][data-fx] [data-ui='button']:hover {
+  box-shadow: 0 0 10px 1px color-mix(in srgb, var(--wz-spark) 35%, transparent);
+}
+
+/* The top bar: a faint gold rule under it, like the sidebar's. */
+:root[data-mode='wizard'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--wz-gold) 30%, transparent);
+}
+
+/* The sidebar: a double gold rule, and the page you are on underlined instead of filled. */
+:root[data-mode='wizard'] [data-ui='sidebar'] {
+  border-right: 3px double color-mix(in srgb, var(--wz-gold) 70%, transparent);
+}
+:root[data-mode='wizard'] nav[aria-label='Main'] a[aria-current='page'] {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--wz-gold);
+  color: var(--primary);
+}
+:root[data-mode='wizard'][data-fx] nav[aria-label='Main'] a[aria-current='page'] svg {
+  filter: drop-shadow(0 0 4px var(--wz-spark));
+}
+
+/* The rune circle that turns in place of the spinner: the whole circle turns, which the browser does without drawing it again. */
+.rune-turning { animation: dmp-turn 1.6s linear infinite; }
+@keyframes dmp-turn { to { transform: rotate(360deg); } }
+
+/* Mode thumbnails on the Modes page and in the unlock dialog: a small panel in that mode's colors, whatever mode is on. */
+.mode-thumb {
+  --t-bg: var(--background);
+  --t-side: var(--card);
+  --t-line: var(--border);
+  --t-accent: var(--primary);
+  --t-ink: var(--foreground);
+  --t-card: var(--card);
+  position: relative;
+  display: grid;
+  grid-template-columns: 26% 1fr;
+  aspect-ratio: 16 / 10;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--t-bg);
+}
+.mode-thumb[data-thumb='classic'] {
+  --t-bg: oklch(0.985 0.002 270);
+  --t-side: oklch(1 0 0);
+  --t-line: oklch(0.91 0.008 270);
+  --t-accent: oklch(0.55 0.21 285);
+  --t-ink: oklch(0.2 0.02 270);
+  --t-card: oklch(1 0 0);
+}
+.dark .mode-thumb[data-thumb='classic'] {
+  --t-bg: oklch(0.16 0.01 275);
+  --t-side: oklch(0.2 0.012 275);
+  --t-line: oklch(0.28 0.012 275);
+  --t-accent: oklch(0.66 0.18 285);
+  --t-ink: oklch(0.95 0.005 270);
+  --t-card: oklch(0.2 0.012 275);
+}
+.mode-thumb[data-thumb='wizard'] {
+  --t-bg: #e4e8f2;
+  --t-side: #dce0ee;
+  --t-line: #c1c7dd;
+  --t-accent: #5a3fd6;
+  --t-ink: #1d1b33;
+  --t-card: #eff1f8;
+}
+.dark .mode-thumb[data-thumb='wizard'] {
+  --t-bg: #0b0d1c;
+  --t-side: #10132a;
+  --t-line: #2c3159;
+  --t-accent: #a78bfa;
+  --t-ink: #e7e9f7;
+  --t-card: #1a1d36;
+}
+.mode-thumb .mt-side { display: flex; flex-direction: column; gap: 7%; padding: 9% 8%; background: var(--t-side); border-right: 1px solid var(--t-line); }
+.mode-thumb .mt-side i { height: 5px; border-radius: 2px; background: var(--t-line); }
+.mode-thumb .mt-side i:nth-child(2) { background: var(--t-accent); }
+.mode-thumb .mt-main { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: min-content; gap: 6%; padding: 7%; }
+.mode-thumb .mt-main b { grid-column: 1 / -1; width: 40%; height: 7px; border-radius: 2px; background: var(--t-ink); opacity: 0.7; }
+.mode-thumb .mt-main i { aspect-ratio: 1 / 1.05; border: 1px solid var(--t-line); border-radius: 4px; background: var(--t-card); }
+.mode-thumb[data-thumb='wizard'] .mt-main b { border-radius: 0; }
+.mode-thumb[data-thumb='wizard'] .mt-main i { border-radius: 1px; border-color: transparent; box-shadow: inset 0 0 6px var(--t-line); filter: url(#dmp-paper-edge-3); }
+.mode-thumb[data-sealed] > :not(.mt-lock) { filter: blur(3px) grayscale(0.7); opacity: 0.5; }
+.mode-thumb .mt-lock { position: absolute; inset: 0; display: grid; place-items: center; color: var(--foreground); }
+.mode-thumb[data-reveal]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, #e2c275 55%, transparent) 50%, transparent 65%);
+  animation: dmp-sweep 1.1s ease-out 0.3s both;
+}
+@keyframes dmp-sweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(110%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode] :not(.rune-turning),
+  :root[data-mode] *::before,
+  :root[data-mode] *::after,
+  .mode-thumb::after {
+    animation: none !important;
+  }
+}

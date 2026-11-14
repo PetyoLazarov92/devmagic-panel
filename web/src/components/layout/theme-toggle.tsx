@@ -11,7 +11,7 @@ const options: Array<{ value: Theme; label: string; icon: typeof Sun }> = [
 export function ThemeToggle({ className }: { className?: string }) {
   const [theme, setTheme] = useTheme();
   return (
-    <div role="radiogroup" aria-label="Theme" className={cn('inline-flex rounded-lg border bg-muted p-0.5', className)}>
+    <div role="radiogroup" aria-label="Theme" data-ui="segmented" className={cn('inline-flex rounded-lg border bg-muted p-0.5', className)}>
       {options.map(({ value, label, icon: Icon }) => (
         <button
           key={value}

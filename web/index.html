@@ -13,6 +13,11 @@
         try { saved = localStorage.getItem('dmp-theme'); } catch (e) {}
         var dark = saved === 'dark' || ((saved === null || saved === 'system') && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.classList.toggle('dark', dark);
+        // The mode too (Wizard and the like), from the copy of the preferences this browser keeps.
+        try {
+          var mode = JSON.parse(localStorage.getItem('dmp-preferences') || '{}').mode;
+          if (mode && mode !== 'classic' && /^[a-z]+$/.test(mode)) document.documentElement.dataset.mode = mode;
+        } catch (e) {}
       })();
     </script>
     <!-- panel-only: the demo has no panel to wait for, so its build leaves this out. -->

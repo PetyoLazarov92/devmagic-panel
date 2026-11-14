@@ -53,6 +53,7 @@ const PAGES = [
   '/activity/runs',
   '/update',
   '/settings',
+  '/modes',
   '/developer',
 ];
 

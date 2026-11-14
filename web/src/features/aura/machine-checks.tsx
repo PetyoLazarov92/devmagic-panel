@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { CheckAgain, Notice } from '@/components/layout/page';
 import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
+import { reportModeEvent } from '@/lib/modes';
 
 const statusIcon = {
   ok: <CircleCheck className="size-4.5 text-success" aria-label="OK" />,
@@ -67,7 +68,10 @@ export function MachineChecks() {
     try {
       const result = await api.runAction(f.action, f.input);
       setFix({ key, phase: result.ok ? 'done' : 'failed', output: result.output });
-      if (result.ok) void load();
+      if (result.ok) {
+        reportModeEvent('auraFix');
+        void load();
+      }
     } catch (err) {
       setFix({ key, phase: 'failed', output: (err as Error).message });
     }

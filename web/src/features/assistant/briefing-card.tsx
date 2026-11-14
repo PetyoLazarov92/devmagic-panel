@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { runWithToast } from '@/lib/site-actions';
 import { useAsync } from '@/lib/use-async';
 import { Spinner } from '@/components/ui/spinner';
+import { reportModeEvent, useModeText } from '@/lib/modes';
 
 /** A fix from the panel's own findings; Claude only chose which ones to show. */
 function FixButton({ item }: { item: AuraItem }) {
@@ -23,6 +24,7 @@ function FixButton({ item }: { item: AuraItem }) {
         setState('running');
         const result = await runWithToast(fix.action, fix.input, item.domain ? `${fix.label} (${item.domain})` : fix.label);
         setState(result?.ok ? 'done' : 'idle');
+        if (result?.ok) reportModeEvent('auraFix');
       }}
     >
       {state === 'running' ? <Spinner /> : state === 'done' ? <Check className="text-success" /> : <Wrench />}
@@ -38,12 +40,13 @@ function FixButton({ item }: { item: AuraItem }) {
  */
 export function BriefingCard() {
   const { data, loading } = useAsync(() => api.briefing(), []);
+  const text = useModeText();
 
   if (loading && !data) {
     return (
       <Card className="mt-6 flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
         <Spinner className="size-4 text-primary" />
-        Claude is reading your sites...
+        {text('aiReading')}
       </Card>
     );
   }

@@ -31,7 +31,7 @@ const buttonVariants = cva(
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
 export function Button({ className, variant, size, type = 'button', ...props }: ButtonProps) {
-  return <button type={type} className={cn(buttonVariants({ variant, size }), className)} {...props} />;
+  return <button type={type} data-ui="button" className={cn(buttonVariants({ variant, size }), className)} {...props} />;
 }
 
 export interface ButtonLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement>, VariantProps<typeof buttonVariants> {

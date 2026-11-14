@@ -20,7 +20,7 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement>, VariantProp
 
 /** A short label on a thing: what it is or how it stands. Coloured only for status. */
 export function Badge({ className, tone, ...props }: BadgeProps) {
-  return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
+  return <span data-ui="badge" className={cn(badgeVariants({ tone }), className)} {...props} />;
 }
 
 /** A number in a tab, a menu item or a filter: only what needs a look is coloured. */

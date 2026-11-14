@@ -1,5 +1,13 @@
 # Changelog
 
+### v1.49.0 (2026-11-14)
+* **Modes:** a new page for how the panel looks, under the palette icon at the foot of the menu, where the key icon was. Classic is the mode you know; some modes are sealed for now. A mode restyles the whole panel, its cards, tiles, buttons, fields, dropdowns, checkboxes, switches, filters, tabs, menus, modals, scrollbars and the top bar, and has effects you switch one by one (the pointer, the page's elements, the background); none run while your system asks for reduced motion, and they rest when nothing moves
+* **Command palette:** Modes, and Change the panel password, which opens Settings
+* **Sites:** the filters above the list are all one height, so they line up
+* **Messages:** a long address in a message wraps, instead of pushing its buttons past the edge of the window
+* **Developer options:** a Modes card to unlock, seal and test them
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.48.1 (2026-11-14)
 * **Command palette:** the list scrolls with the arrow keys, so the one you move to is always in view, with its group's heading at the top
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

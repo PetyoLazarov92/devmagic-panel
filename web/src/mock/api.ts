@@ -1,6 +1,6 @@
 import type { BackgroundTask, PanelStorage, HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, WporgDetails, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
-import { accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
+import { countMode, emptyModesState, isUnlocked, type ModesState, modesDeveloper, modesDeveloperView, modesView, readModesState, speakWord, accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
@@ -1068,11 +1068,31 @@ let mockRemembered: RememberedRepo[] = [
 // Kept for the browser session, as the panel keeps them in its database.
 const mockPreferences: Preferences = (() => {
   try {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false, ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false, mode: 'classic', effects: {}, ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
   } catch {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false, mode: 'classic', effects: {} } as Preferences;
   }
 })();
+
+// The modes' progress, kept in this browser: the same rules as the panel's, counted from what the demo can see.
+const MOCK_MODES_KEY = 'dmp-mock-modes';
+function mockModes(): ModesState {
+  try {
+    return readModesState(localStorage.getItem(MOCK_MODES_KEY) ?? undefined);
+  } catch {
+    return emptyModesState();
+  }
+}
+function changeMockModes(edit: (state: ModesState) => unknown): ModesState {
+  const state = mockModes();
+  edit(state);
+  try {
+    localStorage.setItem(MOCK_MODES_KEY, JSON.stringify(state));
+  } catch {
+    // the mock forgets them then
+  }
+  return state;
+}
 
 /** As for a release that changes install.sh but no root script, read over git because the repository is private. */
 /**
@@ -1366,7 +1386,28 @@ export const mockApi: Api = {
     return structuredClone(list);
   },
   preferences: async () => ({ ...mockPreferences }),
+  modes: async () => modesView(mockModes()),
+  modeSeen: async (mode) => modesView(changeMockModes((st) => { const done = st.unlocks[mode]; if (done) done.seen = true; })),
+  modeEvent: async (event) => modesView(changeMockModes((st) => countMode(st, event))),
+  modeWord: async (word) => {
+    let unlocked: string | null = null;
+    const state = changeMockModes((st) => { unlocked = speakWord(st, word); });
+    return { ...modesView(state), unlocked };
+  },
+  modesDeveloper: async () => modesDeveloperView(mockModes()),
+  modeDeveloper: async (mode, what) => {
+    const state = changeMockModes((st) => {
+      if (what === 'unlock') modesDeveloper.unlock(st, mode);
+      if (what === 'seal') modesDeveloper.seal(st, mode);
+      if (what === 'replay') modesDeveloper.replay(st, mode);
+      if (what === 'reset') modesDeveloper.resetMode(st, mode);
+    });
+    if (what === 'seal' && mockPreferences.mode === mode) await mockApi.savePreferences({ mode: 'classic' });
+    return modesDeveloperView(state);
+  },
+  modePath: async (path, what) => modesDeveloperView(changeMockModes((st) => void (what === 'reset' ? modesDeveloper.resetPath(st, path) : modesDeveloper.completePath(st, path)))),
   savePreferences: async (update) => {
+    if (update.mode && !isUnlocked(mockModes(), update.mode)) throw new Error('That mode is still sealed');
     Object.assign(mockPreferences, update);
     try {
       sessionStorage.setItem('dmp-mock-preferences', JSON.stringify(mockPreferences));

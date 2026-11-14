@@ -2,8 +2,8 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, TaskRun, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { FILE_TEXT_MAX, gitUrl, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
+import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, TaskRun, ApacheReport, ModesDeveloperView, ModesView, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import { browserCounter, FILE_TEXT_MAX, gitUrl, MODE_PATHS, sealedModeId, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -64,6 +64,7 @@ import { installedCores, readWpcoreConfig } from './wpcore.js';
 import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPaths, readMail, unreadMail } from './mailpit.js';
 import { cachedReport, forgetReport, keepReport, SharedReads } from './wordpress-report-cache.js';
 import { tableGrowth } from './table-growth.js';
+import { countAction, ModeProgress } from './modes.js';
 
 export interface AppDeps {
   config: SystemConfig;
@@ -133,6 +134,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // A job on a site may have changed its database: the WordPress view reads it anew next time.
   jobs.onEnd((view) => {
     if (view.target) forgetReport(deps.store, view.target);
+  });
+  // The modes' paths: a site the New site wizard finished, a job undone. Counted in the panel's database, sent nowhere.
+  const modes = new ModeProgress(deps.store);
+  jobs.onEnd((view) => {
+    if (view.status === 'done' && view.kind === 'site.create') modes.count('siteWizard');
+    if (view.status === 'undone') modes.count('undo');
   });
   const limiter = new LoginLimiter();
   const resetLock = new GlobalLock();
@@ -435,7 +442,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const { id } = request.params;
       if (!isActionId(id)) return reply.code(404).send({ error: `unknown action: ${id}` });
       try {
-        return await runAction(
+        const result = await runAction(
           {
             config: deps.config, exec: deps.exec, store: deps.store, dmpRoot: deps.dmpRoot,
             wpcoreBin: deps.wpcoreBin ?? WPCORE_BIN, wpcoreConf: deps.hostPaths.wpcoreConf, home: deps.hostPaths.home,
@@ -448,6 +455,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           id,
           request.body,
         );
+        if (result.ok) countAction(modes, id, request.body);
+        return result;
       } catch (error) {
         if (error instanceof ActionInputError) return reply.code(400).send({ error: error.message });
         if (error instanceof ActionBusyError) return reply.code(409).send({ error: error.message, ...(error.jobId ? { jobId: error.jobId } : {}) });
@@ -545,7 +554,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       browsing(reply, () => dbSchema(browse(), request.params.database)));
     // The SQL runner: one statement that reads, as the read-only account. A POST: the SQL can hold data.
     api.post<{ Params: { database: string } }>('/api/mysql/databases/:database/query', async (request, reply): Promise<DbQueryResult | undefined> =>
-      browsing(reply, () => runQuery(browse(), request.params.database, request.body)));
+      browsing(reply, async () => {
+        const result = await runQuery(browse(), request.params.database, request.body);
+        modes.count('sqlQuery');
+        return result;
+      }));
     // A WordPress site's database as WordPress sees it: autoload, transients, clean-up counts, users. ?blog= picks a site of a network,
     // ?sections=autoload,users the parts to read (the page asks for the slow ones one at a time), ?sizes=1 the size of every postmeta value.
     // ?cached=1 answers with the report kept from the last reads, at once, or 204 when there is none.
@@ -743,9 +756,61 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     api.put<{ Body: unknown }>('/api/preferences', async (request, reply): Promise<Preferences | undefined> => {
       const update = preferencesUpdate.safeParse(request.body);
       if (!update.success) return reply.code(400).send({ error: update.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ') });
+      if (update.data.mode && !modes.isUnlocked(update.data.mode)) return reply.code(400).send({ error: 'That mode is still sealed' });
       const next = preferences.parse({ ...readPreferences(), ...update.data });
       deps.store.setMeta(PREFERENCES_KEY, JSON.stringify(next));
       return next;
+    });
+
+    // Modes: what is unlocked, the sealed ones' riddles, and the paths that unlock them. How the panel looks, not an action.
+    const sealedMode = (raw: string) => {
+      const parsed = sealedModeId.safeParse(raw);
+      return parsed.success ? parsed.data : null;
+    };
+    api.get('/api/modes', async (): Promise<ModesView> => modes.view());
+    api.post<{ Params: { mode: string } }>('/api/modes/:mode/seen', async (request, reply): Promise<ModesView | undefined> => {
+      const mode = sealedMode(request.params.mode);
+      if (!mode) return reply.code(404).send({ error: 'No such mode' });
+      modes.seen(mode);
+      return modes.view();
+    });
+    // What the browser counts itself: a command run from Ctrl+K, a fix from Aura. Fixed names only, once a second each.
+    api.post<{ Body: unknown }>('/api/modes/events', async (request, reply): Promise<ModesView | undefined> => {
+      const event = browserCounter.safeParse((request.body as { event?: unknown } | null)?.event);
+      if (!event.success) return reply.code(400).send({ error: 'Not an event the panel counts' });
+      modes.report(event.data);
+      return modes.view();
+    });
+    // A word typed in Ctrl+K: compared, then dropped. Never logged or kept.
+    api.post<{ Body: unknown }>('/api/modes/word', async (request): Promise<ModesView & { unlocked: string | null }> => {
+      const word = (request.body as { word?: unknown } | null)?.word;
+      const unlocked = typeof word === 'string' && word.length <= 40 ? modes.word(word) : null;
+      return { ...modes.view(), unlocked };
+    });
+    // Developer options: the rules and each path's progress, and the buttons to unlock, seal and start over.
+    api.get('/api/modes/developer', async (): Promise<ModesDeveloperView> => modes.developerView());
+    api.post<{ Params: { mode: string; what: string } }>('/api/modes/:mode/:what', async (request, reply): Promise<ModesDeveloperView | undefined> => {
+      const mode = sealedMode(request.params.mode);
+      if (!mode) return reply.code(404).send({ error: 'No such mode' });
+      const { what } = request.params;
+      if (what === 'unlock') modes.unlock(mode);
+      else if (what === 'seal') {
+        modes.seal(mode);
+        // Sealing the mode in use puts the panel back on Classic.
+        const prefs = readPreferences();
+        if (prefs.mode === mode) deps.store.setMeta(PREFERENCES_KEY, JSON.stringify({ ...prefs, mode: 'classic' }));
+      } else if (what === 'replay') modes.replay(mode);
+      else if (what === 'reset') modes.resetMode(mode);
+      else return reply.code(404).send({ error: `Nothing called ${what.slice(0, 20)} to do with a mode` });
+      return modes.developerView();
+    });
+    api.post<{ Params: { path: string; what: string } }>('/api/modes/paths/:path/:what', async (request, reply): Promise<ModesDeveloperView | undefined> => {
+      const { path, what } = request.params;
+      if (!MODE_PATHS.some((p) => p.id === path)) return reply.code(404).send({ error: 'No such path' });
+      if (what === 'reset') modes.resetPath(path);
+      else if (what === 'complete') modes.completePath(path);
+      else return reply.code(404).send({ error: `Nothing called ${what.slice(0, 20)} to do with a path` });
+      return modes.developerView();
     });
 
     // What the new site wizard remembers per repo: listed, changed and forgotten in Settings. Panel settings, not an action.

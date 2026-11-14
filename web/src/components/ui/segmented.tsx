@@ -10,7 +10,7 @@ export function Segmented<T extends string>({ label, value, onChange, options, c
   className?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className={cn('inline-flex rounded-lg border bg-muted p-0.5 text-sm', className)}>
+    <div role="radiogroup" aria-label={label} data-ui="segmented" className={cn('inline-flex rounded-lg border bg-muted p-0.5 text-sm', className)}>
       {options.map(([v, text, Icon]) => (
         <button
           key={v}

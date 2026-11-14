@@ -24,6 +24,7 @@ export function FilterChips<T extends string>({ label, value, onChange, options,
             type="button"
             role="radio"
             aria-checked={on}
+            data-ui="chip"
             onClick={() => onChange(o.value)}
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors',
@@ -46,9 +47,12 @@ export function FilterChips<T extends string>({ label, value, onChange, options,
  * The bar over a list: a search on the left, filters after it, then pickers and the view
  * switch at its end. It wraps on a narrow screen and never scrolls sideways.
  */
+/** One height for everything in a row of filters, whatever each control's own: the search, the chips, the pickers and the view switch line up. */
+export const FILTER_ROW_HEIGHT = '[&_[data-ui=chip]]:h-9 [&_[data-ui=segmented]]:h-9 [&_input:not([type=checkbox],[type=radio])]:h-9 [&_select]:h-9';
+
 export function FilterBar({ search, children, end, className }: { search?: ReactNode; children?: ReactNode; end?: ReactNode; className?: string }) {
   return (
-    <div className={cn('flex flex-wrap items-center gap-2', className)}>
+    <div className={cn('flex flex-wrap items-center gap-2', FILTER_ROW_HEIGHT, className)}>
       {search && <div className="min-w-48 flex-[1_1_14rem]">{search}</div>}
       {children}
       {end && <div className="ml-auto flex flex-wrap items-center gap-2">{end}</div>}

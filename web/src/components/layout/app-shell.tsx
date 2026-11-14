@@ -1,7 +1,6 @@
-import { CircleArrowUp, FlaskConical, Globe, HeartPulse, KeyRound, Layers, ListChecks, LogOut, Mail, Menu, PanelLeftClose, PanelLeftOpen, Search, Server, Settings, Sparkles, Wrench, X } from 'lucide-react';
+import { CircleArrowUp, FlaskConical, Globe, HeartPulse, Layers, ListChecks, LogOut, Mail, Menu, Palette, PanelLeftClose, PanelLeftOpen, Search, Server, Settings, Sparkles, Wrench, X } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Logo } from '@/components/layout/logo';
-import { ChangePasswordDialog } from '@/features/settings/panel-password';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
@@ -18,6 +17,10 @@ import { useDeveloper, useVersionTaps } from '@/lib/developer';
 import { useMailUnread } from '@/lib/mail-unread';
 import { useHtaccessNotices } from '@/lib/htaccess-notices';
 import { navActive } from '@/lib/nav';
+import { refreshModes, useModeText, usePageName } from '@/lib/modes';
+import { ModeEffects } from '@/features/modes/mode-effects';
+import { UnlockDialog } from '@/features/modes/unlock-dialog';
+import { navigate } from '@/lib/router';
 import { loadPreferences, savePreferences, usePreferences } from '@/lib/preferences';
 import { useAsync } from '@/lib/use-async';
 import { Link } from '@/lib/router';
@@ -78,11 +81,13 @@ function openPalette() {
 }
 
 export function AppShell({ path, user, version, onLogout, children, siteCount }: Props) {
-  const [changingPassword, setChangingPassword] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const text = useModeText();
   const rail = usePreferences().sidebar === 'rail';
   // A link in the drawer goes to its page and the drawer closes.
   useEffect(() => setMenuOpen(false), [path]);
+  // Whether a mode was unlocked meanwhile: asked again as you move between pages.
+  useEffect(() => void refreshModes(), [path]);
   useSidebarShortcut();
   const assistant = useAsync(() => api.assistant(), []);
   // Signed in: the panel's preferences replace this browser's copy.
@@ -108,16 +113,17 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
     '/update': dot === 'new' ? (update?.latest ?? 'new') : undefined,
   };
   const body = (mode: 'full' | 'rail') => (
-    <SidebarBody mode={mode} path={path} groups={groups} live={live} dots={dots} user={user} version={version} onTapVersion={tapVersion} onPassword={() => setChangingPassword(true)} onLogout={onLogout} />
+    <SidebarBody mode={mode} path={path} groups={groups} live={live} dots={dots} user={user} version={version} onTapVersion={tapVersion} onLogout={onLogout} />
   );
   return (
     <div className="flex min-h-svh flex-col md:flex-row">
       {/* From md up: the sidebar, with its labels or folded to a rail of icons. Below md it is a drawer behind the menu button. */}
-      <aside className={cn('sticky top-0 hidden h-svh shrink-0 flex-col border-r bg-card transition-[width] duration-150 md:flex', rail ? 'w-14' : 'w-60')}>
+      <aside data-ui="sidebar" className={cn('sticky top-0 hidden h-svh shrink-0 flex-col border-r bg-card transition-[width] duration-150 md:flex', rail ? 'w-14' : 'w-60')}>
         {body(rail ? 'rail' : 'full')}
       </aside>
       <MobileNav open={menuOpen} onClose={() => setMenuOpen(false)}>{body('full')}</MobileNav>
-      <ChangePasswordDialog open={changingPassword} onClose={() => setChangingPassword(false)} user={user} />
+      <UnlockDialog path={path} />
+      <ModeEffects />
       <div className="flex min-w-0 flex-1 flex-col">
         {/* The public demo says on every page what it is, since a link can open any of them first. */}
         {isDemo && (
@@ -129,7 +135,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
           </Notice>
         )}
         {/* The page's width, so its edges meet the page's: the search on the left, what changes while you work on the right, the room between. */}
-        <header className={cn('mx-auto flex w-full items-center gap-2 px-4 pt-4 sm:px-6 md:px-10', PAGE_MAX_WIDTH)}>
+        <header data-ui="topbar" className={cn('mx-auto flex w-full items-center gap-2 px-4 pt-4 sm:px-6 md:px-10', PAGE_MAX_WIDTH)}>
           <IconButton icon={Menu} label="Open the menu" onClick={() => setMenuOpen(true)} className="shrink-0 md:hidden" aria-expanded={menuOpen} />
           {/* Drawn like a search field: it opens the command palette. */}
           <Button
@@ -138,7 +144,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             className="min-w-0 flex-1 justify-start px-3 font-normal text-muted-foreground shadow-xs hover:bg-card hover:text-foreground sm:flex-[0_1_28rem]"
           >
             <Search />
-            <span className="flex-1 truncate text-left">Search sites and actions</span>
+            <span className="flex-1 truncate text-left">{text('search')}</span>
             <kbd className="hidden rounded border bg-muted px-1.5 font-mono text-2xs sm:inline">Ctrl K</kbd>
           </Button>
           <div className="ml-auto flex shrink-0 items-center justify-end gap-2">
@@ -197,7 +203,7 @@ function useSidebarShortcut() {
  * icons only, each named in its tooltip and to screen readers, and a dot
  * where an item has news.
  */
-function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersion, onPassword, onLogout }: {
+function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersion, onLogout }: {
   mode: 'full' | 'rail';
   path: string;
   groups: Array<{ group: string; items: NavItem[] }>;
@@ -206,10 +212,10 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
   user: string;
   version: string;
   onTapVersion: () => void;
-  onPassword: () => void;
   onLogout: () => void;
 }) {
   const rail = mode === 'rail';
+  const name = usePageName();
   const fold = rail ? 'Show the menu labels' : 'Fold the menu to icons';
   const FoldIcon = rail ? PanelLeftOpen : PanelLeftClose;
   return (
@@ -224,11 +230,11 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
           <Link
             href="/mockup"
             aria-current={path === '/mockup' ? 'page' : undefined}
-            title={rail ? `${isDemo ? 'Demo' : 'Mockup'}: sample data` : undefined}
+            title={rail ? `${name(isDemo ? 'Demo' : 'Mockup')}: sample data` : name(isDemo ? 'Demo' : 'Mockup') !== (isDemo ? 'Demo' : 'Mockup') ? (isDemo ? 'Demo' : 'Mockup') : undefined}
             className={cn('flex items-center gap-2.5 rounded-md bg-warning/12 py-1.5 text-sm font-medium whitespace-nowrap text-warning transition-colors hover:bg-warning/20', rail ? 'justify-center px-0' : 'px-2.5', path === '/mockup' && 'bg-warning/20')}
           >
             <FlaskConical className="size-4 shrink-0" />
-            <span className={cn(rail && 'sr-only')}>{isDemo ? 'Demo' : 'Mockup'}</span>
+            <span className={cn(rail && 'sr-only')}>{name(isDemo ? 'Demo' : 'Mockup')}</span>
             {!rail && <span className="ml-auto pl-2 text-2xs font-normal">sample data</span>}
           </Link>
         </div>
@@ -238,7 +244,10 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
           <div key={group} role="group" aria-label={group} className="flex flex-col gap-0.5">
             {rail ? <div className="mx-2 mt-3 mb-1 border-t" aria-hidden /> : <p className="px-2.5 pt-3 pb-1 text-2xs font-medium text-muted-foreground/80">{group}</p>}
             {items.map((item) => {
-              const { label, href, icon: Icon } = item;
+              const { href, icon: Icon } = item;
+              // A mode's name for the page, with the Classic one in the tooltip.
+              const label = name(item.label);
+              const classic = label !== item.label ? item.label : undefined;
               const active = navActive(item, path);
               const hint = live[href] ?? item.hint;
               const dot = dots[href];
@@ -247,7 +256,7 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
                   key={href}
                   href={href}
                   aria-current={active ? 'page' : undefined}
-                  title={rail ? [label, dot?.title ?? live[href]].filter(Boolean).join(': ') : undefined}
+                  title={rail ? [classic ? `${label} (${classic})` : label, dot?.title ?? live[href]].filter(Boolean).join(': ') : classic}
                   className={cn(
                     'relative flex items-center gap-2.5 rounded-md py-1.5 text-sm whitespace-nowrap transition-colors',
                     rail ? 'justify-center px-0' : 'px-2.5',
@@ -274,7 +283,7 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
           </div>
         )}
         <div className={cn('flex shrink-0', rail && 'flex-col items-center gap-1')}>
-          <IconButton icon={KeyRound} label="Change the panel password" onClick={onPassword} />
+          <IconButton icon={Palette} label={`${name('Modes')}: how the panel looks`} onClick={() => navigate('/modes')} aria-current={path === '/modes' ? 'page' : undefined} />
           <IconButton icon={LogOut} label="Log out" onClick={onLogout} />
           {/* Folding is for the sidebar beside the page; the drawer on a phone has no rail. */}
           <IconButton icon={FoldIcon} label={fold} onClick={() => toggleSidebar(mode)} title={`${fold} (Ctrl+B)`} className="hidden md:inline-flex" />

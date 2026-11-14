@@ -28,7 +28,7 @@ export function SectionLayout<T extends string>({ label, items, value, onChange,
         <Tabs items={items} value={value} onChange={onChange} />
       </div>
       <nav aria-label={label} className="hidden lg:block">
-        <ul className="sticky top-4 grid gap-0.5 rounded-xl border bg-card p-1.5 shadow-xs">
+        <ul data-ui="section-nav" className="sticky top-4 grid gap-0.5 rounded-xl border bg-card p-1.5 shadow-xs">
           {items.map((item, i) => {
             const on = item.value === value;
             const Icon: ComponentType<{ className?: string }> | undefined = icons?.[item.value];

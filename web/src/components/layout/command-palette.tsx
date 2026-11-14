@@ -1,6 +1,6 @@
 import type { ActionId, InstallDraft, Site } from '@devmagic-panel/shared';
 import { branchWebUrl, repoWeb } from '@devmagic-panel/shared';
-import { Activity, Archive, HeartPulse, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, Folder, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
+import { Activity, Archive, HeartPulse, KeyRound, Palette, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, Folder, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { openInVSCode, siteUrl } from '@/components/layout/site-bits';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { siteSections } from '@/lib/site-tabs';
 import { SITE_TAB_ICONS } from '@/features/site/site-shared';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { reportModeEvent, speakModeWord, useActiveMode, useModeText, usePageName } from '@/lib/modes';
 
 interface Command {
   id: string;
@@ -98,29 +99,39 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const name = usePageName();
+  const text = useModeText();
+  const { mode } = useActiveMode();
   const commands = useMemo<Command[]>(() => {
+    // A page's name in the mode on screen, with the Classic one in the hint so typing either finds it.
+    const page = (id: string, classic: string, hint: string | undefined, icon: ReactNode, href: string): Command => {
+      const label = name(classic);
+      return { id, label, hint: label === classic ? hint : [classic, hint].filter(Boolean).join(' · '), icon, group: 'Go to', run: () => navigate(href) };
+    };
     const pages: Command[] = [
       { id: 'ask', label: 'Ask Claude', hint: 'when the AI assistant is on', icon: <Sparkles />, group: 'Actions', run: () => setAssistantOpen(true) },
-      { id: 'new', label: 'New site', icon: <Plus />, group: 'Actions', run: () => navigate('/sites/new') },
+      { id: 'new', label: text('newSite'), ...(text('newSite') !== 'New site' ? { hint: 'New site' } : {}), icon: <Plus />, group: 'Actions', run: () => navigate('/sites/new') },
       ...drafts
         .filter((d) => d.status !== 'installing')
         .map((d): Command => {
           const p = draftProgress(d);
           return { id: `draft:${d.id}`, label: `Continue ${d.title || 'New site'}`, hint: `Step ${p.at} of ${p.total}: ${p.label}`, icon: <History />, group: 'Actions', run: () => navigate(draftHref(d.id, p.step)) };
         }),
-      { id: 'sites', label: 'Sites', icon: <Globe />, group: 'Go to', run: () => navigate('/sites') },
+      page('sites', 'Sites', undefined, <Globe />, '/sites'),
       { id: 'aura', label: 'Aura', icon: <Sparkles />, group: 'Go to', run: () => navigate('/aura') },
-      { id: 'cores', label: 'WP Cores', hint: 'WordPress releases', icon: <Layers />, group: 'Go to', run: () => navigate('/cores') },
-      { id: 'services', label: 'Services', icon: <Server />, group: 'Go to', run: () => navigate('/services') },
+      page('cores', 'WP Cores', 'WordPress releases', <Layers />, '/cores'),
+      page('services', 'Services', undefined, <Server />, '/services'),
       { id: 'machine', label: 'Machine checks', hint: 'Aura: Apache, MySQL, PHP, tools', icon: <Activity />, group: 'Go to', run: () => navigate('/aura/machine') },
-      { id: 'settings', label: 'Settings', hint: 'password, AI assistant, Claude Code defaults', icon: <Settings />, group: 'Go to', run: () => navigate('/settings') },
+      page('settings', 'Settings', 'password, AI assistant, Claude Code defaults', <Settings />, '/settings'),
+      page('modes', 'Modes', 'how the panel looks: themes and effects', <Palette />, '/modes'),
+      { id: 'password', label: 'Change the panel password', hint: 'on Settings', icon: <KeyRound />, group: 'Actions', run: () => navigate('/settings') },
       { id: 'sanctum', label: 'Sanctum', hint: 'the panel: programs running, background tasks, storage', icon: <HeartPulse />, group: 'Go to', run: () => navigate('/sanctum') },
-      { id: 'activity', label: 'Activity', hint: 'jobs since the panel started', icon: <ListChecks />, group: 'Go to', run: () => navigate('/activity') },
+      page('activity', 'Activity', 'jobs since the panel started', <ListChecks />, '/activity'),
       { id: 'runs', label: 'Run history', hint: 'every action with its output', icon: <History />, group: 'Go to', run: () => navigate('/activity/runs') },
-      { id: 'mail', label: 'Mail', hint: 'what Mailpit caught', icon: <Mail />, group: 'Go to', run: () => navigate('/mail') },
+      page('mail', 'Mail', 'what Mailpit caught', <Mail />, '/mail'),
       { id: 'removed', label: 'Removed sites', hint: 'kept 14 days, to restore', icon: <Archive />, group: 'Go to', run: () => navigate('/sites?show=removed') },
-      { id: 'developer', label: 'Developer options', icon: <Wrench />, group: 'Go to', run: () => navigate('/developer') },
-      { id: 'update', label: 'Updates', hint: 'new releases, changelogs, switch back', icon: <CircleArrowUp />, group: 'Go to', run: () => navigate('/update') },
+      page('developer', 'Developer options', undefined, <Wrench />, '/developer'),
+      page('update', 'Updates', 'new releases, changelogs, switch back', <CircleArrowUp />, '/update'),
     ];
     const perSite = sites.flatMap((s): Command[] => {
       const name = siteName(s);
@@ -150,7 +161,8 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
     });
     const run = actionCommands(sites, here);
     return [...sections.filter((c) => c.group === 'Sections'), ...run.filter((c) => c.group === 'This site'), ...pages, ...perSite, ...run.filter((c) => c.group !== 'This site'), ...sections.filter((c) => c.group !== 'Sections')];
-  }, [sites, drafts, here]);
+    // With the mode: the pages' names change with it.
+  }, [sites, drafts, here, mode]);
 
   const q = query.trim().toLowerCase();
   // With nothing typed: the open site's tabs and views and its first few actions, then the pages; typing searches everything, every word in any order.
@@ -192,6 +204,18 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
     }
     close();
     c.run();
+    reportModeEvent('paletteCommand');
+  }
+
+  /** Enter with nothing to pick: a single word typed might be one the panel listens for. */
+  async function speak() {
+    const word = query.trim();
+    if (!/^[a-z]{3,20}$/i.test(word)) return;
+    const unlocked = await speakModeWord(word);
+    if (unlocked) {
+      close();
+      toast({ tone: 'info', title: 'Something stirred' });
+    }
   }
 
   let lastGroup = '';
@@ -222,9 +246,9 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, shown.length - 1)); }
                 if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-                if (e.key === 'Enter') { e.preventDefault(); pick(shown[active]); }
+                if (e.key === 'Enter') { e.preventDefault(); if (shown[active]) pick(shown[active]); else void speak(); }
               }}
-              placeholder="Jump to a site, a tab or a view, or run an action"
+              placeholder={text('palette')}
               aria-label="Search commands"
               role="combobox"
               aria-expanded="true"

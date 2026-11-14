@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.48.1-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.49.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
@@ -64,7 +64,7 @@ listens on localhost.
 - ✅ **Undo and removed sites**: removed or replaced sites are kept 14 days, installs can be undone, system files are backed up first. [More](docs/undo-and-backups.md)
 - ✅ **Updates without a token**: through public HTTPS, the GitHub CLI or git over SSH, whichever reaches the repository. [More](docs/updates.md)
 - ✅ **Optional AI assistant**: a briefing, a chat and an MCP server for Claude Code; every change comes back as a card you run. [More](docs/ai-assistant.md)
-- ✅ **Light and dark themes**, a phone-friendly layout, localhost only
+- ✅ **Light and dark themes**, modes waiting to be found, a phone-friendly layout, localhost only. [More](docs/modes.md)
 
 [⬆️ Back to top](#-table-of-contents)
 
@@ -262,8 +262,8 @@ done. Restart your browsers after the first install so they load the new CA.
    WordPress, an empty site, or one from your organization. Each step shows
    its output, and you can leave and come back while it runs.
 
-Change the panel password from the key button next to Log out, or on
-Settings: it asks for the current one, and every other browser
+Change the panel password on Settings, or with Ctrl+K's Change the panel
+password: it asks for the current one, and every other browser
 is signed out. Forgot it? **Forgot your password?** on the login page resets it
 with the password you log in to this computer with (sudo checks it; the panel
 never keeps it, and 5 wrong tries lock it for an hour), or set one in a

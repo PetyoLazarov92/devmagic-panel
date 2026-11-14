@@ -49,14 +49,14 @@ export function Toaster() {
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed right-0 bottom-0 z-50 grid w-full max-w-sm gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      className="pointer-events-none fixed right-0 bottom-0 z-50 grid w-full max-w-sm grid-cols-[minmax(0,1fr)] gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
       {toasts.map((t) => (
-        <Card key={t.id} className="pointer-events-auto flex gap-3 px-4 py-3 text-sm shadow-lg">
+        <Card key={t.id} className="pointer-events-auto flex min-w-0 gap-3 px-4 py-3 text-sm shadow-lg">
           <span className="mt-0.5 shrink-0">{icons[t.tone]}</span>
           <div className="min-w-0 flex-1">
             <p className="font-medium">{t.title}</p>
-            {t.detail && <p className="mt-0.5 font-mono text-xs break-words whitespace-pre-wrap text-muted-foreground">{t.detail}</p>}
+            {t.detail && <p className="mt-0.5 font-mono text-xs whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">{t.detail}</p>}
           </div>
           {t.action && (
             <Button

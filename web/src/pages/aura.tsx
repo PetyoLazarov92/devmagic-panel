@@ -17,6 +17,7 @@ import { useAsync } from '@/lib/use-async';
 import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
 import { CardSkeleton, Reading } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
+import { reportModeEvent } from '@/lib/modes';
 
 const MACHINE = 'This machine';
 
@@ -77,6 +78,7 @@ function Problems() {
     for (const [index, fix] of fixes.entries()) {
       try {
         const result = await api.runAction(fix.action, fix.input);
+        if (result.ok) reportModeEvent('auraFix');
         if (!result.ok) {
           failed++;
           toast({ tone: 'danger', title: `${fix.label} failed`, detail: lastLine(result.output) });

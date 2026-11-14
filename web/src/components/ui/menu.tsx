@@ -97,6 +97,7 @@ export function Menu({ items, label = 'More actions', align = 'end', trigger, tr
           id={id}
           ref={list}
           role="menu"
+          data-ui="menu"
           style={place}
           className="fixed z-50 min-w-48 rounded-lg border bg-card p-1 text-left shadow-lg"
         >

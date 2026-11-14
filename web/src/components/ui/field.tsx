@@ -34,6 +34,7 @@ export function Select({ className, wrapClassName, children, ...props }: SelectH
     <div className={cn('relative', wrapClassName)}>
       <select
         ref={ref}
+        data-ui="input"
         className={cn(
           'dmp-select peer h-10 w-full cursor-pointer appearance-none rounded-md border border-input bg-card pr-9 pl-3 text-sm text-transparent shadow-xs transition-colors hover:border-ring/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60',
           className,

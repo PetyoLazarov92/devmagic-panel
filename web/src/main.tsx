@@ -5,6 +5,7 @@ import { isMockup } from './lib/api';
 import { keepLinksInMockup } from './lib/mockup-links';
 import { toast } from './lib/toast';
 import './index.css';
+import './styles/modes.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>
