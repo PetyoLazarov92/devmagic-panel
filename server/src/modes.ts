@@ -134,8 +134,9 @@ export class ModeProgress {
     this.change((state, now) => modesDeveloper.unlock(state, mode, now));
   }
 
-  seal(mode: SealedModeId): void {
-    this.change((state) => modesDeveloper.seal(state, mode));
+  /** Seals a mode and any bonus mode that no longer has enough found; returns every mode sealed. */
+  seal(mode: SealedModeId): SealedModeId[] {
+    return this.change((state) => modesDeveloper.seal(state, mode));
   }
 
 

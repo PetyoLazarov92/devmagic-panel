@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build && node ../scripts/check-secrets.mjs dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "mockup": "VITE_MOCK=1 vite",
     "build:demo": "tsc -p tsconfig.json --noEmit && VITE_MOCK=1 VITE_DEMO=1 vite build --outDir ../dist-demo --emptyOutDir"

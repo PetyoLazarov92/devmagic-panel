@@ -125,7 +125,10 @@ export function useActiveMode(): { mode: ModeId; effects: ModeEffects; reduced: 
   const prefs = usePreferences();
   const previewing = usePreviewMode();
   const reduced = useReducedMotion();
-  const saved = (MODES as readonly string[]).includes(prefs.mode) ? prefs.mode : 'classic';
+  // A saved mode that is sealed again (from Developer options, or a bonus mode short of its count) shows as Classic.
+  const view = useModesView();
+  const known = (MODES as readonly string[]).includes(prefs.mode) ? prefs.mode : 'classic';
+  const saved = view && view.modes.find((m) => m.id === known)?.unlocked === false ? 'classic' : known;
   const mode = previewing ?? saved;
   const chosen = mode === 'classic' ? EFFECTS_OFF : previewing ? { pointer: true, elements: true, background: true } : (prefs.effects[mode] ?? EFFECTS_OFF);
   // Its own names for pages and a few lines: on unless switched off for this mode, and always in a preview.

@@ -1369,10 +1369,24 @@ export const mockApi: Api = {
   },
   preferences: async () => ({ ...mockPreferences }),
   // The modes: the panel's own rules in the mockup, every mode open in the public demo (mock/modes.ts, mock/modes-demo.ts).
-  ...mockModesApi,
+  // Each one called through, never spread in: a spread would keep the whole mock in the panel's own build.
+  modes: () => mockModesApi.modes(),
+  modeSeen: (mode) => mockModesApi.modeSeen(mode),
+  modeEvent: (event) => mockModesApi.modeEvent(event),
+  modeWordCheck: (word) => mockModesApi.modeWordCheck(word),
+  modeWord: (word) => mockModesApi.modeWord(word),
+  modesDeveloper: () => mockModesApi.modesDeveloper(),
+  modePath: (path, what) => mockModesApi.modePath(path, what),
+  modesDeveloperState: () => mockModesApi.modesDeveloperState(),
+  modesPuzzle: () => mockModesApi.modesPuzzle(),
+  modesPuzzleAnswer: (id, choice) => mockModesApi.modesPuzzleAnswer(id, choice),
+  modesLock: () => mockModesApi.modesLock(),
+  dailyLine: () => mockModesApi.dailyLine(),
+  dailyLineSeen: () => mockModesApi.dailyLineSeen(),
   modeDeveloper: async (mode, what) => {
     const view = await mockModesApi.modeDeveloper(mode, what);
-    if (what === 'seal' && mockPreferences.mode === mode) await mockApi.savePreferences({ mode: 'classic' });
+    // Sealing the mode in use, or a bonus mode that falls short with it, puts the mockup back on Classic.
+    if (what === 'seal' && !mockModeOpen(mockPreferences.mode)) await mockApi.savePreferences({ mode: 'classic' });
     return view;
   },
   savePreferences: async (update) => {

@@ -4,5 +4,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["server/src", "server/test", "shared/src", "shared/test", "vitest.config.ts"]
+  "include": ["server/src", "server/test", "shared/src", "shared/test", "vitest.config.ts", "vitest.global-setup.ts"]
 }

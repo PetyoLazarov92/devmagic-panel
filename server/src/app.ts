@@ -842,10 +842,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const { what } = request.params;
       if (what === 'unlock') modes.unlock(mode);
       else if (what === 'seal') {
-        modes.seal(mode);
-        // Sealing the mode in use puts the panel back on Classic.
+        const sealed: string[] = modes.seal(mode);
+        // Sealing the mode in use, or a bonus mode that falls short with it, puts the panel back on Classic.
         const prefs = readPreferences();
-        if (prefs.mode === mode) deps.store.setMeta(PREFERENCES_KEY, JSON.stringify({ ...prefs, mode: 'classic' }));
+        if (sealed.includes(prefs.mode)) deps.store.setMeta(PREFERENCES_KEY, JSON.stringify({ ...prefs, mode: 'classic' }));
       } else if (what === 'reset') modes.resetMode(mode);
       else return reply.code(404).send({ error: `Nothing called ${what.slice(0, 20)} to do with a mode` });
       return modes.developerView();

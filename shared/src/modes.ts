@@ -268,9 +268,29 @@ export function startFreshPaths(state: ModesState, now = new Date()): void {
     state.once.modeEarned = earned;
     state.counters.modeEarned = earned.length;
   }
+  // A mode sealed since it was earned no longer counts (sealed before this was so, it still did).
+  const stillOpen = (state.once.modeEarned ?? []).filter((m) => state.unlocks[m as SealedModeId]);
+  if (stillOpen.length !== (state.once.modeEarned ?? []).length) {
+    state.once.modeEarned = stillOpen;
+    state.counters.modeEarned = stillOpen.length;
+    sealShortBonuses(state);
+  }
   for (const path of MODE_PATHS) {
     if (path.startsFresh && !state.starts[path.id]) state.starts[path.id] = { from: state.counters[path.counter] ?? 0, since: now.toISOString() };
   }
+}
+
+/** Seals each bonus mode its count opened that no longer has enough modes found; returns them. */
+function sealShortBonuses(state: ModesState): SealedModeId[] {
+  const sealed: SealedModeId[] = [];
+  for (const bonus of BONUS_MODES) {
+    const path = MODE_PATHS.find((p) => p.mode === bonus);
+    if (path && state.unlocks[bonus]?.by === path.id && pathProgress(state, path) < path.goal) {
+      delete state.unlocks[bonus];
+      sealed.push(bonus);
+    }
+  }
+  return sealed;
 }
 
 export function isUnlocked(state: ModesState, mode: ModeId): boolean {
@@ -416,8 +436,21 @@ export const modesDeveloper = {
   unlock(state: ModesState, mode: SealedModeId, now = new Date()): void {
     if (!isUnlocked(state, mode)) unlock(state, mode, 'developer', now);
   },
-  seal(state: ModesState, mode: SealedModeId): void {
+  /**
+   * Seals a mode again. It no longer counts as earned, and a bonus mode its count opened
+   * is sealed too once the count falls short (one opened from here stays). Returns every
+   * mode sealed, the one asked for first.
+   */
+  seal(state: ModesState, mode: SealedModeId): SealedModeId[] {
+    if (!state.unlocks[mode]) return [];
     delete state.unlocks[mode];
+    const sealed: SealedModeId[] = [mode];
+    const earned = state.once.modeEarned ?? [];
+    if (earned.includes(mode)) {
+      state.once.modeEarned = earned.filter((m) => m !== mode);
+      state.counters.modeEarned = Math.max(0, (state.counters.modeEarned ?? 0) - 1);
+    }
+    return [...sealed, ...sealShortBonuses(state)];
   },
   resetPath(state: ModesState, pathId: string, now = new Date()): void {
     const path = MODE_PATHS.find((p) => p.id === pathId);

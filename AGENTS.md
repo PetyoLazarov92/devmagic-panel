@@ -365,7 +365,10 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
     the changelog, the README, commit messages or UI text before it opens,
     with two exceptions: the daily line (`shared/src/daily-line.ts`) shows
     one word a day in bold, never saying which mode it opens, its sources
-    made up; and a bonus mode shows openly how many modes it needs. The
+    made up, and its dialog may carry a few touches of its own
+    (`daily-line.tsx`) that are never described anywhere else, the changelog
+    and commit messages included; and a bonus mode shows openly how many
+    modes it needs. The
     Modes page shows riddles only, and Developer options the rules only once
     its puzzle is solved (`server/src/app.ts` keeps them back until then).
     Its progress is counters in the panel's database (`server/src/modes.ts`),
@@ -374,7 +377,10 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
     words, and no line of its text contains one (`web/test/modes.test.ts`).
     The public demo is a showcase with every mode open (`web/src/mock/modes-demo.ts`,
     swapped in by `web/vite.config.ts`): no words, paths, rules or daily lines, and
-    `scripts/demo/finish.mjs` fails the demo build if one turns up.
+    `scripts/demo/finish.mjs` fails the demo build if one turns up; the
+    panel's own web build runs the same check (`scripts/check-secrets.mjs`).
+    Never spread an object into the mock's API (`web/src/mock/api.ts`): it
+    keeps the whole mock in the panel's build.
     A mode changes looks, names and a few lines, never errors, warnings,
     status labels or anything that removes something.
 

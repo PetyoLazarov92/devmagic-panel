@@ -21,8 +21,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), demoHtml()],
   resolve: {
     alias: [
-      // The public demo is a showcase of the modes, built without their secrets (mock/modes-demo.ts).
-      ...(process.env.VITE_DEMO === '1' ? [{ find: /^@\/mock\/modes$/, replacement: fileURLToPath(new URL('./src/mock/modes-demo.ts', import.meta.url)) }] : []),
+      // The modes' full logic (mock/modes.ts) is for the local mockup only: the public demo is a showcase
+      // built without the secrets (mock/modes-demo.ts), and so is the panel's own build, which never uses the mock.
+      ...(process.env.VITE_MOCK !== '1' || process.env.VITE_DEMO === '1' ? [{ find: /^@\/mock\/modes$/, replacement: fileURLToPath(new URL('./src/mock/modes-demo.ts', import.meta.url)) }] : []),
       { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
     ],
   },

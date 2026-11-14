@@ -273,7 +273,10 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
               aria-activedescendant={shown[active] ? `cmd-${shown[active].id}` : undefined}
               className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
-            <kbd className="rounded border bg-muted px-1.5 font-mono text-2xs text-muted-foreground">Esc</kbd>
+            {/* Esc closes the palette, and so does a click on its badge. */}
+            <Button variant="outline" size="xs" onClick={close} aria-label="Close (Esc)" title="Close (Esc)" className="h-6 px-1.5 font-mono text-2xs text-muted-foreground">
+              Esc
+            </Button>
           </div>
           <ul id="palette-list" role="listbox" className="max-h-80 overflow-auto p-1.5">
             {shown.map((c, i) => {

@@ -1,4 +1,4 @@
-import { DAILY_LINES, dailyLine, dailyLineParts, countMode, emptyModesState, MODE_PATHS, MODE_PUZZLES, MODE_WORDS, modesDeveloper, modesDeveloperView, modesView, nextPuzzle, pathProgress, readModesState, speakWord } from '@devmagic-panel/shared';
+import { DAILY_LINES, dailyLine, dailyLineParts, countMode, emptyModesState, MODE_PATHS, MODE_PUZZLES, MODE_WORDS, modesDeveloper, modesDeveloperView, modesView, nextPuzzle, pathProgress, readModesState, speakWord, startFreshPaths } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { countAction, ModeProgress, newerVersion } from '../src/modes.js';
 
@@ -350,6 +350,40 @@ describe('mode progress', () => {
     expect(state.unlocks.storms?.by).toBe('storms.collect');
     expect(state.counters.modeEarned).toBe(12);
     expect(modesDeveloperView(state).modes.find((m) => m.id === 'storms')?.word).toBeUndefined();
+  });
+
+  it('takes a mode sealed in Developer options out of the count, sealing a bonus mode that falls short with it', () => {
+    const state = emptyModesState();
+    for (const word of Object.values(MODE_WORDS)) speakWord(state, word);
+    expect(state.unlocks.storms?.by).toBe('storms.collect');
+    expect(modesDeveloper.seal(state, 'wizard')).toEqual(['wizard', 'storms']);
+    expect(state.counters.modeEarned).toBe(11);
+    expect(modesDeveloper.seal(state, 'circuit')).toEqual(['circuit']);
+    expect(state.counters.modeEarned).toBe(10);
+    expect(state.unlocks.frostfall?.by).toBe('frostfall.collect');
+    expect(state.unlocks.atlas?.by).toBe('atlas.collect');
+    // Earned again, it counts again, and the bonus mode opens again.
+    speakWord(state, 'abracadabra');
+    speakWord(state, 'overclock');
+    expect(state.unlocks.storms?.by).toBe('storms.collect');
+    // A bonus mode opened from Developer options stays when the count falls.
+    modesDeveloper.seal(state, 'storms');
+    modesDeveloper.unlock(state, 'storms');
+    modesDeveloper.seal(state, 'grove');
+    expect(state.unlocks.storms?.by).toBe('developer');
+    expect(modesDeveloper.seal(state, 'neon')).toEqual(['neon']);
+  });
+
+  it('settles a count that still held modes sealed before sealing took them out', () => {
+    const state = emptyModesState();
+    for (const word of Object.values(MODE_WORDS)) speakWord(state, word);
+    // As an older panel left it: two modes sealed, the count untouched.
+    delete state.unlocks.wizard;
+    delete state.unlocks.circuit;
+    startFreshPaths(state);
+    expect(state.counters.modeEarned).toBe(10);
+    expect(state.unlocks.storms).toBeUndefined();
+    expect(state.unlocks.frostfall?.by).toBe('frostfall.collect');
   });
 
   it('opens a bonus mode at start when its count was reached before it existed', () => {

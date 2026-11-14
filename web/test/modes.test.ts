@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { MODE_WORDS } from '@devmagic-panel/shared';
 import { modeText, pageName } from '../src/lib/mode-names.js';
+import { modeDots } from '../src/lib/mode-dots.js';
 
 /** Every source file of the web app, but the mockup's stand-in for the server. */
 function webSources(dir = join(__dirname, '../src')): string[] {
@@ -141,3 +142,23 @@ describe('mode names and lines', () => {
     expect(modeText('allGood', 'wizard')).toBe('All wards hold');
   });
 });
+
+describe("the daily line's dots", () => {
+  const view = (open: Array<[string, string]>) => ({
+    earned: true,
+    fresh: [],
+    modes: open.map(([id, at]) => ({ id, title: id, description: '', unlocked: true, unlockedAt: at })),
+  }) as unknown as Parameters<typeof modeDots>[0];
+
+  it('lights the modes found in the order they were found, the bonus ones in slots 5, 10 and 15', () => {
+    const dots = modeDots(view([['grove', '2026-11-02'], ['wizard', '2026-11-01'], ['atlas', '2026-11-03'], ['classic', '']]));
+    expect(dots).toHaveLength(15);
+    expect(dots.map((d) => d.mode)).toEqual(['wizard', 'grove', null, null, 'atlas', null, null, null, null, null, null, null, null, null, null]);
+    expect(dots.map((d, i) => (d.bonus ? i : -1)).filter((i) => i >= 0)).toEqual([4, 9, 14]);
+  });
+
+  it('shows nothing lit before anything is found', () => {
+    expect(modeDots(null).every((d) => d.mode === null)).toBe(true);
+  });
+});
+

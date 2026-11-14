@@ -1,5 +1,13 @@
 # Changelog
 
+### v1.66.0 (2026-11-15)
+* **Modes:** the line for today has a few new touches
+* **Command palette:** a click on its Esc badge closes it
+* **Modes:** a mode sealed in Developer options no longer counts as found, so a bonus mode that falls short of its count seals with it, and a sealed mode in use shows as Classic
+* **Menu:** items no longer move a pixel the first time you point at them
+* **Modes:** the panel's web app again carries none of the modes' secret words, which v1.65.3 let back in, and its build now stops if one turns up
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.65.3 (2026-11-14)
 * **Demo:** the public demo is now a showcase of the modes: every mode is open to try from the start, and nothing about how one opens ships with it, no words, paths or lines for today. Its build stops if one ever turns up
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

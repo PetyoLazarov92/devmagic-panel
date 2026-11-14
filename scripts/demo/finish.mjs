@@ -2,8 +2,9 @@
 // files, with an .htaccess for Apache or LiteSpeed. The page's inline script is allowed by its
 // hash, so the CSP needs no 'unsafe-inline' for scripts; nothing loads from another origin.
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { modeSecretsIn } from '../check-secrets.mjs';
 
 const out = fileURLToPath(new URL('../../dist-demo/', import.meta.url));
 const html = readFileSync(`${out}index.html`, 'utf8');
@@ -14,19 +15,7 @@ const hashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
 if (/\/healthz/.test(html)) throw new Error('dist-demo/index.html still has the panel-only script');
 
 // The demo is a showcase of the modes: none of their secrets may ship with it (web/src/mock/modes-demo.ts).
-// Every word, every path's rule and unlock line, and every daily line is looked for in what was built.
-const { DAILY_LINES, MODE_PATHS, MODE_WORDS, MODE_WORD_LINE } = await import('../../shared/dist/index.js');
-const built = readdirSync(`${out}assets`)
-  .filter((f) => f.endsWith('.js'))
-  .map((f) => readFileSync(`${out}assets/${f}`, 'utf8'))
-  .concat(html)
-  .join('\n');
-const lower = built.toLowerCase();
-const leaks = [
-  ...Object.values(MODE_WORDS).filter((w) => new RegExp(`\\b${w}\\b`).test(lower)),
-  ...[...MODE_PATHS.map((p) => p.rule), ...MODE_PATHS.map((p) => p.line), ...Object.values(MODE_WORD_LINE)].filter((t) => t && built.includes(t)),
-  ...Object.values(DAILY_LINES).flat().map((l) => l.text.replace(/\*\*/g, '')).filter((t) => built.includes(t.slice(0, 40))),
-];
+const leaks = await modeSecretsIn(out);
 if (leaks.length) throw new Error(`dist-demo/ holds ${leaks.length} of the modes' secrets, starting with: ${leaks[0]}`);
 
 const csp = [
