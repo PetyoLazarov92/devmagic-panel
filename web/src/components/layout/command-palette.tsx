@@ -114,7 +114,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
       { id: 'services', label: 'Services', icon: <Server />, group: 'Go to', run: () => navigate('/services') },
       { id: 'machine', label: 'Machine checks', hint: 'Aura: Apache, MySQL, PHP, tools', icon: <Activity />, group: 'Go to', run: () => navigate('/aura/machine') },
       { id: 'settings', label: 'Settings', hint: 'password, AI assistant, Claude Code defaults', icon: <Settings />, group: 'Go to', run: () => navigate('/settings') },
-      { id: 'sanctum', label: 'Sanctum', hint: 'the panel: background tasks, storage, programs running', icon: <HeartPulse />, group: 'Go to', run: () => navigate('/sanctum') },
+      { id: 'sanctum', label: 'Sanctum', hint: 'the panel: programs running, background tasks, storage', icon: <HeartPulse />, group: 'Go to', run: () => navigate('/sanctum') },
       { id: 'activity', label: 'Activity', hint: 'jobs since the panel started', icon: <ListChecks />, group: 'Go to', run: () => navigate('/activity') },
       { id: 'runs', label: 'Run history', hint: 'every action with its output', icon: <History />, group: 'Go to', run: () => navigate('/activity/runs') },
       { id: 'mail', label: 'Mail', hint: 'what Mailpit caught', icon: <Mail />, group: 'Go to', run: () => navigate('/mail') },

@@ -21,10 +21,11 @@ import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 
 type View = 'storage' | 'tasks' | 'programs';
+// Running now first: the page opens on what the panel does this moment.
 const VIEWS: ReadonlyArray<readonly [View, string, typeof HardDrive]> = [
-  ['storage', 'Storage', HardDrive],
-  ['tasks', 'Background tasks', Clock],
   ['programs', 'Running now', Cpu],
+  ['tasks', 'Background tasks', Clock],
+  ['storage', 'Storage', HardDrive],
 ];
 
 /** How often a task runs, said short: "hourly". */
@@ -41,12 +42,12 @@ export function SanctumPage() {
   const [fresh, setFresh] = useState(0);
   const storage = useAsync(() => api.panelStorage(fresh > 0), [fresh]);
   const asked = useQueryParam('view');
-  const [view, setView] = useState<View>(asked === 'tasks' || asked === 'programs' ? asked : 'storage');
+  const [view, setView] = useState<View>(asked === 'tasks' || asked === 'storage' ? asked : 'programs');
   const [runningTask, setRunningTask] = useState<string | null>(null);
 
   const show = (v: View) => {
     setView(v);
-    navigate(v === 'storage' ? '/sanctum' : `/sanctum?view=${v}`, { replace: true });
+    navigate(v === 'programs' ? '/sanctum' : `/sanctum?view=${v}`, { replace: true });
   };
   const runTask = async (id: string, label: string) => {
     setRunningTask(id);

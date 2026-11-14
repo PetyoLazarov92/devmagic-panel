@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.47.1 (2026-11-14)
+* **Sanctum:** opens on Running now, with Background tasks second and Storage third. Storage is at `/sanctum?view=storage`
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.47.0 (2026-11-14)
 * **Storage:** the panel versions it does not run are kept packed, with gzip at its best: about 12 MB each instead of 86 MB. A daily background task packs them, and switching back to one unpacks it first, in a few seconds. Updates marks them packed, with Unpack it for one whose installer runs in a terminal
 * **Sanctum:** a program says its command (`git status`, `wp plugin list`), which page started it ("Sites › local.spellbook.example › plugins"), and why it failed in a few words ("table not there", "not a git repository"), from its exit code and MySQL's error number, never its arguments or output. Alike ones share a line, and the page reads that went well are a table with how many times, the average and the slowest

@@ -109,36 +109,7 @@ next task. Four tiles give the short answer: the panel
 stop cleanly), what runs now, its background tasks (with any that failed),
 and its storage in all. Under them, one list at a time:
 
-- **Storage** (the default): what the panel keeps, each with its size and how
-  long it stays (point at a name for what it is): database snapshots, clean
-  copies, backups for Undo, deleted sites, downloaded dumps, the Files tab's
-  deletes, MySQL settings backups, panel versions, Mailpit and tools, Run
-  history and logs, and kept databases. **Clean up now** removes all of that
-  kind now, after a confirmation that says what goes (and, for kept
-  databases, lists them): the snapshots the panel took before a change (yours
-  stay), downloaded dumps (except one a job or a draft uses), the Files tab's
-  deletes with their Undo, MySQL settings backups, every finished run, or
-  every kept database (except one of a site a job works on). It is the
-  `storage.clean` action, so Run history has it. The other kinds open where
-  you manage them: clean copies on a site's Database tab, deleted sites in
-  Removed sites, panel versions on Updates (three are kept: the running one
-  unpacked, the others packed with gzip at its best, about a seventh of the
-  room; switching back to one unpacks it first), caught mail in
-  Mail; backups for Undo stay for `dmp-restore`. Snapshots the panel takes before a change
-  (`before-import` and the like) keep the newest 3 per site and every one
-  from the last 30 days; the ones you take stay until you delete them.
-- **Background tasks** (`?view=tasks`): the work the panel does on its own,
-  how often, what each last did and when it runs next, with **Run now**,
-  which like the timer removes only what is past its time and says so when
-  nothing was:
-  remove expired install drafts (every 10 minutes); trim Run history, remove
-  old downloaded dumps, Files tab deletes and MySQL settings backups, drop
-  expired kept databases (hourly); remove old automatic snapshots (daily);
-  pack older panel versions (daily); remove deleted sites for good and check
-  for a new release (every 6 hours).
-  Click a task for its last runs: when, what it did or why it failed, and how
-  long it took. The newest 20 per task are kept in the panel's database.
-- **Running now** (`?view=programs`): each program the panel has open, with
+- **Running now** (the default): each program the panel has open, with
   its command where it has one (`git status`, `wp plugin list`, `dmp-root
   vhost-write`; only words that look like a command, never a value), since
   when, and what started it: a job (a link to it), a background task, or the
@@ -159,6 +130,35 @@ and its storage in all. Under them, one list at a time:
   more, or failed for a job or a background task, also goes to the panel's
   log (`journalctl --user -u devmagic-panel`), by name only; a page's read
   that fails is often meant to (a sign-in check), so it is not logged.
+- **Background tasks** (`?view=tasks`): the work the panel does on its own,
+  how often, what each last did and when it runs next, with **Run now**,
+  which like the timer removes only what is past its time and says so when
+  nothing was:
+  remove expired install drafts (every 10 minutes); trim Run history, remove
+  old downloaded dumps, Files tab deletes and MySQL settings backups, drop
+  expired kept databases (hourly); remove old automatic snapshots (daily);
+  pack older panel versions (daily); remove deleted sites for good and check
+  for a new release (every 6 hours).
+  Click a task for its last runs: when, what it did or why it failed, and how
+  long it took. The newest 20 per task are kept in the panel's database.
+- **Storage** (`?view=storage`): what the panel keeps, each with its size and how
+  long it stays (point at a name for what it is): database snapshots, clean
+  copies, backups for Undo, deleted sites, downloaded dumps, the Files tab's
+  deletes, MySQL settings backups, panel versions, Mailpit and tools, Run
+  history and logs, and kept databases. **Clean up now** removes all of that
+  kind now, after a confirmation that says what goes (and, for kept
+  databases, lists them): the snapshots the panel took before a change (yours
+  stay), downloaded dumps (except one a job or a draft uses), the Files tab's
+  deletes with their Undo, MySQL settings backups, every finished run, or
+  every kept database (except one of a site a job works on). It is the
+  `storage.clean` action, so Run history has it. The other kinds open where
+  you manage them: clean copies on a site's Database tab, deleted sites in
+  Removed sites, panel versions on Updates (three are kept: the running one
+  unpacked, the others packed with gzip at its best, about a seventh of the
+  room; switching back to one unpacks it first), caught mail in
+  Mail; backups for Undo stay for `dmp-restore`. Snapshots the panel takes before a change
+  (`before-import` and the like) keep the newest 3 per site and every one
+  from the last 30 days; the ones you take stay until you delete them.
 
 When the panel does not answer (it restarts after an update, or Apache
 reloads), the heart icon says **Reconnecting...** until it is back. A page
