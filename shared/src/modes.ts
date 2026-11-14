@@ -8,9 +8,23 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink', 'dune', 'pixel', 'sorbet', 'deco', 'chrome'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink', 'dune', 'pixel', 'sorbet', 'deco', 'chrome', 'atlas'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
+
+/**
+ * The bonus modes: no riddle and no word, they open by collecting. Each opens
+ * once enough of the other modes were earned (by a path or a word, never an
+ * unlock from Developer options), shown on its card as dashes filling up.
+ */
+export const BONUS_MODES = ['atlas'] as const;
+export type BonusModeId = (typeof BONUS_MODES)[number];
+/** The modes with a word, every sealed mode but the bonus ones. */
+export type WordModeId = Exclude<SealedModeId, BonusModeId>;
+export const BONUS_GOAL: Record<BonusModeId, number> = { atlas: 4 };
+export function isBonusMode(mode: string): mode is BonusModeId {
+  return (BONUS_MODES as readonly string[]).includes(mode);
+}
 
 export const MODE_INFO: Record<ModeId, { title: string; description: string }> = {
   classic: { title: 'Classic', description: 'The panel as you know it. Every mode works in light and dark.' },
@@ -26,6 +40,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   sorbet: { title: 'Sorbet', description: 'Pastel mint, strawberry and lemon: rounded everything, three scoops in each corner, sprinkles where you click, and a few pages named for the ice cream parlor.' },
   deco: { title: 'Art Deco', description: 'Gold on black or ivory: a fine gold frame, a sunburst fan in each corner, a gold star where you click, and a few pages named for the grand hotel.' },
   chrome: { title: 'Chrome', description: 'Liquid metal: chrome titles, a reflection sweeping across each card, chrome droplets in each corner, a ripple of mercury where you click, and a few pages named for the machine.' },
+  atlas: { title: 'Atlas', description: "An explorer's chart: an engraved map behind the pages, cards like a weathered pirate map with a compass that swings, a pin where you click, and a few pages named for the voyage." },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -99,6 +114,11 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: "A reflection sweeps across each card now and then, its droplets flow together while you point at it, a broken site's edge breathes red, a healthy site's bead glints, a chrome ring turns where something runs.",
     background: 'Soft blobs of silver light drift slowly behind the pages, like light on liquid metal.',
   },
+  atlas: {
+    pointer: 'A click drops a small red pin that settles on the map.',
+    elements: "A card's compass needle swings to a new heading when you point at the card, a broken site's edge is singed red, a compass turns where something runs.",
+    background: 'A red route winds slowly across the map behind the pages, around the forest and over the river.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
@@ -164,6 +184,7 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'chrome.mirror', mode: 'chrome', counter: 'prodRefresh', goal: 5, riddle: 'Hold up the mirror five times.', line: 'Five times, a perfect reflection.', rule: "Refresh a site's database from production 5 times", startsFresh: true },
   { id: 'chrome.polish', mode: 'chrome', counter: 'searchReplace', goal: 10, riddle: 'Buff out ten scratches.', line: 'Ten scratches, buffed out.', rule: "Run a search and replace on a site's database 10 times", startsFresh: true },
   { id: 'chrome.engine', mode: 'chrome', counter: 'serviceRestart', goal: 20, riddle: 'Rev the engine twenty times.', line: 'Twenty revs of the engine.', rule: 'Restart or reload a service (Apache, nginx, PHP-FPM, MySQL and the like) 20 times', startsFresh: true },
+  { id: 'atlas.collect', mode: 'atlas', counter: 'modeEarned', goal: BONUS_GOAL.atlas, riddle: '', line: 'Four modes found: the map is yours.', rule: 'Earn 4 of the other modes, by a path or a word (Developer options unlocks do not count); modes earned before this release count too' },
 ];
 
 /**
@@ -175,10 +196,10 @@ const RETIRED_PATHS: Record<string, { line: string; label: string }> = {
 };
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy', dune: 'sandstorm', pixel: 'extralife', sorbet: 'brainfreeze', deco: 'champagne', chrome: 'quicksilver' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.', ink: 'The ink took to the paper.', dune: 'The storm let you through.', pixel: 'One extra life.', sorbet: 'Brain freeze, worth it.', deco: 'Champagne for everyone.', chrome: 'Quicksilver, in your hands.' };
+export const MODE_WORDS: Record<WordModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy', dune: 'sandstorm', pixel: 'extralife', sorbet: 'brainfreeze', deco: 'champagne', chrome: 'quicksilver' };
+export const MODE_WORD_LINE: Record<WordModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.', ink: 'The ink took to the paper.', dune: 'The storm let you through.', pixel: 'One extra life.', sorbet: 'Brain freeze, worth it.', deco: 'Champagne for everyone.', chrome: 'Quicksilver, in your hands.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.', dune: 'The dunes are shifting.', pixel: 'Player one, ready.', sorbet: 'Help yourself to a scoop.', deco: 'The ballroom is open.', chrome: 'Polished to a mirror shine.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.', dune: 'The dunes are shifting.', pixel: 'Player one, ready.', sorbet: 'Help yourself to a scoop.', deco: 'The ballroom is open.', chrome: 'Polished to a mirror shine.', atlas: 'Chart your own course.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;
@@ -229,7 +250,7 @@ export function pathProgress(state: ModesState, path: ModePath): number {
  */
 export function startFreshPaths(state: ModesState, now = new Date()): void {
   if (state.counters.modeEarned === undefined) {
-    const earned = (Object.keys(state.unlocks) as SealedModeId[]).filter((m) => state.unlocks[m] && state.unlocks[m]?.by !== 'developer');
+    const earned = (Object.keys(state.unlocks) as SealedModeId[]).filter((m) => !isBonusMode(m) && state.unlocks[m] && state.unlocks[m]?.by !== 'developer');
     state.once.modeEarned = earned;
     state.counters.modeEarned = earned.length;
   }
@@ -246,7 +267,7 @@ function unlock(state: ModesState, mode: SealedModeId, by: UnlockedBy, now: Date
   state.unlocks[mode] = { at: now.toISOString(), by, seen: false };
   // A mode earned by a path or a word, not opened from Developer options: one more world cleared, once per mode.
   const earned = state.once.modeEarned ?? [];
-  if (by !== 'developer' && !earned.includes(mode)) {
+  if (by !== 'developer' && !isBonusMode(mode) && !earned.includes(mode)) {
     state.once.modeEarned = [...earned, mode];
     state.counters.modeEarned = (state.counters.modeEarned ?? 0) + 1;
   }
@@ -278,7 +299,7 @@ export function countMode(state: ModesState, counter: ModeCounter, now = new Dat
 /** A word typed in Ctrl+K: unlocks its mode when it is one, and is never kept. Changes `state`. */
 export function speakWord(state: ModesState, text: string, now = new Date()): SealedModeId | null {
   const word = text.trim().toLowerCase();
-  const mode = (Object.keys(MODE_WORDS) as SealedModeId[]).find((m) => MODE_WORDS[m] === word);
+  const mode = (Object.keys(MODE_WORDS) as WordModeId[]).find((m) => MODE_WORDS[m] === word);
   if (!mode || isUnlocked(state, mode)) return null;
   unlock(state, mode, 'word', now);
   // A mode earned may finish a path that counts modes earned; that one shows its own dialog after.
@@ -297,6 +318,8 @@ export interface ModeView {
   riddles?: Array<{ text: string; weakening: boolean }>;
   /** For the unlock dialog: what earned it, with the mode's own ending. */
   unlockLine?: string;
+  /** A bonus mode: how many of the modes it needs are earned so far, for its card's dashes. */
+  bonus?: { have: number; goal: number };
 }
 
 export interface ModesView {
@@ -308,7 +331,7 @@ export interface ModesView {
 }
 
 function unlockLine(mode: SealedModeId, by: UnlockedBy): string {
-  const first = by === 'word' ? MODE_WORD_LINE[mode] : by === 'developer' ? 'Unlocked from Developer options.' : (MODE_PATHS.find((p) => p.id === by)?.line ?? RETIRED_PATHS[by]?.line ?? '');
+  const first = by === 'word' && !isBonusMode(mode) ? MODE_WORD_LINE[mode] : by === 'developer' ? 'Unlocked from Developer options.' : (MODE_PATHS.find((p) => p.id === by)?.line ?? RETIRED_PATHS[by]?.line ?? '');
   return [first, MODE_UNLOCK_TAIL[mode]].filter(Boolean).join(' ');
 }
 
@@ -317,7 +340,11 @@ export function modesView(state: ModesState): ModesView {
     const base = { id, ...MODE_INFO[id] };
     if (id === 'classic') return { ...base, unlocked: true };
     const done = state.unlocks[id];
-    if (done) return { ...base, unlocked: true, unlockedAt: done.at, unlockLine: unlockLine(id, done.by) };
+    if (done) return { ...base, unlocked: true, unlockedAt: done.at, unlockLine: unlockLine(id, done.by), ...(isBonusMode(id) ? { bonus: { have: BONUS_GOAL[id], goal: BONUS_GOAL[id] } } : {}) };
+    if (isBonusMode(id)) {
+      const path = MODE_PATHS.find((p) => p.mode === id);
+      return { ...base, unlocked: false, bonus: { have: path ? Math.min(pathProgress(state, path), path.goal) : 0, goal: BONUS_GOAL[id] } };
+    }
     const riddles = MODE_PATHS.filter((p) => p.mode === id).map((p) => ({ text: p.riddle, weakening: pathProgress(state, p) * 2 >= p.goal }));
     return { ...base, unlocked: false, riddles };
   });
@@ -332,7 +359,8 @@ export interface ModesDeveloperView {
     id: SealedModeId;
     title: string;
     unlocked?: { at: string; by: UnlockedBy; byLabel: string; seen: boolean };
-    word: string;
+    /** Typed in Ctrl+K; a bonus mode has none. */
+    word?: string;
     paths: Array<{ id: string; rule: string; progress: number; goal: number; since: string }>;
   }>;
   counters: Array<{ id: ModeCounter; count: number }>;
@@ -348,7 +376,7 @@ export function modesDeveloperView(state: ModesState): ModesDeveloperView {
         id,
         title: MODE_INFO[id].title,
         ...(done ? { unlocked: { ...done, byLabel } } : {}),
-        word: MODE_WORDS[id],
+        ...(isBonusMode(id) ? {} : { word: MODE_WORDS[id] }),
         paths: MODE_PATHS.filter((p) => p.mode === id).map((p) => ({ id: p.id, rule: p.rule, progress: pathProgress(state, p), goal: p.goal, since: state.starts[p.id]?.since ?? state.since })),
       };
     }),

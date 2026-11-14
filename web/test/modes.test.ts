@@ -72,6 +72,12 @@ describe('mode names and lines', () => {
     expect(modeText('allGood', 'deco')).toBe('All in order');
   });
 
+  it("gives pages Atlas's names", () => {
+    expect(pageName('Sites', 'atlas')).toBe('Lands');
+    expect(pageName('Activity', 'atlas')).toBe("Ship's log");
+    expect(modeText('palette', 'atlas')).toBe('Set a course...');
+  });
+
   it("gives pages Chrome's names", () => {
     expect(pageName('Sites', 'chrome')).toBe('Fleet');
     expect(pageName('Activity', 'chrome')).toBe('Telemetry');

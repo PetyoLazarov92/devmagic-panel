@@ -18,7 +18,7 @@ import { SITE_TAB_ICONS } from '@/features/site/site-shared';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { reportModeEvent, speakModeWord, useActiveMode, useModeText, useModesEntry, useModesView, usePageName } from '@/lib/modes';
-import { EFFECTS_ON, MODE_INFO, MODE_WORDS, type SealedModeId } from '@devmagic-panel/shared';
+import { EFFECTS_ON, MODE_INFO, MODE_WORDS, type WordModeId } from '@devmagic-panel/shared';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 
 interface Command {
@@ -173,7 +173,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
   // command to unlock it; unlocked, one to switch to it; already on, one that says so and opens the Modes page.
   const modes = useModesView();
   const prefs = usePreferences();
-  const spoken = (Object.keys(MODE_WORDS) as SealedModeId[]).find((m) => MODE_WORDS[m] === q);
+  const spoken = (Object.keys(MODE_WORDS) as WordModeId[]).find((m) => MODE_WORDS[m] === q);
   const spokenView = spoken ? modes?.modes.find((x) => x.id === spoken) : undefined;
   const unlock: Command | null =
     !spoken || !spokenView

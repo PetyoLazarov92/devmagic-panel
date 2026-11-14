@@ -59,7 +59,8 @@ export function ModesPage() {
   }
 
   const active = view?.modes.find((m) => m.id === prefs.mode) ?? view?.modes[0];
-  const others = view?.modes.filter((m) => m.id !== active?.id) ?? [];
+  const others = view?.modes.filter((m) => m.id !== active?.id && !m.bonus) ?? [];
+  const bonus = view?.modes.filter((m) => m.id !== active?.id && m.bonus) ?? [];
   const sealedCount = others.filter((m) => !m.unlocked).length;
 
   return (
@@ -89,6 +90,16 @@ export function ModesPage() {
               <h2 id="more-modes" className="text-sm font-semibold">More modes{sealedCount > 0 ? <span className="font-normal text-muted-foreground"> · {sealedCount === 1 ? '1 sealed' : `${sealedCount} sealed`}</span> : null}</h2>
               <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {others.map((m) => (m.unlocked ? <UnlockedMode key={m.id} mode={m} onActivate={() => activate(m.id)} onPreview={() => preview(m.id)} /> : <SealedMode key={m.id} mode={m} />))}
+              </div>
+            </section>
+          )}
+          {bonus.length > 0 && (
+            <section className="mt-8" aria-labelledby="bonus-modes">
+              <h2 id="bonus-modes" className="text-sm font-semibold">
+                Bonus<span className="font-normal text-muted-foreground"> · they open as you find the other modes</span>
+              </h2>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {bonus.map((m) => (m.unlocked ? <UnlockedMode key={m.id} mode={m} onActivate={() => activate(m.id)} onPreview={() => preview(m.id)} /> : <BonusSealed key={m.id} mode={m} />))}
               </div>
             </section>
           )}
@@ -201,6 +212,30 @@ function UnlockedMode({ mode, onActivate, onPreview }: { mode: ModeView; onActiv
             Preview
           </Button>
         )}
+      </div>
+    </Card>
+  );
+}
+
+/** A bonus mode still to find: a question mark, and a dash per mode it needs, filled as they are found. */
+function BonusSealed({ mode }: { mode: ModeView }) {
+  const have = mode.bonus?.have ?? 0;
+  const goal = mode.bonus?.goal ?? 0;
+  return (
+    <Card className="flex flex-col gap-3 p-4" data-bonus="sealed">
+      <div className="grid aspect-[16/10] place-items-center rounded-lg border border-dashed bg-muted/40" aria-hidden>
+        <span className="font-serif text-6xl font-semibold text-muted-foreground/60">?</span>
+      </div>
+      <div className="grid gap-2">
+        <h3 className="text-sm font-semibold">A bonus mode</h3>
+        <div className="flex gap-1.5" role="img" aria-label={`${have} of ${goal} modes found`}>
+          {Array.from({ length: goal }, (_, i) => (
+            <span key={i} className={cn('h-1.5 flex-1 rounded-full', i < have ? 'bg-primary' : 'bg-muted-foreground/25')} />
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {have} of {goal} modes found
+        </p>
       </div>
     </Card>
   );

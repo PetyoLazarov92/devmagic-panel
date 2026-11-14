@@ -1,4 +1,4 @@
-import { EFFECTS_ON, MODE_INFO, type SealedModeId } from '@devmagic-panel/shared';
+import { EFFECTS_ON, isBonusMode, MODE_INFO, type SealedModeId } from '@devmagic-panel/shared';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -22,7 +22,8 @@ export function UnlockDialog({ path }: { path: string }) {
   const view = useModesView();
   const prefs = usePreferences();
   const reduced = useReducedMotion();
-  const fresh = view?.fresh[0];
+  // A bonus mode waits for the Modes page (the menu's palette icon turns until then); the others show anywhere.
+  const fresh = view?.fresh.find((m) => !isBonusMode(m) || path === '/modes');
   const [showing, setShowing] = useState<SealedModeId | null>(null);
 
   useEffect(() => {

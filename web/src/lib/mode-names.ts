@@ -181,6 +181,21 @@ const PAGE_NAMES: Partial<Record<ModeId, Record<string, string>>> = {
     Developer: 'Lab',
     'Developer options': 'Lab',
   },
+  atlas: {
+    Demo: 'Practice voyage',
+    Mockup: 'Practice voyage',
+    Sites: 'Lands',
+    Aura: 'Lookout',
+    Mail: 'Dispatches',
+    Services: 'Harbor',
+    'WP Cores': 'Charts',
+    Activity: "Ship's log",
+    Updates: 'New horizons',
+    Settings: "Captain's desk",
+    Modes: 'Expeditions',
+    Developer: 'Map room',
+    'Developer options': 'Map room',
+  },
 };
 
 export function pageName(classic: string, mode: ModeId): string {
@@ -189,12 +204,12 @@ export function pageName(classic: string, mode: ModeId): string {
 
 /** The few lines a mode says its own way. Errors, warnings, status labels and anything that removes something never change. */
 const TEXT = {
-  newSite: { classic: 'New site', wizard: 'Conjure a site', circuit: 'Deploy a site', forge: 'Forge a site', grove: 'Plant a site', abyss: 'Grow a reef', neon: 'Light up a site', ink: 'Begin a scroll', dune: 'Pitch a site', pixel: 'New game', sorbet: 'Scoop a site', deco: 'Open a suite', chrome: 'Cast a site' },
-  search: { classic: 'Search sites and actions', wizard: 'Search the portals', circuit: 'Search nodes and commands', forge: 'Search the foundry', grove: 'Search the gardens', abyss: 'Search the reefs', neon: 'Search the skyline', ink: 'Search the scrolls', dune: 'Search the dunes', pixel: 'Search the levels', sorbet: 'Search the scoops', deco: 'Search the suites', chrome: 'Search the fleet' },
-  palette: { classic: 'Jump to a site, a tab or a view, or run an action', wizard: 'Cast a command...', circuit: 'Enter a command_', forge: 'Pick up a tool...', grove: 'What shall we tend?', abyss: 'Where to dive?', neon: 'Press start...', ink: 'Write a command...', dune: 'Which way?', pixel: 'Press any key...', sorbet: 'What flavor?', deco: 'At your service...', chrome: 'Command?' },
-  aiReading: { classic: 'Claude is reading your sites...', wizard: 'Scrying your sites...', circuit: 'Scanning your sites...', forge: 'Stoking the fire...', grove: 'Walking the gardens...', abyss: 'Sounding the depths...', neon: 'Rewinding the tape...', ink: 'Reading the scrolls...', dune: 'Reading the sands...', pixel: 'Scanning the levels...', sorbet: 'Tasting your sites...', deco: 'The concierge is reading...', chrome: 'Running diagnostics...' },
-  allGood: { classic: 'All good', wizard: 'All wards hold', circuit: 'All systems nominal', forge: 'All fires lit', grove: 'All in bloom', abyss: 'Calm waters', neon: 'All lights on', ink: 'Clear and still', dune: 'Clear skies', pixel: 'Full health', sorbet: 'All sweet', deco: 'All in order', chrome: 'Mirror finish' },
-  noJobs: { classic: 'No jobs since the panel started', wizard: 'No quests since the panel woke', circuit: 'Log empty', forge: 'Nothing on the anvil', grove: 'Nothing growing yet', abyss: 'Still waters', neon: 'Quiet night', ink: 'Blank page', dune: 'Still air', pixel: 'Waiting for player one', sorbet: 'All quiet at the counter', deco: 'A quiet evening', chrome: 'Engine idle' },
+  newSite: { classic: 'New site', wizard: 'Conjure a site', circuit: 'Deploy a site', forge: 'Forge a site', grove: 'Plant a site', abyss: 'Grow a reef', neon: 'Light up a site', ink: 'Begin a scroll', dune: 'Pitch a site', pixel: 'New game', sorbet: 'Scoop a site', deco: 'Open a suite', chrome: 'Cast a site', atlas: 'Chart a site' },
+  search: { classic: 'Search sites and actions', wizard: 'Search the portals', circuit: 'Search nodes and commands', forge: 'Search the foundry', grove: 'Search the gardens', abyss: 'Search the reefs', neon: 'Search the skyline', ink: 'Search the scrolls', dune: 'Search the dunes', pixel: 'Search the levels', sorbet: 'Search the scoops', deco: 'Search the suites', chrome: 'Search the fleet', atlas: 'Search the lands' },
+  palette: { classic: 'Jump to a site, a tab or a view, or run an action', wizard: 'Cast a command...', circuit: 'Enter a command_', forge: 'Pick up a tool...', grove: 'What shall we tend?', abyss: 'Where to dive?', neon: 'Press start...', ink: 'Write a command...', dune: 'Which way?', pixel: 'Press any key...', sorbet: 'What flavor?', deco: 'At your service...', chrome: 'Command?', atlas: 'Set a course...' },
+  aiReading: { classic: 'Claude is reading your sites...', wizard: 'Scrying your sites...', circuit: 'Scanning your sites...', forge: 'Stoking the fire...', grove: 'Walking the gardens...', abyss: 'Sounding the depths...', neon: 'Rewinding the tape...', ink: 'Reading the scrolls...', dune: 'Reading the sands...', pixel: 'Scanning the levels...', sorbet: 'Tasting your sites...', deco: 'The concierge is reading...', chrome: 'Running diagnostics...', atlas: 'Reading the charts...' },
+  allGood: { classic: 'All good', wizard: 'All wards hold', circuit: 'All systems nominal', forge: 'All fires lit', grove: 'All in bloom', abyss: 'Calm waters', neon: 'All lights on', ink: 'Clear and still', dune: 'Clear skies', pixel: 'Full health', sorbet: 'All sweet', deco: 'All in order', chrome: 'Mirror finish', atlas: 'Fair winds' },
+  noJobs: { classic: 'No jobs since the panel started', wizard: 'No quests since the panel woke', circuit: 'Log empty', forge: 'Nothing on the anvil', grove: 'Nothing growing yet', abyss: 'Still waters', neon: 'Quiet night', ink: 'Blank page', dune: 'Still air', pixel: 'Waiting for player one', sorbet: 'All quiet at the counter', deco: 'A quiet evening', chrome: 'Engine idle', atlas: 'Calm seas' },
 } satisfies Record<string, { classic: string } & Partial<Record<ModeId, string>>>;
 export type ModeTextKey = keyof typeof TEXT;
 

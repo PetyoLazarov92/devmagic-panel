@@ -19,11 +19,22 @@ its word; a mode opened from Developer options does not show them. The mode you 
   the mode's look and effects as they are. It is kept per mode and stays on
   with reduced motion, since nothing moves.
 
-Below are the other modes. An unlocked one has **Activate** and **Preview**,
-which shows it on the Modes page for 20 seconds without saving it. A mode you
-use for the first time comes with its effects on. A sealed one is blurred
-behind a lock and shows a riddle for each way it opens; once you are past half
-way on one of them, its riddle says **The seal is weakening**.
+Below are the other modes, and under them the **Bonus** modes. An unlocked one
+has **Activate** and **Preview**, which shows it on the Modes page for 20
+seconds without saving it. A mode you use for the first time comes with its
+effects on. A sealed one is blurred behind a lock and shows a riddle for each
+way it opens; once you are past half way on one of them, its riddle says **The
+seal is weakening**.
+
+## Bonus modes
+
+The Bonus section holds modes that open by collecting rather than by a riddle:
+each opens once you have found enough of the other modes, by their ways in or
+their words (a mode opened from Developer options does not count). Until then
+its card is a question mark with a dash for each mode it needs, filled as you
+find them. When one opens, it does not interrupt you: the palette icon in the
+menu turns and pulses, and its dialog waits for you on the Modes page. Modes
+found before a bonus mode existed count too.
 
 ## A line for today
 
@@ -433,6 +444,38 @@ ring turns where something runs. Pages it names its own way:
 | Settings | Controls |
 | Modes | Finishes |
 | Developer options | Lab |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
+## Atlas
+
+A bonus mode, the first: an explorer's chart. An engraved map lies behind the
+pages, aged parchment in the light theme and a night chart in pale ink in the
+dark one, with a mountain range, forests, a river, a keep, towns and a sea
+with hatched shallows. Cards are pieces of a weathered pirate map with a
+singed, torn edge, and a compass rose in one corner
+whose needle swings to a new heading while you point at the card. Names are
+in an old-style serif and whatever is chosen takes the route's red (gold by
+night). The effects add a red route winding slowly across the map (Background);
+a small red pin dropping where you click a button or link, with nothing
+following the cursor (Pointer); and the swinging needle, a broken site's map
+singed red and a healthy site's dot glowing like a lamp (Elements). A compass
+turns where something runs. Pages it names its own way:
+
+| Classic | Atlas |
+| --- | --- |
+| Demo | Practice voyage |
+| Sites | Lands |
+| Aura | Lookout |
+| Mail | Dispatches |
+| Services | Harbor |
+| WP Cores | Charts |
+| Activity | Ship's log |
+| Updates | New horizons |
+| Settings | Captain's desk |
+| Modes | Expeditions |
+| Developer options | Map room |
 
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.

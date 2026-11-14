@@ -1,0 +1,437 @@
+/*
+ * Atlas: an explorer's chart, a bonus mode. An engraved map behind the pages
+ * (aged parchment in light, a night chart in pale ink in dark), cards like a
+ * weathered pirate map with a singed, torn edge, a
+ * compass rose in each card's corner whose needle swings on hover, names in
+ * an old-style serif, and the route's red for what is chosen. data-mode="atlas"
+ * on the root, data-fx while Elements is on, data-fx-bg while Background is on
+ * (the route drawing itself); a click's pin on one canvas
+ * (features/modes/atlas-effects.tsx). The pictures are in assets/modes.
+ */
+:root[data-mode='atlas']:not(.dark) {
+  --background: #ecdcb8;
+  --foreground: #2e2416;
+  --card: #f6ead0;
+  --muted: #efe2c4;
+  --muted-foreground: #66543a;
+  --border: #c8ae7a;
+  --input: #bfa472;
+  --ring: #9a2a1a;
+  --primary: #9a2a1a;
+  --primary-foreground: #fbf3e0;
+  --secondary: #efe0bc;
+  --secondary-foreground: #6a2a14;
+  --success: #3e6e2a;
+  --warning: #8a5a00;
+  --danger: #b0302a;
+  --at-red: #b03024;
+  --at-gold: #b8862a;
+  --at-ink: #4a2c0e;
+  --at-raised: #faf1dc;
+  --at-chosen-ink: #7a1e10;
+  --at-map: url('../assets/modes/atlas-map-light.svg');
+  --at-route: url('../assets/modes/atlas-route-light.svg');
+  --at-edge: url('../assets/modes/atlas-edge-light.svg');
+  --at-rose: url('../assets/modes/atlas-rose-light.svg');
+  --at-needle: url('../assets/modes/atlas-needle-light.svg');
+  --at-grain: url('../assets/modes/atlas-grain-light.svg');
+}
+:root[data-mode='atlas'].dark {
+  --background: #141a24;
+  --foreground: #e6dcc6;
+  --card: #1c2230;
+  --muted: #212836;
+  --muted-foreground: #a89c80;
+  --border: #3e4658;
+  --input: #4a5266;
+  --ring: #e6b45a;
+  --primary: #e6b45a;
+  --primary-foreground: #141a24;
+  --secondary: #232a38;
+  --secondary-foreground: #f2d8a0;
+  --success: #a8d08a;
+  --warning: #f0c060;
+  --danger: #f07a62;
+  --at-red: #e86a52;
+  --at-gold: #e6b45a;
+  --at-ink: #ead8a6;
+  --at-raised: #20283a;
+  --at-chosen-ink: #f2d8a0;
+  --at-map: url('../assets/modes/atlas-map-dark.svg');
+  --at-route: url('../assets/modes/atlas-route-dark.svg');
+  --at-edge: url('../assets/modes/atlas-edge-dark.svg');
+  --at-rose: url('../assets/modes/atlas-rose-dark.svg');
+  --at-needle: url('../assets/modes/atlas-needle-dark.svg');
+  --at-grain: url('../assets/modes/atlas-grain-dark.svg');
+}
+:root[data-mode='atlas'] {
+  --font-atlas: 'IM Fell English', 'Cormorant Garamond', 'EB Garamond', 'DejaVu Serif', Georgia, serif;
+  --at-chosen: color-mix(in srgb, var(--at-red) 12%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --at-veil: 86%;
+  scrollbar-color: color-mix(in srgb, var(--at-ink) 35%, var(--border)) transparent;
+}
+:root[data-mode='atlas'].dark {
+  --at-chosen: color-mix(in srgb, var(--at-gold) 15%, var(--card));
+}
+
+/* The map behind every page: part of the look, drawn once and fixed, so scrolling never paints it again. */
+:root[data-mode='atlas'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--at-map) center / cover no-repeat;
+  opacity: 0.85;
+}
+/* The background effect: a red route drawing itself across the map, then fading to start again. */
+:root[data-mode='atlas'][data-fx-bg] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--at-route) center / cover no-repeat;
+}
+
+/* Names: page titles, card titles and dialogs in an old-style serif. */
+:root[data-mode='atlas'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-atlas);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+:root[data-mode='atlas'] [data-ui='page-title'] {
+  font-style: italic;
+}
+:root[data-mode='atlas'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-atlas);
+  font-size: 1.05em;
+}
+:root[data-mode='atlas'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-atlas);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/*
+ * Cards: a piece of a weathered pirate map. One edge only: singed and torn,
+ * drawn just outside the card (a border image set outward, so nothing moves),
+ * the paper darkening a little toward it, with a grain. A compass rose sits in
+ * the bottom right corner (::after) with its needle (::before).
+ */
+:root[data-mode='atlas'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 0;
+  border-color: transparent;
+  border-image: var(--at-edge) 20 / 9px / 7px round;
+  background-image: var(--at-grain);
+  box-shadow: inset 0 0 34px -14px color-mix(in srgb, var(--at-ink) 32%, transparent);
+}
+:root[data-mode='atlas'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 84px;
+  height: 84px;
+  max-width: calc(100% - 12px);
+  max-height: calc(100% - 12px);
+  z-index: -1;
+  pointer-events: none;
+  background: var(--at-rose) center / contain no-repeat;
+  opacity: 0.85;
+}
+/* The needle: on the rose's middle, pointing north, swinging to a new heading while you point at the card. */
+:root[data-mode='atlas'] [data-ui='card']::before {
+  content: '';
+  position: absolute;
+  right: 44px;
+  bottom: 6px;
+  width: 8px;
+  height: 84px;
+  max-height: calc(100% - 12px);
+  z-index: -1;
+  pointer-events: none;
+  background: var(--at-needle) center / contain no-repeat;
+  transform-origin: 50% 50%;
+  rotate: var(--at-rest, 0deg);
+}
+:root[data-mode='atlas'][data-fx] [data-ui='card']::before {
+  transition: rotate 1.1s cubic-bezier(0.34, 1.6, 0.4, 1);
+}
+:root[data-mode='atlas'][data-fx] [data-ui='card']:hover::before {
+  rotate: var(--at-heading, 62deg);
+}
+:root[data-mode='atlas'] [data-ui='card']:nth-of-type(2n) {
+  --at-rest: -8deg;
+  --at-heading: -118deg;
+}
+:root[data-mode='atlas'] [data-ui='card']:nth-of-type(3n) {
+  --at-rest: 6deg;
+  --at-heading: 145deg;
+}
+:root[data-mode='atlas'] dialog [data-ui='card'] {
+  border-image: none;
+  box-shadow: none;
+}
+:root[data-mode='atlas'] dialog [data-ui='card']::after,
+:root[data-mode='atlas'] dialog [data-ui='card']::before {
+  display: none;
+}
+
+/* A broken site: its map singed red toward the edge. */
+:root[data-mode='atlas'] [data-health='fail'][data-ui='card'] {
+  box-shadow: inset 0 0 34px -10px color-mix(in srgb, var(--danger) 50%, transparent);
+}
+/* A healthy dot glows a little, like a lamp on the chart; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='atlas'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='atlas'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 7px 1px color-mix(in srgb, var(--success) 50%, transparent);
+  animation: at-lamp 5s ease-in-out infinite;
+}
+@keyframes at-lamp {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+/* Everything else with a frame: nearly square. */
+:root[data-mode='atlas'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 3px;
+}
+:root[data-mode='atlas'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='atlas'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #2e2416 40%, transparent);
+}
+:root[data-mode='atlas'] [data-ui='tile'] {
+  border-radius: 3px;
+}
+:root[data-mode='atlas']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='atlas'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 3px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--at-veil), transparent);
+}
+:root[data-mode='atlas'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='atlas'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='atlas'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='atlas'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--at-veil), transparent);
+}
+:root[data-mode='atlas'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--at-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='atlas'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='atlas'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--at-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #141a24 50%, transparent);
+}
+:root[data-mode='atlas'] [data-ui='dialog'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--at-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #141a24 60%, transparent);
+}
+:root[data-mode='atlas'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='atlas'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #141a24 50%, transparent);
+}
+:root[data-mode='atlas'] :is([role='menuitem'], [role='option']) {
+  border-radius: 3px;
+}
+:root[data-mode='atlas'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--at-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='atlas'] select.dmp-select::picker(select) {
+    border-radius: 4px;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--at-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #141a24 50%, transparent);
+  }
+  :root[data-mode='atlas'] select.dmp-select option {
+    border-radius: 4px;
+  }
+  :root[data-mode='atlas'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--at-chosen);
+  }
+  :root[data-mode='atlas'] select.dmp-select option:checked {
+    background: var(--at-chosen);
+    color: var(--at-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, a red edge while you type. */
+:root[data-mode='atlas'] [data-ui='input'] {
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='atlas'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='atlas'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: nearly square; the main one a soft red. */
+:root[data-mode='atlas'] [data-ui='button'],
+:root[data-mode='atlas'] [data-ui='chip'] {
+  border-radius: 3px;
+}
+:root[data-mode='atlas'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--at-red) 50%, transparent);
+  background-color: var(--at-chosen);
+  color: var(--at-chosen-ink);
+}
+:root[data-mode='atlas'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--at-red) 20%, var(--card));
+}
+:root[data-mode='atlas'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--at-veil), transparent);
+}
+
+/* Whatever is chosen: a soft red fill. */
+:root[data-mode='atlas'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--at-red) 50%, transparent);
+  background: var(--at-chosen);
+  color: var(--at-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='atlas'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 3px;
+  background: var(--at-chosen);
+  color: var(--at-chosen-ink);
+}
+:root[data-mode='atlas'] [data-ui='segmented'],
+:root[data-mode='atlas'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 3px;
+}
+:root[data-mode='atlas'] [role='tab'][aria-selected='true'] {
+  border-color: var(--at-red);
+  color: var(--at-chosen-ink);
+}
+
+/* Switches: a soft red when on. */
+:root[data-mode='atlas'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='atlas'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='atlas'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: nearly square, a red mark when ticked. */
+:root[data-mode='atlas'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='atlas'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='atlas'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--at-red);
+  background-color: var(--at-chosen);
+}
+:root[data-mode='atlas'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--at-red);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='atlas'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--at-red);
+}
+:root[data-mode='atlas'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='atlas'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: the route's red into gold, softly. */
+:root[data-mode='atlas'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--at-red) 60%, var(--card)), color-mix(in oklab, var(--at-gold) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint ink rule; the page you are on in a soft red fill. */
+:root[data-mode='atlas'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='atlas'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 3px;
+  background: var(--at-chosen);
+  color: var(--at-chosen-ink);
+}
+
+/* Atlas's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='atlas'] {
+  --t-bg: #ecdcb8;
+  --t-side: #e4d2aa;
+  --t-line: #c8ae7a;
+  --t-accent: #b03024;
+  --t-ink: #2e2416;
+  --t-card: #f6ead0;
+}
+.dark .mode-thumb[data-thumb='atlas'] {
+  --t-bg: #141a24;
+  --t-side: #18202c;
+  --t-line: #3e4658;
+  --t-accent: #e6b45a;
+  --t-ink: #e6dcc6;
+  --t-card: #1c2230;
+}
+.mode-thumb[data-thumb='atlas'] .mt-main i {
+  border-radius: 0;
+  box-shadow: inset 0 0 0 2px var(--t-card), inset 0 0 0 3px color-mix(in srgb, var(--t-ink) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='atlas'] :not(.rune-turning),
+  :root[data-mode='atlas'] *::before,
+  :root[data-mode='atlas'] *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

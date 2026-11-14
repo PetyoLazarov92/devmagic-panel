@@ -206,12 +206,15 @@ function ModesSecrets() {
                       </tr>
                     );
                   })}
-                  <tr className="border-t">
-                    <td className="px-3 py-2">Type <span className="font-mono">{m.word}</span> in Ctrl+K</td>
-                    <td className="px-3 py-2 text-muted-foreground">{m.unlocked?.by === 'word' ? 'spoken' : 'not spoken'}</td>
-                    <td className="px-3 py-2" />
-                    <td className="px-3 py-2" />
-                  </tr>
+                  {/* A bonus mode has no word: it opens by collecting. */}
+                  {m.word && (
+                    <tr className="border-t">
+                      <td className="px-3 py-2">Type <span className="font-mono">{m.word}</span> in Ctrl+K</td>
+                      <td className="px-3 py-2 text-muted-foreground">{m.unlocked?.by === 'word' ? 'spoken' : 'not spoken'}</td>
+                      <td className="px-3 py-2" />
+                      <td className="px-3 py-2" />
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

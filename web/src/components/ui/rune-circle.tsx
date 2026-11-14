@@ -177,3 +177,20 @@ export function ChromeRing({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Atlas's turning icon: a compass, its needle (red to the north) turning
+ * while something runs.
+ */
+export function Compass({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} aria-hidden>
+      <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="4" />
+      <g className="rune-turning" style={{ animationDuration: '1.6s', transformOrigin: '32px 32px' }}>
+        <path d="M32 8 L38 32 H26 Z" fill="var(--at-red, currentColor)" />
+        <path d="M32 56 L38 32 H26 Z" fill="currentColor" fillOpacity="0.55" />
+      </g>
+      <circle cx="32" cy="32" r="4" fill="currentColor" />
+    </svg>
+  );
+}

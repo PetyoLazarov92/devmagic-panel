@@ -304,6 +304,30 @@ describe('mode progress', () => {
     expect(Object.values(MODE_WORDS)).toContain(dailyLineParts(dailyLine(state, '2026-11-16').text).word);
   });
 
+  it('opens Atlas once four of the other modes are earned, never counting itself or Developer options unlocks', () => {
+    const state = emptyModesState();
+    modesDeveloper.unlock(state, 'neon');
+    for (const word of ['abracadabra', 'overclock', 'ignite']) speakWord(state, word);
+    expect(state.unlocks.atlas).toBeUndefined();
+    expect(modesView(state).modes.find((m) => m.id === 'atlas')?.bonus).toEqual({ have: 3, goal: 4 });
+    expect(modesView(state).modes.find((m) => m.id === 'atlas')?.riddles).toBeUndefined();
+    speakWord(state, 'bloom');
+    expect(state.unlocks.atlas?.by).toBe('atlas.collect');
+    expect(modesView(state).fresh).toContain('atlas');
+    // Atlas itself is not one more mode found for the next bonus.
+    expect(state.counters.modeEarned).toBe(4);
+    expect(modesDeveloperView(state).modes.find((m) => m.id === 'atlas')?.word).toBeUndefined();
+  });
+
+  it('opens a bonus mode at start when its count was reached before it existed', () => {
+    const store = memory();
+    const state = emptyModesState();
+    for (const m of ['wizard', 'circuit', 'forge', 'grove'] as const) state.unlocks[m] = { at: '2026-11-01T00:00:00Z', by: 'word', seen: true };
+    store.setMeta('modes', JSON.stringify(state));
+    const progress = new ModeProgress(store);
+    expect(progress.view().modes.find((m) => m.id === 'atlas')?.unlocked).toBe(true);
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);

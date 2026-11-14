@@ -363,13 +363,13 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
 14. **Modes keep their secrets.** How a sealed mode opens (its paths, goals
     and words, all in `shared/src/modes.ts`) is never written in the docs,
     the changelog, the README, commit messages or UI text before it opens,
-    with one exception: the daily line (`shared/src/daily-line.ts`) shows
+    with two exceptions: the daily line (`shared/src/daily-line.ts`) shows
     one word a day in bold, never saying which mode it opens, its sources
-    made up. The Modes page shows riddles only, and Developer options the
-    rules only once its puzzle is solved (`server/src/app.ts` keeps them back
-    until then). Its progress is counters in the panel's database
-    (`server/src/modes.ts`), never sent anywhere, and a word typed in Ctrl+K
-    is compared and dropped.
+    made up; and a bonus mode shows openly how many modes it needs. The
+    Modes page shows riddles only, and Developer options the rules only once
+    its puzzle is solved (`server/src/app.ts` keeps them back until then).
+    Its progress is counters in the panel's database (`server/src/modes.ts`),
+    never sent anywhere, and a word typed in Ctrl+K is compared and dropped.
     A mode changes looks, names and a few lines, never errors, warnings,
     status labels or anything that removes something.
 

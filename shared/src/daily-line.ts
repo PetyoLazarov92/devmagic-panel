@@ -1,4 +1,4 @@
-import { isUnlocked, MODE_WORDS, type ModesState, type SealedModeId } from './modes.js';
+import { isUnlocked, MODE_WORDS, type ModesState, type WordModeId } from './modes.js';
 
 /**
  * The daily line: once a day, a thought, a bit of wisdom or a fact, written
@@ -27,7 +27,7 @@ const ALMANAC = 'the Spellbook almanac';
 const ALEX = "Alex Morgan's notebook";
 const SAM = 'Sam Lee, after a Friday deploy';
 
-export const DAILY_LINES: Record<SealedModeId, DailyLineText[]> = {
+export const DAILY_LINES: Record<WordModeId, DailyLineText[]> = {
   wizard: [
     { text: 'Most bugs vanish the moment someone else looks at them. It is the oldest **abracadabra** in the trade.', source: SYSADMIN },
     { text: 'A good commit message is no **abracadabra**: it says what changed and why.', source: HANDBOOK },
@@ -115,11 +115,11 @@ export function localDate(now = new Date()): string {
 
 /** The line for a day: a word from a mode still sealed, a different one each day in turn; once all are open, any. */
 export function dailyLine(state: ModesState, date: string): DailyLine {
-  const all = Object.keys(MODE_WORDS) as SealedModeId[];
+  const all = Object.keys(MODE_WORDS) as WordModeId[];
   const sealed = all.filter((m) => !isUnlocked(state, m));
   const pool = sealed.length ? sealed : all;
   const day = dayNumber(date);
-  const mode = pool[day % pool.length] as SealedModeId;
+  const mode = pool[day % pool.length] as WordModeId;
   const lines = DAILY_LINES[mode];
   const line = lines[Math.floor(day / pool.length) % lines.length] as DailyLineText;
   return { ...line, date };

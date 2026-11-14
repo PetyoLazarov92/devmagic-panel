@@ -17,6 +17,7 @@ import './styles/pixel.css';
 import './styles/sorbet.css';
 import './styles/deco.css';
 import './styles/chrome.css';
+import './styles/atlas.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>

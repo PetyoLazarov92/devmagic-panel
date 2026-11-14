@@ -1,4 +1,4 @@
-import { type BrowserCounter, countMode, type DailyLine, dailyLine, localDate, startFreshPaths, isUnlocked as unlockedIn, type ModeCounter, type ModesDeveloperView, modesDeveloper, modesDeveloperView, type ModesState, type ModesView, modesView, readModesState, type SealedModeId, speakWord } from '@devmagic-panel/shared';
+import { type BrowserCounter, checkPaths, countMode, type DailyLine, dailyLine, localDate, startFreshPaths, isUnlocked as unlockedIn, type ModeCounter, type ModesDeveloperView, modesDeveloper, modesDeveloperView, type ModesState, type ModesView, modesView, readModesState, type SealedModeId, speakWord } from '@devmagic-panel/shared';
 
 /** The meta row that holds the counters, where each path started and what is unlocked. */
 export const MODES_KEY = 'modes';
@@ -37,8 +37,12 @@ export class ModeProgress {
   private lastDay: string | undefined;
 
   constructor(private readonly store: MetaStore, private readonly now: () => Date = () => new Date()) {
-    // A mode this release added starts its paths now, from what the counters hold.
-    this.change((state, at) => startFreshPaths(state, at));
+    // A mode this release added starts its paths now, from what the counters hold; one already earned (a bonus
+    // mode whose count was reached before it existed) opens now.
+    this.change((state, at) => {
+      startFreshPaths(state, at);
+      checkPaths(state, at);
+    });
   }
 
   private change<T>(edit: (state: ModesState, now: Date) => T): T {
