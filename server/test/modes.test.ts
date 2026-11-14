@@ -1,4 +1,4 @@
-import { emptyModesState, MODE_PATHS, modesDeveloper, modesView, pathProgress, readModesState } from '@devmagic-panel/shared';
+import { countMode, emptyModesState, MODE_PATHS, modesDeveloper, modesView, pathProgress, readModesState, speakWord } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { countAction, ModeProgress } from '../src/modes.js';
 
@@ -66,6 +66,29 @@ describe('mode progress', () => {
     modesDeveloper.seal(state, 'wizard');
     modesDeveloper.resetMode(state, 'wizard');
     expect(MODE_PATHS.filter((p) => p.mode === 'wizard').map((p) => pathProgress(state, p))).toEqual([0, 0, 0]);
+  });
+
+  it("counts a newer mode's paths from when the panel first sees them, and keeps the older mode's progress", () => {
+    const state = emptyModesState();
+    state.counters.paletteCommand = 55;
+    state.counters.undo = 2;
+    const keyboard = MODE_PATHS.find((p) => p.id === 'circuit.keyboard')!;
+    const undo = MODE_PATHS.find((p) => p.id === 'wizard.undo')!;
+    expect(pathProgress(state, keyboard)).toBe(0);
+    expect(countMode(state, 'paletteCommand')).toEqual([]);
+    expect(pathProgress(state, keyboard)).toBe(1);
+    expect(pathProgress(state, undo)).toBe(2);
+    for (let i = 0; i < 38; i++) countMode(state, 'paletteCommand');
+    expect(countMode(state, 'paletteCommand')).toEqual(['circuit']);
+    expect(modesView(state).modes.find((m) => m.id === 'circuit')?.unlockLine).toContain('you clearly prefer the keyboard');
+  });
+
+  it('unlocks Circuit by its word, and only an unlocked mode is left alone by it', () => {
+    const state = emptyModesState();
+    expect(speakWord(state, 'overclocked')).toBeNull();
+    expect(speakWord(state, 'OverClock')).toBe('circuit');
+    expect(speakWord(state, 'overclock')).toBeNull();
+    expect(modesView(state).modes.find((m) => m.id === 'circuit')?.unlockLine).toBe('Override accepted. Systems online.');
   });
 
   it('reads a broken saved state as a fresh one', () => {

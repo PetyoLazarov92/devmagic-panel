@@ -1,4 +1,4 @@
-import { type BrowserCounter, countMode, isUnlocked as unlockedIn, type ModeCounter, type ModesDeveloperView, modesDeveloper, modesDeveloperView, type ModesState, type ModesView, modesView, readModesState, type SealedModeId, speakWord } from '@devmagic-panel/shared';
+import { type BrowserCounter, countMode, startFreshPaths, isUnlocked as unlockedIn, type ModeCounter, type ModesDeveloperView, modesDeveloper, modesDeveloperView, type ModesState, type ModesView, modesView, readModesState, type SealedModeId, speakWord } from '@devmagic-panel/shared';
 
 /** The meta row that holds the counters, where each path started and what is unlocked. */
 export const MODES_KEY = 'modes';
@@ -18,7 +18,10 @@ const BROWSER_EVENT_GAP_MS = 1000;
 export class ModeProgress {
   private readonly lastBrowserEvent = new Map<BrowserCounter, number>();
 
-  constructor(private readonly store: MetaStore, private readonly now: () => Date = () => new Date()) {}
+  constructor(private readonly store: MetaStore, private readonly now: () => Date = () => new Date()) {
+    // A mode this release added starts its paths now, from what the counters hold.
+    this.change((state, at) => startFreshPaths(state, at));
+  }
 
   private change<T>(edit: (state: ModesState, now: Date) => T): T {
     const now = this.now();

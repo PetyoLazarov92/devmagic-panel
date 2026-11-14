@@ -22,3 +22,18 @@ export function RuneCircle({ className, progress }: { className?: string; progre
     </svg>
   );
 }
+
+/**
+ * Circuit mode's turning icon: a ring of segments with a brighter arc and a
+ * square at its center, turning as one while something runs.
+ */
+export function SegmentRing({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} aria-hidden>
+      <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" strokeOpacity=".3" strokeWidth="5" strokeDasharray="10 4.2" />
+      <circle cx="32" cy="32" r="27" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="10 4.2 10 4.2 10 200" />
+      <circle cx="32" cy="32" r="17" fill="none" stroke="currentColor" strokeOpacity=".55" strokeWidth="2" strokeDasharray="2 4" />
+      <rect x="27" y="27" width="10" height="10" fill="currentColor" />
+    </svg>
+  );
+}

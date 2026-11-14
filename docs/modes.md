@@ -83,6 +83,42 @@ keeps its Classic name in the tooltip, and Ctrl+K finds it by either name. The
 words inside pages stay plain, and so do errors, warnings, status labels
 (Healthy, Needs attention, Broken) and anything that removes something.
 
+## Circuit
+
+A holographic control surface: glass panels with two cut corners and bracket
+marks on the other two, a thin lit outline, clean glass with thin hex outlines
+fading out from one corner (a few cells softly lit), square controls, and a
+circuit board behind the pages. Tinted boxes on the page (notices and the
+like) are mostly solid, so the board shows through them only a little.
+Whatever is chosen gets a soft cyan fill and a lit bar; titles and the menu
+are in a narrow technical face, spaced out. The board is part of the look and
+stays when every effect is off. The effects add light running along its
+traces (Background); a reticle on the cursor's tip that locks its brackets
+onto the button, link or small control you point at, with rings when you
+click (Pointer); and a slow glint of light over one card now and then, a
+pulsing red outline on a broken site and a breathing light on a healthy one
+(Elements). A segmented ring turns where something runs. Pages it names its
+own way:
+
+| Classic | Circuit |
+| --- | --- |
+| Demo | Simulation |
+| Sites | Nodes |
+| Aura | Diagnostics |
+| Mail | Comms |
+| Services | Systems |
+| WP Cores | Cores |
+| Activity | Ops log |
+| Sanctum | Mainframe |
+| Updates | Firmware |
+| Settings | Config |
+| Modes | Interface |
+| Developer options | Debug |
+
+The same rules as Wizard's hold: only labels change, addresses and the words
+inside pages stay, and errors, warnings, status labels and anything that
+removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks

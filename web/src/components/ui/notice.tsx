@@ -22,6 +22,8 @@ export function Notice({ tone = 'danger', size = 'default', children, action, ic
   return (
     <div
       role={tone === 'danger' || tone === 'warning' ? 'alert' : 'status'}
+      data-ui="notice"
+      data-tone={tone}
       className={cn('flex flex-wrap items-start gap-x-3 gap-y-2 rounded-lg border', size === 'inline' ? 'px-3 py-2 text-xs' : 'px-4 py-3 text-sm', box, className)}
     >
       {icon && <Icon className={cn('shrink-0', size === 'inline' ? 'mt-px size-3.5' : 'mt-0.5 size-4', iconTone)} aria-hidden />}

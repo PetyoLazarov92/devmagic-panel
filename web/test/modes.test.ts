@@ -11,6 +11,13 @@ describe('mode names and lines', () => {
     expect(pageName('Mail', 'classic')).toBe('Mail');
   });
 
+  it("gives pages Circuit's names", () => {
+    expect(pageName('Sites', 'circuit')).toBe('Nodes');
+    expect(pageName('Updates', 'circuit')).toBe('Firmware');
+    expect(pageName('Developer options', 'circuit')).toBe('Debug');
+    expect(modeText('newSite', 'circuit')).toBe('Deploy a site');
+  });
+
   it('says a line its own way in Wizard, and the plain one in Classic', () => {
     expect(modeText('newSite', 'wizard')).toBe('Conjure a site');
     expect(modeText('newSite', 'classic')).toBe('New site');

@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.50.0 (2026-11-14)
+* **Modes:** one more mode is waiting to be found. Each mode now says on the Modes page what its own effects do
+* **Modes:** what follows the cursor sits exactly on it, also on a page with a scrollbar, where it drifted a little to the left
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.49.1 (2026-11-14)
 * **Modes:** the dialog that says a mode opened is wider, with the picture of the mode beside what earned it
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

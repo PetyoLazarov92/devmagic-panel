@@ -1,4 +1,4 @@
-import { EFFECTS_OFF, EFFECTS_ON, MODE_EFFECT_INFO, MODE_EFFECTS, type ModeEffect, type ModeId, type ModeView } from '@devmagic-panel/shared';
+import { EFFECTS_OFF, EFFECTS_ON, MODE_EFFECT_INFO, MODE_EFFECT_LABEL, MODE_EFFECTS, type ModeEffect, type ModeId, type ModeView } from '@devmagic-panel/shared';
 import { Eye } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Notice, PageHeader } from '@/components/layout/page';
@@ -12,6 +12,13 @@ import { ModeThumb } from '@/features/modes/mode-thumb';
 import { refreshModes, setPreviewMode, useModesView, usePreviewMode, useReducedMotion } from '@/lib/modes';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
+
+/** What the effects are, said for any mode: on Classic, which has none. */
+const ANY_EFFECT: Record<ModeEffect, string> = {
+  pointer: 'Something that follows your cursor and answers a click.',
+  elements: "Life on the page's own parts: a broken site, a healthy one, what runs.",
+  background: 'Movement behind the pages.',
+};
 
 /** How long Preview shows a mode before the page goes back to the one you use. */
 const PREVIEW_MS = 20_000;
@@ -119,10 +126,10 @@ function ActiveMode({ mode }: { mode: ModeView }) {
           <p className="text-sm text-muted-foreground">Effects</p>
           {MODE_EFFECTS.map((effect) => (
             <div key={effect} className={cn('flex items-start gap-3', (classic || reduced) && 'opacity-60')}>
-              <Switch checked={!reduced && effects[effect]} disabled={classic || reduced} label={MODE_EFFECT_INFO[effect].label} onChange={(on) => set(effect, on)} />
+              <Switch checked={!reduced && effects[effect]} disabled={classic || reduced} label={MODE_EFFECT_LABEL[effect]} onChange={(on) => set(effect, on)} />
               <div className="min-w-0">
-                <p className="text-sm font-medium">{MODE_EFFECT_INFO[effect].label}</p>
-                <p className="text-xs text-muted-foreground">{MODE_EFFECT_INFO[effect].what}</p>
+                <p className="text-sm font-medium">{MODE_EFFECT_LABEL[effect]}</p>
+                <p className="text-xs text-muted-foreground">{mode.id === 'classic' ? ANY_EFFECT[effect] : MODE_EFFECT_INFO[mode.id][effect]}</p>
               </div>
             </div>
           ))}

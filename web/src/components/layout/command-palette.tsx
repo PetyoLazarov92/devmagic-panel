@@ -1,6 +1,6 @@
 import type { ActionId, InstallDraft, Site } from '@devmagic-panel/shared';
 import { branchWebUrl, repoWeb } from '@devmagic-panel/shared';
-import { Activity, Archive, HeartPulse, KeyRound, Palette, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, Folder, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
+import { Activity, Archive, HeartPulse, LockOpen, KeyRound, Palette, CircleArrowUp, Code2, CornerDownLeft, ExternalLink, Folder, GitBranch, Globe, History, Layers, ListChecks, LogIn, Mail, Play, Plus, Search, Server, Settings, Sparkles, Wrench } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { openInVSCode, siteUrl } from '@/components/layout/site-bits';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,9 @@ import { siteSections } from '@/lib/site-tabs';
 import { SITE_TAB_ICONS } from '@/features/site/site-shared';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-import { reportModeEvent, speakModeWord, useActiveMode, useModeText, usePageName } from '@/lib/modes';
+import { reportModeEvent, speakModeWord, useActiveMode, useModeText, useModesView, usePageName } from '@/lib/modes';
+import { EFFECTS_ON, MODE_INFO, MODE_WORDS, type SealedModeId } from '@devmagic-panel/shared';
+import { savePreferences, usePreferences } from '@/lib/preferences';
 
 interface Command {
   id: string;
@@ -165,9 +167,30 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
   }, [sites, drafts, here, mode]);
 
   const q = query.trim().toLowerCase();
+  // A mode's whole word, typed exactly, and nothing for part of a word, so typing gives no hints: sealed, a
+  // command to unlock it; unlocked, one to switch to it; already on, one that says so and opens the Modes page.
+  const modes = useModesView();
+  const prefs = usePreferences();
+  const spoken = (Object.keys(MODE_WORDS) as SealedModeId[]).find((m) => MODE_WORDS[m] === q);
+  const spokenView = spoken ? modes?.modes.find((x) => x.id === spoken) : undefined;
+  const unlock: Command | null =
+    !spoken || !spokenView
+      ? null
+      : !spokenView.unlocked
+        ? { id: `unlock:${spoken}`, label: `Unlock ${MODE_INFO[spoken].title} mode`, hint: 'the word was right', icon: <LockOpen />, group: 'Something stirred', run: () => void speakModeWord(q) }
+        : prefs.mode !== spoken
+          ? {
+              id: `unlock:switch:${spoken}`,
+              label: `Switch to ${MODE_INFO[spoken].title} mode`,
+              hint: 'unlocked already',
+              icon: <Palette />,
+              group: 'Modes',
+              run: () => savePreferences(prefs.effects[spoken] ? { mode: spoken } : { mode: spoken, effects: { ...prefs.effects, [spoken]: EFFECTS_ON } }),
+            }
+          : { id: `unlock:on:${spoken}`, label: `${MODE_INFO[spoken].title} mode is already on`, hint: 'open Modes', icon: <Palette />, group: 'Modes', run: () => navigate('/modes') };
   // With nothing typed: the open site's tabs and views and its first few actions, then the pages; typing searches everything, every word in any order.
   const words = q.split(/\s+/).filter(Boolean);
-  const shown = (
+  const listed = (
     q
       ? commands.filter((c) => {
           const text = `${c.label} ${c.hint ?? ''}`.toLowerCase();
@@ -179,6 +202,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
           ...commands.filter((c) => !['Open', 'Run', 'This site', 'Sections', 'Sections of other sites'].includes(c.group)),
         ]
   ).slice(0, here ? 30 : 12);
+  const shown = unlock ? [unlock, ...listed] : listed;
 
   useEffect(() => setActive(0), [query]);
   // The arrows move past what the list shows: keep the chosen one in view, its group heading too at the top.
@@ -204,18 +228,8 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
     }
     close();
     c.run();
-    reportModeEvent('paletteCommand');
-  }
-
-  /** Enter with nothing to pick: a single word typed might be one the panel listens for. */
-  async function speak() {
-    const word = query.trim();
-    if (!/^[a-z]{3,20}$/i.test(word)) return;
-    const unlocked = await speakModeWord(word);
-    if (unlocked) {
-      close();
-      toast({ tone: 'info', title: 'Something stirred' });
-    }
+    // What the word brings up is not a command the keyboard path counts.
+    if (!c.id.startsWith('unlock:')) reportModeEvent('paletteCommand');
   }
 
   let lastGroup = '';
@@ -246,7 +260,7 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, shown.length - 1)); }
                 if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-                if (e.key === 'Enter') { e.preventDefault(); if (shown[active]) pick(shown[active]); else void speak(); }
+                if (e.key === 'Enter') { e.preventDefault(); pick(shown[active]); }
               }}
               placeholder={text('palette')}
               aria-label="Search commands"

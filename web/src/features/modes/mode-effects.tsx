@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { CircuitBoard, CircuitGlint, CircuitPointer } from '@/features/modes/circuit-effects';
 import { useActiveMode } from '@/lib/modes';
 
 /** The most particles alive at once, so a long drag never piles them up. */
@@ -47,7 +48,17 @@ function star(c: CanvasRenderingContext2D, x: number, y: number, r: number): voi
  * the tab is hidden, and there is no canvas at all while every effect is off.
  */
 export function ModeEffects() {
-  const { mode, effects } = useActiveMode();
+  const { mode, effects, reduced } = useActiveMode();
+  if (mode === 'circuit') {
+    // The board is part of Circuit's look and is drawn even with every effect off; only its pulses move.
+    return (
+      <>
+        <CircuitBoard animate={effects.background && !reduced} />
+        {effects.pointer && <CircuitPointer />}
+        {effects.elements && <CircuitGlint />}
+      </>
+    );
+  }
   const on = mode === 'wizard' && (effects.pointer || effects.background || effects.elements);
   if (!on) return null;
   return <WizardCanvas pointer={effects.pointer} background={effects.background} elements={effects.elements} />;
@@ -64,8 +75,10 @@ function WizardCanvas({ pointer, background, elements }: { pointer: boolean; bac
     let H = 0;
     const size = () => {
       const d = Math.min(window.devicePixelRatio || 1, 2);
-      W = window.innerWidth;
-      H = window.innerHeight;
+      // The canvas's own size on screen: the window less its scrollbar, so the wisp sits on the cursor.
+      const r = cv.getBoundingClientRect();
+      W = r.width || window.innerWidth;
+      H = r.height || window.innerHeight;
       cv.width = Math.round(W * d);
       cv.height = Math.round(H * d);
       c.setTransform(d, 0, 0, d, 0, 0);
@@ -280,7 +293,9 @@ function WizardCanvas({ pointer, background, elements }: { pointer: boolean; bac
       } else wake();
     };
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('resize', size);
+    // A scrollbar that comes or goes changes the canvas, not the window: watch the canvas.
+    const sized = new ResizeObserver(size);
+    sized.observe(cv);
     wake();
 
     return () => {
@@ -291,7 +306,7 @@ function WizardCanvas({ pointer, background, elements }: { pointer: boolean; bac
       document.removeEventListener('mouseout', onLeave);
       window.removeEventListener('click', onClick, true);
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('resize', size);
+      sized.disconnect();
     };
   }, [pointer, background, elements]);
 

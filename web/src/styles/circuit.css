@@ -1,0 +1,503 @@
+/*
+ * Circuit: a holographic control surface. Glass panels with two cut corners
+ * and bracket marks on the other two, thin lit outlines, clean glass with a
+ * hex mesh fading out from a corner, square controls, and a circuit board
+ * behind the pages (features/modes/circuit-effects.tsx). Soft colors, as Wizard's: cyan light on
+ * cool glass, never a hard fill. data-mode="circuit" on the root, data-fx
+ * while Elements is on, as in modes.css.
+ */
+:root[data-mode='circuit']:not(.dark) {
+  --background: #eaf0f4;
+  --foreground: #0b1b26;
+  --card: #f6f9fb;
+  --muted: #dde7ed;
+  --muted-foreground: #4d6675;
+  --border: #c3d3dc;
+  --input: #b2c7d2;
+  --ring: #0a7fa6;
+  --primary: #0a7fa6;
+  --primary-foreground: #f6f9fb;
+  --secondary: #d9ebf2;
+  --secondary-foreground: #0b4a63;
+  --success: #0d7d57;
+  --warning: #9a5b00;
+  --danger: #c0362f;
+  --ck-edge: #6fb0c8;
+  --ck-trace: #cddbe4;
+  --ck-pad: #a9c3d1;
+  --ck-raised: #fbfdfe;
+  /* The glint across the glass: a pale cyan band on light glass, a soft cyan one on dark. */
+  --ck-glint: color-mix(in srgb, var(--primary) 34%, transparent);
+  /* The hex corner of each card's glass: thin outlines fading out, a few cells softly lit. */
+  --ck-hex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='190'%3E%3Cdefs%3E%3Cpolygon id='h' points='11.09,-6.4 11.09,6.4 0.0,12.8 -11.09,6.4 -11.09,-6.4 -0.0,-12.8' fill='none' stroke='%230a7fa6' stroke-width='.8'/%3E%3Cpolygon id='f' points='10.05,-5.8 10.05,5.8 0.0,11.6 -10.05,5.8 -10.05,-5.8 -0.0,-11.6' fill='%230a7fa6'/%3E%3C/defs%3E%3Cuse href='%23h' x='300.0' y='190.0' opacity='0.460'/%3E%3Cuse href='%23h' x='275.8' y='190.0' opacity='0.417'/%3E%3Cuse href='%23h' x='251.5' y='190.0' opacity='0.374'/%3E%3Cuse href='%23f' x='251.5' y='190.0' opacity='0.130'/%3E%3Cuse href='%23h' x='227.3' y='190.0' opacity='0.331'/%3E%3Cuse href='%23h' x='203.0' y='190.0' opacity='0.288'/%3E%3Cuse href='%23h' x='178.8' y='190.0' opacity='0.245'/%3E%3Cuse href='%23h' x='154.5' y='190.0' opacity='0.203'/%3E%3Cuse href='%23f' x='154.5' y='190.0' opacity='0.070'/%3E%3Cuse href='%23h' x='130.3' y='190.0' opacity='0.160'/%3E%3Cuse href='%23h' x='106.0' y='190.0' opacity='0.117'/%3E%3Cuse href='%23h' x='81.8' y='190.0' opacity='0.074'/%3E%3Cuse href='%23h' x='57.5' y='190.0' opacity='0.031'/%3E%3Cuse href='%23h' x='287.9' y='169.0' opacity='0.399'/%3E%3Cuse href='%23h' x='263.6' y='169.0' opacity='0.374'/%3E%3Cuse href='%23f' x='263.6' y='169.0' opacity='0.130'/%3E%3Cuse href='%23h' x='239.4' y='169.0' opacity='0.339'/%3E%3Cuse href='%23h' x='215.1' y='169.0' opacity='0.299'/%3E%3Cuse href='%23h' x='190.9' y='169.0' opacity='0.259'/%3E%3Cuse href='%23h' x='166.6' y='169.0' opacity='0.217'/%3E%3Cuse href='%23f' x='166.6' y='169.0' opacity='0.076'/%3E%3Cuse href='%23h' x='142.4' y='169.0' opacity='0.175'/%3E%3Cuse href='%23h' x='118.1' y='169.0' opacity='0.133'/%3E%3Cuse href='%23h' x='93.9' y='169.0' opacity='0.091'/%3E%3Cuse href='%23f' x='93.9' y='169.0' opacity='0.032'/%3E%3Cuse href='%23h' x='69.6' y='169.0' opacity='0.048'/%3E%3Cuse href='%23h' x='300.0' y='148.0' opacity='0.346'/%3E%3Cuse href='%23h' x='275.8' y='148.0' opacity='0.339'/%3E%3Cuse href='%23h' x='251.5' y='148.0' opacity='0.318'/%3E%3Cuse href='%23h' x='227.3' y='148.0' opacity='0.288'/%3E%3Cuse href='%23h' x='203.0' y='148.0' opacity='0.254'/%3E%3Cuse href='%23h' x='178.8' y='148.0' opacity='0.217'/%3E%3Cuse href='%23h' x='154.5' y='148.0' opacity='0.179'/%3E%3Cuse href='%23f' x='154.5' y='148.0' opacity='0.062'/%3E%3Cuse href='%23h' x='130.3' y='148.0' opacity='0.139'/%3E%3Cuse href='%23h' x='106.0' y='148.0' opacity='0.098'/%3E%3Cuse href='%23h' x='81.8' y='148.0' opacity='0.058'/%3E%3Cuse href='%23h' x='57.5' y='148.0' opacity='0.016'/%3E%3Cuse href='%23f' x='57.5' y='148.0' opacity='0.006'/%3E%3Cuse href='%23h' x='287.9' y='127.0' opacity='0.288'/%3E%3Cuse href='%23h' x='263.6' y='127.0' opacity='0.278'/%3E%3Cuse href='%23h' x='239.4' y='127.0' opacity='0.259'/%3E%3Cuse href='%23h' x='215.1' y='127.0' opacity='0.233'/%3E%3Cuse href='%23h' x='190.9' y='127.0' opacity='0.202'/%3E%3Cuse href='%23f' x='190.9' y='127.0' opacity='0.070'/%3E%3Cuse href='%23h' x='166.6' y='127.0' opacity='0.169'/%3E%3Cuse href='%23h' x='142.4' y='127.0' opacity='0.133'/%3E%3Cuse href='%23h' x='118.1' y='127.0' opacity='0.096'/%3E%3Cuse href='%23f' x='118.1' y='127.0' opacity='0.033'/%3E%3Cuse href='%23h' x='93.9' y='127.0' opacity='0.057'/%3E%3Cuse href='%23f' x='93.9' y='127.0' opacity='0.020'/%3E%3Cuse href='%23h' x='69.6' y='127.0' opacity='0.018'/%3E%3Cuse href='%23h' x='300.0' y='106.0' opacity='0.233'/%3E%3Cuse href='%23h' x='275.8' y='106.0' opacity='0.229'/%3E%3Cuse href='%23h' x='251.5' y='106.0' opacity='0.217'/%3E%3Cuse href='%23h' x='227.3' y='106.0' opacity='0.199'/%3E%3Cuse href='%23h' x='203.0' y='106.0' opacity='0.175'/%3E%3Cuse href='%23h' x='178.8' y='106.0' opacity='0.147'/%3E%3Cuse href='%23h' x='154.5' y='106.0' opacity='0.117'/%3E%3Cuse href='%23h' x='130.3' y='106.0' opacity='0.083'/%3E%3Cuse href='%23f' x='130.3' y='106.0' opacity='0.029'/%3E%3Cuse href='%23h' x='106.0' y='106.0' opacity='0.048'/%3E%3Cuse href='%23h' x='81.8' y='106.0' opacity='0.012'/%3E%3Cuse href='%23h' x='287.9' y='85.0' opacity='0.175'/%3E%3Cuse href='%23h' x='263.6' y='85.0' opacity='0.169'/%3E%3Cuse href='%23f' x='263.6' y='85.0' opacity='0.059'/%3E%3Cuse href='%23h' x='239.4' y='85.0' opacity='0.156'/%3E%3Cuse href='%23h' x='215.1' y='85.0' opacity='0.139'/%3E%3Cuse href='%23h' x='190.9' y='85.0' opacity='0.116'/%3E%3Cuse href='%23h' x='166.6' y='85.0' opacity='0.091'/%3E%3Cuse href='%23h' x='142.4' y='85.0' opacity='0.062'/%3E%3Cuse href='%23h' x='118.1' y='85.0' opacity='0.031'/%3E%3Cuse href='%23h' x='300.0' y='64.0' opacity='0.119'/%3E%3Cuse href='%23h' x='275.8' y='64.0' opacity='0.116'/%3E%3Cuse href='%23h' x='251.5' y='64.0' opacity='0.108'/%3E%3Cuse href='%23h' x='227.3' y='64.0' opacity='0.096'/%3E%3Cuse href='%23h' x='203.0' y='64.0' opacity='0.078'/%3E%3Cuse href='%23f' x='203.0' y='64.0' opacity='0.027'/%3E%3Cuse href='%23h' x='178.8' y='64.0' opacity='0.057'/%3E%3Cuse href='%23h' x='154.5' y='64.0' opacity='0.033'/%3E%3Cuse href='%23h' x='287.9' y='43.0' opacity='0.062'/%3E%3Cuse href='%23h' x='263.6' y='43.0' opacity='0.057'/%3E%3Cuse href='%23f' x='263.6' y='43.0' opacity='0.020'/%3E%3Cuse href='%23h' x='239.4' y='43.0' opacity='0.048'/%3E%3Cuse href='%23f' x='239.4' y='43.0' opacity='0.017'/%3E%3Cuse href='%23h' x='215.1' y='43.0' opacity='0.035'/%3E%3Cuse href='%23f' x='215.1' y='43.0' opacity='0.012'/%3E%3Cuse href='%23h' x='190.9' y='43.0' opacity='0.018'/%3E%3C/svg%3E");
+}
+:root[data-mode='circuit'].dark {
+  --background: #060b11;
+  --foreground: #d7eef7;
+  --card: #0b1722;
+  --muted: #0f2030;
+  --muted-foreground: #7fa3b5;
+  --border: #163547;
+  --input: #1d4258;
+  --ring: #3fd8ff;
+  --primary: #3fd8ff;
+  --primary-foreground: #04121a;
+  --secondary: #0e2a3a;
+  --secondary-foreground: #a6eefe;
+  --success: #3ee6a4;
+  --warning: #ffb23f;
+  --danger: #ff5d5d;
+  --ck-edge: #1f6f8c;
+  --ck-trace: #0e2635;
+  --ck-pad: #1a4560;
+  --ck-raised: #10202e;
+  --ck-glint: color-mix(in srgb, var(--primary) 26%, transparent);
+  --ck-hex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='190'%3E%3Cdefs%3E%3Cpolygon id='h' points='11.09,-6.4 11.09,6.4 0.0,12.8 -11.09,6.4 -11.09,-6.4 -0.0,-12.8' fill='none' stroke='%233fd8ff' stroke-width='.8'/%3E%3Cpolygon id='f' points='10.05,-5.8 10.05,5.8 0.0,11.6 -10.05,5.8 -10.05,-5.8 -0.0,-11.6' fill='%233fd8ff'/%3E%3C/defs%3E%3Cuse href='%23h' x='300.0' y='190.0' opacity='0.340'/%3E%3Cuse href='%23h' x='275.8' y='190.0' opacity='0.308'/%3E%3Cuse href='%23h' x='251.5' y='190.0' opacity='0.277'/%3E%3Cuse href='%23f' x='251.5' y='190.0' opacity='0.179'/%3E%3Cuse href='%23h' x='227.3' y='190.0' opacity='0.245'/%3E%3Cuse href='%23h' x='203.0' y='190.0' opacity='0.213'/%3E%3Cuse href='%23h' x='178.8' y='190.0' opacity='0.181'/%3E%3Cuse href='%23h' x='154.5' y='190.0' opacity='0.150'/%3E%3Cuse href='%23f' x='154.5' y='190.0' opacity='0.097'/%3E%3Cuse href='%23h' x='130.3' y='190.0' opacity='0.118'/%3E%3Cuse href='%23h' x='106.0' y='190.0' opacity='0.086'/%3E%3Cuse href='%23h' x='81.8' y='190.0' opacity='0.055'/%3E%3Cuse href='%23h' x='57.5' y='190.0' opacity='0.023'/%3E%3Cuse href='%23h' x='287.9' y='169.0' opacity='0.295'/%3E%3Cuse href='%23h' x='263.6' y='169.0' opacity='0.277'/%3E%3Cuse href='%23f' x='263.6' y='169.0' opacity='0.179'/%3E%3Cuse href='%23h' x='239.4' y='169.0' opacity='0.250'/%3E%3Cuse href='%23h' x='215.1' y='169.0' opacity='0.221'/%3E%3Cuse href='%23h' x='190.9' y='169.0' opacity='0.191'/%3E%3Cuse href='%23h' x='166.6' y='169.0' opacity='0.161'/%3E%3Cuse href='%23f' x='166.6' y='169.0' opacity='0.104'/%3E%3Cuse href='%23h' x='142.4' y='169.0' opacity='0.130'/%3E%3Cuse href='%23h' x='118.1' y='169.0' opacity='0.098'/%3E%3Cuse href='%23h' x='93.9' y='169.0' opacity='0.067'/%3E%3Cuse href='%23f' x='93.9' y='169.0' opacity='0.043'/%3E%3Cuse href='%23h' x='69.6' y='169.0' opacity='0.036'/%3E%3Cuse href='%23h' x='300.0' y='148.0' opacity='0.256'/%3E%3Cuse href='%23h' x='275.8' y='148.0' opacity='0.250'/%3E%3Cuse href='%23h' x='251.5' y='148.0' opacity='0.235'/%3E%3Cuse href='%23h' x='227.3' y='148.0' opacity='0.213'/%3E%3Cuse href='%23h' x='203.0' y='148.0' opacity='0.188'/%3E%3Cuse href='%23h' x='178.8' y='148.0' opacity='0.161'/%3E%3Cuse href='%23h' x='154.5' y='148.0' opacity='0.132'/%3E%3Cuse href='%23f' x='154.5' y='148.0' opacity='0.085'/%3E%3Cuse href='%23h' x='130.3' y='148.0' opacity='0.103'/%3E%3Cuse href='%23h' x='106.0' y='148.0' opacity='0.073'/%3E%3Cuse href='%23h' x='81.8' y='148.0' opacity='0.043'/%3E%3Cuse href='%23h' x='57.5' y='148.0' opacity='0.012'/%3E%3Cuse href='%23f' x='57.5' y='148.0' opacity='0.008'/%3E%3Cuse href='%23h' x='287.9' y='127.0' opacity='0.213'/%3E%3Cuse href='%23h' x='263.6' y='127.0' opacity='0.205'/%3E%3Cuse href='%23h' x='239.4' y='127.0' opacity='0.191'/%3E%3Cuse href='%23h' x='215.1' y='127.0' opacity='0.172'/%3E%3Cuse href='%23h' x='190.9' y='127.0' opacity='0.150'/%3E%3Cuse href='%23f' x='190.9' y='127.0' opacity='0.097'/%3E%3Cuse href='%23h' x='166.6' y='127.0' opacity='0.125'/%3E%3Cuse href='%23h' x='142.4' y='127.0' opacity='0.098'/%3E%3Cuse href='%23h' x='118.1' y='127.0' opacity='0.071'/%3E%3Cuse href='%23f' x='118.1' y='127.0' opacity='0.046'/%3E%3Cuse href='%23h' x='93.9' y='127.0' opacity='0.042'/%3E%3Cuse href='%23f' x='93.9' y='127.0' opacity='0.027'/%3E%3Cuse href='%23h' x='69.6' y='127.0' opacity='0.013'/%3E%3Cuse href='%23h' x='300.0' y='106.0' opacity='0.172'/%3E%3Cuse href='%23h' x='275.8' y='106.0' opacity='0.169'/%3E%3Cuse href='%23h' x='251.5' y='106.0' opacity='0.160'/%3E%3Cuse href='%23h' x='227.3' y='106.0' opacity='0.147'/%3E%3Cuse href='%23h' x='203.0' y='106.0' opacity='0.129'/%3E%3Cuse href='%23h' x='178.8' y='106.0' opacity='0.109'/%3E%3Cuse href='%23h' x='154.5' y='106.0' opacity='0.086'/%3E%3Cuse href='%23h' x='130.3' y='106.0' opacity='0.062'/%3E%3Cuse href='%23f' x='130.3' y='106.0' opacity='0.040'/%3E%3Cuse href='%23h' x='106.0' y='106.0' opacity='0.036'/%3E%3Cuse href='%23h' x='81.8' y='106.0' opacity='0.009'/%3E%3Cuse href='%23h' x='287.9' y='85.0' opacity='0.129'/%3E%3Cuse href='%23h' x='263.6' y='85.0' opacity='0.125'/%3E%3Cuse href='%23f' x='263.6' y='85.0' opacity='0.081'/%3E%3Cuse href='%23h' x='239.4' y='85.0' opacity='0.116'/%3E%3Cuse href='%23h' x='215.1' y='85.0' opacity='0.102'/%3E%3Cuse href='%23h' x='190.9' y='85.0' opacity='0.086'/%3E%3Cuse href='%23h' x='166.6' y='85.0' opacity='0.067'/%3E%3Cuse href='%23h' x='142.4' y='85.0' opacity='0.046'/%3E%3Cuse href='%23h' x='118.1' y='85.0' opacity='0.023'/%3E%3Cuse href='%23h' x='300.0' y='64.0' opacity='0.088'/%3E%3Cuse href='%23h' x='275.8' y='64.0' opacity='0.086'/%3E%3Cuse href='%23h' x='251.5' y='64.0' opacity='0.080'/%3E%3Cuse href='%23h' x='227.3' y='64.0' opacity='0.071'/%3E%3Cuse href='%23h' x='203.0' y='64.0' opacity='0.058'/%3E%3Cuse href='%23f' x='203.0' y='64.0' opacity='0.037'/%3E%3Cuse href='%23h' x='178.8' y='64.0' opacity='0.042'/%3E%3Cuse href='%23h' x='154.5' y='64.0' opacity='0.024'/%3E%3Cuse href='%23h' x='287.9' y='43.0' opacity='0.046'/%3E%3Cuse href='%23h' x='263.6' y='43.0' opacity='0.042'/%3E%3Cuse href='%23f' x='263.6' y='43.0' opacity='0.027'/%3E%3Cuse href='%23h' x='239.4' y='43.0' opacity='0.035'/%3E%3Cuse href='%23f' x='239.4' y='43.0' opacity='0.023'/%3E%3Cuse href='%23h' x='215.1' y='43.0' opacity='0.026'/%3E%3Cuse href='%23f' x='215.1' y='43.0' opacity='0.017'/%3E%3Cuse href='%23h' x='190.9' y='43.0' opacity='0.013'/%3E%3C/svg%3E");
+}
+:root[data-mode='circuit'] {
+  --font-tech: 'Rajdhani', 'Exo 2', 'Saira', 'Oxanium', 'DejaVu Sans Condensed', 'Liberation Sans Narrow', 'Arial Narrow', system-ui, sans-serif;
+  /* The soft fill of whatever is chosen: a cyan tint on the glass. */
+  --ck-chosen: color-mix(in srgb, var(--primary) 14%, var(--card));
+  --ck-chosen-ink: color-mix(in srgb, var(--primary) 75%, var(--foreground));
+  /*
+   * How solid a see-through fill is in this mode: one level for all of them (notices, muted
+   * boxes, a tile's hover, soft buttons), within frosted glass's usual 70 to 85 percent, so text
+   * on them keeps its contrast whatever runs on the board behind.
+   */
+  --ck-veil: 72%;
+  scrollbar-color: color-mix(in srgb, var(--primary) 30%, var(--border)) transparent;
+}
+:root[data-mode='circuit'].dark {
+  --ck-chosen: color-mix(in srgb, var(--primary) 16%, var(--card));
+  --ck-chosen-ink: var(--secondary-foreground);
+}
+
+/* Names: the page title, card titles, tile labels and the menu in a narrow technical face, spaced out. */
+:root[data-mode='circuit'] [data-ui='page-title'] {
+  font-family: var(--font-tech);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+:root[data-mode='circuit'].dark [data-ui='page-title'] {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+:root[data-mode='circuit'] :is([data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-tech);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+:root[data-mode='circuit'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-tech);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+:root[data-mode='circuit'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+}
+
+/*
+ * Cards: a glass panel. Its outline (::before) and its glass (::after) are cut
+ * at the top right and bottom left; bracket marks sit just outside the other
+ * two corners, drawn as the card's own background. The glass is clean, a soft
+ * light from the top, and in its bottom right corner thin hex outlines fading
+ * out, a few cells softly lit.
+ * Now and then a glint of light passes over one card (data-glint, set by
+ * features/modes/circuit-effects.tsx while Elements is on).
+ */
+:root[data-mode='circuit'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  background:
+    linear-gradient(var(--primary), var(--primary)) left top / 14px 2px no-repeat,
+    linear-gradient(var(--primary), var(--primary)) left top / 2px 14px no-repeat,
+    linear-gradient(var(--primary), var(--primary)) right bottom / 14px 2px no-repeat,
+    linear-gradient(var(--primary), var(--primary)) right bottom / 2px 14px no-repeat;
+}
+:root[data-mode='circuit'] [data-ui='card']::before,
+:root[data-mode='circuit'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+}
+:root[data-mode='circuit'] [data-ui='card']::before {
+  inset: 3px;
+  background: var(--ck-edge);
+}
+:root[data-mode='circuit'] [data-ui='card']::after {
+  inset: 4px;
+  /* Top to bottom: the soft light from the top, the cyan tint, the hex corner, the glass. */
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, transparent), transparent 28%),
+    linear-gradient(160deg, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
+    var(--ck-hex) right bottom / 300px 190px no-repeat,
+    var(--card);
+}
+/* The glint: a soft band of light across the glass, left to right, slowly; on one card at a time. */
+:root[data-mode='circuit'][data-fx] [data-ui='card'][data-glint]::after {
+  background:
+    linear-gradient(105deg, transparent 43%, var(--ck-glint) 50%, transparent 57%) 110% 0 / 300% 100% no-repeat,
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 7%, transparent), transparent 28%),
+    linear-gradient(160deg, color-mix(in srgb, var(--primary) 9%, transparent), transparent 60%),
+    var(--ck-hex) right bottom / 300px 190px no-repeat,
+    var(--card);
+  animation: ck-glint 2.4s ease-in-out 1 both;
+}
+@keyframes ck-glint {
+  from { background-position: 110% 0, 0 0, 0 0, right bottom; }
+  to { background-position: -10% 0, 0 0, 0 0, right bottom; }
+}
+
+:root[data-mode='circuit'].dark [data-ui='card']::before {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--primary) 25%, transparent));
+}
+/* A card in a dialog keeps a plain panel; the dialog has its own frame. */
+:root[data-mode='circuit'] dialog [data-ui='card'] {
+  background: var(--card);
+  border-color: var(--border);
+}
+:root[data-mode='circuit'] dialog [data-ui='card']::before,
+:root[data-mode='circuit'] dialog [data-ui='card']::after {
+  display: none;
+}
+/* A broken site: its outline turns red, and pulses by its opacity while Elements is on. */
+:root[data-mode='circuit'] [data-health='fail'][data-ui='card']::before {
+  background: var(--danger);
+}
+:root[data-mode='circuit'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: ck-alert 2.2s ease-in-out infinite;
+}
+@keyframes ck-alert {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+/* A healthy site's light breathes: a halo that fades in and out, by its opacity only. */
+:root[data-mode='circuit'] [data-ui='status-dot'] > span:not(.sr-only) {
+  position: relative;
+  border-radius: 1px;
+}
+:root[data-mode='circuit'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  box-shadow: 0 0 6px 2px color-mix(in srgb, var(--success) 60%, transparent);
+  opacity: 0;
+  animation: ck-breathe 2.8s ease-in-out infinite;
+}
+@keyframes ck-breathe {
+  50% { opacity: 1; }
+}
+
+/* Everything else with a frame: square corners, a lit edge, a touch of glass. */
+:root[data-mode='circuit'] :is(.rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-full).border:not([data-ui='card']) {
+  border-radius: 0;
+}
+:root[data-mode='circuit'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='circuit'] [data-ui='tile'] {
+  border-color: color-mix(in srgb, var(--ck-edge) 70%, var(--border));
+  background-image: linear-gradient(160deg, color-mix(in srgb, var(--primary) 6%, transparent), transparent 60%);
+}
+:root[data-mode='circuit'] [data-ui='badge'] {
+  border-radius: 0;
+}
+:root[data-mode='circuit']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ck-edge) 30%, transparent);
+}
+
+/*
+ * Tints that sit on the page: notices, muted boxes, a tile's hover, the soft buttons. Their
+ * own fills are see-through, and on Circuit the board's traces and pulses
+ * would run right through them; here they all take --ck-veil, mostly solid, the
+ * board still showing through a little.
+ */
+:root[data-mode='circuit'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 0;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--ck-veil), transparent);
+}
+:root[data-mode='circuit'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='circuit'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='circuit'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='circuit'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--ck-veil), transparent);
+}
+:root[data-mode='circuit'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 10%, var(--card)) var(--ck-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
+}
+:root[data-mode='circuit'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--ck-veil), transparent);
+}
+:root[data-mode='circuit'] [data-ui='button'][class~='bg-foreground/4']:hover:not(:disabled) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 11%, var(--card)) var(--ck-veil), transparent);
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised clean glass with a lit edge and a soft glow. */
+:root[data-mode='circuit'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='circuit'] [data-ui='dialog'],
+:root[data-mode='circuit'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 0;
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 6%, transparent), transparent 30%),
+    var(--ck-raised);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 12%, transparent), 0 12px 30px -10px color-mix(in srgb, #04121a 45%, transparent), 0 0 24px -10px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+:root[data-mode='circuit'] [aria-label='Unsaved changes'][data-ui='card']::before,
+:root[data-mode='circuit'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='circuit'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #04121a 55%, transparent);
+}
+:root[data-mode='circuit'] [data-ui='dialog'] .border-t {
+  border-top-color: color-mix(in srgb, var(--ck-edge) 60%, var(--border));
+}
+:root[data-mode='circuit'] :is([role='menuitem'], [role='option']) {
+  border-radius: 0;
+}
+:root[data-mode='circuit'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--ck-chosen);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='circuit'] select.dmp-select::picker(select) {
+    border-radius: 0;
+    border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+    background: var(--ck-raised);
+    box-shadow: 0 12px 30px -10px color-mix(in srgb, #04121a 45%, transparent), 0 0 24px -10px color-mix(in srgb, var(--primary) 45%, transparent);
+  }
+  :root[data-mode='circuit'] select.dmp-select option {
+    border-radius: 0;
+  }
+  :root[data-mode='circuit'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--ck-chosen);
+    box-shadow: inset 2px 0 0 var(--primary);
+  }
+  :root[data-mode='circuit'] select.dmp-select option:checked {
+    background: var(--ck-chosen);
+    color: var(--ck-chosen-ink);
+  }
+}
+
+/* Fields: square, on a darker glass, the lit line under them while you type. */
+:root[data-mode='circuit'] [data-ui='input'] {
+  border-radius: 0;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='circuit'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--input));
+}
+:root[data-mode='circuit'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent), inset 0 -2px 0 var(--primary);
+}
+
+/* Buttons: square, outlined in the lit edge; the main one a soft cyan with a brighter line, filling a little on hover. */
+:root[data-mode='circuit'] [data-ui='button'] {
+  border-radius: 0;
+}
+:root[data-mode='circuit'] [data-ui='button'].border-input {
+  border-color: color-mix(in srgb, var(--ck-edge) 70%, var(--input));
+}
+:root[data-mode='circuit'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  background-color: var(--ck-chosen);
+  color: var(--ck-chosen-ink);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--primary) 55%, transparent);
+}
+:root[data-mode='circuit'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--primary) 24%, var(--card));
+  box-shadow: inset 0 -2px 0 var(--primary), 0 0 12px -2px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+:root[data-mode='circuit'][data-fx] [data-ui='button']:hover {
+  box-shadow: 0 0 10px -2px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+/*
+ * Whatever is chosen: a soft cyan fill and a lit bar, along the bottom for a
+ * chip, a toggle or a view, along the left for the open section of a side menu.
+ */
+:root[data-mode='circuit'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--primary) 50%, transparent);
+  border-radius: 0;
+  background: var(--ck-chosen);
+  color: var(--ck-chosen-ink);
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+:root[data-mode='circuit'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 0;
+  background: var(--ck-chosen);
+  color: var(--ck-chosen-ink);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+:root[data-mode='circuit'] [data-ui='segmented'],
+:root[data-mode='circuit'] [data-ui='chip'] {
+  border-radius: 0;
+  border-color: color-mix(in srgb, var(--ck-edge) 70%, var(--border));
+}
+:root[data-mode='circuit'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 0;
+}
+:root[data-mode='circuit'] [role='tab'][aria-selected='true'] {
+  border-color: var(--primary);
+  color: var(--ck-chosen-ink);
+}
+:root[data-mode='circuit'].dark [role='tab'][aria-selected='true'] {
+  text-shadow: 0 0 10px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+:root[data-mode='circuit'] [role='tablist'] {
+  border-bottom-color: color-mix(in srgb, var(--ck-edge) 60%, var(--border));
+}
+
+/* Switches: a square slot; on, it fills with the soft cyan and the square knob glows. */
+:root[data-mode='circuit'] [data-ui='switch'] {
+  border-radius: 1px;
+  border: 1px solid color-mix(in srgb, var(--ck-edge) 70%, var(--border));
+}
+:root[data-mode='circuit'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 80%, var(--input));
+}
+:root[data-mode='circuit'] [data-ui='switch'][aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--primary) 60%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 40%, var(--card));
+}
+:root[data-mode='circuit'] [data-ui='switch'] > span {
+  border-radius: 1px;
+  background: var(--card);
+}
+:root[data-mode='circuit'] [data-ui='switch'][aria-checked='true'] > span {
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+:root[data-mode='circuit'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 85%, var(--primary));
+}
+
+/* Checkboxes and radios: square (a radio round), a lit box when ticked. */
+:root[data-mode='circuit'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--ck-edge) 80%, var(--input));
+  border-radius: 0;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='circuit'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='circuit'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--primary);
+  background-color: var(--ck-chosen);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--primary) 40%, transparent);
+}
+:root[data-mode='circuit'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--primary);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='square'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='circuit'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--primary);
+}
+:root[data-mode='circuit'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='circuit'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: a soft cyan bar with a brighter leading edge. */
+:root[data-mode='circuit'] .bg-primary[style*='width'] {
+  border-radius: 0;
+  background-color: color-mix(in srgb, var(--primary) 55%, var(--card));
+  box-shadow: inset -2px 0 0 var(--primary);
+}
+:root[data-mode='circuit'] .bg-muted:has(> .bg-primary[style*='width']) {
+  border-radius: 0;
+}
+
+/* The top bar and the sidebar: a lit rule; the page you are on with a bar on its left. */
+:root[data-mode='circuit'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ck-edge) 55%, transparent);
+}
+:root[data-mode='circuit'] [data-ui='sidebar'] {
+  border-right-color: color-mix(in srgb, var(--ck-edge) 70%, transparent);
+}
+:root[data-mode='circuit'] nav[aria-label='Main'] a {
+  border-radius: 0;
+}
+:root[data-mode='circuit'] nav[aria-label='Main'] a[aria-current='page'] {
+  background: var(--ck-chosen);
+  color: var(--ck-chosen-ink);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+:root[data-mode='circuit'][data-fx] nav[aria-label='Main'] a[aria-current='page'] svg {
+  filter: drop-shadow(0 0 4px var(--primary));
+}
+
+/* Circuit's thumbnail on the Modes page and in the unlock dialog: cool glass, cyan light, cut corners. */
+.mode-thumb[data-thumb='circuit'] {
+  --t-bg: #eaf0f4;
+  --t-side: #dde7ed;
+  --t-line: #6fb0c8;
+  --t-accent: #0a7fa6;
+  --t-ink: #0b1b26;
+  --t-card: #f6f9fb;
+}
+.dark .mode-thumb[data-thumb='circuit'] {
+  --t-bg: #060b11;
+  --t-side: #08111a;
+  --t-line: #1f6f8c;
+  --t-accent: #3fd8ff;
+  --t-ink: #d7eef7;
+  --t-card: #0b1722;
+}
+.mode-thumb[data-thumb='circuit'] .mt-main {
+  background:
+    linear-gradient(color-mix(in srgb, var(--t-accent) 8%, transparent) 1px, transparent 1px) 0 0 / 100% 12px,
+    linear-gradient(90deg, color-mix(in srgb, var(--t-accent) 8%, transparent) 1px, transparent 1px) 0 0 / 12px 100%;
+}
+.mode-thumb[data-thumb='circuit'] .mt-main b {
+  border-radius: 0;
+}
+.mode-thumb[data-thumb='circuit'] .mt-main i {
+  border-radius: 0;
+  border-color: var(--t-line);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='circuit'] :not(.rune-turning),
+  :root[data-mode='circuit'] *::before,
+  :root[data-mode='circuit'] *::after {
+    animation: none !important;
+  }
+}

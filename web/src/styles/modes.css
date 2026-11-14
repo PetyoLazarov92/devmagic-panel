@@ -140,7 +140,7 @@
  * menu, a list to pick from) would only be on top inside its own card, and the
  * next card would cover it. The card with one open comes above the others.
  */
-:root[data-mode='wizard'] [data-ui='card']:has([role='menu'], [role='listbox']) {
+:root[data-mode] [data-ui='card']:has([role='menu'], [role='listbox']) {
   z-index: 30;
 }
 

@@ -8,13 +8,14 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard'] as const;
+export const MODES = ['classic', 'wizard', 'circuit'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
 export const MODE_INFO: Record<ModeId, { title: string; description: string }> = {
   classic: { title: 'Classic', description: 'The panel as you know it. Every mode works in light and dark.' },
   wizard: { title: 'Wizard', description: 'Enchanted paper, rune circles, star dust, and a few pages with a story.' },
+  circuit: { title: 'Circuit', description: 'Glass panels, a live circuit board behind the pages, and a lock on whatever you point at.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -25,10 +26,19 @@ export type ModeEffects = z.infer<typeof modeEffects>;
 export const EFFECTS_OFF: ModeEffects = { pointer: false, elements: false, background: false };
 export const EFFECTS_ON: ModeEffects = { pointer: true, elements: true, background: true };
 
-export const MODE_EFFECT_INFO: Record<ModeEffect, { label: string; what: string }> = {
-  pointer: { label: 'Pointer', what: 'A light that follows your cursor, and a few stars when you click.' },
-  elements: { label: 'Elements', what: 'A glow on a broken site, a pulse on a healthy one, turning rune circles.' },
-  background: { label: 'Background', what: 'A soft glow behind the pages, and motes drifting up.' },
+export const MODE_EFFECT_LABEL: Record<ModeEffect, string> = { pointer: 'Pointer', elements: 'Elements', background: 'Background' };
+/** What each effect does in each mode. */
+export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> = {
+  wizard: {
+    pointer: 'A light that follows your cursor, and a few stars when you click.',
+    elements: 'A glow on a broken site, a pulse on a healthy one, turning rune circles.',
+    background: 'A soft glow behind the pages, and motes drifting up.',
+  },
+  circuit: {
+    pointer: 'A reticle that follows your cursor and locks onto what you point at, with a ring when you click.',
+    elements: "A glint of light passes over a card now and then, a broken site's outline pulses red, a healthy one's light breathes.",
+    background: 'Light runs along the circuit board behind the pages.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
@@ -49,19 +59,28 @@ export interface ModePath {
   line: string;
   /** The rule, said plainly: only Developer options shows it. */
   rule: string;
+  /**
+   * For a mode added after counting began: the path counts from when the panel
+   * first saw it, not from what its counter held already, so a new mode is
+   * earned from the release that brings it.
+   */
+  startsFresh?: true;
 }
 
 export const MODE_PATHS: ModePath[] = [
   { id: 'wizard.wizard', mode: 'wizard', counter: 'siteWizard', goal: 3, riddle: "Walk the wizard's path three times.", line: 'Three sites, conjured through the wizard.', rule: 'Finish the New site wizard 3 times' },
   { id: 'wizard.undo', mode: 'wizard', counter: 'undo', goal: 3, riddle: 'Bend time three times.', line: 'Three times you turned back time.', rule: 'Use Undo 3 times' },
   { id: 'wizard.aura', mode: 'wizard', counter: 'auraFix', goal: 5, riddle: 'Mend five ailments.', line: 'Five ailments, mended.', rule: 'Apply 5 fixes from Aura' },
+  { id: 'circuit.keyboard', mode: 'circuit', counter: 'paletteCommand', goal: 40, riddle: 'Forty orders, and never a click.', line: 'Forty commands from Ctrl+K: you clearly prefer the keyboard.', rule: 'Run 40 commands from Ctrl+K', startsFresh: true },
+  { id: 'circuit.servers', mode: 'circuit', counter: 'nginxSite', goal: 1, riddle: 'Two servers, one machine.', line: 'A site on nginx, next to Apache: you know your way around a server.', rule: 'Move a site to nginx, or put nginx in front of one', startsFresh: true },
+  { id: 'circuit.queries', mode: 'circuit', counter: 'sqlQuery', goal: 25, riddle: 'Ask the database twenty-five questions.', line: 'Twenty-five questions for the database: you like to look under the hood.', rule: 'Run 25 queries in the SQL runner', startsFresh: true },
 ];
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.' };
+export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock' };
+export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;
@@ -99,7 +118,17 @@ export function readModesState(raw: string | undefined, now = new Date()): Modes
 }
 
 export function pathProgress(state: ModesState, path: ModePath): number {
-  return Math.max(0, (state.counters[path.counter] ?? 0) - (state.starts[path.id]?.from ?? 0));
+  const count = state.counters[path.counter] ?? 0;
+  // A path that starts fresh and has not been seen yet has counted nothing so far.
+  const from = state.starts[path.id]?.from ?? (path.startsFresh ? count : 0);
+  return Math.max(0, count - from);
+}
+
+/** Gives every path that starts fresh its starting point the first time the panel sees it. Changes `state`. */
+export function startFreshPaths(state: ModesState, now = new Date()): void {
+  for (const path of MODE_PATHS) {
+    if (path.startsFresh && !state.starts[path.id]) state.starts[path.id] = { from: state.counters[path.counter] ?? 0, since: now.toISOString() };
+  }
 }
 
 export function isUnlocked(state: ModesState, mode: ModeId): boolean {
@@ -123,6 +152,7 @@ export function checkPaths(state: ModesState, now = new Date()): SealedModeId[] 
 
 /** Counts one more; with `key`, only the first time for that key (a site moved to nginx counts once). Changes `state`. */
 export function countMode(state: ModesState, counter: ModeCounter, now = new Date(), key?: string): SealedModeId[] {
+  startFreshPaths(state, now);
   if (key !== undefined) {
     const seen = state.once[counter] ?? [];
     if (seen.includes(key)) return [];
@@ -231,6 +261,7 @@ export const modesDeveloper = {
   completePath(state: ModesState, pathId: string, now = new Date()): SealedModeId[] {
     const path = MODE_PATHS.find((p) => p.id === pathId);
     if (!path) return [];
+    startFreshPaths(state, now);
     const short = path.goal - pathProgress(state, path);
     if (short > 0) state.starts[path.id] = { from: (state.starts[path.id]?.from ?? 0) - short, since: state.starts[path.id]?.since ?? state.since };
     return checkPaths(state, now);
