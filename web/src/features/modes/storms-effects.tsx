@@ -14,8 +14,8 @@ const RUNES = [
   'M-4 7V-7L0 -3L4 -7V7',
 ];
 /** A rune surfaces every this many pixels of the cursor's path, and fades over TRAIL_MS. */
-const TRAIL_GAP = 64;
-const TRAIL_MS = 2_200;
+const TRAIL_GAP = 50;
+const TRAIL_MS = 1_500;
 /** A click's rune flares over FLARE_MS, with a few sparks. */
 const FLARE_MS = 900;
 const SPARKS = 7;
@@ -201,11 +201,11 @@ export function StormsEffects({ pointer, background }: { pointer: boolean; backg
         // Eases in and out on a slow curve, so a rune never pops on or off.
         const a = Math.sin(Math.PI * t) ** 2;
         c.save();
-        c.translate(m.x, m.y - t * 4);
+        c.translate(m.x, m.y - t * 6);
         c.rotate(m.rot);
-        c.scale(0.85, 0.85);
-        c.globalAlpha = (dark ? 0.32 : 0.36) * a;
-        c.shadowBlur = dark ? 4 : 2;
+        c.scale(0.9, 0.9);
+        c.globalAlpha = (dark ? 0.62 : 0.6) * a;
+        c.shadowBlur = dark ? 7 : 4;
         c.lineWidth = 1.5;
         c.stroke(runes[m.rune] as Path2D);
         c.restore();
