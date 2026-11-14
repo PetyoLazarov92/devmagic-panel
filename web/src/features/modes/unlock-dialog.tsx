@@ -22,7 +22,7 @@ export function UnlockDialog({ path }: { path: string }) {
   const view = useModesView();
   const prefs = usePreferences();
   const reduced = useReducedMotion();
-  // A bonus mode waits for the Modes page (the menu's palette icon turns until then); the others show anywhere.
+  // A bonus mode waits for the Modes page (a ring pulses around the menu's palette icon until then); the others show anywhere.
   const fresh = view?.fresh.find((m) => !isBonusMode(m) || path === '/modes');
   const [showing, setShowing] = useState<SealedModeId | null>(null);
 

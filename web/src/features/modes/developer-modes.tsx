@@ -65,8 +65,9 @@ function ModesLocked({ onTap }: { onTap: () => void }) {
         title="Modes"
         description="Each mode and whether it is unlocked."
         meta={
-          // Looks like the icon it always was; seven taps on it ask the puzzle.
-          <IconButton icon={Palette} label="Modes" size="icon-sm" onClick={onTap} className="cursor-default text-muted-foreground select-none hover:bg-transparent hover:text-muted-foreground" />
+          // Looks like the plain icon it always was, with no tooltip, no hover and no mode's click effect (data-quiet);
+          // seven taps on it ask the puzzle.
+          <IconButton icon={Palette} label="Modes" title="" data-ui="quiet" data-quiet size="icon-sm" onClick={onTap} className="cursor-default text-muted-foreground select-none hover:bg-transparent hover:text-muted-foreground focus-visible:ring-0" />
         }
       />
       <CardBody>
@@ -114,7 +115,8 @@ function ModesPuzzle({ open, onClose, onSolved }: { open: boolean; onClose: () =
     }
   }
   return (
-    <Dialog open={open} onClose={onClose} title="A question first" description="Answer it to see how each mode opens.">
+    // A click outside does not close it: only the close button or Escape, so a stray click never loses the question.
+    <Dialog open={open} onClose={onClose} closeOnBackdrop={false} title="A question first" description="Answer it to see how each mode opens.">
       <div className="grid gap-4">
         {failed && <Notice size="inline">{failed}</Notice>}
         {wrong && <Notice size="inline" tone="warning">Not that one. Here is another question.</Notice>}

@@ -118,7 +118,7 @@ export function AbyssEffects({ pointer, background }: { pointer: boolean; backgr
     };
     const onClick = (e: MouseEvent) => {
       if (e.detail === 0) return;
-      const el = e.target instanceof Element ? e.target.closest('button, a[href], [role="button"], [role="switch"]') : null;
+      const el = e.target instanceof Element ? e.target.closest('button:not([data-quiet]), a[href], [role="button"], [role="switch"]') : null;
       if (!el) return;
       for (let i = 0; i < CLICK_BUBBLES; i++) {
         bubbles.push({ x: e.clientX + rand(-8, 8), y: e.clientY + rand(-4, 4), r: rand(1.4, 3.4), vy: rand(-1.4, -0.7), wob: rand(0, 6.28), life: rand(700, 1100), max: 1100 });

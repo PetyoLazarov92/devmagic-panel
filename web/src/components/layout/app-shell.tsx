@@ -219,7 +219,7 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
 }) {
   // The way to the Modes page shows once a mode was earned (or one is on).
   const showModes = useModesEntry();
-  // A bonus mode found and not yet shown: the palette icon turns and pulses until the Modes page opens.
+  // A bonus mode found and not yet shown: a ring pulses around the palette icon until the Modes page opens.
   const signal = Boolean(useModesView()?.fresh.some(isBonusMode));
   const rail = mode === 'rail';
   const name = usePageName();
@@ -285,8 +285,8 @@ function SidebarBody({ mode, path, groups, live, dots, user, version, onTapVersi
         {!rail && (
           <div className="min-w-0 text-xs">
             <div className="truncate font-medium">{user}</div>
-            {/* Seven taps turn on the Developer options, like a phone's build number. */}
-            <button type="button" onClick={onTapVersion} className="cursor-default text-muted-foreground select-none">v{version}</button>
+            {/* Seven taps turn on the Developer options, like a phone's build number; plain text to the eye, and no mode's click effect (data-quiet). */}
+            <button type="button" data-quiet onClick={onTapVersion} className="cursor-default text-muted-foreground select-none">v{version}</button>
           </div>
         )}
         <div className={cn('flex shrink-0', rail && 'flex-col items-center gap-1')}>

@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.63.1 (2026-11-14)
+* **Modes:** Atlas's route fades out once drawn and starts again at the same slow pace, instead of winding back fast. A bonus mode found makes the palette icon in the menu pulse, without turning. Developer options' Modes card keeps its question open on a click outside it
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.63.0 (2026-11-14)
 * **Modes:** a Bonus section on the Modes page, for modes that open as you find the others: each card shows a dash per mode it needs, filled as you find them. When one opens, the palette icon in the menu turns and pulses, and its dialog waits for you on the Modes page. The first is Atlas, an explorer's chart
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

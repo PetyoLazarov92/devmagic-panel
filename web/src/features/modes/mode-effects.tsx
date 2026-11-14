@@ -186,7 +186,7 @@ function WizardCanvas({ pointer, background, elements }: { pointer: boolean; bac
       const el = e.target instanceof Element ? e.target : null;
       // Over a field the text cursor matters more than the light: it hides.
       hide = Boolean(el?.closest('input, textarea, select, [contenteditable], .cm-editor'));
-      hover = Boolean(el?.closest('button, a[href], [role="button"], [role="switch"]'));
+      hover = Boolean(el?.closest('button:not([data-quiet]), a[href], [role="button"], [role="switch"]'));
       wake();
     };
     // Out of the window: mouseout with nowhere it went to.
@@ -198,7 +198,7 @@ function WizardCanvas({ pointer, background, elements }: { pointer: boolean; bac
       wake();
     };
     const onClick = (e: MouseEvent) => {
-      const el = e.target instanceof Element ? e.target.closest('button, a[href], [role="button"]') : null;
+      const el = e.target instanceof Element ? e.target.closest('button:not([data-quiet]), a[href], [role="button"]') : null;
       if (!el || e.detail === 0) return;
       for (let i = 0; i < 12; i++) {
         const a = (i / 12) * Math.PI * 2 + rand(-0.15, 0.15);

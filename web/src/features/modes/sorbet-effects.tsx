@@ -55,7 +55,7 @@ export function SorbetEffects() {
     const sprinkles: Sprinkle[] = [];
     const onClick = (e: MouseEvent) => {
       if (e.detail === 0) return;
-      const el = e.target instanceof Element ? e.target.closest('button, a[href], [role="button"], [role="switch"]') : null;
+      const el = e.target instanceof Element ? e.target.closest('button:not([data-quiet]), a[href], [role="button"], [role="switch"]') : null;
       if (!el) return;
       for (let i = 0; i < SPRINKLES; i++) {
         if (sprinkles.length >= MAX_SPRINKLES) sprinkles.shift();

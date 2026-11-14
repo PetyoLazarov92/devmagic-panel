@@ -33,7 +33,7 @@ each opens once you have found enough of the other modes, by their ways in or
 their words (a mode opened from Developer options does not count). Until then
 its card is a question mark with a dash for each mode it needs, filled as you
 find them. When one opens, it does not interrupt you: the palette icon in the
-menu turns and pulses, and its dialog waits for you on the Modes page. Modes
+menu pulses, and its dialog waits for you on the Modes page. Modes
 found before a bonus mode existed count too.
 
 ## A line for today

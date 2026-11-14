@@ -659,16 +659,13 @@
 }
 
 /*
- * A bonus mode found and its dialog not shown yet: the menu's palette icon
- * turns slowly and a soft ring pulses around it until the Modes page opens.
- * With reduced motion only the ring pulses, more gently.
+ * A bonus mode found and its dialog not shown yet: a soft ring pulses around
+ * the menu's palette icon until the Modes page opens, more gently with
+ * reduced motion.
  */
 .modes-signal {
   position: relative;
   color: var(--primary);
-}
-.modes-signal svg {
-  animation: dmp-turn 3.2s linear infinite;
 }
 .modes-signal::after {
   content: '';
@@ -684,9 +681,6 @@
   100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--primary) 0%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .modes-signal svg {
-    animation: none !important;
-  }
   .modes-signal::after {
     animation-duration: 3s !important;
   }

@@ -318,7 +318,7 @@ export function CircuitPointer() {
       livelyUntil = performance.now() + LIVELY_MS;
       const el = e.target instanceof Element ? e.target : null;
       hide = Boolean(el?.closest('input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable], .cm-editor'));
-      const control = hide ? null : (el?.closest('button, a[href], [role="button"], [role="switch"], [role="tab"], [role="radio"], [role="option"], [role="menuitem"]') ?? null);
+      const control = hide ? null : (el?.closest('button:not([data-quiet]), a[href], [role="button"], [role="switch"], [role="tab"], [role="radio"], [role="option"], [role="menuitem"]') ?? null);
       const size = control?.getBoundingClientRect();
       lockEl = control && size && size.width <= LOCK_MAX_W && size.height <= LOCK_MAX_H ? control : null;
       wake();
