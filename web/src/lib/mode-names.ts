@@ -46,6 +46,21 @@ const PAGE_NAMES: Partial<Record<ModeId, Record<string, string>>> = {
     Developer: 'Toolroom',
     'Developer options': 'Toolroom',
   },
+  grove: {
+    Demo: 'Greenhouse',
+    Mockup: 'Greenhouse',
+    Sites: 'Gardens',
+    Aura: 'Weather',
+    Mail: 'Birdsong',
+    Services: 'Roots',
+    'WP Cores': 'Seeds',
+    Activity: 'Seasons',
+    Updates: 'Growth',
+    Settings: 'Almanac',
+    Modes: 'Canopy',
+    Developer: 'Toolshed',
+    'Developer options': 'Toolshed',
+  },
 };
 
 export function pageName(classic: string, mode: ModeId): string {
@@ -54,12 +69,12 @@ export function pageName(classic: string, mode: ModeId): string {
 
 /** The few lines a mode says its own way. Errors, warnings, status labels and anything that removes something never change. */
 const TEXT = {
-  newSite: { classic: 'New site', wizard: 'Conjure a site', circuit: 'Deploy a site', forge: 'Forge a site' },
-  search: { classic: 'Search sites and actions', wizard: 'Search the portals', circuit: 'Search nodes and commands', forge: 'Search the foundry' },
-  palette: { classic: 'Jump to a site, a tab or a view, or run an action', wizard: 'Cast a command...', circuit: 'Enter a command_', forge: 'Pick up a tool...' },
-  aiReading: { classic: 'Claude is reading your sites...', wizard: 'Scrying your sites...', circuit: 'Scanning your sites...', forge: 'Stoking the fire...' },
-  allGood: { classic: 'All good', wizard: 'All wards hold', circuit: 'All systems nominal', forge: 'All fires lit' },
-  noJobs: { classic: 'No jobs since the panel started', wizard: 'No quests since the panel woke', circuit: 'Log empty', forge: 'Nothing on the anvil' },
+  newSite: { classic: 'New site', wizard: 'Conjure a site', circuit: 'Deploy a site', forge: 'Forge a site', grove: 'Plant a site' },
+  search: { classic: 'Search sites and actions', wizard: 'Search the portals', circuit: 'Search nodes and commands', forge: 'Search the foundry', grove: 'Search the gardens' },
+  palette: { classic: 'Jump to a site, a tab or a view, or run an action', wizard: 'Cast a command...', circuit: 'Enter a command_', forge: 'Pick up a tool...', grove: 'What shall we tend?' },
+  aiReading: { classic: 'Claude is reading your sites...', wizard: 'Scrying your sites...', circuit: 'Scanning your sites...', forge: 'Stoking the fire...', grove: 'Walking the gardens...' },
+  allGood: { classic: 'All good', wizard: 'All wards hold', circuit: 'All systems nominal', forge: 'All fires lit', grove: 'All in bloom' },
+  noJobs: { classic: 'No jobs since the panel started', wizard: 'No quests since the panel woke', circuit: 'Log empty', forge: 'Nothing on the anvil', grove: 'Nothing growing yet' },
 } satisfies Record<string, { classic: string } & Partial<Record<ModeId, string>>>;
 export type ModeTextKey = keyof typeof TEXT;
 

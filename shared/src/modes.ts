@@ -8,7 +8,7 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit', 'forge'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
@@ -17,6 +17,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   wizard: { title: 'Wizard', description: 'Enchanted paper, rune circles, star dust, and a few pages with a story.' },
   circuit: { title: 'Circuit', description: 'Glass panels, a live circuit board behind the pages, and a lock on whatever you point at.' },
   forge: { title: 'Forge', description: 'Iron plates with molten cracks, sparks and embers, and a few pages named for the work.' },
+  grove: { title: 'Grove', description: 'Rounded leaves, fireflies and a falling leaf, and a few pages named like a garden.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -45,10 +46,15 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: 'The cracks in each card breathe, a broken site glows like hot metal, a gear turns where something runs.',
     background: 'Embers rise slowly from the bottom of the page.',
   },
+  grove: {
+    pointer: 'A firefly follows your cursor, slowly.',
+    elements: 'A healthy site glows like a firefly, a broken one turns autumn brown at its edge, a seed sprouts where something runs.',
+    background: 'A few fireflies drift, and leaves fall now and then, a few at a time.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
-export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch'] as const;
+export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay'] as const;
 export type ModeCounter = (typeof MODE_COUNTERS)[number];
 /** The counters the browser reports itself; the rest the server counts as things finish. */
 export const BROWSER_COUNTERS = ['auraFix', 'paletteCommand'] as const satisfies readonly ModeCounter[];
@@ -83,13 +89,16 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'forge.updates', mode: 'forge', counter: 'panelUpdate', goal: 5, riddle: 'Rise from the ashes five times.', line: 'Five times the panel rose from the ashes.', rule: 'Update the panel 5 times', startsFresh: true },
   { id: 'forge.temper', mode: 'forge', counter: 'pluginUpdate', goal: 25, riddle: 'Temper twenty-five blades.', line: 'Twenty-five plugins and themes, tempered.', rule: 'Update 25 plugins or themes', startsFresh: true },
   { id: 'forge.metal', mode: 'forge', counter: 'phpSwitch', goal: 5, riddle: 'Change the metal five times.', line: 'Five times you changed the metal.', rule: "Switch a site's PHP version 5 times", startsFresh: true },
+  { id: 'grove.bloom', mode: 'grove', counter: 'healthyDay', goal: 7, riddle: 'Seven days of every garden flowering.', line: 'Seven days with every garden flowering.', rule: 'Have every site Healthy (3 or more) on 7 different days', startsFresh: true },
+  { id: 'grove.tend', mode: 'grove', counter: 'auraFix', goal: 15, riddle: 'Tend fifteen hurts.', line: 'Fifteen hurts, tended.', rule: 'Apply 15 fixes from Aura', startsFresh: true },
+  { id: 'grove.watch', mode: 'grove', counter: 'vulnCheckDay', goal: 30, riddle: 'Keep watch for thirty days.', line: 'Thirty days of keeping watch.', rule: 'Let the vulnerability check run on 30 different days', startsFresh: true },
 ];
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.' };
+export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom' };
+export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;

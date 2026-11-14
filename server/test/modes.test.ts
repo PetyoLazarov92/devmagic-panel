@@ -106,6 +106,19 @@ describe('mode progress', () => {
     expect(progress.developerView().modes.find((m) => m.id === 'forge')?.unlocked?.by).toBe('forge.metal');
   });
 
+  it("counts Grove's healthy days and check days once per day each, and its own Aura fixes from when it is first seen", () => {
+    const state = emptyModesState();
+    state.counters.auraFix = 12;
+    const tend = MODE_PATHS.find((p) => p.id === 'grove.tend')!;
+    const bloom = MODE_PATHS.find((p) => p.id === 'grove.bloom')!;
+    expect(pathProgress(state, tend)).toBe(0);
+    countMode(state, 'healthyDay', new Date('2026-11-14T09:00:00Z'), '2026-11-14');
+    countMode(state, 'healthyDay', new Date('2026-11-14T17:00:00Z'), '2026-11-14');
+    expect(pathProgress(state, bloom)).toBe(1);
+    for (let d = 15; d <= 20; d++) countMode(state, 'healthyDay', new Date(`2026-11-${d}T09:00:00Z`), `2026-11-${d}`);
+    expect(state.unlocks.grove?.by).toBe('grove.bloom');
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);

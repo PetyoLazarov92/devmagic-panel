@@ -270,6 +270,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       await vulnerabilities.settled();
       const last = vulnerabilities.lastRound();
       if (last === before) return last ? `the last round was ${Math.round((Date.now() - Date.parse(last)) / 3_600_000)} h ago; the next one is a day after it` : 'no round yet';
+      // A day the check ran counts once for that day.
+      if (last) modes.count('vulnCheckDay', last.slice(0, 10));
       const sites = (await siteList()).filter((x) => x.core.kind !== 'none');
       const hit = sites.filter((x) => (vulnerabilities.kept(`${x.domain}${x.path ?? ''}`)?.hits.length ?? 0) > 0);
       return `checked ${sites.length} sites: ${hit.length ? `${hit.length} with known vulnerabilities (${hit.map((x) => `${x.domain}${x.path ?? ''}`).join(', ')})` : 'none known'}`;
@@ -923,6 +925,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerCreateRoutes(api, { exec: deps.exec, jobs, uploadsDir: deps.uploadsDir });
     const siteRoutes = registerSiteRoutes(api, {
       vulnerabilities,
+      // A day with 3 sites or more, all Healthy, counts once for that day.
+      onSites: (list) => {
+        if (list.length >= 3 && list.every((x) => x.health === 'ok')) modes.count('healthyDay', new Date().toISOString().slice(0, 10));
+      },
       cron,
       config: deps.config,
       exec: deps.exec,

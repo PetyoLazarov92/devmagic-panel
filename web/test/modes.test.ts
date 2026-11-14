@@ -24,6 +24,12 @@ describe('mode names and lines', () => {
     expect(modeText('allGood', 'forge')).toBe('All fires lit');
   });
 
+  it("gives pages Grove's names", () => {
+    expect(pageName('Sites', 'grove')).toBe('Gardens');
+    expect(pageName('Aura', 'grove')).toBe('Weather');
+    expect(modeText('newSite', 'grove')).toBe('Plant a site');
+  });
+
   it('says a line its own way in Wizard, and the plain one in Classic', () => {
     expect(modeText('newSite', 'wizard')).toBe('Conjure a site');
     expect(modeText('newSite', 'classic')).toBe('New site');

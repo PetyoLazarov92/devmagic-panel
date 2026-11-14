@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.52.0 (2026-11-14)
+* **Modes:** one more mode is waiting to be found. A broken site's pulsing dot sits on the dot again in every mode
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.51.1 (2026-11-14)
 * **Modes:** the dialog that says a mode opened has its Switch button ready, so Enter switches
 * **Developer options:** the Modes card loses Show the dialog again; an unlock there shows the dialog, as any other

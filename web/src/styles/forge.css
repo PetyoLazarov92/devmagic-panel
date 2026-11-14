@@ -150,7 +150,8 @@
   50% { opacity: 1; }
 }
 /* A healthy site's dot glows softly, by its opacity only. */
-:root[data-mode='forge'] [data-ui='status-dot'] > span:not(.sr-only) {
+/* Only a healthy dot gets a halo; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='forge'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
   position: relative;
 }
 :root[data-mode='forge'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {

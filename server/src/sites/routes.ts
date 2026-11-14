@@ -64,6 +64,8 @@ export interface SiteRouteDeps {
   dmpRoot: string;
   /** The crontab and its runs, for a site's Cron tab and Aura. */
   cron: () => CronContext;
+  /** Told each time the sites are listed, with their health: the modes count a day with every site Healthy. */
+  onSites?: (sites: Site[]) => void;
 }
 
 const CACHE_MS = 3000;
@@ -144,7 +146,11 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
     });
   };
 
-  api.get('/api/sites', async () => marked(await sites()));
+  api.get('/api/sites', async () => {
+    const list = marked(await sites());
+    deps.onSites?.(list);
+    return list;
+  });
 
   // Known vulnerabilities of plugins and themes: off until switched on; a read of Aura starts the day's round in the background.
   const vulnerabilities = deps.vulnerabilities ?? new VulnerabilityWatch(deps.store, deps.exec, deps.config);

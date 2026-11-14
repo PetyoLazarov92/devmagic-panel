@@ -1,0 +1,401 @@
+/*
+ * Grove: a calm garden. Rounded leaves of cards with soft shadows, a fine leaf
+ * vein growing into one corner, pill buttons and a rounded face for names;
+ * moss and forest green in dark, fresh pale green in light. Soft colors, as
+ * the other modes': a green tint for what is chosen. data-mode="grove" on the
+ * root, data-fx while Elements is on; the firefly, fireflies and a falling
+ * leaf on one canvas (features/modes/grove-effects.tsx).
+ */
+:root[data-mode='grove']:not(.dark) {
+  --background: #eef3ea;
+  --foreground: #1c2b1f;
+  --card: #fbfcf7;
+  --muted: #e6eee1;
+  --muted-foreground: #5e7461;
+  --border: #d3dfcc;
+  --input: #c2d2ba;
+  --ring: #2f7d4a;
+  --primary: #2f7d4a;
+  --primary-foreground: #f4fbef;
+  --secondary: #e1f0e1;
+  --secondary-foreground: #1f5a33;
+  --success: #2a7a3e;
+  --warning: #9a6a00;
+  --danger: #b4412a;
+  --gv-glow: #8fa82a;
+  --gv-autumn: #b5651d;
+  --gv-raised: #fdfefb;
+  --gv-veins: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cg fill='none' stroke='%232f7d4a' stroke-linecap='round'%3E%3Cpath d='M204 124C168 78 126 60 70 58' stroke-opacity='.45' stroke-width='1.5'/%3E%3Cpath d='M156 82c-4-18-18-31-36-38M131 70c2-16-4-29-13-38M178 101c7-13 20-20 27-22M106 64c-4-11-13-18-24-20M166 93c-15 4-29 2-42-7M144 76c-12 6-26 6-38 0' stroke-opacity='.3' stroke-width='1.1'/%3E%3C/g%3E%3C/svg%3E");
+}
+:root[data-mode='grove'].dark {
+  --background: #0f1913;
+  --foreground: #e3efe2;
+  --card: #17251c;
+  --muted: #1d2e23;
+  --muted-foreground: #9bb39e;
+  --border: #2d4a36;
+  --input: #365a42;
+  --ring: #7ccf8a;
+  --primary: #7ccf8a;
+  --primary-foreground: #0c160f;
+  --secondary: #1f3a28;
+  --secondary-foreground: #c9f0cf;
+  --success: #8fdc9a;
+  --warning: #e8c06a;
+  --danger: #f08a6a;
+  --gv-glow: #e8f59a;
+  --gv-autumn: #d98a3a;
+  --gv-raised: #1f3226;
+  --gv-veins: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cg fill='none' stroke='%237ccf8a' stroke-linecap='round'%3E%3Cpath d='M204 124C168 78 126 60 70 58' stroke-opacity='.5' stroke-width='1.5'/%3E%3Cpath d='M156 82c-4-18-18-31-36-38M131 70c2-16-4-29-13-38M178 101c7-13 20-20 27-22M106 64c-4-11-13-18-24-20M166 93c-15 4-29 2-42-7M144 76c-12 6-26 6-38 0' stroke-opacity='.32' stroke-width='1.1'/%3E%3C/g%3E%3C/svg%3E");
+}
+:root[data-mode='grove'] {
+  --font-grove: 'Nunito', 'Quicksand', 'Varela Round', 'Comfortaa', 'Ubuntu', system-ui, sans-serif;
+  --gv-chosen: color-mix(in srgb, var(--primary) 14%, var(--card));
+  --gv-chosen-ink: color-mix(in srgb, var(--primary) 80%, var(--foreground));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --gv-veil: 82%;
+  scrollbar-color: color-mix(in srgb, var(--primary) 30%, var(--border)) transparent;
+}
+:root[data-mode='grove'].dark {
+  --gv-chosen: color-mix(in srgb, var(--primary) 16%, var(--card));
+  --gv-chosen-ink: var(--secondary-foreground);
+}
+
+/* Names: page titles, card titles, the menu and dialogs in a rounded face. */
+:root[data-mode='grove'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-grove);
+  font-weight: 700;
+}
+:root[data-mode='grove'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-grove);
+  font-weight: 600;
+}
+:root[data-mode='grove'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-grove);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* Cards: a leaf, rounded, lifted by a soft shadow, a fine vein growing into its bottom right corner (::after). */
+:root[data-mode='grove'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 14px;
+  border-color: var(--border);
+  box-shadow: 0 8px 22px -14px color-mix(in srgb, #0c1a10 45%, transparent);
+}
+:root[data-mode='grove'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 200px;
+  height: 120px;
+  max-width: 100%;
+  max-height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0 0 14px 0;
+  background: var(--gv-veins) right bottom / 200px 120px no-repeat;
+}
+:root[data-mode='grove'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='grove'] dialog [data-ui='card']::after {
+  display: none;
+}
+/* A broken site: its leaf turns autumn brown at the edge, slowly deepening and fading while Elements is on. */
+:root[data-mode='grove'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--gv-autumn) 55%, var(--border));
+}
+:root[data-mode='grove'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 14px;
+  box-shadow: inset 0 0 18px -4px color-mix(in srgb, var(--gv-autumn) 55%, transparent);
+}
+:root[data-mode='grove'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: gv-autumn 5s ease-in-out infinite;
+}
+@keyframes gv-autumn {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+/* A healthy site's dot glows like a firefly, by its opacity only. */
+/* Only a healthy dot gets a halo; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='grove'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='grove'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--gv-glow) 65%, transparent);
+  opacity: 0;
+  animation: gv-firefly 3.2s ease-in-out infinite;
+}
+@keyframes gv-firefly {
+  50% { opacity: 1; }
+}
+
+/* Everything else with a frame: rounder corners; chips and buttons as pills. */
+:root[data-mode='grove'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 10px;
+}
+:root[data-mode='grove'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='grove'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #0c1a10 40%, transparent);
+}
+:root[data-mode='grove'] [data-ui='tile'] {
+  border-radius: 12px;
+}
+:root[data-mode='grove']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='grove'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 12px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--gv-veil), transparent);
+}
+:root[data-mode='grove'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='grove'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='grove'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='grove'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--gv-veil), transparent);
+}
+:root[data-mode='grove'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 10%, var(--card)) var(--gv-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): a raised leaf with a soft shadow. */
+:root[data-mode='grove'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='grove'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: var(--gv-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #0c1a10 45%, transparent);
+}
+:root[data-mode='grove'] [data-ui='dialog'] {
+  border-radius: 18px;
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: var(--gv-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #0c1a10 55%, transparent);
+}
+:root[data-mode='grove'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='grove'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #0c1a10 45%, transparent);
+}
+:root[data-mode='grove'] :is([role='menuitem'], [role='option']) {
+  border-radius: 8px;
+}
+:root[data-mode='grove'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--gv-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='grove'] select.dmp-select::picker(select) {
+    border-radius: 14px;
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+    background: var(--gv-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #0c1a10 45%, transparent);
+  }
+  :root[data-mode='grove'] select.dmp-select option {
+    border-radius: 8px;
+  }
+  :root[data-mode='grove'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--gv-chosen);
+  }
+  :root[data-mode='grove'] select.dmp-select option:checked {
+    background: var(--gv-chosen);
+    color: var(--gv-chosen-ink);
+  }
+}
+
+/* Fields: rounded, on a soft green ground, a green edge while you type. */
+:root[data-mode='grove'] [data-ui='input'] {
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='grove'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='grove'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: pills; the main one a soft green. */
+:root[data-mode='grove'] [data-ui='button'],
+:root[data-mode='grove'] [data-ui='chip'] {
+  border-radius: 999px;
+}
+/* An icon-only button is a round pebble. */
+:root[data-mode='grove'] [data-ui='button']:is([class~='size-6'], [class~='size-7'], [class~='size-8'], [class~='size-9']) {
+  border-radius: 50%;
+}
+:root[data-mode='grove'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  background-color: var(--gv-chosen);
+  color: var(--gv-chosen-ink);
+}
+:root[data-mode='grove'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--primary) 24%, var(--card));
+}
+:root[data-mode='grove'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--gv-veil), transparent);
+}
+:root[data-mode='grove'][data-fx] [data-ui='button']:hover {
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--gv-glow) 45%, transparent);
+}
+
+/* Whatever is chosen: a soft green fill. */
+:root[data-mode='grove'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background: var(--gv-chosen);
+  color: var(--gv-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='grove'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 10px;
+  background: var(--gv-chosen);
+  color: var(--gv-chosen-ink);
+}
+:root[data-mode='grove'] [data-ui='segmented'] {
+  border-radius: 999px;
+}
+:root[data-mode='grove'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 999px;
+}
+:root[data-mode='grove'] [role='tab'][aria-selected='true'] {
+  border-color: var(--primary);
+  color: var(--gv-chosen-ink);
+}
+
+/* Switches: round, a soft green when on, the knob glowing like a firefly. */
+:root[data-mode='grove'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='grove'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='grove'] [data-ui='switch'][aria-checked='true'] > span {
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--gv-glow) 60%, transparent);
+}
+:root[data-mode='grove'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: rounded, a green mark when ticked. */
+:root[data-mode='grove'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 5px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='grove'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='grove'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--primary);
+  background-color: var(--gv-chosen);
+}
+:root[data-mode='grove'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--primary);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='grove'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--primary);
+}
+:root[data-mode='grove'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='grove'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: a bar that grows from deep green into a young one. */
+:root[data-mode='grove'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--primary) 70%, var(--card)), color-mix(in oklab, var(--gv-glow) 60%, var(--card)));
+}
+
+/* The top bar and the sidebar: a soft green rule; the page you are on in a rounded green fill. */
+:root[data-mode='grove'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+}
+:root[data-mode='grove'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 10px;
+  background: var(--gv-chosen);
+  color: var(--gv-chosen-ink);
+}
+
+/* The background effect's still part: a faint green light from the top left, as through leaves. */
+:root[data-mode='grove'][data-fx-bg] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(60% 50% at 30% 0%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 70%);
+}
+:root[data-mode='grove'][data-fx-bg].dark body::before {
+  background: radial-gradient(60% 50% at 30% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 70%);
+}
+
+/* Grove's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='grove'] {
+  --t-bg: #eef3ea;
+  --t-side: #e6eee1;
+  --t-line: #c2d2ba;
+  --t-accent: #2f7d4a;
+  --t-ink: #1c2b1f;
+  --t-card: #fbfcf7;
+}
+.dark .mode-thumb[data-thumb='grove'] {
+  --t-bg: #0f1913;
+  --t-side: #142019;
+  --t-line: #2d4a36;
+  --t-accent: #7ccf8a;
+  --t-ink: #e3efe2;
+  --t-card: #17251c;
+}
+.mode-thumb[data-thumb='grove'] .mt-main i {
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='grove'] :not(.rune-turning),
+  :root[data-mode='grove'] *::before,
+  :root[data-mode='grove'] *::after {
+    animation: none !important;
+  }
+}

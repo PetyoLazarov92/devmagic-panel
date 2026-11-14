@@ -147,6 +147,36 @@ runs. Pages it names its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Grove
+
+A calm garden: rounded cards lifted by soft shadows, a fine leaf vein growing
+into one corner, pill-shaped buttons and chips and a rounded face for names;
+moss and forest green in the dark theme, fresh pale green in the light one.
+Whatever is chosen gets a soft green tint. The effects add a few fireflies
+that wander and blink, and up to three leaves falling across the page, a few
+seconds apart (Background); a firefly that follows the cursor a little behind it and drifts
+on its own when the cursor leaves the page (Pointer); and a healthy site's dot
+glowing like a firefly and a broken site's card turning autumn brown at its
+edge (Elements). A sprouting seed turns where something runs. Pages it names
+its own way:
+
+| Classic | Grove |
+| --- | --- |
+| Demo | Greenhouse |
+| Sites | Gardens |
+| Aura | Weather |
+| Mail | Birdsong |
+| Services | Roots |
+| WP Cores | Seeds |
+| Activity | Seasons |
+| Updates | Growth |
+| Settings | Almanac |
+| Modes | Canopy |
+| Developer options | Toolshed |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks

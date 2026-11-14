@@ -50,3 +50,19 @@ export function Gear({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Grove's turning icon: a ring of leaves around a seed, turning slowly as one
+ * while something runs.
+ */
+export function Sprout({ className }: { className?: string }) {
+  const leaf = 'M32 6c6 6 6 14 0 20-6-6-6-14 0-20Z';
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} style={{ animationDuration: '2.6s' }} aria-hidden>
+      {[0, 72, 144, 216, 288].map((a, i) => (
+        <path key={a} d={leaf} fill="currentColor" fillOpacity={0.3 + i * 0.15} transform={`rotate(${a} 32 32)`} />
+      ))}
+      <circle cx="32" cy="32" r="6" fill="currentColor" />
+    </svg>
+  );
+}
