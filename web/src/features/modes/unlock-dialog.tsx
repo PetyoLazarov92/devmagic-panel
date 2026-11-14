@@ -57,7 +57,7 @@ export function UnlockDialog({ path }: { path: string }) {
       open
       onClose={close}
       title={`You unlocked ${title} mode`}
-      size="sm"
+      size="lg"
       footer={
         <>
           <Button variant="soft" onClick={close}>Later</Button>
@@ -65,11 +65,14 @@ export function UnlockDialog({ path }: { path: string }) {
         </>
       }
     >
-      <div className="grid gap-3 text-sm">
+      {/* Wide: the picture of the mode beside what earned it; stacked on a phone. */}
+      <div className="grid items-center gap-5 text-sm sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <ModeThumb mode={showing} reveal={!reduced} />
-        {mode?.unlockLine && <p className="font-medium">{mode.unlockLine}</p>}
-        <p className="text-muted-foreground">{MODE_INFO[showing].description}</p>
-        <p className="text-xs text-muted-foreground">You can switch back any time on the Modes page.</p>
+        <div className="grid gap-3">
+          {mode?.unlockLine && <p className="text-base font-medium">{mode.unlockLine}</p>}
+          <p className="text-muted-foreground">{MODE_INFO[showing].description}</p>
+          <p className="text-xs text-muted-foreground">You can switch back any time on the Modes page.</p>
+        </div>
       </div>
     </Dialog>
   );
