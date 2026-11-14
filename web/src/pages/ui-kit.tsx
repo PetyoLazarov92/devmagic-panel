@@ -1,4 +1,4 @@
-import { Database, Download, FolderOpen, LayoutDashboard, MoreHorizontal, Plug, RefreshCw, ScrollText, Server, Trash2 } from 'lucide-react';
+import { Database, Download, FolderOpen, LayoutDashboard, Plug, RefreshCw, ScrollText, Server, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { CheckAgain, PageHeader, ViewBar } from '@/components/layout/page';
 import { ScopeLabel } from '@/components/layout/scope-label';
@@ -14,6 +14,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Input } from '@/components/ui/input';
 import { KeyValue } from '@/components/ui/key-value';
 import { ListRow, RowList } from '@/components/ui/list-row';
+import { Menu, type MenuItem } from '@/components/ui/menu';
 import { EmptyState, Notice } from '@/components/ui/notice';
 import { SectionLayout } from '@/components/ui/section-nav';
 import { Segmented } from '@/components/ui/segmented';
@@ -28,6 +29,14 @@ import { TextLink } from '@/components/ui/text-link';
  * Only in the mockup: every part the screens are made of, with the rule for where it goes.
  * The reference for a change to the web app; see the Components section of ui-ux.mdc.
  */
+/** What a three-dot menu holds here: the kinds of entries one has, a dangerous one last; none does anything. */
+const SAMPLE_MENU: MenuItem[] = [
+  { label: 'Open folder', icon: <FolderOpen />, onSelect: () => undefined },
+  { label: 'Update to 2.5.0', icon: <RefreshCw />, onSelect: () => undefined },
+  { label: 'Not now', onSelect: () => undefined, disabled: true },
+  { label: 'Delete', icon: <Trash2 />, onSelect: () => undefined, danger: true },
+];
+
 export function UiKitPage() {
   const [tab, setTab] = useState<'overview' | 'logs' | 'files'>('overview');
   const [view, setView] = useState<'overview' | 'tables' | 'sql'>('tables');
@@ -72,7 +81,8 @@ export function UiKitPage() {
               <Button variant="danger"><Trash2 />Delete, in a confirm</Button>
               <Button size="sm" variant="outline"><Download />Small</Button>
               <Button size="xs" variant="outline">Extra small</Button>
-              <IconButton icon={MoreHorizontal} label="More actions" />
+              <IconButton icon={RefreshCw} label="Refresh" />
+              <Menu label="More actions" items={SAMPLE_MENU} />
               <Button disabled><Spinner />Working...</Button>
             </div>
             <p>
@@ -129,7 +139,7 @@ export function UiKitPage() {
         <Card>
           <CardBody flush>
             <RowList label="Plugins">
-              <ListRow leading={<Switch checked={on} onChange={setOn} label="Turn off Wand Forms" />} title="Wand Forms" sub={<span className="font-mono">wand-forms 2.4.1</span>} badges={<Badge tone="warning">2.5.0 available</Badge>} actions={<IconButton icon={MoreHorizontal} label="More for Wand Forms" size="icon-sm" />} />
+              <ListRow leading={<Switch checked={on} onChange={setOn} label="Turn off Wand Forms" />} title="Wand Forms" sub={<span className="font-mono">wand-forms 2.4.1</span>} badges={<Badge tone="warning">2.5.0 available</Badge>} actions={<Menu label="More for Wand Forms" items={SAMPLE_MENU} />} />
               <ListRow leading={<Plug className="size-4 text-muted-foreground" />} title="Spellbook Blocks" sub={<span className="font-mono">spellbook-blocks 1.3.0</span>} badges={<Badge tone="primary">Local helper</Badge>} actions={<Button size="sm" variant="outline">Open folder</Button>} />
             </RowList>
           </CardBody>
