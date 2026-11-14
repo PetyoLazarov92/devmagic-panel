@@ -284,7 +284,7 @@ describe('modes', () => {
     expect((await app.inject({ method: 'GET', url: '/api/modes', headers: { host: HOST } })).statusCode).toBe(401);
     const first = (await app.inject({ method: 'GET', url: '/api/modes', headers })).json();
     expect(first.fresh).toEqual([]);
-    expect(first.modes.map((m: { id: string; unlocked: boolean }) => [m.id, m.unlocked])).toEqual([['classic', true], ['wizard', false], ['circuit', false], ['forge', false], ['grove', false], ['abyss', false], ['neon', false], ['ink', false], ['dune', false], ['pixel', false], ['sorbet', false], ['deco', false], ['chrome', false], ['atlas', false]]);
+    expect(first.modes.map((m: { id: string; unlocked: boolean }) => [m.id, m.unlocked])).toEqual([['classic', true], ['wizard', false], ['circuit', false], ['forge', false], ['grove', false], ['abyss', false], ['neon', false], ['ink', false], ['dune', false], ['pixel', false], ['sorbet', false], ['deco', false], ['chrome', false], ['atlas', false], ['frostfall', false]]);
     expect(first.modes[1].riddles).toHaveLength(3);
     expect(first.modes[2].riddles).toHaveLength(3);
     expect(first.modes[3].riddles).toHaveLength(3);
@@ -300,6 +300,7 @@ describe('modes', () => {
     // A bonus mode shows how many modes it needs and how many are found, never a riddle.
     expect(first.modes[13].riddles).toBeUndefined();
     expect(first.modes[13].bonus).toEqual({ have: 0, goal: 4 });
+    expect(first.modes[14].bonus).toEqual({ have: 0, goal: 8 });
     expect(first.earned).toBe(false);
     expect(JSON.stringify(first)).not.toMatch(/abracadabra|overclock|ignite|bloom|dive|afterglow|calligraphy|sandstorm|extralife|brainfreeze|champagne|quicksilver/);
     expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard' } })).statusCode).toBe(400);

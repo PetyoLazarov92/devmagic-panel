@@ -8,7 +8,7 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink', 'dune', 'pixel', 'sorbet', 'deco', 'chrome', 'atlas'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink', 'dune', 'pixel', 'sorbet', 'deco', 'chrome', 'atlas', 'frostfall'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
@@ -17,11 +17,11 @@ export type SealedModeId = Exclude<ModeId, 'classic'>;
  * once enough of the other modes were earned (by a path or a word, never an
  * unlock from Developer options), shown on its card as dashes filling up.
  */
-export const BONUS_MODES = ['atlas'] as const;
+export const BONUS_MODES = ['atlas', 'frostfall'] as const;
 export type BonusModeId = (typeof BONUS_MODES)[number];
 /** The modes with a word, every sealed mode but the bonus ones. */
 export type WordModeId = Exclude<SealedModeId, BonusModeId>;
-export const BONUS_GOAL: Record<BonusModeId, number> = { atlas: 4 };
+export const BONUS_GOAL: Record<BonusModeId, number> = { atlas: 4, frostfall: 8 };
 export function isBonusMode(mode: string): mode is BonusModeId {
   return (BONUS_MODES as readonly string[]).includes(mode);
 }
@@ -41,6 +41,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   deco: { title: 'Art Deco', description: 'Gold on black or ivory: a fine gold frame, a sunburst fan in each corner, a gold star where you click, and a few pages named for the grand hotel.' },
   chrome: { title: 'Chrome', description: 'Liquid metal: chrome titles, a reflection sweeping across each card, chrome droplets in each corner, a ripple of mercury where you click, and a few pages named for the machine.' },
   atlas: { title: 'Atlas', description: "An explorer's chart: an engraved map behind the pages, cards like a weathered pirate map with a compass that swings, a pin where you click, and a few pages named for the voyage." },
+  frostfall: { title: 'Frostfall', description: 'The far north under the moon: ridges fading into fog, snow drifting down with a gust now and then, frozen stone cards with icicles and a house emblem, frost where you click, and a few pages named for the hold.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -119,6 +120,11 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: "A card's compass needle swings to a new heading when you point at the card, a broken site's edge is singed red, a compass turns where something runs.",
     background: 'A red route winds slowly across the map behind the pages, around the forest and over the river.',
   },
+  frostfall: {
+    pointer: 'A click leaves a ring of frost that spreads a little and melts away.',
+    elements: "The snowflake on a card's emblem turns slowly when you point at the card, a broken site's ice glows red, a healthy site's dot shines like ice, a snowflake turns where something runs.",
+    background: 'Snow drifts down slowly behind the pages, and now and then a gust of wind sweeps it sideways.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
@@ -185,6 +191,7 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'chrome.polish', mode: 'chrome', counter: 'searchReplace', goal: 10, riddle: 'Buff out ten scratches.', line: 'Ten scratches, buffed out.', rule: "Run a search and replace on a site's database 10 times", startsFresh: true },
   { id: 'chrome.engine', mode: 'chrome', counter: 'serviceRestart', goal: 20, riddle: 'Rev the engine twenty times.', line: 'Twenty revs of the engine.', rule: 'Restart or reload a service (Apache, nginx, PHP-FPM, MySQL and the like) 20 times', startsFresh: true },
   { id: 'atlas.collect', mode: 'atlas', counter: 'modeEarned', goal: BONUS_GOAL.atlas, riddle: '', line: 'Four modes found: the map is yours.', rule: 'Earn 4 of the other modes, by a path or a word (Developer options unlocks do not count); modes earned before this release count too' },
+  { id: 'frostfall.collect', mode: 'frostfall', counter: 'modeEarned', goal: BONUS_GOAL.frostfall, riddle: '', line: 'Eight modes found: the hold opens its gates.', rule: 'Earn 8 of the other modes, by a path or a word (Developer options unlocks do not count); modes earned before this release count too' },
 ];
 
 /**
@@ -199,7 +206,7 @@ const RETIRED_PATHS: Record<string, { line: string; label: string }> = {
 export const MODE_WORDS: Record<WordModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy', dune: 'sandstorm', pixel: 'extralife', sorbet: 'brainfreeze', deco: 'champagne', chrome: 'quicksilver' };
 export const MODE_WORD_LINE: Record<WordModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.', ink: 'The ink took to the paper.', dune: 'The storm let you through.', pixel: 'One extra life.', sorbet: 'Brain freeze, worth it.', deco: 'Champagne for everyone.', chrome: 'Quicksilver, in your hands.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.', dune: 'The dunes are shifting.', pixel: 'Player one, ready.', sorbet: 'Help yourself to a scoop.', deco: 'The ballroom is open.', chrome: 'Polished to a mirror shine.', atlas: 'Chart your own course.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.', dune: 'The dunes are shifting.', pixel: 'Player one, ready.', sorbet: 'Help yourself to a scoop.', deco: 'The ballroom is open.', chrome: 'Polished to a mirror shine.', atlas: 'Chart your own course.', frostfall: 'No two winters alike.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;

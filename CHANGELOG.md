@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.64.0 (2026-11-14)
+* **Modes:** a second bonus mode, Frostfall: the far north under the moon, snow with a gust of wind now and then, frozen cards with icicles and a house emblem, and frost where you click
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.63.1 (2026-11-14)
 * **Modes:** Atlas's route fades out once drawn and starts again at the same slow pace, instead of winding back fast. A bonus mode found makes the palette icon in the menu pulse, without turning. Developer options' Modes card keeps its question open on a click outside it
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

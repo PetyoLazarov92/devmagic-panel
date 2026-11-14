@@ -319,6 +319,22 @@ describe('mode progress', () => {
     expect(modesDeveloperView(state).modes.find((m) => m.id === 'atlas')?.word).toBeUndefined();
   });
 
+  it('opens Frostfall at eight modes earned, after Atlas, and Atlas never counts toward it', () => {
+    const state = emptyModesState();
+    // Six words, and Pixel opens on its own path at five earned: seven.
+    for (const word of ['abracadabra', 'overclock', 'ignite', 'bloom', 'dive', 'afterglow']) speakWord(state, word);
+    expect(state.unlocks.atlas?.by).toBe('atlas.collect');
+    expect(state.unlocks.pixel?.by).toBe('pixel.worlds');
+    expect(state.unlocks.frostfall).toBeUndefined();
+    expect(modesView(state).modes.find((m) => m.id === 'frostfall')?.bonus).toEqual({ have: 7, goal: 8 });
+    modesDeveloper.unlock(state, 'ink');
+    expect(state.unlocks.frostfall).toBeUndefined();
+    speakWord(state, 'sandstorm');
+    expect(state.unlocks.frostfall?.by).toBe('frostfall.collect');
+    expect(modesView(state).modes.find((m) => m.id === 'frostfall')?.bonus).toEqual({ have: 8, goal: 8 });
+    expect(state.counters.modeEarned).toBe(8);
+  });
+
   it('opens a bonus mode at start when its count was reached before it existed', () => {
     const store = memory();
     const state = emptyModesState();
@@ -326,6 +342,7 @@ describe('mode progress', () => {
     store.setMeta('modes', JSON.stringify(state));
     const progress = new ModeProgress(store);
     expect(progress.view().modes.find((m) => m.id === 'atlas')?.unlocked).toBe(true);
+    expect(progress.view().modes.find((m) => m.id === 'frostfall')?.unlocked).toBe(false);
   });
 
   it('tells a newer version from an older or the same one', () => {

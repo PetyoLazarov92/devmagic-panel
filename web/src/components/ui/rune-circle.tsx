@@ -194,3 +194,21 @@ export function Compass({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Frostfall's turning icon: a snowflake of six arms, each with a pair of
+ * branches, turning slowly while something runs.
+ */
+export function Snowflake({ className }: { className?: string }) {
+  const arm = 'M32 28 V8 M32 18 l-6 -6 M32 18 l6 -6';
+  return (
+    <svg viewBox="0 0 64 64" className={className} aria-hidden>
+      <g className="rune-turning" style={{ animationDuration: '2.4s', transformOrigin: '32px 32px' }} fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round">
+        {[0, 60, 120, 180, 240, 300].map((a) => (
+          <path key={a} d={arm} transform={`rotate(${a} 32 32)`} />
+        ))}
+      </g>
+      <circle cx="32" cy="32" r="4" fill="var(--ff-frost, currentColor)" />
+    </svg>
+  );
+}

@@ -480,6 +480,39 @@ turns where something runs. Pages it names its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Frostfall
+
+A bonus mode, the second: the far north under the moon. A landscape lies
+behind the pages, ridges fading into fog and snowy spruce forests, a pale
+winter day in the light theme and moonlight in the dark one. Cards are frozen
+stone with a crust of frost and icicles along the top, and in one corner the
+house's emblem, a shield with a snowflake and a motto ribbon. Names are in a
+carved serif and whatever is chosen takes ice blue. The effects add snow
+drifting down behind the cards, the nearer flakes crystals that turn slowly,
+and now and then a gust of wind that sweeps it sideways and dies down
+(Background); a ring of frost where you click a button or link, with nothing
+following the cursor (Pointer); and the emblem's snowflake turning while you
+point at a card, a broken site's ice glowing red and a healthy site's dot
+shining like ice (Elements). A snowflake turns where something runs. Pages it
+names its own way:
+
+| Classic | Frostfall |
+| --- | --- |
+| Demo | Winter drill |
+| Sites | Holdfasts |
+| Aura | Watchtower |
+| Mail | Ravens |
+| Services | Hearths |
+| WP Cores | Stores |
+| Activity | Chronicle |
+| Updates | Thaw |
+| Settings | Steward's hall |
+| Modes | Banners |
+| Developer options | Forge below |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card. It lists

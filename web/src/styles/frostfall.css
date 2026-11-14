@@ -1,0 +1,407 @@
+/*
+ * Frostfall: the far north under the moon, a bonus mode. A landscape behind
+ * the pages (ridges fading into fog, snowy pines; a pale winter day in light,
+ * moonlight in dark), frozen stone cards with a frost crust and icicles along
+ * the top, a house emblem in each card's corner (a shield with a snowflake
+ * that turns while you point at the card), and ice blue for what is chosen.
+ * data-mode="frostfall" on the root, data-fx while Elements is on; the snow
+ * and a click's frost are on canvases (features/modes/frostfall-effects.tsx).
+ * The pictures are in assets/modes.
+ */
+:root[data-mode='frostfall']:not(.dark) {
+  --background: #e6edf3;
+  --foreground: #1c2a38;
+  --card: #f8fbfd;
+  --muted: #edf2f6;
+  --muted-foreground: #55687b;
+  --border: #c4d2de;
+  --input: #b4c4d2;
+  --ring: #3f6f99;
+  --primary: #3f6f99;
+  --primary-foreground: #f8fbfd;
+  --secondary: #e8eff5;
+  --secondary-foreground: #2c4c6c;
+  --success: #2f7a5a;
+  --warning: #8a6100;
+  --danger: #b23a48;
+  --ff-ice: #4a7ca6;
+  --ff-frost: #8fb4d4;
+  --ff-raised: #fbfdfe;
+  --ff-chosen-ink: #1f4466;
+  --ff-crust: rgba(255, 255, 255, 0.85);
+  --ff-land: url('../assets/modes/frostfall-land-light.svg');
+  --ff-icicles: url('../assets/modes/frostfall-ice-light.svg');
+  --ff-shield: url('../assets/modes/frostfall-shield-light.svg');
+  --ff-flake: url('../assets/modes/frostfall-flake-light.svg');
+}
+:root[data-mode='frostfall'].dark {
+  --background: #0b121b;
+  --foreground: #e2ebf4;
+  --card: #142030;
+  --muted: #182536;
+  --muted-foreground: #93a6ba;
+  --border: #2b3b4e;
+  --input: #36485c;
+  --ring: #9cc8ec;
+  --primary: #9cc8ec;
+  --primary-foreground: #0b121b;
+  --secondary: #1a2738;
+  --secondary-foreground: #cfe3f5;
+  --success: #8fd4b0;
+  --warning: #f0c870;
+  --danger: #f08a8a;
+  --ff-ice: #9cc8ec;
+  --ff-frost: #cfe2f4;
+  --ff-raised: #172435;
+  --ff-chosen-ink: #d6eafa;
+  --ff-crust: rgba(207, 226, 244, 0.35);
+  --ff-land: url('../assets/modes/frostfall-land-dark.svg');
+  --ff-icicles: url('../assets/modes/frostfall-ice-dark.svg');
+  --ff-shield: url('../assets/modes/frostfall-shield-dark.svg');
+  --ff-flake: url('../assets/modes/frostfall-flake-dark.svg');
+}
+:root[data-mode='frostfall'] {
+  --font-frost: 'Marcellus SC', 'Marcellus', 'Cinzel', 'Cormorant SC', 'Trajan Pro', 'Palatino Linotype', Palatino, 'URW Palladio L', P052, Georgia, serif;
+  --ff-chosen: color-mix(in srgb, var(--ff-ice) 13%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --ff-veil: 88%;
+  scrollbar-color: color-mix(in srgb, var(--ff-ice) 35%, var(--border)) transparent;
+}
+:root[data-mode='frostfall'].dark {
+  --ff-chosen: color-mix(in srgb, var(--ff-ice) 16%, var(--card));
+}
+
+/* The landscape behind every page: part of the look, drawn once and fixed, so scrolling never paints it again. */
+:root[data-mode='frostfall'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--ff-land) center bottom / cover no-repeat;
+  opacity: 0.9;
+}
+
+/* Names: page titles, card titles and dialogs in a carved serif. */
+:root[data-mode='frostfall'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-frost);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+:root[data-mode='frostfall'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-frost);
+  letter-spacing: 0.02em;
+}
+:root[data-mode='frostfall'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-frost);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/*
+ * Cards: frozen stone. A crust of frost and a row of icicles along the top
+ * edge (background layers, behind the text), a cold light from above, and
+ * the house emblem in the bottom right corner: the shield (::after) and its
+ * snowflake (::before), the same box, so they line up at any size.
+ */
+:root[data-mode='frostfall'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 5px;
+  border-color: color-mix(in srgb, var(--ff-ice) 26%, var(--border));
+  background-image: var(--ff-icicles), linear-gradient(180deg, color-mix(in srgb, var(--ff-frost) 18%, transparent), transparent 56px);
+  background-repeat: repeat-x, no-repeat;
+  background-size: 240px 26px, 100% 100%;
+  background-position: left top, left top;
+  box-shadow: inset 0 1px 0 var(--ff-crust), 0 6px 18px -14px color-mix(in srgb, #0b121b 55%, transparent);
+}
+:root[data-mode='frostfall'] [data-ui='card']::after,
+:root[data-mode='frostfall'] [data-ui='card']::before {
+  content: '';
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  height: min(84px, calc(100% - 24px));
+  aspect-ratio: 3 / 4;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.9;
+}
+:root[data-mode='frostfall'] [data-ui='card']::after {
+  background: var(--ff-shield) center / contain no-repeat;
+}
+/* The snowflake: turns a sixth of a circle, slowly, while you point at the card. */
+:root[data-mode='frostfall'] [data-ui='card']::before {
+  background: var(--ff-flake) center / contain no-repeat;
+  transform-origin: 50% 44%;
+}
+:root[data-mode='frostfall'][data-fx] [data-ui='card']::before {
+  transition: rotate 1.8s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+:root[data-mode='frostfall'][data-fx] [data-ui='card']:hover::before {
+  rotate: 60deg;
+}
+:root[data-mode='frostfall'] dialog [data-ui='card'] {
+  background-image: none;
+  box-shadow: none;
+}
+:root[data-mode='frostfall'] dialog [data-ui='card']::after,
+:root[data-mode='frostfall'] dialog [data-ui='card']::before {
+  display: none;
+}
+
+/* A broken site: its ice glows red from the edges in. */
+:root[data-mode='frostfall'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  box-shadow: inset 0 1px 0 var(--ff-crust), inset 0 0 30px -12px color-mix(in srgb, var(--danger) 55%, transparent);
+}
+/* A healthy dot shines like ice now and then; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='frostfall'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='frostfall'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 7px 1px color-mix(in srgb, var(--ff-frost) 70%, transparent);
+  animation: ff-shine 6s ease-in-out infinite;
+}
+@keyframes ff-shine {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* Everything else with a frame: nearly square. */
+:root[data-mode='frostfall'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 3px;
+}
+:root[data-mode='frostfall'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='frostfall'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #1c2a38 40%, transparent);
+}
+:root[data-mode='frostfall'] [data-ui='tile'] {
+  border-radius: 3px;
+}
+:root[data-mode='frostfall']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='frostfall'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 3px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--ff-veil), transparent);
+}
+:root[data-mode='frostfall'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='frostfall'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='frostfall'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='frostfall'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--ff-veil), transparent);
+}
+:root[data-mode='frostfall'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--ff-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='frostfall'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='frostfall'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--ff-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #0b121b 50%, transparent);
+}
+:root[data-mode='frostfall'] [data-ui='dialog'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--ff-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #0b121b 60%, transparent);
+}
+:root[data-mode='frostfall'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='frostfall'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #0b121b 50%, transparent);
+}
+:root[data-mode='frostfall'] :is([role='menuitem'], [role='option']) {
+  border-radius: 3px;
+}
+:root[data-mode='frostfall'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--ff-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='frostfall'] select.dmp-select::picker(select) {
+    border-radius: 4px;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--ff-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #0b121b 50%, transparent);
+  }
+  :root[data-mode='frostfall'] select.dmp-select option {
+    border-radius: 4px;
+  }
+  :root[data-mode='frostfall'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--ff-chosen);
+  }
+  :root[data-mode='frostfall'] select.dmp-select option:checked {
+    background: var(--ff-chosen);
+    color: var(--ff-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, an ice-blue edge while you type. */
+:root[data-mode='frostfall'] [data-ui='input'] {
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='frostfall'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='frostfall'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: nearly square; the main one a soft ice blue. */
+:root[data-mode='frostfall'] [data-ui='button'],
+:root[data-mode='frostfall'] [data-ui='chip'] {
+  border-radius: 3px;
+}
+:root[data-mode='frostfall'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--ff-ice) 50%, transparent);
+  background-color: var(--ff-chosen);
+  color: var(--ff-chosen-ink);
+}
+:root[data-mode='frostfall'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--ff-ice) 20%, var(--card));
+}
+:root[data-mode='frostfall'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--ff-veil), transparent);
+}
+
+/* Whatever is chosen: a soft ice-blue fill. */
+:root[data-mode='frostfall'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--ff-ice) 50%, transparent);
+  background: var(--ff-chosen);
+  color: var(--ff-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='frostfall'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 3px;
+  background: var(--ff-chosen);
+  color: var(--ff-chosen-ink);
+}
+:root[data-mode='frostfall'] [data-ui='segmented'],
+:root[data-mode='frostfall'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 3px;
+}
+:root[data-mode='frostfall'] [role='tab'][aria-selected='true'] {
+  border-color: var(--ff-ice);
+  color: var(--ff-chosen-ink);
+}
+
+/* Switches: ice blue when on. */
+:root[data-mode='frostfall'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='frostfall'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='frostfall'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: nearly square, an ice-blue mark when ticked. */
+:root[data-mode='frostfall'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='frostfall'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='frostfall'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--ff-ice);
+  background-color: var(--ff-chosen);
+}
+:root[data-mode='frostfall'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--ff-ice);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='frostfall'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ff-ice);
+}
+:root[data-mode='frostfall'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='frostfall'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: ice blue into frost, softly. */
+:root[data-mode='frostfall'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--ff-ice) 60%, var(--card)), color-mix(in oklab, var(--ff-frost) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint frost rule; the page you are on in a soft ice-blue fill. */
+:root[data-mode='frostfall'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='frostfall'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 3px;
+  background: var(--ff-chosen);
+  color: var(--ff-chosen-ink);
+}
+
+/* Frostfall's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='frostfall'] {
+  --t-bg: #e6edf3;
+  --t-side: #dce5ed;
+  --t-line: #c4d2de;
+  --t-accent: #4a7ca6;
+  --t-ink: #1c2a38;
+  --t-card: #f8fbfd;
+}
+.dark .mode-thumb[data-thumb='frostfall'] {
+  --t-bg: #0b121b;
+  --t-side: #0f1824;
+  --t-line: #2b3b4e;
+  --t-accent: #9cc8ec;
+  --t-ink: #e2ebf4;
+  --t-card: #142030;
+}
+.mode-thumb[data-thumb='frostfall'] .mt-main i {
+  border-radius: 2px;
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--t-accent) 45%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='frostfall'] :not(.rune-turning),
+  :root[data-mode='frostfall'] *::before,
+  :root[data-mode='frostfall'] *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
