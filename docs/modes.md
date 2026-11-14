@@ -371,11 +371,12 @@ gold frame drawn inside every card and dialog, a sunburst fan in one corner of
 each card, names in a light geometric face in capitals with wide spacing, and
 gold for whatever is chosen. A healthy site's dot is a small diamond. The
 effects add a fine diagonal pattern behind the pages and, now and then, a faint
-band of gold shimmer crossing it (Background, CSS only); a thin gold fan of
-lines rising where you click a button or link, with nothing following the
-cursor (Pointer); and a sheen passing over each sunburst now and then, a broken
-site's inner frame turning red and breathing, and the healthy diamond glowing
-gold (Elements). A sunburst turns where something runs. Pages it names its own
+band of gold shimmer crossing it (Background, CSS only); a gold star, four
+long points and four short around a diamond, opening where you click a button
+or link, with nothing following the cursor (Pointer); and a sheen, cut to the
+sunburst's quarter circle, passing over it now and then, a broken site's inner
+frame turning red and breathing, and the healthy diamond glowing gold
+(Elements). A sunburst turns where something runs. Pages it names its own
 way:
 
 | Classic | Art Deco |

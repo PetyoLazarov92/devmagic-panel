@@ -24,7 +24,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   dune: { title: 'Dune', description: 'Sand and terracotta: dune lines under a low sun, a trail of sand behind your cursor, and a few pages named for the desert.' },
   pixel: { title: 'Pixel', description: 'Square edges and hard shadows: a pixel heart over stepped hills, a +1 where you click, and a few pages named for the game.' },
   sorbet: { title: 'Sorbet', description: 'Pastel mint, strawberry and lemon: rounded everything, three scoops in each corner, sprinkles where you click, and a few pages named for the ice cream parlor.' },
-  deco: { title: 'Art Deco', description: 'Gold on black or ivory: a fine gold frame, a sunburst fan in each corner, a gold fan where you click, and a few pages named for the grand hotel.' },
+  deco: { title: 'Art Deco', description: 'Gold on black or ivory: a fine gold frame, a sunburst fan in each corner, a gold star where you click, and a few pages named for the grand hotel.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -89,7 +89,7 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     background: 'Soft blobs of mint, strawberry and lemon drift slowly behind the pages.',
   },
   deco: {
-    pointer: 'A click sends up a thin gold fan of lines that fades.',
+    pointer: 'A click opens a gold star that fades.',
     elements: "A sheen passes over each card's sunburst now and then, a broken site's inner frame turns red and breathes, a healthy site's diamond glows gold, a sunburst turns where something runs.",
     background: 'A fine diagonal pattern behind the pages, and now and then a faint band of gold shimmer crossing it.',
   },

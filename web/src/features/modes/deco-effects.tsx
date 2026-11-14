@@ -1,17 +1,18 @@
 import { useEffect, useRef } from 'react';
 
-/** How long a fan of lines rises and fades, how long its rays grow, and how many there are. */
-const FAN_MS = 900;
-const FAN_LENGTH = 30;
-const RAYS = 7;
+/** How long a star opens and fades, its long and short points, and how many points it has. */
+const STAR_MS = 900;
+const LONG_POINT = 26;
+const SHORT_POINT = 12;
+const POINTS = 8;
 
-interface Fan { x: number; y: number; at: number }
+interface Star { x: number; y: number; at: number }
 
 /**
  * Art Deco's pointer effect, on one canvas over the page that never takes a
- * click: a click on a button or link sends up a thin gold fan of lines, a
- * half sunburst, that grows and fades. Nothing follows the cursor, and the
- * canvas rests whenever no fan is on it. The pattern and the shimmer behind
+ * click: a click on a button or link opens a gold star, four long points and
+ * four short around a small diamond, that fades. Nothing follows the cursor,
+ * and the canvas rests whenever no star is on it. The pattern and the shimmer behind
  * the page are CSS (styles/deco.css).
  */
 export function DecoEffects() {
@@ -49,12 +50,12 @@ export function DecoEffects() {
     const watch = new MutationObserver(read);
     watch.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-mode'] });
 
-    const fans: Fan[] = [];
+    const stars: Star[] = [];
     const onClick = (e: MouseEvent) => {
       if (e.detail === 0) return;
       const el = e.target instanceof Element ? e.target.closest('button, a[href], [role="button"], [role="switch"]') : null;
       if (!el) return;
-      fans.push({ x: e.clientX, y: e.clientY, at: performance.now() });
+      stars.push({ x: e.clientX, y: e.clientY, at: performance.now() });
       wake();
     };
     window.addEventListener('click', onClick, true);
@@ -64,35 +65,40 @@ export function DecoEffects() {
       raf = 0;
       c.clearRect(0, 0, W, H);
       c.strokeStyle = gold;
+      c.fillStyle = gold;
       c.lineCap = 'round';
-      for (let i = fans.length - 1; i >= 0; i--) {
-        const fan = fans[i] as Fan;
-        const t = (now - fan.at) / FAN_MS;
+      c.lineWidth = 1.2;
+      for (let i = stars.length - 1; i >= 0; i--) {
+        const star = stars[i] as Star;
+        const t = (now - star.at) / STAR_MS;
         if (t >= 1) {
-          fans.splice(i, 1);
+          stars.splice(i, 1);
           continue;
         }
-        const grow = 1 - (1 - Math.min(1, t * 1.8)) ** 3;
-        const inner = 6 + 6 * grow;
-        const outer = inner + FAN_LENGTH * grow;
-        c.globalAlpha = (dark ? 0.9 : 0.8) * (t < 0.45 ? 1 : 1 - (t - 0.45) / 0.55);
-        c.lineWidth = 1.2;
+        const open = 1 - (1 - Math.min(1, t * 1.6)) ** 3;
+        c.globalAlpha = (dark ? 0.9 : 0.85) * (t < 0.45 ? 1 : 1 - (t - 0.45) / 0.55);
+        // The points: long ones straight up, down and to the sides, short ones between.
+        const inner = 4 + 3 * open;
         c.beginPath();
-        // A half sunburst opening upward: rays from just above the click, evenly from left to right.
-        for (let r = 0; r < RAYS; r++) {
-          const a = Math.PI + (r / (RAYS - 1)) * Math.PI;
-          c.moveTo(fan.x + Math.cos(a) * inner, fan.y + Math.sin(a) * inner);
-          c.lineTo(fan.x + Math.cos(a) * outer, fan.y + Math.sin(a) * outer);
+        for (let p = 0; p < POINTS; p++) {
+          const a = (p / POINTS) * Math.PI * 2 - Math.PI / 2;
+          const reach = inner + (p % 2 ? SHORT_POINT : LONG_POINT) * open;
+          c.moveTo(star.x + Math.cos(a) * inner, star.y + Math.sin(a) * inner);
+          c.lineTo(star.x + Math.cos(a) * reach, star.y + Math.sin(a) * reach);
         }
         c.stroke();
-        // A fine arc tying the rays together, as on a deco fan.
-        c.lineWidth = 0.8;
+        // A small diamond at the heart.
+        const d = 3 + 2 * open;
         c.beginPath();
-        c.arc(fan.x, fan.y, inner + (outer - inner) * 0.55, Math.PI, Math.PI * 2);
-        c.stroke();
+        c.moveTo(star.x, star.y - d);
+        c.lineTo(star.x + d, star.y);
+        c.lineTo(star.x, star.y + d);
+        c.lineTo(star.x - d, star.y);
+        c.closePath();
+        c.fill();
       }
       c.globalAlpha = 1;
-      if (fans.length) raf = requestAnimationFrame(frame);
+      if (stars.length) raf = requestAnimationFrame(frame);
     };
     function wake() {
       if (!raf && !document.hidden) raf = requestAnimationFrame(frame);
@@ -101,7 +107,7 @@ export function DecoEffects() {
       if (!document.hidden) return;
       cancelAnimationFrame(raf);
       raf = 0;
-      fans.length = 0;
+      stars.length = 0;
       c.clearRect(0, 0, W, H);
     };
     document.addEventListener('visibilitychange', onVisible);

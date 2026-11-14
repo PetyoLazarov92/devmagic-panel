@@ -80,7 +80,7 @@
   color: var(--primary);
 }
 
-/* Cards: nearly square, a fine gold frame inside the edge, a sunburst fan in the bottom right corner (::after); a sheen passes over it now and then while Elements is on (::before). */
+/* Cards: nearly square, a fine gold frame inside the edge, a sunburst fan in the bottom right corner (::after); a sheen in the sunburst's quarter circle passes over it now and then while Elements is on (::before). */
 :root[data-mode='deco'] [data-ui='card'] {
   position: relative;
   isolation: isolate;
@@ -109,13 +109,16 @@
   position: absolute;
   right: 4px;
   bottom: 4px;
-  width: 120px;
-  height: 90px;
+  width: 92px;
+  height: 92px;
   max-width: calc(100% - 8px);
   max-height: calc(100% - 8px);
   z-index: -1;
   pointer-events: none;
   background: linear-gradient(115deg, transparent 35%, color-mix(in srgb, var(--dc-gold-light) 22%, transparent) 50%, transparent 65%) 0 0 / 300% 100% no-repeat;
+  /* Cut to a quarter circle around the corner, so its top left edge follows the sunburst's outer curve. */
+  -webkit-mask: radial-gradient(circle at 100% 100%, #000 0 84px, transparent 87px);
+  mask: radial-gradient(circle at 100% 100%, #000 0 84px, transparent 87px);
   animation: dc-sheen 12s ease-in-out infinite;
 }
 :root[data-mode='deco'][data-fx] [data-ui='card']:nth-of-type(2n):not([data-health='fail'])::before {
