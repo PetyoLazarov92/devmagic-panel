@@ -120,3 +120,17 @@ export function Hourglass({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Pixel's turning icon: eight squares in a ring, faintest to brightest, turning
+ * a square at a time (in steps, not smoothly) while something runs.
+ */
+export function PixelRing({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} style={{ animationDuration: '1s', animationTimingFunction: 'steps(8)' }} shapeRendering="crispEdges" aria-hidden>
+      {[0, 45, 90, 135, 180, 225, 270, 315].map((a, i) => (
+        <rect key={a} x="27" y="4" width="10" height="10" fill="currentColor" fillOpacity={0.23 + i * 0.11} transform={`rotate(${a} 32 32)`} />
+      ))}
+    </svg>
+  );
+}

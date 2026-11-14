@@ -149,6 +149,11 @@ export function countAction(progress: ModeProgress, id: string, input: unknown):
   if (id === 'cert.reissue') progress.count('certReissue');
   if (id === 'db.snapshot') progress.count('dbSnapshot');
   if (id === 'cron.add') progress.count('cronTask');
+  if (id === 'site.installPlugins' && input && typeof input === 'object') {
+    const { plugins, themes } = input as { plugins?: unknown; themes?: unknown };
+    const n = (Array.isArray(plugins) ? plugins.length : 0) + (Array.isArray(themes) ? themes.length : 0);
+    if (n > 0) progress.count('itemInstall', undefined, n);
+  }
   if (id === 'db.cleanTransients' || id === 'db.cleanContent' || id === 'db.cleanOrphans') progress.count('dbClean');
   if (id === 'db.restore' || id === 'db.restoreKept' || id === 'trash.restore' || id === 'file.restore') progress.count('restore');
   if (id === 'mysql.undoRowChange' || id === 'mysql.undoCleanup' || id === 'cron.undo' || id === 'wpcron.undo') progress.count('undo');

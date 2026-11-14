@@ -54,6 +54,12 @@ describe('mode names and lines', () => {
     expect(modeText('allGood', 'dune')).toBe('Clear skies');
   });
 
+  it("gives pages Pixel's names", () => {
+    expect(pageName('Sites', 'pixel')).toBe('Levels');
+    expect(pageName('Settings', 'pixel')).toBe('Options');
+    expect(modeText('newSite', 'pixel')).toBe('New game');
+  });
+
   it('says a line its own way in Wizard, and the plain one in Classic', () => {
     expect(modeText('newSite', 'wizard')).toBe('Conjure a site');
     expect(modeText('newSite', 'classic')).toBe('New site');

@@ -9,6 +9,8 @@ export interface CreateRouteDeps {
   exec: Executor;
   jobs: Jobs;
   uploadsDir: string;
+  /** A failed step retried or skipped: counted for a mode's path. */
+  onContinue?: () => void;
 }
 
 /** Dump uploads and job status; registered inside the authenticated scope. */
@@ -56,17 +58,23 @@ export function registerCreateRoutes(api: FastifyInstance, deps: CreateRouteDeps
 
   api.get<{ Params: { id: string } }>('/api/jobs/:id', async (request, reply) => deps.jobs.get(request.params.id) ?? reply.code(404).send({ error: 'unknown job' }));
 
-  api.post<{ Params: { id: string } }>('/api/jobs/:id/retry', async (request, reply) =>
-    deps.jobs.retry(request.params.id) ?? reply.code(409).send({ error: 'only a failed job can be retried' }),
-  );
+  api.post<{ Params: { id: string } }>('/api/jobs/:id/retry', async (request, reply) => {
+    const view = deps.jobs.retry(request.params.id);
+    if (!view) return reply.code(409).send({ error: 'only a failed job can be retried' });
+    deps.onContinue?.();
+    return view;
+  });
 
   api.post<{ Params: { id: string } }>('/api/jobs/:id/stop', async (request, reply) =>
     deps.jobs.stop(request.params.id) ?? reply.code(409).send({ error: 'only a running job that can stop safely can be stopped' }),
   );
 
-  api.post<{ Params: { id: string } }>('/api/jobs/:id/skip', async (request, reply) =>
-    deps.jobs.skip(request.params.id) ?? reply.code(409).send({ error: 'only a failed step the panel marks as skippable can be skipped' }),
-  );
+  api.post<{ Params: { id: string } }>('/api/jobs/:id/skip', async (request, reply) => {
+    const view = deps.jobs.skip(request.params.id);
+    if (!view) return reply.code(409).send({ error: 'only a failed step the panel marks as skippable can be skipped' });
+    deps.onContinue?.();
+    return view;
+  });
 
   api.post<{ Params: { id: string } }>('/api/jobs/:id/undo', async (request, reply) =>
     deps.jobs.undo(request.params.id) ?? reply.code(409).send({ error: 'this job cannot be undone now' }),

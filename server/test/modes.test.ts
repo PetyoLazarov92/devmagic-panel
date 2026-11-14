@@ -184,6 +184,37 @@ describe('mode progress', () => {
     expect(progress.developerView().modes.find((m) => m.id === 'dune')?.unlocked?.by).toBe('dune.sundial');
   });
 
+  it("counts Pixel's worlds from the modes earned before, once per mode, never Developer options' unlocks", () => {
+    const state = emptyModesState();
+    state.unlocks.wizard = { at: '2026-11-01T00:00:00Z', by: 'wizard.undo', seen: true };
+    state.unlocks.circuit = { at: '2026-11-02T00:00:00Z', by: 'word', seen: true };
+    state.unlocks.forge = { at: '2026-11-03T00:00:00Z', by: 'developer', seen: true };
+    const worlds = MODE_PATHS.find((p) => p.id === 'pixel.worlds')!;
+    countMode(state, 'undo');
+    expect(pathProgress(state, worlds)).toBe(2);
+    // Sealed and spoken again, the same mode is not a second world.
+    modesDeveloper.seal(state, 'circuit');
+    speakWord(state, 'overclock');
+    expect(pathProgress(state, worlds)).toBe(2);
+    // Forge is open from Developer options already: its word earns nothing.
+    speakWord(state, 'ignite');
+    speakWord(state, 'bloom');
+    speakWord(state, 'dive');
+    expect(pathProgress(state, worlds)).toBe(4);
+    expect(state.unlocks.pixel).toBeUndefined();
+    // The fifth world opens Pixel at once, after the mode that earned it.
+    speakWord(state, 'afterglow');
+    expect(state.unlocks.pixel?.by).toBe('pixel.worlds');
+  });
+
+  it("counts Pixel's continues and its plugins and themes installed", () => {
+    const progress = new ModeProgress(memory());
+    const count = (id: string) => progress.developerView().counters.find((c) => c.id === id)?.count ?? 0;
+    countAction(progress, 'site.installPlugins', { domain: 'local.spellbook.example', plugins: [{ slug: 'wand-forms' }, { slug: 'spellbook-blocks' }], themes: [{ slug: 'wandworks' }] });
+    progress.count('jobContinue');
+    expect([count('itemInstall'), count('jobContinue')]).toEqual([3, 1]);
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);

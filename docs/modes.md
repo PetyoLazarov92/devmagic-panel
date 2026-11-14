@@ -301,6 +301,39 @@ something runs. Pages it names its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Pixel
+
+Square edges and hard shadows: square corners everywhere, a second line drawn
+outside each frame and a solid offset shadow instead of a soft one, deep
+indigo in the dark theme and warm off-white in the light one, lime for
+whatever is chosen with coin yellow and coral for small things, names in a
+blocky face in capitals, and a pixel heart over stepped hills in one corner of
+each card. A button pressed with the mouse sinks into its shadow, status dots
+are square and progress bars fill in blocks. The effects add a few square stars
+blinking slowly behind the pages (Background, CSS only); a +1 floating up and a
+few square sparks where you click a button or link (Pointer); and a broken
+site's card blinking its frame in steps now and then, a healthy site's square
+dot blinking softly and a small arrow before the menu entry you point at
+(Elements). A ring of squares lights up in turn where something runs. Pages it
+names its own way:
+
+| Classic | Pixel |
+| --- | --- |
+| Demo | Practice |
+| Sites | Levels |
+| Aura | Health bar |
+| Mail | Chat log |
+| Services | Engine |
+| WP Cores | Game files |
+| Activity | Replay |
+| Updates | Patches |
+| Settings | Options |
+| Modes | Skins |
+| Developer options | Debug menu |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks

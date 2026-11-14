@@ -928,7 +928,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return { command: `claude mcp add devmagic-panel -- ${process.execPath} --disable-warning=ExperimentalWarning ${panelCli(update)} mcp` };
     });
 
-    registerCreateRoutes(api, { exec: deps.exec, jobs, uploadsDir: deps.uploadsDir });
+    registerCreateRoutes(api, { exec: deps.exec, jobs, uploadsDir: deps.uploadsDir, onContinue: () => modes.count('jobContinue') });
     const siteRoutes = registerSiteRoutes(api, {
       vulnerabilities,
       // A day with 3 sites or more, all Healthy, counts once for that day.

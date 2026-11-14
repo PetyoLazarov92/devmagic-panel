@@ -1,0 +1,484 @@
+/*
+ * Pixel: square edges and hard shadows. Deep indigo in dark and warm off-white
+ * in light, lime for what is chosen with coin yellow and coral for small
+ * things, names in a blocky face in capitals, and a pixel heart over stepped
+ * hills in each card's corner. Frames get a second line drawn outside them
+ * (a box-shadow, so nothing moves) and a solid offset shadow, never a blur.
+ * data-mode="pixel" on the root, data-fx while Elements is on, data-fx-bg
+ * while Background is on (the stars are CSS); a click's +1 and sparks on one
+ * canvas (features/modes/pixel-effects.tsx).
+ */
+:root[data-mode='pixel']:not(.dark) {
+  --background: #f4f1e8;
+  --foreground: #23202e;
+  --card: #fffdf6;
+  --muted: #ece8da;
+  --muted-foreground: #5d5873;
+  --border: #d4cdb8;
+  --input: #bdb6a0;
+  --ring: #3a7e18;
+  --primary: #3a7e18;
+  --primary-foreground: #fffdf6;
+  --secondary: #ece8da;
+  --secondary-foreground: #2f5e14;
+  --success: #2f7a12;
+  --warning: #946200;
+  --danger: #c0342a;
+  --px-lime: #4a9a22;
+  --px-coin: #c89400;
+  --px-coral: #e0503a;
+  --px-frame: color-mix(in srgb, #23202e 45%, #fffdf6);
+  --px-shadow: #d6d0bd;
+  --px-raised: #fffef9;
+  --px-chosen-ink: #2a5e0e;
+  --px-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120' shape-rendering='crispEdges'%3E%3Cpath d='M100 120v-10h10v-10h10v-10h20v10h10v10h10v-10h10v-10h10v-10h20v40Z' fill='%234a9a22' fill-opacity='.24'/%3E%3Cpath d='M160 36h6v6h6v-6h6v6h6v6h-6v6h-6v6h-6v-6h-6v-6h-6v-6h6Z' fill='%23e0503a' fill-opacity='.5'/%3E%3Crect x='128' y='62' width='6' height='6' fill='%23c89400' fill-opacity='.55'/%3E%3Crect x='112' y='76' width='4' height='4' fill='%23c89400' fill-opacity='.55'/%3E%3C/svg%3E");
+}
+:root[data-mode='pixel'].dark {
+  --background: #14121f;
+  --foreground: #ece8ff;
+  --card: #1e1b2e;
+  --muted: #262238;
+  --muted-foreground: #a9a2cc;
+  --border: #3a3556;
+  --input: #4a4470;
+  --ring: #9be15d;
+  --primary: #9be15d;
+  --primary-foreground: #14121f;
+  --secondary: #2a2540;
+  --secondary-foreground: #e0dcff;
+  --success: #8fe08a;
+  --warning: #ffd860;
+  --danger: #ff6f6f;
+  --px-lime: #9be15d;
+  --px-coin: #ffd860;
+  --px-coral: #ff8a7a;
+  --px-frame: #4a4470;
+  --px-shadow: #0a0912;
+  --px-raised: #24203a;
+  --px-chosen-ink: #d8ffb8;
+  --px-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120' shape-rendering='crispEdges'%3E%3Cpath d='M100 120v-10h10v-10h10v-10h20v10h10v10h10v-10h10v-10h10v-10h20v40Z' fill='%239be15d' fill-opacity='.26'/%3E%3Cpath d='M160 36h6v6h6v-6h6v6h6v6h-6v6h-6v6h-6v-6h-6v-6h-6v-6h6Z' fill='%23ff8a7a' fill-opacity='.55'/%3E%3Crect x='128' y='62' width='6' height='6' fill='%23ffd860' fill-opacity='.5'/%3E%3Crect x='112' y='76' width='4' height='4' fill='%23ffd860' fill-opacity='.5'/%3E%3C/svg%3E");
+}
+:root[data-mode='pixel'] {
+  --font-pixel: 'Press Start 2P', 'Silkscreen', 'VT323', 'Ubuntu Mono', ui-monospace, monospace;
+  --px-chosen: color-mix(in srgb, var(--px-lime) 14%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --px-veil: 85%;
+  scrollbar-color: color-mix(in srgb, var(--px-lime) 40%, var(--border)) transparent;
+}
+:root[data-mode='pixel'].dark {
+  --px-chosen: color-mix(in srgb, var(--px-lime) 16%, var(--card));
+}
+
+/* Names: page titles, card titles and dialogs in a blocky face, in capitals. */
+:root[data-mode='pixel'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-pixel);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+:root[data-mode='pixel'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-pixel);
+}
+:root[data-mode='pixel'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-pixel);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Cards: square, a second line outside the frame and a solid offset shadow, a pixel heart over stepped hills in the bottom right corner (::after). */
+:root[data-mode='pixel'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 0;
+  border-color: var(--px-frame);
+  box-shadow: 0 0 0 1px var(--px-frame), 4px 4px 0 1px var(--px-shadow);
+}
+:root[data-mode='pixel'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 200px;
+  height: 120px;
+  max-width: 100%;
+  max-height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--px-corner) right bottom / 200px 120px no-repeat;
+}
+:root[data-mode='pixel'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='pixel'] dialog [data-ui='card']::after {
+  display: none;
+}
+
+/* A broken site: its card's frame in the danger color, blinking off and on in steps now and then while Elements is on. */
+:root[data-mode='pixel'] [data-health='fail'][data-ui='card'] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger), 4px 4px 0 1px var(--px-shadow);
+}
+:root[data-mode='pixel'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--danger) 35%, transparent);
+}
+:root[data-mode='pixel'][data-fx] [data-health='fail'][data-ui='card']::before {
+  animation: px-blink 4s steps(1, end) infinite;
+}
+@keyframes px-blink {
+  0% { opacity: 1; }
+  70% { opacity: 0; }
+  76% { opacity: 1; }
+  82% { opacity: 0; }
+  88% { opacity: 1; }
+}
+/* Status dots are square; a healthy one blinks softly in steps while Elements is on, a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='pixel'] [data-ui='status-dot'] > span:not(.sr-only),
+:root[data-mode='pixel'] [data-ui='status-dot'] > span:not(.sr-only) > span {
+  border-radius: 0;
+}
+:root[data-mode='pixel'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='pixel'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--success) 55%, transparent);
+  animation: px-glint 2.4s steps(1, end) infinite;
+}
+@keyframes px-glint {
+  0% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+/* A menu entry you point at gets a small arrow before it while Elements is on. */
+:root[data-mode='pixel'][data-fx] :is([role='menuitem'], [role='option']) {
+  position: relative;
+}
+:root[data-mode='pixel'][data-fx] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible)::before {
+  content: '>';
+  position: absolute;
+  left: 1px;
+  top: 50%;
+  translate: 0 -50%;
+  font: 700 10px var(--font-pixel);
+  color: var(--px-lime);
+}
+
+/* Everything else with a frame: square. */
+:root[data-mode='pixel'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 0;
+}
+:root[data-mode='pixel'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='pixel'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #23202e 40%, transparent);
+}
+:root[data-mode='pixel'] [data-ui='tile'] {
+  border-radius: 0;
+}
+:root[data-mode='pixel']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='pixel'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 0;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--px-veil), transparent);
+}
+:root[data-mode='pixel'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='pixel'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='pixel'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='pixel'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--px-veil), transparent);
+}
+:root[data-mode='pixel'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--px-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='pixel'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='pixel'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 0;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--px-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #0a0912 50%, transparent);
+}
+:root[data-mode='pixel'] [data-ui='dialog'] {
+  border-radius: 0;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--px-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #0a0912 60%, transparent);
+}
+:root[data-mode='pixel'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='pixel'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #0a0912 50%, transparent);
+}
+:root[data-mode='pixel'] :is([role='menuitem'], [role='option']) {
+  border-radius: 0;
+}
+:root[data-mode='pixel'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--px-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='pixel'] select.dmp-select::picker(select) {
+    border-radius: 0;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--px-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #0a0912 50%, transparent);
+  }
+  :root[data-mode='pixel'] select.dmp-select option {
+    border-radius: 0;
+  }
+  :root[data-mode='pixel'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--px-chosen);
+  }
+  :root[data-mode='pixel'] select.dmp-select option:checked {
+    background: var(--px-chosen);
+    color: var(--px-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, a lime edge while you type. */
+:root[data-mode='pixel'] [data-ui='input'] {
+  border-radius: 0;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='pixel'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='pixel'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: square; the main one a soft lime. */
+:root[data-mode='pixel'] [data-ui='button'],
+:root[data-mode='pixel'] [data-ui='chip'] {
+  border-radius: 0;
+}
+:root[data-mode='pixel'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--px-lime) 50%, transparent);
+  background-color: var(--px-chosen);
+  color: var(--px-chosen-ink);
+}
+:root[data-mode='pixel'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--px-lime) 20%, var(--card));
+}
+:root[data-mode='pixel'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--px-veil), transparent);
+}
+
+/* Whatever is chosen: a soft lime fill. */
+:root[data-mode='pixel'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--px-lime) 50%, transparent);
+  background: var(--px-chosen);
+  color: var(--px-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='pixel'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 0;
+  background: var(--px-chosen);
+  color: var(--px-chosen-ink);
+}
+:root[data-mode='pixel'] [data-ui='segmented'],
+:root[data-mode='pixel'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 0;
+}
+:root[data-mode='pixel'] [role='tab'][aria-selected='true'] {
+  border-color: var(--px-lime);
+  color: var(--px-chosen-ink);
+}
+
+/* Switches: a soft lime when on. */
+:root[data-mode='pixel'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='pixel'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='pixel'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: square, a lime mark when ticked. */
+:root[data-mode='pixel'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 0;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='pixel'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='pixel'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--px-lime);
+  background-color: var(--px-chosen);
+}
+:root[data-mode='pixel'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--px-lime);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='pixel'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--px-lime);
+}
+:root[data-mode='pixel'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='pixel'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: lime into coin yellow, in blocks. */
+:root[data-mode='pixel'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--px-lime) 60%, var(--card)), color-mix(in oklab, var(--px-coin) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint ink rule; the page you are on in a soft lime fill. */
+:root[data-mode='pixel'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='pixel'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 0;
+  background: var(--px-chosen);
+  color: var(--px-chosen-ink);
+}
+
+/*
+ * Pixel frames: buttons, chips, fields, tiles and the sheets over the page get
+ * the same second line outside and a solid shadow, smaller than a card's. A
+ * button pressed with the mouse sinks into its shadow, as a key does.
+ */
+:root[data-mode='pixel'] :is([data-ui='button']:is(.border, .bg-primary, .bg-secondary, .bg-danger), [data-ui='chip']) {
+  box-shadow: 0 0 0 1px var(--px-frame), 2px 2px 0 1px var(--px-shadow);
+}
+:root[data-mode='pixel'] [data-ui='button']:is(.border, .bg-primary, .bg-secondary, .bg-danger):active:not(:disabled) {
+  translate: 2px 2px;
+  box-shadow: 0 0 0 1px var(--px-frame);
+}
+:root[data-mode='pixel'] [data-ui='input'] {
+  box-shadow: 0 0 0 1px var(--input);
+}
+:root[data-mode='pixel'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 3px 3px 0 0 color-mix(in srgb, var(--primary) 25%, transparent);
+}
+:root[data-mode='pixel'] [data-ui='tile'] {
+  border-color: var(--px-frame);
+  box-shadow: 0 0 0 1px var(--px-frame), 3px 3px 0 1px var(--px-shadow);
+}
+:root[data-mode='pixel'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='pixel'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-color: var(--px-frame);
+  box-shadow: 0 0 0 1px var(--px-frame), 4px 4px 0 1px var(--px-shadow);
+}
+:root[data-mode='pixel'] [data-ui='dialog'] {
+  border-color: var(--px-frame);
+  box-shadow: 0 0 0 1px var(--px-frame), 6px 6px 0 1px var(--px-shadow);
+}
+:root[data-mode='pixel'] [data-ui='switch'],
+:root[data-mode='pixel'] [data-ui='switch'] > span {
+  border-radius: 0;
+}
+:root[data-mode='pixel'] [data-ui='switch'] {
+  box-shadow: 0 0 0 1px var(--px-frame);
+}
+:root[data-mode='pixel'] .bg-primary[style*='width'] {
+  background-image: repeating-linear-gradient(90deg, var(--px-lime) 0 6px, transparent 6px 8px);
+}
+
+/* The background effect: a few square stars behind the pages, two groups blinking in turn, in steps. */
+:root[data-mode='pixel'][data-fx-bg] body::before,
+:root[data-mode='pixel'][data-fx-bg] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  --star: color-mix(in srgb, var(--foreground) 45%, transparent);
+  animation: px-stars 6s steps(1, end) infinite;
+}
+:root[data-mode='pixel'][data-fx-bg] body::before {
+  background:
+    linear-gradient(var(--star), var(--star)) 14% 12% / 4px 4px no-repeat,
+    linear-gradient(var(--star), var(--star)) 38% 28% / 2px 2px no-repeat,
+    linear-gradient(var(--star), var(--star)) 62% 9% / 4px 4px no-repeat,
+    linear-gradient(var(--star), var(--star)) 86% 34% / 2px 2px no-repeat,
+    linear-gradient(var(--star), var(--star)) 24% 64% / 2px 2px no-repeat,
+    linear-gradient(var(--star), var(--star)) 74% 72% / 4px 4px no-repeat;
+}
+:root[data-mode='pixel'][data-fx-bg] body::after {
+  animation-delay: -3s;
+  background:
+    linear-gradient(var(--star), var(--star)) 6% 40% / 2px 2px no-repeat,
+    linear-gradient(var(--star), var(--star)) 50% 46% / 4px 4px no-repeat,
+    linear-gradient(var(--star), var(--star)) 94% 16% / 4px 4px no-repeat,
+    linear-gradient(var(--star), var(--star)) 32% 88% / 4px 4px no-repeat,
+    linear-gradient(var(--star), var(--star)) 66% 58% / 2px 2px no-repeat,
+    linear-gradient(var(--star), var(--star)) 90% 90% / 2px 2px no-repeat;
+}
+:root[data-mode='pixel'][data-fx-bg]:not(.dark) body::before,
+:root[data-mode='pixel'][data-fx-bg]:not(.dark) body::after {
+  --star: color-mix(in srgb, var(--px-lime) 55%, transparent);
+}
+@keyframes px-stars {
+  0% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+/* Pixel's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='pixel'] {
+  --t-bg: #f4f1e8;
+  --t-side: #ece8da;
+  --t-line: #8e8aa0;
+  --t-accent: #4a9a22;
+  --t-ink: #23202e;
+  --t-card: #fffdf6;
+}
+.dark .mode-thumb[data-thumb='pixel'] {
+  --t-bg: #14121f;
+  --t-side: #191627;
+  --t-line: #4a4470;
+  --t-accent: #9be15d;
+  --t-ink: #ece8ff;
+  --t-card: #1e1b2e;
+}
+.mode-thumb[data-thumb='pixel'] :is(.mt-main i, .mt-side, .mt-main) {
+  border-radius: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='pixel'] :not(.rune-turning),
+  :root[data-mode='pixel'] *::before,
+  :root[data-mode='pixel'] *::after {
+    animation: none !important;
+  }
+}

@@ -13,6 +13,7 @@ import './styles/abyss.css';
 import './styles/neon.css';
 import './styles/ink.css';
 import './styles/dune.css';
+import './styles/pixel.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>

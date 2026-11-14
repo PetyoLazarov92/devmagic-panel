@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.57.0 (2026-11-14)
+* **Modes:** one more mode is waiting to be found
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.56.1 (2026-11-14)
 * **Modes:** the chosen view of a switch like Compact and Details has a thin ring in the mode's color, so it shows in light as well as dark
 * **Mockup:** the three-dot buttons on the Parts page open a menu, so menus can be checked in every mode

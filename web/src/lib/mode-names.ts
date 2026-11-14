@@ -121,6 +121,21 @@ const PAGE_NAMES: Partial<Record<ModeId, Record<string, string>>> = {
     Developer: 'Camp',
     'Developer options': 'Camp',
   },
+  pixel: {
+    Demo: 'Practice',
+    Mockup: 'Practice',
+    Sites: 'Levels',
+    Aura: 'Health bar',
+    Mail: 'Chat log',
+    Services: 'Engine',
+    'WP Cores': 'Game files',
+    Activity: 'Replay',
+    Updates: 'Patches',
+    Settings: 'Options',
+    Modes: 'Skins',
+    Developer: 'Debug menu',
+    'Developer options': 'Debug menu',
+  },
 };
 
 export function pageName(classic: string, mode: ModeId): string {
@@ -129,12 +144,12 @@ export function pageName(classic: string, mode: ModeId): string {
 
 /** The few lines a mode says its own way. Errors, warnings, status labels and anything that removes something never change. */
 const TEXT = {
-  newSite: { classic: 'New site', wizard: 'Conjure a site', circuit: 'Deploy a site', forge: 'Forge a site', grove: 'Plant a site', abyss: 'Grow a reef', neon: 'Light up a site', ink: 'Begin a scroll', dune: 'Pitch a site' },
-  search: { classic: 'Search sites and actions', wizard: 'Search the portals', circuit: 'Search nodes and commands', forge: 'Search the foundry', grove: 'Search the gardens', abyss: 'Search the reefs', neon: 'Search the skyline', ink: 'Search the scrolls', dune: 'Search the dunes' },
-  palette: { classic: 'Jump to a site, a tab or a view, or run an action', wizard: 'Cast a command...', circuit: 'Enter a command_', forge: 'Pick up a tool...', grove: 'What shall we tend?', abyss: 'Where to dive?', neon: 'Press start...', ink: 'Write a command...', dune: 'Which way?' },
-  aiReading: { classic: 'Claude is reading your sites...', wizard: 'Scrying your sites...', circuit: 'Scanning your sites...', forge: 'Stoking the fire...', grove: 'Walking the gardens...', abyss: 'Sounding the depths...', neon: 'Rewinding the tape...', ink: 'Reading the scrolls...', dune: 'Reading the sands...' },
-  allGood: { classic: 'All good', wizard: 'All wards hold', circuit: 'All systems nominal', forge: 'All fires lit', grove: 'All in bloom', abyss: 'Calm waters', neon: 'All lights on', ink: 'Clear and still', dune: 'Clear skies' },
-  noJobs: { classic: 'No jobs since the panel started', wizard: 'No quests since the panel woke', circuit: 'Log empty', forge: 'Nothing on the anvil', grove: 'Nothing growing yet', abyss: 'Still waters', neon: 'Quiet night', ink: 'Blank page', dune: 'Still air' },
+  newSite: { classic: 'New site', wizard: 'Conjure a site', circuit: 'Deploy a site', forge: 'Forge a site', grove: 'Plant a site', abyss: 'Grow a reef', neon: 'Light up a site', ink: 'Begin a scroll', dune: 'Pitch a site', pixel: 'New game' },
+  search: { classic: 'Search sites and actions', wizard: 'Search the portals', circuit: 'Search nodes and commands', forge: 'Search the foundry', grove: 'Search the gardens', abyss: 'Search the reefs', neon: 'Search the skyline', ink: 'Search the scrolls', dune: 'Search the dunes', pixel: 'Search the levels' },
+  palette: { classic: 'Jump to a site, a tab or a view, or run an action', wizard: 'Cast a command...', circuit: 'Enter a command_', forge: 'Pick up a tool...', grove: 'What shall we tend?', abyss: 'Where to dive?', neon: 'Press start...', ink: 'Write a command...', dune: 'Which way?', pixel: 'Press any key...' },
+  aiReading: { classic: 'Claude is reading your sites...', wizard: 'Scrying your sites...', circuit: 'Scanning your sites...', forge: 'Stoking the fire...', grove: 'Walking the gardens...', abyss: 'Sounding the depths...', neon: 'Rewinding the tape...', ink: 'Reading the scrolls...', dune: 'Reading the sands...', pixel: 'Scanning the levels...' },
+  allGood: { classic: 'All good', wizard: 'All wards hold', circuit: 'All systems nominal', forge: 'All fires lit', grove: 'All in bloom', abyss: 'Calm waters', neon: 'All lights on', ink: 'Clear and still', dune: 'Clear skies', pixel: 'Full health' },
+  noJobs: { classic: 'No jobs since the panel started', wizard: 'No quests since the panel woke', circuit: 'Log empty', forge: 'Nothing on the anvil', grove: 'Nothing growing yet', abyss: 'Still waters', neon: 'Quiet night', ink: 'Blank page', dune: 'Still air', pixel: 'Waiting for player one' },
 } satisfies Record<string, { classic: string } & Partial<Record<ModeId, string>>>;
 export type ModeTextKey = keyof typeof TEXT;
 
