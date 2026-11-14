@@ -51,7 +51,8 @@ problem in one list, with one-click fixes and **Fix all**:
   ignores, and nginx rules of another kind after a site became a network.
 - Known vulnerabilities in the sites' plugins and themes, once you switch the
   check on in the **Known vulnerabilities** card under the list. It runs once a
-  day in the background (or on **Check now**) through
+  day as a background task (Sanctum lists it, and it looks hourly whether a
+  day passed, so a restart never skips one), or on **Check now**, through
   [WPVulnerability](https://www.wpvulnerability.com/), free and without a key.
   Only the slugs WordPress's own update check found on WordPress.org are
   asked about, never a version: the answer lists every known vulnerability with
@@ -136,9 +137,14 @@ and its storage in all. Under them, one list at a time:
   nothing was:
   remove expired install drafts (every 10 minutes); trim Run history, remove
   old downloaded dumps, Files tab deletes and MySQL settings backups, drop
-  expired kept databases (hourly); remove old automatic snapshots (daily);
+  expired kept databases (hourly); check plugins and themes for known
+  vulnerabilities (looks hourly, checks once a day while the check is on in
+  Aura; Run now checks at once); remove old automatic snapshots (daily);
   pack older panel versions (daily); remove deleted sites for good and check
-  for a new release (every 6 hours).
+  for a new release (every 6 hours). Under them, **Watching all the time**:
+  the .htaccess files of the sites on nginx, with how many folders on how
+  many sites and when it last noticed a change. The tasks in your crontab
+  (a site's WP-Cron and the like) run from cron: Services, Cron lists them.
   Click a task for its last runs: when, what it did or why it failed, and how
   long it took. The newest 20 per task are kept in the panel's database.
 - **Storage** (`?view=storage`): what the panel keeps, each with its size and how
@@ -202,12 +208,21 @@ is the card's own: what its Delete button takes as it opens.
 Tap the version at the bottom of the menu seven times, like a phone's build
 number. A **Developer** page joins the menu with:
 
-- The panel's version and commit, its services and `config.env`.
+- The panel's version and commit, its services (the panel, Mailpit, Apache,
+  MySQL, nginx, cron and PHP-FPM of each version that has it) and
+  `config.env`.
 - The install logs, and the panel service's startup log (starts, stops,
   warnings and errors, without the request lines).
-- Every file the installer put on the machine and the files the panel makes as
-  it runs, as folders that start closed. Open one and the panel reads what it
-  holds: names and sizes, never contents, at most 200 entries, and only the
-  folders those two lists name.
+- Every file the installer put on the machine, and what the panel makes as it
+  runs in three groups: its data (run history, uploads, the Files tab's
+  deletes and staged files, snapshots and Undo copies, caches, tools and
+  logs), the system files dmp-root wrote (PHP's pools and settings per
+  version, Apache's and nginx's confs, the sites on nginx, MySQL's settings
+  and the state in `/var/lib/devmagic-panel`, only the ones there), and other
+  things it made (its block in your crontab, the MySQL accounts it signs in
+  with by name only, and how many sites have its two mu-plugins). Folders
+  start closed. Open one and the panel reads what it holds: names and sizes,
+  never contents, at most 200 entries, and only the folders those lists
+  name.
 
 A switch on that page turns it off again. It is remembered per browser.

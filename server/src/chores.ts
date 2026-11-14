@@ -7,8 +7,8 @@ import { inTask } from './running.js';
  * Sanctum page, so you can see what runs when without reading the log.
  */
 
-/** A chore's work: what it did, said short ("removed 3 dumps"), or nothing worth saying. It throws when it failed. */
-export type ChoreWork = () => Promise<string | void> | string | void;
+/** A chore's work: what it did, said short ("removed 3 dumps"), or nothing worth saying. It throws when it failed. asked: Run now, not its timer. */
+export type ChoreWork = (how: { asked: boolean }) => Promise<string | void> | string | void;
 
 interface Chore extends Omit<BackgroundTask, 'running'> {
   work: ChoreWork;
@@ -40,15 +40,15 @@ export class Chores {
     this.timers.push(first);
   }
 
-  /** Runs one now, or waits for the run in progress. */
-  async run(id: string): Promise<void> {
+  /** Runs one now, or waits for the run in progress. asked: Run now on the Sanctum page, which some work treats as "now, whatever the timer says". */
+  async run(id: string, asked = false): Promise<void> {
     const chore = this.chores.get(id);
     if (!chore) return;
     if (chore.running) return chore.running;
     chore.running = (async () => {
       const started = this.now();
       try {
-        const note = await inTask({ id: chore.id, title: chore.label }, () => chore.work());
+        const note = await inTask({ id: chore.id, title: chore.label }, () => chore.work({ asked }));
         chore.lastOk = true;
         if (note) chore.lastNote = note;
         else delete chore.lastNote;

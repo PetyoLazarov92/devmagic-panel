@@ -1,11 +1,12 @@
-import type { BackgroundTask, FinishedProgram, PanelStatus, PanelStorage, RunningProgram, StorageRow } from '@devmagic-panel/shared';
+import type { BackgroundTask, FinishedProgram, PanelStatus, PanelStorage, PanelWatcher, RunningProgram, StorageRow } from '@devmagic-panel/shared';
 import { pageLabel } from '@devmagic-panel/shared';
-import { ChevronRight, Clock, Cpu, HardDrive, History, Play, Trash2 } from 'lucide-react';
+import { ChevronRight, Clock, Cpu, Eye, HardDrive, History, Play, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
 import { ProgramFrom } from '@/components/layout/panel-status-indicator';
 import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Button } from '@/components/ui/button';
+import { TextLink } from '@/components/ui/text-link';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Segmented } from '@/components/ui/segmented';
@@ -87,8 +88,14 @@ export function SanctumPage() {
               ? <p className="px-5 py-4 text-sm text-muted-foreground">This panel runs no background tasks (a development server).</p>
               : <ul className="divide-y">{s.tasks.map((t) => <TaskRow key={t.id} task={t} busy={runningTask === t.id} onRun={() => void runTask(t.id, t.label)} />)}</ul>
           )}
+          {view === 'tasks' && (
+            <p className="border-t px-5 py-3 text-xs text-muted-foreground">
+              The tasks in your crontab, like a site&apos;s WP-Cron, run from cron, not the panel: see them in <TextLink href="/services/cron">Services, Cron</TextLink>.
+            </p>
+          )}
         </Card>
       )}
+      {view === 'tasks' && s && s.watchers.length > 0 && <Watchers watchers={s.watchers} />}
       {view === 'programs' && s && <Programs status={s} />}
     </div>
   );
@@ -260,6 +267,26 @@ function Programs({ status: s }: { status: PanelStatus }) {
         </Card>
       )}
     </>
+  );
+}
+
+/** What the panel keeps an eye on all the time, not on a timer. */
+function Watchers({ watchers }: { watchers: PanelWatcher[] }) {
+  return (
+    <Card className="mt-4">
+      <CardHeader title="Watching all the time" meta={<Eye className="size-4 text-muted-foreground" />} />
+      <ul className="divide-y">
+        {watchers.map((w) => (
+          <li key={w.id} className="grid gap-0.5 px-5 py-3 text-sm">
+            <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span className="font-medium" title={w.what}>{w.label}</span>
+              <span className="text-xs text-muted-foreground">{w.note}{w.lastAt ? `, the last change ${timeAgo(w.lastAt)}` : ''}</span>
+            </span>
+            <span className="text-xs text-muted-foreground">{w.what}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

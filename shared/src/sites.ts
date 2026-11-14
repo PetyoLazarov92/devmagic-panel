@@ -987,7 +987,13 @@ export interface DeveloperReport {
   config: Array<{ key: string; value: string }>;
   /** null until install.sh has written its list (installs before v0.5.0). */
   installedFiles: InstalledPath[] | null;
-  panelFiles: Array<{ path: string; note: string; exists: boolean; sizeBytes?: number; kind: 'dir' | 'file' }>;
+  /**
+   * What the panel made as it runs, in three groups: data (its own files and
+   * folders), system (files dmp-root wrote for PHP, Apache, nginx and MySQL,
+   * and its state; only the ones there), other (its crontab block, MySQL
+   * accounts by name and the mu-plugins it adds to sites, counted).
+   */
+  panelFiles: Array<{ path: string; note: string; exists: boolean; sizeBytes?: number; kind: string; group: 'data' | 'system' | 'other' }>;
   logs: Array<{ name: string; sizeBytes: number; modifiedAt: string }>;
 }
 

@@ -90,6 +90,13 @@ export class HtaccessWatcher {
     }
   }
 
+  /** What it watches now, for Sanctum: how many sites on nginx and folders, and when it last noticed a change. */
+  state(): { sites: number; folders: number; lastChange?: string } {
+    const folders = [...this.watchers.values()].reduce((n, list) => n + list.length, 0);
+    const last = this.events.at(-1)?.at;
+    return { sites: this.watchers.size, folders, ...(last ? { lastChange: last } : {}) };
+  }
+
   /** The changes after since (an ISO time), oldest first, and the time to ask from next. */
   changes(since?: string): HtaccessChanges {
     const from = since ? Date.parse(since) : this.now();

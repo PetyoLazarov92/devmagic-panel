@@ -84,6 +84,18 @@ export interface PanelStatus {
   /** Page reads that went well since the panel started, counted per program instead of listed: a site's page starts several at once. */
   pageReads: Array<{ program: string; count: number; totalMs: number; maxMs: number }>;
   tasks: BackgroundTask[];
+  /** What the panel keeps an eye on all the time rather than on a timer, like the .htaccess files of the sites on nginx. */
+  watchers: PanelWatcher[];
+}
+
+/** Something the panel watches while it runs: what, and what it watches now ("4 folders on 2 sites"). */
+export interface PanelWatcher {
+  id: string;
+  label: string;
+  what: string;
+  note: string;
+  /** When it last noticed something. */
+  lastAt?: string;
 }
 
 /** One kind of thing the panel keeps on disk, for the Sanctum page: how much, and how long it stays. */

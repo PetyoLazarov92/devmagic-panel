@@ -129,6 +129,16 @@ describe('the programs that ended lately', () => {
 describe('the work the panel does on its own', () => {
   afterEach(() => vi.useRealTimers());
 
+  it('tells its work whether Run now asked or the timer did', async () => {
+    const chores = new Chores();
+    chores.every('look', 'Look', 'Looks.', 3_600_000, ({ asked }) => (asked ? 'checked at once' : 'not due yet'), 3_600_000);
+    await chores.run('look');
+    expect(chores.list()[0]?.lastNote).toBe('not due yet');
+    await chores.run('look', true);
+    expect(chores.list()[0]?.lastNote).toBe('checked at once');
+    chores.stop();
+  });
+
   it('runs each chore on its timer and keeps what its last run did, or why it failed', async () => {
     vi.useFakeTimers({ now: new Date('2026-11-13T08:00:00Z') });
     const errors: string[] = [];
@@ -191,7 +201,7 @@ describe('the panel status route', () => {
     mkdirSync(join(t.root, 'uploads'), { recursive: true });
     await app.inject({ method: 'GET', url: '/api/panel/storage?fresh=1', headers: { host: HOST, cookie } });
     expect(programs.finished().find((p) => p.program === 'du')).toMatchObject({ page: { route: 'GET /api/panel/storage' }, ended: 'failed', reason: 'permission denied' });
-    expect(status.tasks.map((t: { id: string }) => t.id)).toEqual(['drafts', 'runs', 'downloads', 'file-trash', 'mysql-backups', 'snapshots', 'kept', 'trash', 'versions']);
+    expect(status.tasks.map((t: { id: string }) => t.id)).toEqual(['drafts', 'runs', 'downloads', 'file-trash', 'mysql-backups', 'snapshots', 'kept', 'trash', 'vulnerabilities', 'versions']);
     const ran = await app.inject({ method: 'POST', url: '/api/panel/tasks/runs/run', headers: { host: HOST, origin: ORIGIN, cookie } });
     expect(ran.json()).toMatchObject({ id: 'runs', lastOk: true });
     expect((await app.inject({ method: 'POST', url: '/api/panel/tasks/nope/run', headers: { host: HOST, origin: ORIGIN, cookie } })).statusCode).toBe(404);

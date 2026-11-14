@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs';
-import { join, posix } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DeveloperReport, FolderEntry, FolderListing, InstalledPath, ServiceState } from '@devmagic-panel/shared';
 import { FOLDER_ENTRIES } from '@devmagic-panel/shared';
@@ -7,6 +7,9 @@ import { autostartFile } from './autostart.js';
 import type { SystemConfig } from './config.js';
 import type { Executor } from './exec.js';
 import { readRelease } from './update.js';
+import { CRON_BEGIN, CRON_END } from './cron.js';
+import { installedVersions } from './php/versions.js';
+import { VHOST_MARKER } from './sites/vhost.js';
 
 /**
  * What the hidden Developer options show: versions, the services, config.env,
@@ -24,15 +27,34 @@ export interface DeveloperContext {
   logsDir: string;
   /** How many jobs are queued or running now. */
   runningJobs?: () => number;
+  /** The MySQL accounts the panel signs in with, by user and host only: never a password. */
+  mysqlAccounts?: () => Array<{ user: string; host: string; role: 'admin' | 'read-only' }>;
 }
 
-/** The units the panel needs: its own and Mailpit (user services), Apache and MySQL or MariaDB (system ones). */
-const UNITS: Array<{ units: string[]; label: string; scope: 'user' | 'system' }> = [
+type Unit = { units: string[]; label: string; scope: 'user' | 'system' };
+
+/**
+ * The units the panel needs or uses: its own and Mailpit (user services),
+ * Apache, MySQL or MariaDB, nginx (next to Apache, once set up), cron (the
+ * panel's crontab tasks) and PHP-FPM of each version installed with it.
+ */
+const UNITS: Unit[] = [
   { units: ['devmagic-panel.service'], label: 'Panel', scope: 'user' },
   { units: ['devmagic-panel-mailpit.service'], label: 'Mailpit', scope: 'user' },
   { units: ['apache2.service'], label: 'Apache', scope: 'system' },
   { units: ['mysql.service', 'mariadb.service'], label: 'MySQL', scope: 'system' },
+  { units: ['nginx.service'], label: 'nginx', scope: 'system' },
+  { units: ['cron.service'], label: 'cron', scope: 'system' },
 ];
+
+/** PHP-FPM of each version that has it: the pools and the default PHP run through them. */
+function fpmUnits(config: SystemConfig): Unit[] {
+  try {
+    return installedVersions(config).filter((v) => v.sapis.includes('fpm')).map((v) => ({ units: [`php${v.version}-fpm.service`], label: `PHP ${v.version} FPM`, scope: 'system' as const }));
+  } catch {
+    return [];
+  }
+}
 
 /** systemctl show's KEY=value lines, one block per unit. */
 export function parseUnitStates(text: string): Array<Record<string, string>> {
@@ -42,9 +64,9 @@ export function parseUnitStates(text: string): Array<Record<string, string>> {
     .filter((b) => Object.keys(b).length > 0);
 }
 
-async function serviceStates(exec: Executor): Promise<ServiceState[]> {
+async function serviceStates(exec: Executor, config: SystemConfig): Promise<ServiceState[]> {
   return Promise.all(
-    UNITS.map(async ({ units, label, scope }): Promise<ServiceState> => {
+    [...UNITS, ...fpmUnits(config)].map(async ({ units, label, scope }): Promise<ServiceState> => {
       const r = await exec('systemctl', [...(scope === 'user' ? ['--user'] : []), 'show', '--timestamp=unix', '-p', 'Id,LoadState,ActiveState,UnitFileState,ActiveEnterTimestamp', ...units], { timeoutMs: 10_000 });
       const found = parseUnitStates(r.stdout).find((u) => u.LoadState === 'loaded');
       if (r.code !== 0 || !found) return { unit: units[0] as string, label, scope, active: 'not installed', enabled: '' };
@@ -95,6 +117,15 @@ function look(path: string): { exists: boolean; sizeBytes?: number } {
   }
 }
 
+const kindOf = (path: string, folders: readonly string[]) => {
+  if (folders.includes(path)) return 'dir';
+  try {
+    return statSync(path).isDirectory() ? 'dir' : 'file';
+  } catch {
+    return 'file';
+  }
+};
+
 const trimmed = async (exec: Executor, file: string, args: string[]) => {
   const r = await exec(file, args, { timeoutMs: 10_000 });
   return r.code === 127 ? null : r.stdout.trim() || r.stderr.trim();
@@ -108,16 +139,113 @@ function installedList(ctx: DeveloperContext): Array<Omit<InstalledPath, 'exists
 
 /** The panel's own files, made as it runs; secrets.json is listed, never read. */
 function ownFiles(ctx: DeveloperContext): Array<[string, string]> {
+  const d = (name: string) => join(ctx.dataDir, name);
+  const backup = (name: string) => join(ctx.config.BACKUP_DIR, name);
   return [
-    [join(ctx.configDir, 'secrets.json'), 'panel password hash, MySQL admin account, the Anthropic key and saved SSH passwords (mode 0600)'],
+    [join(ctx.configDir, 'secrets.json'), 'panel password hash, MySQL accounts, the Anthropic key and saved SSH passwords (mode 0600)'],
     [join(ctx.configDir, 'settings.json'), 'assistant settings'],
-    [join(ctx.dataDir, 'panel.db'), 'run history, queued proposals and the wizard\'s answers per repo'],
-    [join(ctx.dataDir, 'uploads'), 'database dumps waiting for an install or import'],
-    [join(ctx.dataDir, 'mailpit'), 'Mailpit, when installed from the panel'],
+    [d('panel.db'), 'run history, background task runs, queued proposals and the wizard\'s answers per repo'],
+    [d('uploads'), 'database dumps waiting for an install or import'],
+    [d('file-uploads'), 'files staged for the Files tab, a day at most'],
+    [d('file-trash'), 'what the Files tab deleted, for Undo: 14 days, 1 GB at most'],
+    [d('mysql-backups'), 'MySQL\'s settings before the panel changed them, 14 days'],
+    [d('profiles'), 'Xdebug profile summaries per site'],
+    [d('tools'), 'tools the panel downloaded, like the PHP compatibility check and its cache'],
+    [d('cron'), 'what the panel\'s crontab tasks ran, by task'],
+    [d('cron.log'), 'the crontab runner\'s log'],
+    [d('updates.git'), 'the release cache, when updates come through git'],
+    [d('update-status.json'), 'the last check for a new release'],
+    [d('update-run.json'), 'an install from the Updates page that is running or just ended'],
+    [d('wp-core-status.json'), 'WordPress.org\'s status of each WordPress release, an hour'],
+    [d('mailpit'), 'Mailpit, when installed from the panel'],
     [join(ctx.home, '.config', 'systemd', 'user', 'devmagic-panel-mailpit.service'), 'Mailpit\'s systemd user service'],
     [autostartFile(ctx.home), 'starts the panel and Mailpit after login, on an encrypted home folder'],
+    [backup('snapshots'), 'database snapshots, yours and the ones the panel takes before a change'],
+    [backup('clean'), 'clean copies of databases, without personal data'],
+    [backup('row-changes'), 'rows as they were before a change in a table, for Undo: 14 days'],
+    [backup('cleanups'), 'what a database clean-up or SQL removed, for Undo: 14 days'],
     [ctx.logsDir, 'install and update logs'],
   ];
+}
+
+/** Each file in dir whose name passes test, as full paths; none when the folder cannot be read. */
+function filesIn(dir: string, test: (name: string) => boolean): string[] {
+  try {
+    return readdirSync(dir).filter(test).sort().map((name) => join(dir, name));
+  } catch {
+    return [];
+  }
+}
+
+/** Whether a file's first line is the panel's marker: a config it wrote and keeps. */
+function managed(file: string): boolean {
+  try {
+    return readFileSync(file, 'utf8').split('\n', 1)[0] === VHOST_MARKER;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The files dmp-root wrote outside the panel's folders, as the system has
+ * them now: PHP's pools and settings, Apache's and nginx's confs, MySQL's
+ * settings and the state dmp-root keeps. Only the ones that are there.
+ */
+function systemFiles(ctx: DeveloperContext): Array<[string, string]> {
+  const c = ctx.config;
+  const out: Array<[string, string]> = [];
+  for (const version of filesIn(c.PHP_CONF_DIR, (n) => /^\d+\.\d+$/.test(n))) {
+    const v = version.slice(c.PHP_CONF_DIR.length + 1);
+    for (const sapi of ['fpm', 'apache2', 'cli']) {
+      for (const ini of filesIn(join(version, sapi, 'conf.d'), (n) => n === '99-devmagic-panel.ini')) out.push([ini, `PHP ${v} (${sapi}) settings the panel keeps`]);
+      for (const ini of filesIn(join(version, sapi, 'conf.d'), (n) => n === '99-devmagic-panel-xdebug.ini')) out.push([ini, `PHP ${v} (${sapi}) Xdebug, when switched on in the panel`]);
+    }
+    for (const pool of filesIn(join(version, 'fpm', 'pool.d'), (n) => /^dmp-.+\.conf$/.test(n))) out.push([pool, `PHP ${v} FPM pool of ${pool.endsWith('dmp-phpmyadmin.conf') ? 'phpMyAdmin' : 'a site with a PHP of its own'}`]);
+  }
+  const apache = dirname(c.APACHE_SITES_AVAILABLE);
+  for (const [name, note] of [['devmagic-panel-php.conf', 'Apache: which site runs on which PHP-FPM'], ['devmagic-panel-remoteip.conf', 'Apache: trusts the visitor address nginx passes on']] as const) {
+    for (const f of filesIn(join(apache, 'conf-available'), (n) => n === name)) out.push([f, note]);
+  }
+  const nginx = dirname(c.NGINX_SITES_AVAILABLE);
+  for (const [name, note] of [['devmagic-panel.conf', 'nginx: the panel\'s setup next to Apache'], ['devmagic-panel-php.conf', 'nginx: the PHP upstream of each site on nginx']] as const) {
+    for (const f of filesIn(join(nginx, 'conf.d'), (n) => n === name)) out.push([f, note]);
+  }
+  for (const f of filesIn(c.NGINX_SITES_AVAILABLE, (n) => n.endsWith('.conf'))) if (managed(f)) out.push([f, 'nginx: a site the panel runs on nginx']);
+  for (const sub of ['mysql.conf.d', 'mariadb.conf.d']) for (const f of filesIn(join(c.MYSQL_CONF_DIR, sub), (n) => n === 'zz-devmagic-panel.cnf')) out.push([f, 'MySQL settings changed in the panel']);
+  const state: Array<[string, string]> = [
+    ['sites', 'the registry of panel-made sites'],
+    ['taken-over', 'sites taken over, with their original files and checksums'],
+    ['trash', 'deleted and archived sites, 14 days'],
+    ['nginx', 'what nginx\'s setup changed, to put back'],
+    ['php-default', 'the default PHP version once mod_php is off'],
+    ['profiles', 'Xdebug profiles, written by PHP'],
+  ];
+  for (const [name, note] of state) if (existsSync(join(c.STATE_DIR, name))) out.push([join(c.STATE_DIR, name), note]);
+  return out;
+}
+
+/** What the panel made that is not a file of its own: its crontab block, its MySQL accounts and the two files it adds to sites. */
+async function otherThings(ctx: DeveloperContext): Promise<Array<{ path: string; note: string; exists: boolean; kind: string }>> {
+  const cron = await ctx.exec('crontab', ['-l'], { timeoutMs: 10_000 });
+  const lines = cron.code === 0 ? cron.stdout.split('\n') : [];
+  const begin = lines.indexOf(CRON_BEGIN);
+  const tasks = begin < 0 ? 0 : lines.slice(begin + 1).findIndex((l) => l === CRON_END);
+  const out: Array<{ path: string; note: string; exists: boolean; kind: string }> = [
+    { kind: 'crontab', path: `crontab of ${ctx.config.PANEL_USER}: the devmagic-panel block`, note: begin < 0 ? 'none yet: it appears with the first task' : `the panel's tasks, ${Math.max(0, tasks)} line${tasks === 1 ? '' : 's'}; every other line stays yours`, exists: begin >= 0 },
+  ];
+  for (const a of ctx.mysqlAccounts?.() ?? []) {
+    out.push({ kind: 'account', path: `MySQL account ${a.user}@${a.host}`, note: a.role === 'read-only' ? 'the SQL runner\'s, SELECT and SHOW VIEW only' : a.user === 'devmagic_panel' ? 'the panel\'s admin account, made by setup' : 'the admin account the panel signs in with (yours)', exists: true });
+  }
+  let login = 0;
+  let local = 0;
+  for (const site of filesIn(ctx.config.WEB_DIR, () => true)) {
+    const mu = join(site, 'wp-content', 'mu-plugins');
+    if (existsSync(join(mu, 'devmagic-panel-login.php'))) login += 1;
+    if (existsSync(join(mu, 'devmagic-panel-local.php'))) local += 1;
+  }
+  out.push({ kind: 'mu-plugin', path: 'mu-plugins/devmagic-panel-login.php', note: `the one-time wp-admin login, in ${login} site folder${login === 1 ? '' : 's'}`, exists: login > 0 });
+  out.push({ kind: 'mu-plugin', path: 'mu-plugins/devmagic-panel-local.php', note: `Local mode, in ${local} site folder${local === 1 ? '' : 's'}`, exists: local > 0 });
+  return out;
 }
 
 export async function developerReport(ctx: DeveloperContext): Promise<DeveloperReport> {
@@ -126,7 +254,7 @@ export async function developerReport(ctx: DeveloperContext): Promise<DeveloperR
   const release = readRelease(REPO_DIR);
   const [commit, services, linger] = await Promise.all([
     release ? `${release.name} (${release.commit.slice(0, 9)})` : trimmed(ctx.exec, 'git', ['-C', REPO_DIR, 'describe', '--always', '--dirty']),
-    serviceStates(ctx.exec),
+    serviceStates(ctx.exec, ctx.config),
     trimmed(ctx.exec, 'loginctl', ['show-user', ctx.config.PANEL_USER, '-p', 'Linger', '--value']),
   ]);
   const own = ownFiles(ctx);
@@ -159,7 +287,11 @@ export async function developerReport(ctx: DeveloperContext): Promise<DeveloperR
     linger: linger === 'yes' ? true : linger === 'no' ? false : null,
     config: Object.entries(ctx.config).map(([key, value]) => ({ key, value: String(value) })),
     installedFiles: listed ? listed.map((p) => ({ ...p, ...look(p.path) })) : null,
-    panelFiles: own.map(([path, note]) => ({ path, note, ...look(path), kind: folders.includes(path) ? 'dir' : 'file' })),
+    panelFiles: [
+      ...own.map(([path, note]) => ({ path, note, ...look(path), kind: kindOf(path, folders), group: 'data' as const })),
+      ...systemFiles(ctx).map(([path, note]) => ({ path, note, ...look(path), kind: kindOf(path, folders), group: 'system' as const })),
+      ...(await otherThings(ctx)).map((t) => ({ ...t, group: 'other' as const })),
+    ],
     logs,
   };
 }

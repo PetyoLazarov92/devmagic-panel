@@ -2,7 +2,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, PanelStatus, PanelStorage, TaskRun, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, TaskRun, ApacheReport, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
 import { FILE_TEXT_MAX, gitUrl, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -14,6 +14,7 @@ import { WPCORE_BIN, type SystemConfig } from './config.js';
 import type { CoreStatusSource } from './core-status.js';
 import { defaultLogsDir, developerReport, type DeveloperContext, listFolder, readLog, REPO_DIR, startupLog } from './developer.js';
 import { packOlderReleases, panelCli, UpdateChecker, type UpdateContext } from './update.js';
+import { VulnerabilityWatch } from './vulnerabilities.js';
 import { installStillNews, settleInstall } from './update-install.js';
 import { DraftRefused, draftId, draftInput, Drafts } from './drafts.js';
 import { checkEnvironment, type HostPaths } from './environment.js';
@@ -177,6 +178,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
     app.addHook('onClose', async () => htaccessWatcher.close());
   }
+  /** The .htaccess watcher in Sanctum's words. */
+  const watcherLine = (w: { sites: number; folders: number; lastChange?: string }): PanelWatcher => ({
+    id: 'htaccess',
+    label: 'Watch the .htaccess files of sites on nginx',
+    what: 'nginx reads no .htaccess, so the panel notices a change to one and says so on the site, for you to review its rules. It never applies anything itself.',
+    note: w.sites === 0 ? 'no site runs on nginx' : `${w.folders} folder${w.folders === 1 ? '' : 's'} on ${w.sites} site${w.sites === 1 ? '' : 's'}`,
+    ...(w.lastChange ? { lastAt: w.lastChange } : {}),
+  });
+  // Known vulnerabilities of plugins and themes: a background task while the check is on, and Aura's Check now.
+  const vulnerabilities = new VulnerabilityWatch(deps.store, deps.exec, deps.config);
+  // The sites as the site routes read them, once those exist (the routes register later, the timers run later still).
+  let siteList: (() => Promise<Site[]>) | null = null;
   // The panel's work on its own timers, listed on the Sanctum page with what each last did.
   const chores = new Chores((id, message) => app.log.warn(`${id}: ${message}`), Date.now, deps.store);
   if (deps.housekeeping) {
@@ -239,6 +252,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       sweepArchives(deps.store, await listTrash(deps.exec, deps.dmpRoot));
       return r.stdout.trim().split('\n').filter(Boolean).at(-1) ?? '';
     });
+    // Hourly it looks whether a day passed since the last round, so a restart or a closed Aura never skips one; Run now checks at once.
+    chores.every('vulnerabilities', 'Check plugins and themes for known vulnerabilities', 'Asks WPVulnerability about the plugins and themes WordPress.org has, by slug only, once a day while the check is on in Aura. Run now checks at once, asking again about answers older than an hour.', 60 * 60_000, async ({ asked }) => {
+      if (!vulnerabilities.enabled()) return 'off: switch it on in Aura to check every day';
+      if (!siteList) return 'the sites are not read yet';
+      const before = vulnerabilities.lastRound();
+      vulnerabilities.maybeStart(siteList, asked);
+      await vulnerabilities.settled();
+      const last = vulnerabilities.lastRound();
+      if (last === before) return last ? `the last round was ${Math.round((Date.now() - Date.parse(last)) / 3_600_000)} h ago; the next one is a day after it` : 'no round yet';
+      const sites = (await siteList()).filter((x) => x.core.kind !== 'none');
+      const hit = sites.filter((x) => (vulnerabilities.kept(`${x.domain}${x.path ?? ''}`)?.hits.length ?? 0) > 0);
+      return `checked ${sites.length} sites: ${hit.length ? `${hit.length} with known vulnerabilities (${hit.map((x) => `${x.domain}${x.path ?? ''}`).join(', ')})` : 'none known'}`;
+    }, 10 * 60_000);
     // The panel versions it does not run stay packed, a seventh of their room; switching back unpacks one first.
     chores.every('versions', 'Pack older panel versions', 'Packs the panel versions it does not run into gzip archives; switching back to one unpacks it first.', 24 * 60 * 60_000, () => packOlderReleases(update), 2 * 60_000);
   }
@@ -616,6 +642,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       configDir: deps.secretsFile ? dirname(deps.secretsFile) : join(deps.hostPaths.home, '.config', 'devmagic-panel'),
       logsDir,
       runningJobs: () => jobs.list().filter((j) => j.status === 'running' || j.status === 'queued' || j.status === 'undoing').length,
+      // By user and host only: the passwords never leave secrets.json.
+      mysqlAccounts: () => {
+        const sec = deps.secrets();
+        return [
+          ...(sec?.mysql ? [{ user: sec.mysql.user, host: sec.mysql.host, role: 'admin' as const }] : []),
+          ...(sec?.mysqlReadOnly ? [{ user: sec.mysqlReadOnly.user, host: sec.mysqlReadOnly.host, role: 'read-only' as const }] : []),
+        ];
+      },
     };
     api.get('/api/developer', async (): Promise<DeveloperReport> => developerReport(developer));
     // The panel's own status for the top bar: since when it runs, how the last run ended, its programs and timed work. No paths or arguments.
@@ -628,6 +662,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       programs: deps.programs?.list() ?? [],
       finished: deps.programs?.finished() ?? [],
       pageReads: deps.programs?.pageReads() ?? [],
+      watchers: htaccessWatcher ? [watcherLine(htaccessWatcher.state())] : [],
       tasks: chores.list(),
     }));
     // What the panel keeps on disk, measured with du; kept ten minutes, as a big folder takes a moment.
@@ -654,7 +689,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // Runs one of the panel's timed chores now.
     api.post<{ Params: { id: string } }>('/api/panel/tasks/:id/run', async (request, reply) => {
       if (!chores.list().some((t) => t.id === request.params.id)) return reply.code(404).send({ error: 'No such task' });
-      await chores.run(request.params.id);
+      await chores.run(request.params.id, true);
       return chores.list().find((t) => t.id === request.params.id);
     });
     api.get<{ Params: { name: string } }>('/api/developer/logs/:name', async (request, reply) => {
@@ -821,6 +856,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     registerCreateRoutes(api, { exec: deps.exec, jobs, uploadsDir: deps.uploadsDir });
     const siteRoutes = registerSiteRoutes(api, {
+      vulnerabilities,
       cron,
       config: deps.config,
       exec: deps.exec,
@@ -832,6 +868,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       jobs,
       dmpRoot: deps.dmpRoot,
     });
+    siteList = siteRoutes.sites;
     registerOrgRoutes(api, {
       exec: deps.exec,
       store: deps.store,

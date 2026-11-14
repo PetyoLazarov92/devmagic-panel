@@ -48,6 +48,8 @@ import { type CronContext, CronRefused } from '../cron.js';
 import { readWpCron, testWpCron } from './wp-cron.js';
 
 export interface SiteRouteDeps {
+  /** The vulnerability check, shared with its background task; one of its own when not given. */
+  vulnerabilities?: VulnerabilityWatch;
   config: SystemConfig;
   exec: Executor;
   secrets: () => Secrets | null;
@@ -145,7 +147,7 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
   api.get('/api/sites', async () => marked(await sites()));
 
   // Known vulnerabilities of plugins and themes: off until switched on; a read of Aura starts the day's round in the background.
-  const vulnerabilities = new VulnerabilityWatch(deps.store, deps.exec, deps.config);
+  const vulnerabilities = deps.vulnerabilities ?? new VulnerabilityWatch(deps.store, deps.exec, deps.config);
   const aura = async (): Promise<AuraReport> => {
     const list = await sites();
     vulnerabilities.maybeStart(sites);

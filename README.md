@@ -1,6 +1,6 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.47.1-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.48.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)

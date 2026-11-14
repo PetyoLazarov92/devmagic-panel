@@ -212,11 +212,27 @@ function InstalledFiles({ report }: { report: DeveloperReport }) {
   );
 }
 
+const FILE_GROUPS: ReadonlyArray<{ group: DeveloperReport['panelFiles'][number]['group']; title: string; intro: string }> = [
+  { group: 'data', title: 'Its data', intro: 'The panel\'s own files and folders: run history, uploads, Undo copies, snapshots, caches. secrets.json is listed, never read.' },
+  { group: 'system', title: 'System files it wrote', intro: 'What dmp-root wrote for PHP, Apache, nginx and MySQL, and the state it keeps; only the ones on this machine now.' },
+  { group: 'other', title: 'Other things it made', intro: 'Not files of its own: its block in your crontab, the MySQL accounts it signs in with (names only) and the two mu-plugins it adds to sites.' },
+];
+
 function PanelFiles({ report }: { report: DeveloperReport }) {
   return (
     <Card className="lg:col-span-2">
-      <CardHeader title="Files the panel makes as it runs" meta={<FolderTree className="size-4 text-muted-foreground" />} />
-      <PathTree listed={report.panelFiles} />
+      <CardHeader title="What the panel makes as it runs" meta={<FolderTree className="size-4 text-muted-foreground" />} />
+      {FILE_GROUPS.map(({ group, title, intro }) => {
+        const listed = report.panelFiles.filter((f) => f.group === group);
+        if (listed.length === 0) return null;
+        return (
+          <section key={group} className="border-t first:border-t-0">
+            <h3 className="px-5 pt-3 text-sm font-medium">{title}</h3>
+            <p className="px-5 pb-1 text-xs text-muted-foreground">{intro}</p>
+            <PathTree listed={listed} />
+          </section>
+        );
+      })}
     </Card>
   );
 }

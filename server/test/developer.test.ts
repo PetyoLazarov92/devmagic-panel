@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { developerReport, formatJournal, listFolder, parseInstalledFiles, readLog } from '../src/developer.js';
 import { fakeExec, tempTree } from './helpers.js';
+import { CRON_BEGIN, CRON_END } from '../src/cron.js';
+import { VHOST_MARKER } from '../src/sites/vhost.js';
 
 const LIST = [
   '# devmagic-panel: what install.sh put on this machine.',
@@ -52,12 +54,14 @@ describe('developer options', () => {
     const report = await developerReport({ config: { ...t.config, STATE_DIR: state }, exec, version: '0.5.0', home: t.root, dataDir: join(t.root, 'data'), configDir: join(t.root, 'config'), logsDir: logs, runningJobs: () => 2 });
     expect(report).toMatchObject({ version: '0.5.0', commit: 'v0.5.0-3-gabc1234', linger: false });
     expect(report.server).toMatchObject({ pid: process.pid, port: t.config.PANEL_PORT, runningJobs: 2 });
-    expect(report.services).toEqual([
+    expect(report.services.slice(0, 4)).toEqual([
       { unit: 'devmagic-panel.service', label: 'Panel', scope: 'user', active: 'active', enabled: 'enabled', since: '2026-10-24T22:51:24.000Z' },
       { unit: 'devmagic-panel-mailpit.service', label: 'Mailpit', scope: 'user', active: 'inactive', enabled: 'disabled' },
       { unit: 'apache2.service', label: 'Apache', scope: 'system', active: 'not installed', enabled: '' },
       { unit: 'mariadb.service', label: 'MySQL', scope: 'system', active: 'active', enabled: 'enabled', since: new Date(1792800000 * 1000).toISOString() },
     ]);
+    // nginx and cron are always asked about; PHP-FPM only for the versions that have it.
+    expect(report.services.slice(4).map((u) => u.label)).toEqual(['nginx', 'cron']);
     expect(report.installedFiles).toEqual([
       { kind: 'file', path: file, onUninstall: 'remove', note: 'the hosts file', exists: true, sizeBytes: 20 },
       { kind: 'file', path: join(t.root, 'gone'), onUninstall: 'remove', note: 'removed since', exists: false },
@@ -65,6 +69,41 @@ describe('developer options', () => {
     expect(report.logs.map((l) => l.name)).toEqual(['install-20261025-090000.log', 'install-20261024-090000.log']);
     expect(report.config.find((c) => c.key === 'STATE_DIR')?.value).toBe(state);
     expect(report.panelFiles.find((f) => f.path.endsWith('secrets.json'))).toMatchObject({ exists: false });
+  });
+
+  it('lists the system files dmp-root wrote, only the ones there, and what else the panel made, never a password', async () => {
+    const t = tempTree();
+    const c = t.config;
+    mkdirSync(join(c.PHP_CONF_DIR, '8.3', 'fpm', 'pool.d'), { recursive: true });
+    mkdirSync(join(c.PHP_CONF_DIR, '8.3', 'fpm', 'conf.d'), { recursive: true });
+    writeFileSync(join(c.PHP_CONF_DIR, '8.3', 'fpm', 'pool.d', 'dmp-local.spellbook.example.conf'), '; pool\n');
+    writeFileSync(join(c.PHP_CONF_DIR, '8.3', 'fpm', 'pool.d', 'www.conf'), '; not ours\n');
+    writeFileSync(join(c.PHP_CONF_DIR, '8.3', 'fpm', 'conf.d', '99-devmagic-panel.ini'), 'memory_limit = 512M\n');
+    mkdirSync(c.NGINX_SITES_AVAILABLE, { recursive: true });
+    writeFileSync(join(c.NGINX_SITES_AVAILABLE, 'local.wandworks.example.conf'), `${VHOST_MARKER}\nserver {}\n`);
+    writeFileSync(join(c.NGINX_SITES_AVAILABLE, 'by-hand.conf'), 'server {}\n');
+    mkdirSync(join(c.MYSQL_CONF_DIR, 'mysql.conf.d'), { recursive: true });
+    writeFileSync(join(c.MYSQL_CONF_DIR, 'mysql.conf.d', 'zz-devmagic-panel.cnf'), '[mysqld]\n');
+    mkdirSync(join(c.WEB_DIR, 'local.spellbook.example', 'wp-content', 'mu-plugins'), { recursive: true });
+    writeFileSync(join(c.WEB_DIR, 'local.spellbook.example', 'wp-content', 'mu-plugins', 'devmagic-panel-login.php'), '<?php\n');
+    const { exec } = fakeExec({ crontab: { stdout: `MAILTO=""\n${CRON_BEGIN}\n*/5 * * * * one\n0 3 * * * two\n${CRON_END}\n` }, loginctl: { stdout: 'yes\n' } });
+    const report = await developerReport({ config: c, exec, version: '0.5.0', home: t.root, dataDir: join(t.root, 'data'), configDir: join(t.root, 'config'), logsDir: join(t.root, 'logs'), mysqlAccounts: () => [{ user: 'devmagic_panel_ro', host: 'localhost', role: 'read-only' }] });
+    const system = report.panelFiles.filter((f) => f.group === 'system').map((f) => f.path);
+    expect(system).toEqual([
+      join(c.PHP_CONF_DIR, '8.3', 'fpm', 'conf.d', '99-devmagic-panel.ini'),
+      join(c.PHP_CONF_DIR, '8.3', 'fpm', 'pool.d', 'dmp-local.spellbook.example.conf'),
+      join(c.NGINX_SITES_AVAILABLE, 'local.wandworks.example.conf'),
+      join(c.MYSQL_CONF_DIR, 'mysql.conf.d', 'zz-devmagic-panel.cnf'),
+    ]);
+    const other = report.panelFiles.filter((f) => f.group === 'other');
+    expect(other.map((f) => f.note)).toEqual([
+      "the panel's tasks, 2 lines; every other line stays yours",
+      "the SQL runner's, SELECT and SHOW VIEW only",
+      'the one-time wp-admin login, in 1 site folder',
+      'Local mode, in 0 site folders',
+    ]);
+    expect(other[1]?.path).toBe('MySQL account devmagic_panel_ro@localhost');
+    expect(report.panelFiles.filter((f) => f.group === 'data').some((f) => f.path === join(t.root, 'data', 'file-trash'))).toBe(true);
   });
 
   it('has no list before the first install that writes one', async () => {
