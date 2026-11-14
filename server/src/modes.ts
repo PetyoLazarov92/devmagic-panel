@@ -149,6 +149,9 @@ export function countAction(progress: ModeProgress, id: string, input: unknown):
   if (id === 'cert.reissue') progress.count('certReissue');
   if (id === 'db.snapshot') progress.count('dbSnapshot');
   if (id === 'cron.add') progress.count('cronTask');
+  if (id === 'site.clearCache') progress.count('cacheClear');
+  if (id === 'site.pluginSet') progress.count('pluginToggle');
+  if (id === 'git.switch') progress.count('branchSwitch');
   if (id === 'site.installPlugins' && input && typeof input === 'object') {
     const { plugins, themes } = input as { plugins?: unknown; themes?: unknown };
     const n = (Array.isArray(plugins) ? plugins.length : 0) + (Array.isArray(themes) ? themes.length : 0);

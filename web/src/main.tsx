@@ -14,6 +14,7 @@ import './styles/neon.css';
 import './styles/ink.css';
 import './styles/dune.css';
 import './styles/pixel.css';
+import './styles/sorbet.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>

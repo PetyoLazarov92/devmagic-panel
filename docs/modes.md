@@ -334,6 +334,36 @@ names its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Sorbet
+
+Pastel mint, strawberry and lemon: the roundest mode, with very rounded cards,
+pill buttons and chips, and three scoops in one corner of each card, blush
+white in the light theme and plum in the dark one, names in a rounded bold
+face, and strawberry for whatever is chosen. The effects add soft blobs of
+mint, strawberry and lemon drifting slowly behind the pages (Background, CSS
+only); a few pastel sprinkles popping out where you click a button or link and
+falling as they fade, with nothing following the cursor (Pointer); and the
+scoops bobbing slowly, a broken site's card glowing soft strawberry at its edge
+and a healthy site's dot glowing mint (Elements). Three scoops circle where
+something runs. Pages it names its own way:
+
+| Classic | Sorbet |
+| --- | --- |
+| Demo | Tasting |
+| Sites | Scoops |
+| Aura | Freshness |
+| Mail | Orders |
+| Services | Freezer |
+| WP Cores | Cones |
+| Activity | Receipts |
+| Updates | New flavors |
+| Settings | Counter |
+| Modes | Flavors |
+| Developer options | Kitchen |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks

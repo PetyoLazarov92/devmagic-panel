@@ -622,11 +622,11 @@
  * ring and shadow do, since the tint alone is close to the group's own fill.
  * Circuit, Forge and Wizard mark it their own way.
  */
-:root:is([data-mode='grove'], [data-mode='abyss'], [data-mode='neon'], [data-mode='ink'], [data-mode='dune'], [data-mode='pixel'])[data-mode] [data-ui='segmented'] > [role='radio'][aria-checked='true'] {
+:root:is([data-mode='grove'], [data-mode='abyss'], [data-mode='neon'], [data-mode='ink'], [data-mode='dune'], [data-mode='pixel'], [data-mode='sorbet'])[data-mode] [data-ui='segmented'] > [role='radio'][aria-checked='true'] {
   background: color-mix(in srgb, var(--primary) 12%, var(--card));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 50%, transparent), 0 1px 2px color-mix(in srgb, var(--foreground) 12%, transparent);
 }
-:root:is([data-mode='grove'], [data-mode='abyss'], [data-mode='neon'], [data-mode='ink'], [data-mode='dune'], [data-mode='pixel'])[data-mode].dark [data-ui='segmented'] > [role='radio'][aria-checked='true'] {
+:root:is([data-mode='grove'], [data-mode='abyss'], [data-mode='neon'], [data-mode='ink'], [data-mode='dune'], [data-mode='pixel'], [data-mode='sorbet'])[data-mode].dark [data-ui='segmented'] > [role='radio'][aria-checked='true'] {
   background: color-mix(in srgb, var(--primary) 18%, var(--card));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 50%, transparent);
 }

@@ -215,6 +215,17 @@ describe('mode progress', () => {
     expect([count('itemInstall'), count('jobContinue')]).toEqual([3, 1]);
   });
 
+  it("counts Sorbet's cache clears, plugin switches and branch switches", () => {
+    const progress = new ModeProgress(memory());
+    const count = (id: string) => progress.developerView().counters.find((c) => c.id === id)?.count ?? 0;
+    countAction(progress, 'site.clearCache', { domain: 'local.spellbook.example' });
+    countAction(progress, 'site.pluginSet', { domain: 'local.spellbook.example', plugin: 'wand-forms', active: false });
+    countAction(progress, 'git.switch', {});
+    expect([count('cacheClear'), count('pluginToggle'), count('branchSwitch')]).toEqual([1, 1, 1]);
+    for (let i = 0; i < 14; i++) countAction(progress, 'git.switch', {});
+    expect(progress.developerView().modes.find((m) => m.id === 'sorbet')?.unlocked?.by).toBe('sorbet.flavors');
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);

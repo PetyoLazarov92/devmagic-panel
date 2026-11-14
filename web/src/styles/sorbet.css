@@ -1,0 +1,440 @@
+/*
+ * Sorbet: pastel mint, strawberry and lemon. Blush white in light and plum in
+ * dark, the roundest mode (soft cards, pill buttons and chips), names in a
+ * rounded bold face, strawberry for what is chosen, and three scoops in each
+ * card's corner. data-mode="sorbet" on the root, data-fx while Elements is
+ * on, data-fx-bg while Background is on (the drifting blobs are CSS); a
+ * click's sprinkles on one canvas (features/modes/sorbet-effects.tsx).
+ */
+:root[data-mode='sorbet']:not(.dark) {
+  --background: #fdf6fb;
+  --foreground: #3a2a44;
+  --card: #ffffff;
+  --muted: #f8ecf4;
+  --muted-foreground: #74607f;
+  --border: #efdcea;
+  --input: #e2c8da;
+  --ring: #c23a6a;
+  --primary: #c23a6a;
+  --primary-foreground: #fff8fb;
+  --secondary: #fbe8f0;
+  --secondary-foreground: #8a2a50;
+  --success: #1f8a6a;
+  --warning: #9a6a00;
+  --danger: #c4284a;
+  --sb-berry: #e0628c;
+  --sb-mint: #3fae8e;
+  --sb-lemon: #e0b020;
+  --sb-lilac: #a080e0;
+  --sb-raised: #ffffff;
+  --sb-chosen-ink: #a8325a;
+  --sb-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Ccircle cx='168' cy='98' r='24' fill='%237fd1b9' fill-opacity='.38'/%3E%3Ccircle cx='138' cy='106' r='17' fill='%23ff9bb3' fill-opacity='.38'/%3E%3Ccircle cx='178' cy='66' r='14' fill='%23ffd060' fill-opacity='.38'/%3E%3Ccircle cx='148' cy='76' r='7' fill='%23b090e8' fill-opacity='.38'/%3E%3C/svg%3E");
+}
+:root[data-mode='sorbet'].dark {
+  --background: #1d1826;
+  --foreground: #f4ecff;
+  --card: #262033;
+  --muted: #2c253b;
+  --muted-foreground: #b6a8cc;
+  --border: #41385a;
+  --input: #50466c;
+  --ring: #ff9bb3;
+  --primary: #ff9bb3;
+  --primary-foreground: #1d1826;
+  --secondary: #302840;
+  --secondary-foreground: #ffd6e0;
+  --success: #8fe0c6;
+  --warning: #ffe08a;
+  --danger: #ff6f8a;
+  --sb-berry: #ff9bb3;
+  --sb-mint: #7fd1b9;
+  --sb-lemon: #ffe08a;
+  --sb-lilac: #c8a8f0;
+  --sb-raised: #2c2540;
+  --sb-chosen-ink: #ffd6e0;
+  --sb-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Ccircle cx='168' cy='98' r='24' fill='%237fd1b9' fill-opacity='.32'/%3E%3Ccircle cx='138' cy='106' r='17' fill='%23ff9bb3' fill-opacity='.32'/%3E%3Ccircle cx='178' cy='66' r='14' fill='%23ffe08a' fill-opacity='.3'/%3E%3Ccircle cx='148' cy='76' r='7' fill='%23c8a8f0' fill-opacity='.35'/%3E%3C/svg%3E");
+}
+:root[data-mode='sorbet'] {
+  --font-sorbet: 'Baloo 2', 'Fredoka', 'Varela Round', 'Nunito', 'Quicksand', 'Ubuntu', system-ui, sans-serif;
+  --sb-chosen: color-mix(in srgb, var(--sb-berry) 13%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --sb-veil: 82%;
+  scrollbar-color: color-mix(in srgb, var(--sb-berry) 35%, var(--border)) transparent;
+}
+:root[data-mode='sorbet'].dark {
+  --sb-chosen: color-mix(in srgb, var(--sb-berry) 16%, var(--card));
+}
+
+/* Names: page titles, card titles and dialogs in a rounded bold face. */
+:root[data-mode='sorbet'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-sorbet);
+  font-weight: 700;
+}
+:root[data-mode='sorbet'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-sorbet);
+  font-weight: 600;
+}
+:root[data-mode='sorbet'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-sorbet);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Cards: very rounded, a soft lift, three scoops in the bottom right corner (::after) that bob slowly while Elements is on. */
+:root[data-mode='sorbet'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 18px;
+  border-color: var(--border);
+  box-shadow: 0 10px 24px -16px color-mix(in srgb, #3a2a44 40%, transparent);
+}
+:root[data-mode='sorbet'].dark [data-ui='card'] {
+  box-shadow: 0 10px 24px -16px #000;
+}
+:root[data-mode='sorbet'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 200px;
+  height: 120px;
+  max-width: 100%;
+  max-height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0 0 18px 0;
+  background: var(--sb-corner) right bottom / 200px 120px no-repeat;
+}
+:root[data-mode='sorbet'][data-fx] [data-ui='card']::after {
+  will-change: transform;
+  animation: sb-bob 7s ease-in-out infinite;
+}
+:root[data-mode='sorbet'][data-fx] [data-ui='card']:nth-of-type(2n)::after {
+  animation-delay: -2.5s;
+}
+:root[data-mode='sorbet'][data-fx] [data-ui='card']:nth-of-type(3n)::after {
+  animation-delay: -4.5s;
+}
+@keyframes sb-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+:root[data-mode='sorbet'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='sorbet'] dialog [data-ui='card']::after {
+  display: none;
+}
+
+/* A broken site: its card glows soft strawberry at the edge, breathing slowly while Elements is on. */
+:root[data-mode='sorbet'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+}
+:root[data-mode='sorbet'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 18px;
+  box-shadow: inset 0 0 22px -6px color-mix(in srgb, var(--danger) 40%, transparent), 0 0 18px -8px var(--danger);
+}
+:root[data-mode='sorbet'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: sb-breathe 5s ease-in-out infinite;
+}
+@keyframes sb-breathe {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+/* A healthy dot glows mint; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='sorbet'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='sorbet'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--sb-mint) 60%, transparent);
+  animation: sb-breathe 4s ease-in-out infinite;
+}
+
+/* Everything else with a frame: rounded. */
+:root[data-mode='sorbet'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 14px;
+}
+:root[data-mode='sorbet'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='sorbet'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #3a2a44 40%, transparent);
+}
+:root[data-mode='sorbet'] [data-ui='tile'] {
+  border-radius: 14px;
+}
+:root[data-mode='sorbet']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='sorbet'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 14px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--sb-veil), transparent);
+}
+:root[data-mode='sorbet'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='sorbet'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='sorbet'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='sorbet'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--sb-veil), transparent);
+}
+:root[data-mode='sorbet'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--sb-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='sorbet'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='sorbet'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 18px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--sb-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #1d1826 50%, transparent);
+}
+:root[data-mode='sorbet'] [data-ui='dialog'] {
+  border-radius: 18px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--sb-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #1d1826 60%, transparent);
+}
+:root[data-mode='sorbet'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='sorbet'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #1d1826 50%, transparent);
+}
+:root[data-mode='sorbet'] :is([role='menuitem'], [role='option']) {
+  border-radius: 14px;
+}
+:root[data-mode='sorbet'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--sb-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='sorbet'] select.dmp-select::picker(select) {
+    border-radius: 18px;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--sb-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #1d1826 50%, transparent);
+  }
+  :root[data-mode='sorbet'] select.dmp-select option {
+    border-radius: 18px;
+  }
+  :root[data-mode='sorbet'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--sb-chosen);
+  }
+  :root[data-mode='sorbet'] select.dmp-select option:checked {
+    background: var(--sb-chosen);
+    color: var(--sb-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, a strawberry edge while you type. */
+:root[data-mode='sorbet'] [data-ui='input'] {
+  border-radius: 14px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='sorbet'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='sorbet'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: rounded; the main one a soft strawberry. */
+:root[data-mode='sorbet'] [data-ui='button'],
+:root[data-mode='sorbet'] [data-ui='chip'] {
+  border-radius: 14px;
+}
+:root[data-mode='sorbet'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--sb-berry) 50%, transparent);
+  background-color: var(--sb-chosen);
+  color: var(--sb-chosen-ink);
+}
+:root[data-mode='sorbet'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--sb-berry) 20%, var(--card));
+}
+:root[data-mode='sorbet'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--sb-veil), transparent);
+}
+
+/* Whatever is chosen: a soft strawberry fill. */
+:root[data-mode='sorbet'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--sb-berry) 50%, transparent);
+  background: var(--sb-chosen);
+  color: var(--sb-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='sorbet'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 14px;
+  background: var(--sb-chosen);
+  color: var(--sb-chosen-ink);
+}
+:root[data-mode='sorbet'] [data-ui='segmented'],
+:root[data-mode='sorbet'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 14px;
+}
+:root[data-mode='sorbet'] [role='tab'][aria-selected='true'] {
+  border-color: var(--sb-berry);
+  color: var(--sb-chosen-ink);
+}
+
+/* Switches: a soft strawberry when on. */
+:root[data-mode='sorbet'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='sorbet'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='sorbet'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: rounded, a strawberry mark when ticked. */
+:root[data-mode='sorbet'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 14px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='sorbet'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='sorbet'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--sb-berry);
+  background-color: var(--sb-chosen);
+}
+:root[data-mode='sorbet'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--sb-berry);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='sorbet'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--sb-berry);
+}
+:root[data-mode='sorbet'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='sorbet'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: mint into strawberry, softly. */
+:root[data-mode='sorbet'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--sb-mint) 60%, var(--card)), color-mix(in oklab, var(--sb-berry) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint strawberry rule; the page you are on in a soft strawberry fill. */
+:root[data-mode='sorbet'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='sorbet'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 14px;
+  background: var(--sb-chosen);
+  color: var(--sb-chosen-ink);
+}
+
+/* Pills: buttons, chips and the segmented switch round off fully. */
+:root[data-mode='sorbet'] :is([data-ui='button'], [data-ui='chip'], [data-ui='segmented'], [data-ui='segmented'] > [role='radio']) {
+  border-radius: 999px;
+}
+:root[data-mode='sorbet'] [data-ui='input'] {
+  border-radius: 12px;
+}
+
+/* The background effect, CSS only: three large soft blobs of mint, strawberry and lemon drifting slowly, moved by transform alone. */
+:root[data-mode='sorbet'][data-fx-bg] body::before,
+:root[data-mode='sorbet'][data-fx-bg] body::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+}
+:root[data-mode='sorbet'][data-fx-bg] body::before {
+  top: -10vh;
+  left: -10vw;
+  width: 60vw;
+  height: 60vh;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sb-mint) 16%, transparent), transparent);
+  animation: sb-drift-a 50s ease-in-out infinite alternate;
+}
+:root[data-mode='sorbet'][data-fx-bg] body::after {
+  bottom: -15vh;
+  right: -10vw;
+  width: 65vw;
+  height: 65vh;
+  background:
+    radial-gradient(closest-side at 40% 50%, color-mix(in srgb, var(--sb-berry) 15%, transparent), transparent),
+    radial-gradient(closest-side at 75% 25%, color-mix(in srgb, var(--sb-lemon) 14%, transparent), transparent 80%);
+  animation: sb-drift-b 60s ease-in-out infinite alternate;
+}
+:root[data-mode='sorbet'][data-fx-bg].dark body::before {
+  opacity: 0.8;
+}
+@keyframes sb-drift-a {
+  from { transform: translate(0, 0); }
+  to { transform: translate(30vw, 25vh); }
+}
+@keyframes sb-drift-b {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-30vw, -20vh); }
+}
+
+/* Sorbet's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='sorbet'] {
+  --t-bg: #fdf6fb;
+  --t-side: #f8ecf4;
+  --t-line: #e2c8da;
+  --t-accent: #e0628c;
+  --t-ink: #3a2a44;
+  --t-card: #ffffff;
+}
+.dark .mode-thumb[data-thumb='sorbet'] {
+  --t-bg: #1d1826;
+  --t-side: #221c2d;
+  --t-line: #41385a;
+  --t-accent: #ff9bb3;
+  --t-ink: #f4ecff;
+  --t-card: #262033;
+}
+.mode-thumb[data-thumb='sorbet'] .mt-main i {
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='sorbet'] :not(.rune-turning),
+  :root[data-mode='sorbet'] *::before,
+  :root[data-mode='sorbet'] *::after {
+    animation: none !important;
+  }
+}

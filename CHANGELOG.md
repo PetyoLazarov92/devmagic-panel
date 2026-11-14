@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.58.0 (2026-11-14)
+* **Modes:** one more mode is waiting to be found
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.57.0 (2026-11-14)
 * **Modes:** one more mode is waiting to be found
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

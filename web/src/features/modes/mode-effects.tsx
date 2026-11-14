@@ -7,6 +7,7 @@ import { NeonEffects } from '@/features/modes/neon-effects';
 import { InkEffects } from '@/features/modes/ink-effects';
 import { DuneEffects } from '@/features/modes/dune-effects';
 import { PixelEffects } from '@/features/modes/pixel-effects';
+import { SorbetEffects } from '@/features/modes/sorbet-effects';
 import { useActiveMode } from '@/lib/modes';
 
 /** The most particles alive at once, so a long drag never piles them up. */
@@ -76,6 +77,8 @@ export function ModeEffects() {
   if (mode === 'dune') return effects.pointer || effects.background ? <DuneEffects pointer={effects.pointer} background={effects.background} /> : null;
   // Pixel's stars are CSS; only a click's +1 and sparks need a canvas.
   if (mode === 'pixel') return effects.pointer ? <PixelEffects /> : null;
+  // Sorbet's blobs are CSS; only a click's sprinkles need a canvas.
+  if (mode === 'sorbet') return effects.pointer ? <SorbetEffects /> : null;
   const on = mode === 'wizard' && (effects.pointer || effects.background || effects.elements);
   if (!on) return null;
   return <WizardCanvas pointer={effects.pointer} background={effects.background} elements={effects.elements} />;

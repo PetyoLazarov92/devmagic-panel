@@ -60,6 +60,12 @@ describe('mode names and lines', () => {
     expect(modeText('newSite', 'pixel')).toBe('New game');
   });
 
+  it("gives pages Sorbet's names", () => {
+    expect(pageName('Sites', 'sorbet')).toBe('Scoops');
+    expect(pageName('Services', 'sorbet')).toBe('Freezer');
+    expect(modeText('palette', 'sorbet')).toBe('What flavor?');
+  });
+
   it('says a line its own way in Wizard, and the plain one in Classic', () => {
     expect(modeText('newSite', 'wizard')).toBe('Conjure a site');
     expect(modeText('newSite', 'classic')).toBe('New site');

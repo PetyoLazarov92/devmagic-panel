@@ -134,3 +134,17 @@ export function PixelRing({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Sorbet's turning icon: three scoops, mint, strawberry and lemon, circling
+ * one another while something runs.
+ */
+export function Scoops({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} style={{ animationDuration: '1.8s' }} aria-hidden>
+      <circle cx="32" cy="14" r="10" style={{ fill: 'var(--sb-berry, currentColor)' }} />
+      <circle cx="47.6" cy="41" r="10" style={{ fill: 'var(--sb-mint, currentColor)' }} />
+      <circle cx="16.4" cy="41" r="10" style={{ fill: 'var(--sb-lemon, currentColor)' }} />
+    </svg>
+  );
+}
