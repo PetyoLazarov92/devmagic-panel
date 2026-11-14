@@ -513,6 +513,42 @@ names its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Hall of Storms
+
+A bonus mode, the last: a northern realm of old. Behind the pages a great
+runestone stands on a hill, moss on its foot and crown and a broken chain at
+its feet, with the Helm of Awe and a band of runes carved in it, under a
+stormy sky over misty hills and far mountains: by day in the light theme,
+night fallen in the dark one, when its carvings glow amber. Cards are carved
+stone with a vine trailing from the top left corner and a rune board of
+moss-covered stones in the bottom right, the Helm of Awe on the largest.
+Names are in a carved serif and whatever is chosen takes amber. The effects
+add the great stone's carvings glowing and dimming slowly, and now and then
+lightning far off in the storm (Background); runes surfacing faintly along
+your path and fading, and a rune that flares with a few sparks where you
+click a button or link, with the cursor itself unchanged (Pointer); and, while
+you point at a card, its carvings lighting up, light running along a trace
+and the vine stirring, a broken site's stone glowing red and a healthy site's
+dot glowing (Elements). The Helm of Awe turns where something runs. Pages it
+names its own way:
+
+| Classic | Hall of Storms |
+| --- | --- |
+| Demo | Training grounds |
+| Sites | Realms |
+| Aura | Seer's stone |
+| Mail | Messengers |
+| Services | Smithy |
+| WP Cores | Runestones |
+| Activity | Sagas |
+| Updates | Omens |
+| Settings | Council |
+| Modes | Rune hoard |
+| Developer options | Under the roots |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card. It lists

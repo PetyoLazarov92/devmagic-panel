@@ -19,6 +19,7 @@ import './styles/deco.css';
 import './styles/chrome.css';
 import './styles/atlas.css';
 import './styles/frostfall.css';
+import './styles/storms.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>

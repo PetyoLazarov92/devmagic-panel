@@ -335,6 +335,23 @@ describe('mode progress', () => {
     expect(state.counters.modeEarned).toBe(8);
   });
 
+  it('opens Hall of Storms only once all twelve modes are earned, with no word of its own', () => {
+    const state = emptyModesState();
+    const words = Object.values(MODE_WORDS);
+    expect(words).toHaveLength(12);
+    // Pixel opens on its own path along the way and counts as earned; its word then earns nothing more.
+    for (const word of words.slice(0, -1)) speakWord(state, word);
+    expect(state.unlocks.frostfall?.by).toBe('frostfall.collect');
+    const missing = (Object.keys(MODE_WORDS) as Array<keyof typeof MODE_WORDS>).filter((m) => !state.unlocks[m]);
+    expect(missing).toHaveLength(1);
+    expect(state.unlocks.storms).toBeUndefined();
+    expect(modesView(state).modes.find((m) => m.id === 'storms')?.bonus).toEqual({ have: 11, goal: 12 });
+    speakWord(state, MODE_WORDS[missing[0] as keyof typeof MODE_WORDS]);
+    expect(state.unlocks.storms?.by).toBe('storms.collect');
+    expect(state.counters.modeEarned).toBe(12);
+    expect(modesDeveloperView(state).modes.find((m) => m.id === 'storms')?.word).toBeUndefined();
+  });
+
   it('opens a bonus mode at start when its count was reached before it existed', () => {
     const store = memory();
     const state = emptyModesState();

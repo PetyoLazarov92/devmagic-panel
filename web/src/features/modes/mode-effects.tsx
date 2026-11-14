@@ -12,6 +12,7 @@ import { DecoEffects } from '@/features/modes/deco-effects';
 import { ChromeEffects } from '@/features/modes/chrome-effects';
 import { AtlasEffects } from '@/features/modes/atlas-effects';
 import { FrostfallEffects } from '@/features/modes/frostfall-effects';
+import { StormsEffects } from '@/features/modes/storms-effects';
 import { useActiveMode } from '@/lib/modes';
 
 /** The most particles alive at once, so a long drag never piles them up. */
@@ -91,6 +92,8 @@ export function ModeEffects() {
   if (mode === 'atlas') return effects.pointer ? <AtlasEffects /> : null;
   // Frostfall's landscape is CSS; the falling snow and a click's frost are canvases.
   if (mode === 'frostfall') return effects.pointer || effects.background ? <FrostfallEffects pointer={effects.pointer} background={effects.background} /> : null;
+  // Hall of Storms' realm and its glow are CSS; the runes along your path, a click's flare and the far lightning are canvases.
+  if (mode === 'storms') return effects.pointer || effects.background ? <StormsEffects pointer={effects.pointer} background={effects.background} /> : null;
   const on = mode === 'wizard' && (effects.pointer || effects.background || effects.elements);
   if (!on) return null;
   return <WizardCanvas pointer={effects.pointer} background={effects.background} elements={effects.elements} />;

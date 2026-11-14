@@ -84,6 +84,12 @@ describe('mode names and lines', () => {
     expect(modeText('allGood', 'frostfall')).toBe('The walls hold');
   });
 
+  it("gives pages Hall of Storms' names", () => {
+    expect(pageName('Sites', 'storms')).toBe('Realms');
+    expect(pageName('Activity', 'storms')).toBe('Sagas');
+    expect(modeText('aiReading', 'storms')).toBe('Reading the runes...');
+  });
+
   it("gives pages Chrome's names", () => {
     expect(pageName('Sites', 'chrome')).toBe('Fleet');
     expect(pageName('Activity', 'chrome')).toBe('Telemetry');

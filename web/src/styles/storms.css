@@ -1,0 +1,442 @@
+/*
+ * Hall of Storms: a northern realm of old, a bonus mode. Behind the pages a
+ * great runestone, moss on its foot and crown and a broken chain at its feet,
+ * stands on a hill under a stormy sky: by day in light, night fallen in dark,
+ * its carvings glowing amber (::after, breathing while Background is on).
+ * Cards are carved stone with a trailing vine at the top left corner and a
+ * rune board of moss-covered stones in the bottom right, the Helm of Awe on
+ * the largest; while you point at a card its carvings light up and the vine
+ * stirs. data-mode="storms" on the root, data-fx while Elements is on,
+ * data-fx-bg while Background is on; the runes along your path, a click's
+ * flare and the far lightning are canvases (features/modes/storms-effects.tsx).
+ * The pictures are in assets/modes.
+ */
+:root[data-mode='storms']:not(.dark) {
+  --background: #e6e9e2;
+  --foreground: #20261f;
+  --card: #f5f4ee;
+  --muted: #eceee6;
+  --muted-foreground: #5d655a;
+  --border: #c7cabd;
+  --input: #b8bcae;
+  --ring: #8a5a1c;
+  --primary: #8a5a1c;
+  --primary-foreground: #fbf8f0;
+  --secondary: #ecebe2;
+  --secondary-foreground: #5a3c14;
+  --success: #3f7a3a;
+  --warning: #8a6100;
+  --danger: #b0392e;
+  --hs-amber: #b06a1a;
+  --hs-moss: #6f8f45;
+  --hs-raised: #fbfaf5;
+  --hs-chosen-ink: #5a3410;
+  --hs-stone: #ebe9e1;
+  --hs-land: url('../assets/modes/storms-land-light.svg');
+  --hs-glow: url('../assets/modes/storms-glow-light.svg');
+  --hs-board: url('../assets/modes/storms-board-light.svg');
+  --hs-board-lit: url('../assets/modes/storms-board-lit-light.svg');
+  --hs-vine: url('../assets/modes/storms-vine-light.svg');
+  --hs-vine-live: url('../assets/modes/storms-vine-live-light.svg');
+}
+:root[data-mode='storms'].dark {
+  --background: #0c1218;
+  --foreground: #e6e8e0;
+  --card: #1b2120;
+  --muted: #1f2624;
+  --muted-foreground: #a3a89c;
+  --border: #333c38;
+  --input: #3e4844;
+  --ring: #e8a640;
+  --primary: #e8a640;
+  --primary-foreground: #10161a;
+  --secondary: #222a27;
+  --secondary-foreground: #f0d49a;
+  --success: #9ccc7a;
+  --warning: #f0c060;
+  --danger: #f0806a;
+  --hs-amber: #ffb347;
+  --hs-moss: #5d8040;
+  --hs-raised: #1f2624;
+  --hs-chosen-ink: #f6dca6;
+  --hs-stone: #232a28;
+  --hs-land: url('../assets/modes/storms-land-dark.svg');
+  --hs-glow: url('../assets/modes/storms-glow-dark.svg');
+  --hs-board: url('../assets/modes/storms-board-dark.svg');
+  --hs-board-lit: url('../assets/modes/storms-board-lit-dark.svg');
+  --hs-vine: url('../assets/modes/storms-vine-dark.svg');
+  --hs-vine-live: url('../assets/modes/storms-vine-live-dark.svg');
+}
+:root[data-mode='storms'] {
+  --font-storm: 'Cinzel', 'Trajan Pro', 'Cormorant SC', 'Marcellus SC', 'Palatino Linotype', Palatino, 'URW Palladio L', P052, Georgia, serif;
+  --hs-chosen: color-mix(in srgb, var(--hs-amber) 13%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --hs-veil: 88%;
+  scrollbar-color: color-mix(in srgb, var(--hs-amber) 30%, var(--border)) transparent;
+}
+:root[data-mode='storms'].dark {
+  --hs-chosen: color-mix(in srgb, var(--hs-amber) 15%, var(--card));
+}
+
+/* The realm behind every page, drawn once and fixed; the stone's carvings lie over it, lit. */
+:root[data-mode='storms'] body::before,
+:root[data-mode='storms'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+:root[data-mode='storms'] body::before {
+  background: var(--hs-land) center bottom / cover no-repeat;
+  opacity: 0.92;
+}
+:root[data-mode='storms'] body::after {
+  background: var(--hs-glow) center bottom / cover no-repeat;
+  opacity: 0.8;
+}
+/* The background effect: the carvings glow and dim, slowly. */
+:root[data-mode='storms'][data-fx-bg] body::after {
+  animation: hs-breathe 7s ease-in-out infinite;
+}
+@keyframes hs-breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+/* Names: page titles, card titles and dialogs in a carved serif. */
+:root[data-mode='storms'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-storm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+:root[data-mode='storms'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-storm);
+  letter-spacing: 0.02em;
+}
+:root[data-mode='storms'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-storm);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/*
+ * Cards: carved stone. A vine trails from the top left corner (a background
+ * layer, behind the text), and the rune board of mossy stones sits in the
+ * bottom right (::after). While you point at the card its carvings light up
+ * and light runs along a trace (::before, the same box as the board, so they
+ * line up at any size), and the vine's leaves stir.
+ */
+:root[data-mode='storms'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 3px;
+  border-color: color-mix(in srgb, var(--hs-moss) 18%, var(--border));
+  background-image: var(--hs-vine), linear-gradient(160deg, var(--hs-stone), var(--card) 60%);
+  background-repeat: no-repeat;
+  background-size: 245px 92px, 100% 100%;
+  background-position: -2px -2px, left top;
+  box-shadow: inset 0 -16px 28px -22px color-mix(in srgb, #10161a 45%, transparent), 0 6px 18px -14px color-mix(in srgb, #10161a 50%, transparent);
+}
+:root[data-mode='storms'][data-fx] [data-ui='card']:hover {
+  background-image: var(--hs-vine-live), linear-gradient(160deg, var(--hs-stone), var(--card) 60%);
+}
+:root[data-mode='storms'] [data-ui='card']::after,
+:root[data-mode='storms'] [data-ui='card']::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  height: min(130px, calc(100% - 14px));
+  aspect-ratio: 190 / 130;
+  z-index: -1;
+  pointer-events: none;
+}
+:root[data-mode='storms'] [data-ui='card']::after {
+  /* Below the lit layer, so the glow lies over the stones, not under them. */
+  z-index: -2;
+  background: var(--hs-board) right bottom / contain no-repeat;
+  opacity: 0.95;
+}
+:root[data-mode='storms'] [data-ui='card']::before {
+  background: none right bottom / contain no-repeat;
+  opacity: 0;
+}
+/*
+ * Leaving the card, the glow fades slowly and the pulses keep moving until it
+ * is gone; only then is the lit picture dropped (a discrete transition at the
+ * halfway point of twice the fade), so nothing runs on a card at rest.
+ * Pointing at it again lights it at once.
+ */
+:root[data-mode='storms'][data-fx] [data-ui='card']::before {
+  transition: opacity 1.6s ease, background-image 3.2s allow-discrete;
+}
+:root[data-mode='storms'][data-fx] [data-ui='card']:hover::before {
+  background-image: var(--hs-board-lit);
+  opacity: 0.8;
+  transition: opacity 0.5s ease;
+}
+:root[data-mode='storms'] dialog [data-ui='card'] {
+  background-image: none;
+  box-shadow: none;
+}
+:root[data-mode='storms'] dialog [data-ui='card']::after,
+:root[data-mode='storms'] dialog [data-ui='card']::before {
+  display: none;
+}
+
+/* A broken site: its stone glows red from the edges in. */
+:root[data-mode='storms'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  box-shadow: inset 0 0 30px -12px color-mix(in srgb, var(--danger) 55%, transparent);
+}
+/* A healthy dot glows like moss in the light now and then; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='storms'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='storms'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 7px 1px color-mix(in srgb, var(--success) 55%, transparent);
+  animation: hs-shine 6s ease-in-out infinite;
+}
+@keyframes hs-shine {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* Everything else with a frame: nearly square. */
+:root[data-mode='storms'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 3px;
+}
+:root[data-mode='storms'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='storms'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #20261f 40%, transparent);
+}
+:root[data-mode='storms'] [data-ui='tile'] {
+  border-radius: 3px;
+}
+:root[data-mode='storms']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='storms'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 3px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--hs-veil), transparent);
+}
+:root[data-mode='storms'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='storms'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='storms'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='storms'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--hs-veil), transparent);
+}
+:root[data-mode='storms'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--hs-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='storms'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='storms'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--hs-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #10161a 50%, transparent);
+}
+:root[data-mode='storms'] [data-ui='dialog'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--hs-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #10161a 60%, transparent);
+}
+:root[data-mode='storms'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='storms'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #10161a 50%, transparent);
+}
+:root[data-mode='storms'] :is([role='menuitem'], [role='option']) {
+  border-radius: 3px;
+}
+:root[data-mode='storms'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--hs-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='storms'] select.dmp-select::picker(select) {
+    border-radius: 4px;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--hs-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #10161a 50%, transparent);
+  }
+  :root[data-mode='storms'] select.dmp-select option {
+    border-radius: 4px;
+  }
+  :root[data-mode='storms'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--hs-chosen);
+  }
+  :root[data-mode='storms'] select.dmp-select option:checked {
+    background: var(--hs-chosen);
+    color: var(--hs-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, an amber edge while you type. */
+:root[data-mode='storms'] [data-ui='input'] {
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='storms'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='storms'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: nearly square; the main one a soft amber. */
+:root[data-mode='storms'] [data-ui='button'],
+:root[data-mode='storms'] [data-ui='chip'] {
+  border-radius: 3px;
+}
+:root[data-mode='storms'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--hs-amber) 50%, transparent);
+  background-color: var(--hs-chosen);
+  color: var(--hs-chosen-ink);
+}
+:root[data-mode='storms'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--hs-amber) 20%, var(--card));
+}
+:root[data-mode='storms'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--hs-veil), transparent);
+}
+
+/* Whatever is chosen: a soft amber fill. */
+:root[data-mode='storms'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--hs-amber) 50%, transparent);
+  background: var(--hs-chosen);
+  color: var(--hs-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='storms'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 3px;
+  background: var(--hs-chosen);
+  color: var(--hs-chosen-ink);
+}
+:root[data-mode='storms'] [data-ui='segmented'],
+:root[data-mode='storms'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 3px;
+}
+:root[data-mode='storms'] [role='tab'][aria-selected='true'] {
+  border-color: var(--hs-amber);
+  color: var(--hs-chosen-ink);
+}
+
+/* Switches: amber when on. */
+:root[data-mode='storms'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='storms'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='storms'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: nearly square, an amber mark when ticked. */
+:root[data-mode='storms'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='storms'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='storms'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--hs-amber);
+  background-color: var(--hs-chosen);
+}
+:root[data-mode='storms'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--hs-amber);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='storms'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--hs-amber);
+}
+:root[data-mode='storms'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='storms'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: amber into moss, softly. */
+:root[data-mode='storms'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--hs-amber) 60%, var(--card)), color-mix(in oklab, var(--hs-moss) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint rune-carved rule; the page you are on in a soft amber fill. */
+:root[data-mode='storms'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='storms'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 3px;
+  background: var(--hs-chosen);
+  color: var(--hs-chosen-ink);
+}
+
+/* Hall of Storms' thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='storms'] {
+  --t-bg: #e6e9e2;
+  --t-side: #dde1d8;
+  --t-line: #c7cabd;
+  --t-accent: #b06a1a;
+  --t-ink: #20261f;
+  --t-card: #f5f4ee;
+}
+.dark .mode-thumb[data-thumb='storms'] {
+  --t-bg: #0c1218;
+  --t-side: #111820;
+  --t-line: #333c38;
+  --t-accent: #ffb347;
+  --t-ink: #e6e8e0;
+  --t-card: #1b2120;
+}
+.mode-thumb[data-thumb='storms'] .mt-main i {
+  border-radius: 1px;
+  box-shadow: inset 2px 2px 0 color-mix(in srgb, #6f8f45 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='storms'] :not(.rune-turning),
+  :root[data-mode='storms'] *::before,
+  :root[data-mode='storms'] *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -212,3 +212,21 @@ export function Snowflake({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Hall of Storms' turning icon: the Helm of Awe, eight staves around a ring,
+ * each with two bars and a fork, turning slowly while something runs.
+ */
+export function HelmOfAwe({ className }: { className?: string }) {
+  const arm = 'M32 26 V12 M28.5 20 H35.5 M28.5 15.5 H35.5 M32 12 L28.5 7.5 M32 12 L35.5 7.5 M32 12 V6.5';
+  return (
+    <svg viewBox="0 0 64 64" className={className} aria-hidden>
+      <g className="rune-turning" style={{ animationDuration: '3s', transformOrigin: '32px 32px' }} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+        <circle cx="32" cy="32" r="5" />
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => (
+          <path key={a} d={arm} transform={`rotate(${a} 32 32)`} />
+        ))}
+      </g>
+    </svg>
+  );
+}
