@@ -20,7 +20,11 @@ export default defineConfig({
   define: { __PANEL_VERSION__: JSON.stringify(version) },
   plugins: [react(), tailwindcss(), demoHtml()],
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: [
+      // The public demo is a showcase of the modes, built without their secrets (mock/modes-demo.ts).
+      ...(process.env.VITE_DEMO === '1' ? [{ find: /^@\/mock\/modes$/, replacement: fileURLToPath(new URL('./src/mock/modes-demo.ts', import.meta.url)) }] : []),
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+    ],
   },
   server: {
     host: '127.0.0.1',

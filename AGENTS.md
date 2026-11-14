@@ -372,6 +372,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
     never sent anywhere, and a word typed in Ctrl+K is compared on the server
     (`/api/modes/word/check`) and dropped: the panel's web app never holds the
     words, and no line of its text contains one (`web/test/modes.test.ts`).
+    The public demo is a showcase with every mode open (`web/src/mock/modes-demo.ts`,
+    swapped in by `web/vite.config.ts`): no words, paths, rules or daily lines, and
+    `scripts/demo/finish.mjs` fails the demo build if one turns up.
     A mode changes looks, names and a few lines, never errors, warnings,
     status labels or anything that removes something.
 

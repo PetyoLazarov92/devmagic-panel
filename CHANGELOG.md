@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.65.3 (2026-11-14)
+* **Demo:** the public demo is now a showcase of the modes: every mode is open to try from the start, and nothing about how one opens ships with it, no words, paths or lines for today. Its build stops if one ever turns up
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.65.2 (2026-11-14)
 * **Modes:** the panel's web app no longer carries the modes' secret words: Ctrl+K asks the panel which mode a word opens, so the words stay on this computer's server. Two mode lines that gave a word away are reworded, and Hall of Storms names the demo Sparring
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

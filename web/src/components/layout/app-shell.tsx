@@ -157,7 +157,8 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             <PanelStatusIndicator />
             <JobsIndicator />
             <QueuedProposals />
-            <DailyLine />
+            {/* The line for today lives in the real panel; the public demo shows every mode and keeps no words. */}
+            {!isDemo && <DailyLine />}
             <ThemeToggle className="hidden md:inline-flex" />
             {assistantOn && (
               <Button variant="outline" onClick={() => setAssistantOpen(true)} title="Ask Claude about your sites">

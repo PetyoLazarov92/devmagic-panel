@@ -558,3 +558,7 @@ have to find first. Solved, the card shows them, with buttons to unlock and
 seal each mode and to fill or reset its paths; an unlock from there shows the
 unlock dialog, as any other. The dialog opens with its Switch button ready, so
 Enter switches. Switching Developer options off locks the card again.
+
+The public demo is a showcase: every mode is open there from
+the start, to try them all. How a mode opens, its word and the line for today
+belong to the panel itself, so none of them ship with the demo.

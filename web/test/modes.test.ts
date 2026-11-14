@@ -20,6 +20,19 @@ describe('the modes secrets stay out of the web app', () => {
     expect(offenders).toEqual([]);
   });
 
+  it("keeps the public demo's modes free of them: every mode open, nothing about how one opens", async () => {
+    const source = readFileSync(join(__dirname, '../src/mock/modes-demo.ts'), 'utf8');
+    expect(source).not.toMatch(/\b(MODE_WORDS|MODE_WORD_LINE|MODE_PATHS|modeForWord|speakWord|DAILY_LINES|dailyLine\(|checkPaths|countMode|modesDeveloperView|modesView)\b/);
+    const { mockModesApi, mockModeOpen } = await import('../src/mock/modes-demo.js');
+    const view = await mockModesApi.modes();
+    expect(view.modes.every((m) => m.unlocked && !m.riddles)).toBe(true);
+    expect(view.fresh).toEqual([]);
+    expect(await mockModesApi.modeWordCheck('anything')).toEqual({ mode: null });
+    await expect(mockModesApi.dailyLine()).rejects.toThrow();
+    await expect(mockModesApi.modesDeveloper()).rejects.toThrow();
+    expect(mockModeOpen('storms')).toBe(true);
+  });
+
   it('never writes a word anywhere in its text, not even inside a line', () => {
     const text = webSources().map((file) => readFileSync(file, 'utf8').toLowerCase()).join('\n');
     const found = Object.values(MODE_WORDS).filter((w) => new RegExp(`\\b${w}\\b`).test(text));

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { ModeThumb } from '@/features/modes/mode-thumb';
+import { isDemo } from '@/lib/api';
 import { refreshModes, setPreviewMode, useModesView, usePreviewMode, useReducedMotion } from '@/lib/modes';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 import { cn } from '@/lib/utils';
@@ -65,7 +66,7 @@ export function ModesPage() {
 
   return (
     <div className="pt-4">
-      <PageHeader title="Modes" intro="How the panel looks, on top of light and dark. Some modes are sealed: they open as you use the panel." />
+      <PageHeader title="Modes" intro={isDemo ? 'How the panel looks, on top of light and dark. In the demo every mode is open to try; in the panel they open as you use it.' : 'How the panel looks, on top of light and dark. Some modes are sealed: they open as you use the panel.'} />
       {previewing && (
         <Notice
           tone="info"
@@ -96,7 +97,7 @@ export function ModesPage() {
           {bonus.length > 0 && (
             <section className="mt-8" aria-labelledby="bonus-modes">
               <h2 id="bonus-modes" className="text-sm font-semibold">
-                Bonus<span className="font-normal text-muted-foreground"> · they open as you find the other modes</span>
+                Bonus<span className="font-normal text-muted-foreground"> · {isDemo ? 'in the panel, they open as you find the other modes' : 'they open as you find the other modes'}</span>
               </h2>
               <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {bonus.map((m) => (m.unlocked ? <UnlockedMode key={m.id} mode={m} onActivate={() => activate(m.id)} onPreview={() => preview(m.id)} /> : <BonusSealed key={m.id} mode={m} />))}

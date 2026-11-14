@@ -4,9 +4,22 @@
     {
       "name": "mockup",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "source ~/.nvm/nvm.sh >/dev/null 2>&1; nvm use >/dev/null 2>&1; exec npm run mockup"],
+      "runtimeArgs": [
+        "-c",
+        "source ~/.nvm/nvm.sh >/dev/null 2>&1; nvm use >/dev/null 2>&1; exec npm run mockup"
+      ],
       "port": 5173,
       "url": "http://127.0.0.1:5173"
+    },
+    {
+      "name": "demo",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "source ~/.nvm/nvm.sh >/dev/null 2>&1; nvm use >/dev/null 2>&1; exec npm run demo:serve"
+      ],
+      "port": 4180,
+      "url": "http://127.0.0.1:4180"
     }
   ]
 }
