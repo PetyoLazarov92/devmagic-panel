@@ -311,9 +311,18 @@ export function countMode(state: ModesState, counter: ModeCounter, now = new Dat
 }
 
 /** A word typed in Ctrl+K: unlocks its mode when it is one, and is never kept. Changes `state`. */
-export function speakWord(state: ModesState, text: string, now = new Date()): SealedModeId | null {
+/**
+ * The mode a word opens, or null: the whole word, any case, nothing for part of
+ * one. Only the server and the mockup's stand-in for it compare; the panel's
+ * web app asks the server, so the words never ship to the browser.
+ */
+export function modeForWord(text: string): WordModeId | null {
   const word = text.trim().toLowerCase();
-  const mode = (Object.keys(MODE_WORDS) as WordModeId[]).find((m) => MODE_WORDS[m] === word);
+  return (Object.keys(MODE_WORDS) as WordModeId[]).find((m) => MODE_WORDS[m] === word) ?? null;
+}
+
+export function speakWord(state: ModesState, text: string, now = new Date()): SealedModeId | null {
+  const mode = modeForWord(text);
   if (!mode || isUnlocked(state, mode)) return null;
   unlock(state, mode, 'word', now);
   // A mode earned may finish a path that counts modes earned; that one shows its own dialog after.

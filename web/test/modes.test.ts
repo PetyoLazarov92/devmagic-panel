@@ -1,5 +1,31 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { MODE_WORDS } from '@devmagic-panel/shared';
 import { modeText, pageName } from '../src/lib/mode-names.js';
+
+/** Every source file of the web app, but the mockup's stand-in for the server. */
+function webSources(dir = join(__dirname, '../src')): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const path = join(dir, e.name);
+    if (e.isDirectory()) return e.name === 'mock' ? [] : webSources(path);
+    return /\.(ts|tsx)$/.test(e.name) ? [path] : [];
+  });
+}
+
+describe('the modes secrets stay out of the web app', () => {
+  it('never imports the words, the paths or the daily lines outside the mockup', () => {
+    const secret = /\b(MODE_WORDS|MODE_WORD_LINE|MODE_PATHS|modeForWord|speakWord|DAILY_LINES|MODE_PUZZLES|modesDeveloperView)\b/;
+    const offenders = webSources().filter((file) => secret.test(readFileSync(file, 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+
+  it('never writes a word anywhere in its text, not even inside a line', () => {
+    const text = webSources().map((file) => readFileSync(file, 'utf8').toLowerCase()).join('\n');
+    const found = Object.values(MODE_WORDS).filter((w) => new RegExp(`\\b${w}\\b`).test(text));
+    expect(found).toEqual([]);
+  });
+});
 
 describe('mode names and lines', () => {
   it("gives pages Wizard's names and leaves the rest, and Classic its own", () => {

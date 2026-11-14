@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.65.2 (2026-11-14)
+* **Modes:** the panel's web app no longer carries the modes' secret words: Ctrl+K asks the panel which mode a word opens, so the words stay on this computer's server. Two mode lines that gave a word away are reworded, and Hall of Storms names the demo Sparring
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.65.1 (2026-11-14)
 * **Modes:** Hall of Storms' runes along your path come a little closer together, move a little quicker and glow brighter, still easing in and out
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

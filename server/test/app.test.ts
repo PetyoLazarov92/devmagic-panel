@@ -306,6 +306,11 @@ describe('modes', () => {
     expect(JSON.stringify(first)).not.toMatch(/abracadabra|overclock|ignite|bloom|dive|afterglow|calligraphy|sandstorm|extralife|brainfreeze|champagne|quicksilver/);
     expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard' } })).statusCode).toBe(400);
 
+    // Ctrl+K asks which mode a word opens while it is typed: the server answers, unlocking and counting nothing.
+    expect((await app.inject({ method: 'POST', url: '/api/modes/word/check', headers, payload: { word: ' Abracadabra ' } })).json()).toEqual({ mode: 'wizard' });
+    expect((await app.inject({ method: 'POST', url: '/api/modes/word/check', headers, payload: { word: 'abracad' } })).json()).toEqual({ mode: null });
+    expect((await app.inject({ method: 'POST', url: '/api/modes/word/check', headers, payload: { word: 7 } })).json()).toEqual({ mode: null });
+    expect((await app.inject({ method: 'GET', url: '/api/modes', headers })).json().modes.find((m: { id: string }) => m.id === 'wizard').unlocked).toBe(false);
     expect((await app.inject({ method: 'POST', url: '/api/modes/word', headers, payload: { word: 'hocus' } })).json().unlocked).toBeNull();
     const spoken = (await app.inject({ method: 'POST', url: '/api/modes/word', headers, payload: { word: ' Abracadabra ' } })).json();
     expect(spoken.unlocked).toBe('wizard');

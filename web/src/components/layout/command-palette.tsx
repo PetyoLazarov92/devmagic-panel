@@ -17,8 +17,8 @@ import { siteSections } from '@/lib/site-tabs';
 import { SITE_TAB_ICONS } from '@/features/site/site-shared';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
-import { reportModeEvent, speakModeWord, useActiveMode, useModeText, useModesEntry, useModesView, usePageName } from '@/lib/modes';
-import { EFFECTS_ON, MODE_INFO, MODE_WORDS, type WordModeId } from '@devmagic-panel/shared';
+import { reportModeEvent, speakModeWord, useActiveMode, useModeText, useModeWord, useModesEntry, useModesView, usePageName } from '@/lib/modes';
+import { EFFECTS_ON, MODE_INFO } from '@devmagic-panel/shared';
 import { savePreferences, usePreferences } from '@/lib/preferences';
 
 interface Command {
@@ -171,9 +171,10 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
   const q = query.trim().toLowerCase();
   // A mode's whole word, typed exactly, and nothing for part of a word, so typing gives no hints: sealed, a
   // command to unlock it; unlocked, one to switch to it; already on, one that says so and opens the Modes page.
+  // The server says which word is which (useModeWord), so the words are never in the web app.
   const modes = useModesView();
   const prefs = usePreferences();
-  const spoken = (Object.keys(MODE_WORDS) as WordModeId[]).find((m) => MODE_WORDS[m] === q);
+  const spoken = useModeWord(query);
   const spokenView = spoken ? modes?.modes.find((x) => x.id === spoken) : undefined;
   const unlock: Command | null =
     !spoken || !spokenView

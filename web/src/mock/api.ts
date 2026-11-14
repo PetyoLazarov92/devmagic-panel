@@ -1,6 +1,6 @@
 import type { BackgroundTask, PanelStorage, HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, WporgDetails, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
-import { checkPaths, dailyLine, localDate, nextPuzzle, type ModePuzzle, puzzleQuestion, countMode, startFreshPaths, emptyModesState, isUnlocked, type ModesState, modesDeveloper, modesDeveloperView, modesView, readModesState, speakWord, accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
+import { checkPaths, dailyLine, modeForWord, localDate, nextPuzzle, type ModePuzzle, puzzleQuestion, countMode, startFreshPaths, emptyModesState, isUnlocked, type ModesState, modesDeveloper, modesDeveloperView, modesView, readModesState, speakWord, accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
@@ -1419,6 +1419,7 @@ export const mockApi: Api = {
   modes: async () => modesView(mockModes()),
   modeSeen: async (mode) => modesView(changeMockModes((st) => { const done = st.unlocks[mode]; if (done) done.seen = true; })),
   modeEvent: async (event) => modesView(changeMockModes((st) => countMode(st, event))),
+  modeWordCheck: async (word) => ({ mode: modeForWord(word) }),
   modeWord: async (word) => {
     let unlocked: string | null = null;
     const state = changeMockModes((st) => { unlocked = speakWord(st, word); });

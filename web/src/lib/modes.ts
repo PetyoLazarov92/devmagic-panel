@@ -1,5 +1,5 @@
-import { type BrowserCounter, EFFECTS_OFF, type ModeEffects, type ModeId, type ModesView, MODES } from '@devmagic-panel/shared';
-import { useEffect, useSyncExternalStore } from 'react';
+import { type BrowserCounter, EFFECTS_OFF, type ModeEffects, type ModeId, type ModesView, MODES, type WordModeId } from '@devmagic-panel/shared';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { api } from '@/lib/api';
 import { usePreferences } from '@/lib/preferences';
 import { type ModeTextKey, modeText, pageName } from '@/lib/mode-names';
@@ -67,6 +67,33 @@ export async function speakModeWord(word: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The mode a word typed in Ctrl+K opens, asked of the server while you type,
+ * so the words never ship to the browser: only a single plain word of a
+ * sensible length is asked about, a moment after typing stops. Null for
+ * anything else, and while the answer is on its way.
+ */
+export function useModeWord(text: string): WordModeId | null {
+  const q = text.trim().toLowerCase();
+  const asking = /^[a-z]{3,20}$/.test(q);
+  const [answer, setAnswer] = useState<{ q: string; mode: WordModeId | null } | null>(null);
+  useEffect(() => {
+    if (!asking) return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      api.modeWordCheck(q).then(
+        (r) => live && setAnswer({ q, mode: r.mode }),
+        () => live && setAnswer({ q, mode: null }),
+      );
+    }, 180);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [q, asking]);
+  return asking && answer?.q === q ? answer.mode : null;
 }
 
 /** Shows a mode on this page for a moment, without saving it; null ends it. */

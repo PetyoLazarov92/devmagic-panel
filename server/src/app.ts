@@ -2,8 +2,8 @@ import { createReadStream, existsSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, TaskRun, ApacheReport, ModesDeveloperView, ModePuzzleQuestion, ModesView, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
-import { browserCounter, FILE_TEXT_MAX, gitUrl, MODE_PATHS, nextPuzzle, puzzleQuestion, sealedModeId, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
+import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, TaskRun, ApacheReport, ModesDeveloperView, ModePuzzleQuestion, ModesView, WordModeId, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import { browserCounter, FILE_TEXT_MAX, gitUrl, MODE_PATHS, modeForWord, nextPuzzle, puzzleQuestion, sealedModeId, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
@@ -795,6 +795,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const word = (request.body as { word?: unknown } | null)?.word;
       const unlocked = typeof word === 'string' && word.length <= 40 ? modes.word(word) : null;
       return { ...modes.view(), unlocked };
+    });
+    // While a word is typed in Ctrl+K: which mode it is, if any, so the palette can offer it. Unlocks nothing,
+    // counts nothing, and is never logged or kept; the browser never holds the words.
+    api.post<{ Body: unknown }>('/api/modes/word/check', async (request): Promise<{ mode: WordModeId | null }> => {
+      const word = (request.body as { word?: unknown } | null)?.word;
+      return { mode: typeof word === 'string' && word.length <= 40 ? modeForWord(word) : null };
     });
     // The daily line: one thought a day with a secret word in bold; it opens by itself the first time the panel is opened that day.
     api.get('/api/modes/line', async () => modes.line());

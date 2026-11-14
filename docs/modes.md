@@ -534,7 +534,7 @@ names its own way:
 
 | Classic | Hall of Storms |
 | --- | --- |
-| Demo | Training grounds |
+| Demo | Sparring |
 | Sites | Realms |
 | Aura | Seer's stone |
 | Mail | Messengers |

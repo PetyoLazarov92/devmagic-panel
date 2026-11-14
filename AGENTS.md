@@ -369,7 +369,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
     Modes page shows riddles only, and Developer options the rules only once
     its puzzle is solved (`server/src/app.ts` keeps them back until then).
     Its progress is counters in the panel's database (`server/src/modes.ts`),
-    never sent anywhere, and a word typed in Ctrl+K is compared and dropped.
+    never sent anywhere, and a word typed in Ctrl+K is compared on the server
+    (`/api/modes/word/check`) and dropped: the panel's web app never holds the
+    words, and no line of its text contains one (`web/test/modes.test.ts`).
     A mode changes looks, names and a few lines, never errors, warnings,
     status labels or anything that removes something.
 
