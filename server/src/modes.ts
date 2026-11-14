@@ -2,6 +2,16 @@ import { type BrowserCounter, countMode, startFreshPaths, isUnlocked as unlocked
 
 /** The meta row that holds the counters, where each path started and what is unlocked. */
 export const MODES_KEY = 'modes';
+/** The panel version the modes last saw running, to notice an update. */
+export const VERSION_KEY = 'modes-version';
+
+/** Whether a version like 1.51.0 (or v1.51.0) is newer than another. */
+export function newerVersion(a: string, b: string): boolean {
+  const parts = (v: string) => v.replace(/^v/, '').split(/[.-]/).slice(0, 3).map((n) => Number.parseInt(n, 10) || 0);
+  const [x, y] = [parts(a), parts(b)];
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
+}
 
 interface MetaStore {
   getMeta(key: string): string | undefined;
@@ -36,8 +46,15 @@ export class ModeProgress {
   }
 
   /** One more of something the server saw finish; `key` counts it once per key. */
-  count(counter: ModeCounter, key?: string): SealedModeId[] {
-    return this.change((state, now) => countMode(state, counter, now, key));
+  count(counter: ModeCounter, key?: string, amount = 1): SealedModeId[] {
+    return this.change((state, now) => countMode(state, counter, now, key, amount));
+  }
+
+  /** The panel started on `version`: one panel update when it is newer than the one it ran before (a switch back is not one). */
+  noteVersion(version: string): SealedModeId[] {
+    const before = this.store.getMeta(VERSION_KEY);
+    this.store.setMeta(VERSION_KEY, version);
+    return before && newerVersion(version, before) ? this.count('panelUpdate') : [];
   }
 
   /** One more of something the browser reports, at most once a second each. */
@@ -97,8 +114,14 @@ export class ModeProgress {
   }
 }
 
-/** Action runs that count, once they finished well: an Undo, or a site moved onto nginx (once per site). */
+/** Action runs that count, once they started or finished well: an Undo, a site moved onto nginx (once per site), the plugins and themes updated, a site's PHP switched. */
 export function countAction(progress: ModeProgress, id: string, input: unknown): void {
+  if (id === 'site.updatePlugins' && input && typeof input === 'object') {
+    const { plugins, themes } = input as { plugins?: unknown; themes?: unknown };
+    const n = (Array.isArray(plugins) ? plugins.length : 0) + (Array.isArray(themes) ? themes.length : 0);
+    if (n > 0) progress.count('pluginUpdate', undefined, n);
+  }
+  if (id === 'site.setPhp') progress.count('phpSwitch');
   if (id === 'mysql.undoRowChange' || id === 'mysql.undoCleanup' || id === 'cron.undo' || id === 'wpcron.undo') progress.count('undo');
   if (id === 'site.setServer' && input && typeof input === 'object') {
     const { domain, server } = input as { domain?: unknown; server?: unknown };

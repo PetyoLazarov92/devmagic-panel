@@ -137,6 +137,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   // The modes' paths: a site the New site wizard finished, a job undone. Counted in the panel's database, sent nowhere.
   const modes = new ModeProgress(deps.store);
+  // A start on a newer version than the last one counts as a panel update.
+  modes.noteVersion(deps.version);
   jobs.onEnd((view) => {
     if (view.status === 'done' && view.kind === 'site.create') modes.count('siteWizard');
     if (view.status === 'undone') modes.count('undo');

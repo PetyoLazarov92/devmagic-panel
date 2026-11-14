@@ -1,0 +1,441 @@
+/*
+ * Forge: a smithy. Iron plates with a faint highlight on top and thin molten
+ * cracks in one corner, ember orange and molten gold, a sturdy slab serif for
+ * names. Soft colors, as the other modes': a warm tint for what is chosen,
+ * never a hard fill. data-mode="forge" on the root, data-fx while Elements
+ * is on, as in modes.css; sparks and embers on one canvas
+ * (features/modes/forge-effects.tsx).
+ */
+:root[data-mode='forge']:not(.dark) {
+  --background: #efe8e1;
+  --foreground: #2a1d14;
+  --card: #f8f3ee;
+  --muted: #ece3d9;
+  --muted-foreground: #7a6250;
+  --border: #d8c8b8;
+  --input: #cdb9a6;
+  --ring: #c4501a;
+  --primary: #c4501a;
+  --primary-foreground: #fff6ee;
+  --secondary: #f5e3d4;
+  --secondary-foreground: #7a2e0c;
+  --success: #4f7d1e;
+  --warning: #9a5b00;
+  --danger: #b42318;
+  --fg-gold: #9a6a22;
+  --fg-ember: #c4501a;
+  --fg-raised: #fcf8f4;
+  --fg-hi: rgba(255, 255, 255, 0.6);
+  --fg-cracks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='190' height='112'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M190 78 158 73 137 89 108 82 90 102 M158 73 149 48 126 41 112 24 M137 89 133 112 M108 82 99 64 74 66 58 54 M126 41 104 46 M149 48 170 36 M74 66 70 84' stroke='%23c4501a' stroke-opacity='.14' stroke-width='6'/%3E%3Cpath d='M190 78 158 73 137 89 108 82 90 102 M158 73 149 48 126 41 112 24 M137 89 133 112 M108 82 99 64 74 66 58 54 M126 41 104 46 M149 48 170 36 M74 66 70 84' stroke='%23d9762e' stroke-opacity='.7' stroke-width='1.3'/%3E%3C/g%3E%3C/svg%3E");
+}
+:root[data-mode='forge'].dark {
+  --background: #15110e;
+  --foreground: #f3e7da;
+  --card: #241e19;
+  --muted: #2e261f;
+  --muted-foreground: #b49c86;
+  --border: #4a3a2d;
+  --input: #5a4636;
+  --ring: #ff7a2e;
+  --primary: #ff8a3d;
+  --primary-foreground: #1a0f08;
+  --secondary: #3a2618;
+  --secondary-foreground: #ffc79a;
+  --success: #9ccf6a;
+  --warning: #f0b354;
+  --danger: #ff6b5a;
+  --fg-gold: #e2a64a;
+  --fg-ember: #ff7a2e;
+  --fg-raised: #2e2620;
+  --fg-hi: rgba(255, 255, 255, 0.05);
+  --fg-cracks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='190' height='112'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M190 78 158 73 137 89 108 82 90 102 M158 73 149 48 126 41 112 24 M137 89 133 112 M108 82 99 64 74 66 58 54 M126 41 104 46 M149 48 170 36 M74 66 70 84' stroke='%23ff7a2e' stroke-opacity='.2' stroke-width='6'/%3E%3Cpath d='M190 78 158 73 137 89 108 82 90 102 M158 73 149 48 126 41 112 24 M137 89 133 112 M108 82 99 64 74 66 58 54 M126 41 104 46 M149 48 170 36 M74 66 70 84' stroke='%23ffb35c' stroke-opacity='.8' stroke-width='1.3'/%3E%3C/g%3E%3C/svg%3E");
+}
+:root[data-mode='forge'] {
+  --font-forge: 'Roboto Slab', 'Rockwell', 'Zilla Slab', 'Bitter', 'DejaVu Serif', Georgia, serif;
+  /* The soft fill of whatever is chosen: a warm tint, with a gold line. */
+  --fg-chosen: color-mix(in srgb, var(--primary) 14%, var(--card));
+  --fg-chosen-ink: color-mix(in srgb, var(--primary) 80%, var(--foreground));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --fg-veil: 80%;
+  scrollbar-color: color-mix(in srgb, var(--primary) 30%, var(--border)) transparent;
+}
+:root[data-mode='forge'].dark {
+  --fg-chosen: color-mix(in srgb, var(--primary) 16%, var(--card));
+  --fg-chosen-ink: var(--secondary-foreground);
+}
+
+/* Names: page titles, card titles, the menu and dialogs in a sturdy slab serif. */
+:root[data-mode='forge'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-forge);
+  font-weight: 700;
+}
+:root[data-mode='forge'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-forge);
+  font-weight: 600;
+}
+:root[data-mode='forge'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-forge);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-gold);
+}
+
+/*
+ * Cards: an iron plate. A faint highlight along the top, a dark line under
+ * it, and thin molten cracks in the bottom right corner (::after), fading out
+ * before the text. While Elements is on the cracks breathe, by their opacity
+ * only.
+ */
+:root[data-mode='forge'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--fg-gold) 25%, var(--border));
+  background: linear-gradient(180deg, var(--fg-hi), transparent 30%), var(--card);
+  box-shadow: inset 0 1px 0 var(--fg-hi), 0 1px 0 color-mix(in srgb, #000 25%, transparent);
+}
+:root[data-mode='forge'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 190px;
+  height: 112px;
+  max-width: 100%;
+  max-height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0 0 4px 0;
+  background: var(--fg-cracks) right bottom / 190px 112px no-repeat;
+}
+:root[data-mode='forge'][data-fx] [data-ui='card']::after {
+  will-change: opacity;
+  animation: fg-breathe 4.8s ease-in-out infinite;
+}
+:root[data-mode='forge'][data-fx] [data-ui='card']:nth-of-type(2n)::after {
+  animation-delay: -2.1s;
+}
+:root[data-mode='forge'][data-fx] [data-ui='card']:nth-of-type(3n)::after {
+  animation-delay: -3.4s;
+}
+@keyframes fg-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+:root[data-mode='forge'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='forge'] dialog [data-ui='card']::after {
+  display: none;
+}
+/* A broken site: its plate glows like hot metal at the edge, pulsing by its opacity while Elements is on. */
+:root[data-mode='forge'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--fg-ember) 60%, var(--border));
+}
+:root[data-mode='forge'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 4px;
+  box-shadow: inset 0 0 14px -2px color-mix(in srgb, var(--fg-ember) 55%, transparent), 0 0 16px -6px var(--fg-ember);
+}
+:root[data-mode='forge'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: fg-heat 3.4s ease-in-out infinite;
+}
+@keyframes fg-heat {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+/* A healthy site's dot glows softly, by its opacity only. */
+:root[data-mode='forge'] [data-ui='status-dot'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='forge'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px 2px color-mix(in srgb, var(--success) 55%, transparent);
+  opacity: 0;
+  animation: fg-glow 3s ease-in-out infinite;
+}
+@keyframes fg-glow {
+  50% { opacity: 1; }
+}
+/* The card with a menu open comes above the others (modes.css). */
+
+/* Everything else with a frame: small corners, a warm edge. */
+:root[data-mode='forge'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-full).border:not([data-ui='card']) {
+  border-radius: 3px;
+}
+:root[data-mode='forge'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='forge'] [data-ui='tile'] {
+  border-color: color-mix(in srgb, var(--fg-gold) 25%, var(--border));
+  background-image: linear-gradient(180deg, var(--fg-hi), transparent 40%);
+}
+:root[data-mode='forge'] [data-ui='badge'] {
+  border-radius: 3px;
+}
+:root[data-mode='forge']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg-gold) 18%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in Circuit. */
+:root[data-mode='forge'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 3px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--fg-veil), transparent);
+}
+:root[data-mode='forge'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='forge'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='forge'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='forge'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--fg-veil), transparent);
+}
+:root[data-mode='forge'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 10%, var(--card)) var(--fg-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): a raised plate with a gold edge. */
+:root[data-mode='forge'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='forge'] [data-ui='dialog'],
+:root[data-mode='forge'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--fg-gold) 50%, var(--border));
+  background: linear-gradient(180deg, var(--fg-hi), transparent 30%), var(--fg-raised);
+  box-shadow: inset 0 1px 0 var(--fg-hi), 0 14px 32px -12px color-mix(in srgb, #000 55%, transparent);
+}
+:root[data-mode='forge'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='forge'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #120c08 55%, transparent);
+}
+:root[data-mode='forge'] [data-ui='dialog'] .border-t {
+  border-top-color: color-mix(in srgb, var(--fg-gold) 35%, var(--border));
+}
+:root[data-mode='forge'] :is([role='menuitem'], [role='option']) {
+  border-radius: 2px;
+}
+:root[data-mode='forge'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--fg-chosen);
+  box-shadow: inset 2px 0 0 var(--fg-gold);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='forge'] select.dmp-select::picker(select) {
+    border-radius: 4px;
+    border-color: color-mix(in srgb, var(--fg-gold) 50%, var(--border));
+    background: var(--fg-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #000 55%, transparent);
+  }
+  :root[data-mode='forge'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--fg-chosen);
+    box-shadow: inset 2px 0 0 var(--fg-gold);
+  }
+  :root[data-mode='forge'] select.dmp-select option:checked {
+    background: var(--fg-chosen);
+    color: var(--fg-chosen-ink);
+  }
+}
+
+/* Fields: a darker inset, an ember edge while you type. */
+:root[data-mode='forge'] [data-ui='input'] {
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--card) 65%, var(--muted));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 15%, transparent);
+}
+:root[data-mode='forge'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--fg-gold) 50%, var(--input));
+}
+:root[data-mode='forge'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons: small corners; outlined ones with a warm edge; the main one a soft ember with a gold underline. */
+:root[data-mode='forge'] [data-ui='button'] {
+  border-radius: 3px;
+}
+:root[data-mode='forge'] [data-ui='button'].border-input {
+  border-color: color-mix(in srgb, var(--fg-gold) 35%, var(--input));
+}
+:root[data-mode='forge'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
+  background-color: var(--fg-chosen);
+  color: var(--fg-chosen-ink);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--fg-gold) 70%, transparent);
+}
+:root[data-mode='forge'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--primary) 24%, var(--card));
+}
+:root[data-mode='forge'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--fg-veil), transparent);
+}
+:root[data-mode='forge'][data-fx] [data-ui='button']:hover {
+  box-shadow: 0 0 10px -2px color-mix(in srgb, var(--fg-ember) 45%, transparent);
+}
+
+/* Whatever is chosen: a soft ember fill and a gold line, under a chip, a toggle or a step, on the left of a side menu's section. */
+:root[data-mode='forge'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background: var(--fg-chosen);
+  color: var(--fg-chosen-ink);
+  box-shadow: inset 0 -2px 0 var(--fg-gold);
+}
+:root[data-mode='forge'] [data-ui='section-nav'] [aria-current='page'] {
+  background: var(--fg-chosen);
+  color: var(--fg-chosen-ink);
+  box-shadow: inset 2px 0 0 var(--fg-gold);
+}
+:root[data-mode='forge'] [data-ui='segmented'],
+:root[data-mode='forge'] [data-ui='chip'] {
+  border-radius: 3px;
+  border-color: color-mix(in srgb, var(--fg-gold) 30%, var(--border));
+}
+:root[data-mode='forge'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 2px;
+}
+:root[data-mode='forge'] [role='tab'][aria-selected='true'] {
+  border-color: var(--fg-gold);
+  color: var(--fg-chosen-ink);
+}
+:root[data-mode='forge'] [role='tablist'] {
+  border-bottom-color: color-mix(in srgb, var(--fg-gold) 30%, var(--border));
+}
+
+/* Switches: a plate slot; on, the soft ember and a glowing knob. */
+:root[data-mode='forge'] [data-ui='switch'] {
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--fg-gold) 40%, var(--border));
+}
+:root[data-mode='forge'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 70%, var(--input));
+}
+:root[data-mode='forge'] [data-ui='switch'][aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 42%, var(--card));
+}
+:root[data-mode='forge'] [data-ui='switch'] > span {
+  border-radius: 2px;
+  background: var(--card);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 30%, transparent);
+}
+:root[data-mode='forge'] [data-ui='switch'][aria-checked='true'] > span {
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--fg-ember) 55%, transparent);
+}
+:root[data-mode='forge'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 85%, var(--primary));
+}
+
+/* Checkboxes and radios: a small plate; ticked, an ember mark. */
+:root[data-mode='forge'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--fg-gold) 55%, var(--input));
+  border-radius: 2px;
+  background-color: color-mix(in srgb, var(--card) 65%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='forge'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='forge'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--primary);
+  background-color: var(--fg-chosen);
+}
+:root[data-mode='forge'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--primary);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='forge'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--primary);
+}
+:root[data-mode='forge'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='forge'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: a bar that runs from ember to gold, softly. */
+:root[data-mode='forge'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--fg-ember) 60%, var(--card)), color-mix(in oklab, var(--fg-gold) 60%, var(--card)));
+}
+
+/* The top bar and the sidebar: a warm rule; the page you are on with a gold bar on its left. */
+:root[data-mode='forge'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--fg-gold) 30%, transparent);
+}
+:root[data-mode='forge'] [data-ui='sidebar'] {
+  border-right: 2px solid color-mix(in srgb, var(--fg-gold) 35%, transparent);
+}
+:root[data-mode='forge'] nav[aria-label='Main'] a[aria-current='page'] {
+  background: var(--fg-chosen);
+  color: var(--fg-chosen-ink);
+  box-shadow: inset 2px 0 0 var(--fg-gold);
+}
+
+/* The background effect's still part: a faint warm glow along the bottom of the page, as from a fire below. */
+:root[data-mode='forge'][data-fx-bg] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(70% 45% at 50% 115%, color-mix(in srgb, var(--fg-ember) 10%, transparent), transparent 70%);
+}
+:root[data-mode='forge'][data-fx-bg].dark body::before {
+  background: radial-gradient(70% 45% at 50% 115%, color-mix(in srgb, var(--fg-ember) 16%, transparent), transparent 70%);
+}
+
+/* Forge's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='forge'] {
+  --t-bg: #efe8e1;
+  --t-side: #ece3d9;
+  --t-line: #cdb9a6;
+  --t-accent: #c4501a;
+  --t-ink: #2a1d14;
+  --t-card: #f8f3ee;
+}
+.dark .mode-thumb[data-thumb='forge'] {
+  --t-bg: #15110e;
+  --t-side: #1c1713;
+  --t-line: #5a4636;
+  --t-accent: #ff8a3d;
+  --t-ink: #f3e7da;
+  --t-card: #2a231d;
+}
+.mode-thumb[data-thumb='forge'] .mt-main i {
+  border-radius: 2px;
+  background: linear-gradient(135deg, transparent 62%, color-mix(in srgb, var(--t-accent) 30%, transparent) 64%, transparent 66%), var(--t-card);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='forge'] :not(.rune-turning),
+  :root[data-mode='forge'] *::before,
+  :root[data-mode='forge'] *::after {
+    animation: none !important;
+  }
+}

@@ -18,6 +18,12 @@ describe('mode names and lines', () => {
     expect(modeText('newSite', 'circuit')).toBe('Deploy a site');
   });
 
+  it("gives pages Forge's names", () => {
+    expect(pageName('Sites', 'forge')).toBe('Foundry');
+    expect(pageName('Settings', 'forge')).toBe('Blueprints');
+    expect(modeText('allGood', 'forge')).toBe('All fires lit');
+  });
+
   it('says a line its own way in Wizard, and the plain one in Classic', () => {
     expect(modeText('newSite', 'wizard')).toBe('Conjure a site');
     expect(modeText('newSite', 'classic')).toBe('New site');

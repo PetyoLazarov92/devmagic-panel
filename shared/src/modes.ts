@@ -8,7 +8,7 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
@@ -16,6 +16,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   classic: { title: 'Classic', description: 'The panel as you know it. Every mode works in light and dark.' },
   wizard: { title: 'Wizard', description: 'Enchanted paper, rune circles, star dust, and a few pages with a story.' },
   circuit: { title: 'Circuit', description: 'Glass panels, a live circuit board behind the pages, and a lock on whatever you point at.' },
+  forge: { title: 'Forge', description: 'Iron plates with molten cracks, sparks and embers, and a few pages named for the work.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -39,10 +40,15 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: "A glint of light passes over a card now and then, a broken site's outline pulses red, a healthy one's light breathes.",
     background: 'Light runs along the circuit board behind the pages.',
   },
+  forge: {
+    pointer: 'Sparks fly when you click.',
+    elements: 'The cracks in each card breathe, a broken site glows like hot metal, a gear turns where something runs.',
+    background: 'Embers rise slowly from the bottom of the page.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
-export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery'] as const;
+export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch'] as const;
 export type ModeCounter = (typeof MODE_COUNTERS)[number];
 /** The counters the browser reports itself; the rest the server counts as things finish. */
 export const BROWSER_COUNTERS = ['auraFix', 'paletteCommand'] as const satisfies readonly ModeCounter[];
@@ -74,13 +80,16 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'circuit.keyboard', mode: 'circuit', counter: 'paletteCommand', goal: 40, riddle: 'Forty orders, and never a click.', line: 'Forty commands from Ctrl+K: you clearly prefer the keyboard.', rule: 'Run 40 commands from Ctrl+K', startsFresh: true },
   { id: 'circuit.servers', mode: 'circuit', counter: 'nginxSite', goal: 1, riddle: 'Two servers, one machine.', line: 'A site on nginx, next to Apache: you know your way around a server.', rule: 'Move a site to nginx, or put nginx in front of one', startsFresh: true },
   { id: 'circuit.queries', mode: 'circuit', counter: 'sqlQuery', goal: 25, riddle: 'Ask the database twenty-five questions.', line: 'Twenty-five questions for the database: you like to look under the hood.', rule: 'Run 25 queries in the SQL runner', startsFresh: true },
+  { id: 'forge.updates', mode: 'forge', counter: 'panelUpdate', goal: 5, riddle: 'Rise from the ashes five times.', line: 'Five times the panel rose from the ashes.', rule: 'Update the panel 5 times', startsFresh: true },
+  { id: 'forge.temper', mode: 'forge', counter: 'pluginUpdate', goal: 25, riddle: 'Temper twenty-five blades.', line: 'Twenty-five plugins and themes, tempered.', rule: 'Update 25 plugins or themes', startsFresh: true },
+  { id: 'forge.metal', mode: 'forge', counter: 'phpSwitch', goal: 5, riddle: 'Change the metal five times.', line: 'Five times you changed the metal.', rule: "Switch a site's PHP version 5 times", startsFresh: true },
 ];
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.' };
+export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite' };
+export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;
@@ -150,15 +159,15 @@ export function checkPaths(state: ModesState, now = new Date()): SealedModeId[] 
   return unlocked;
 }
 
-/** Counts one more; with `key`, only the first time for that key (a site moved to nginx counts once). Changes `state`. */
-export function countMode(state: ModesState, counter: ModeCounter, now = new Date(), key?: string): SealedModeId[] {
+/** Counts one more, or `amount` more; with `key`, only the first time for that key (a site moved to nginx counts once). Changes `state`. */
+export function countMode(state: ModesState, counter: ModeCounter, now = new Date(), key?: string, amount = 1): SealedModeId[] {
   startFreshPaths(state, now);
   if (key !== undefined) {
     const seen = state.once[counter] ?? [];
     if (seen.includes(key)) return [];
     state.once[counter] = [...seen, key].slice(-200);
   }
-  state.counters[counter] = (state.counters[counter] ?? 0) + 1;
+  state.counters[counter] = (state.counters[counter] ?? 0) + Math.max(1, Math.floor(amount));
   return checkPaths(state, now);
 }
 

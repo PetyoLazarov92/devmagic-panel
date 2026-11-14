@@ -1,6 +1,6 @@
 import { countMode, emptyModesState, MODE_PATHS, modesDeveloper, modesView, pathProgress, readModesState, speakWord } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { countAction, ModeProgress } from '../src/modes.js';
+import { countAction, ModeProgress, newerVersion } from '../src/modes.js';
 
 function memory() {
   const meta = new Map<string, string>();
@@ -89,6 +89,28 @@ describe('mode progress', () => {
     expect(speakWord(state, 'OverClock')).toBe('circuit');
     expect(speakWord(state, 'overclock')).toBeNull();
     expect(modesView(state).modes.find((m) => m.id === 'circuit')?.unlockLine).toBe('Override accepted. Systems online.');
+  });
+
+  it("counts Forge's paths: each plugin or theme updated, each PHP switch, and a start on a newer panel version", () => {
+    const store = memory();
+    const progress = new ModeProgress(store);
+    countAction(progress, 'site.updatePlugins', { domain: 'local.spellbook.example', plugins: ['wandworks-forms', 'wandworks-seo'], themes: ['wandworks'] });
+    countAction(progress, 'site.setPhp', { domain: 'local.spellbook.example', version: '8.3' });
+    expect(progress.noteVersion('1.50.0')).toEqual([]);
+    progress.noteVersion('1.50.0');
+    progress.noteVersion('1.49.1');
+    progress.noteVersion('1.51.0');
+    const counters = Object.fromEntries(progress.developerView().counters.map((c) => [c.id, c.count]));
+    expect(counters).toMatchObject({ pluginUpdate: 3, phpSwitch: 1, panelUpdate: 1 });
+    for (let i = 0; i < 4; i++) countAction(progress, 'site.setPhp', {});
+    expect(progress.developerView().modes.find((m) => m.id === 'forge')?.unlocked?.by).toBe('forge.metal');
+  });
+
+  it('tells a newer version from an older or the same one', () => {
+    expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
+    expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);
+    expect(newerVersion('1.50.0', '1.50.0')).toBe(false);
+    expect(newerVersion('1.49.1', '1.50.0')).toBe(false);
   });
 
   it('reads a broken saved state as a fresh one', () => {

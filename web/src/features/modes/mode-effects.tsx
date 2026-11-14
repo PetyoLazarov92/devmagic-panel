@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { CircuitBoard, CircuitGlint, CircuitPointer } from '@/features/modes/circuit-effects';
+import { ForgeEffects } from '@/features/modes/forge-effects';
 import { useActiveMode } from '@/lib/modes';
 
 /** The most particles alive at once, so a long drag never piles them up. */
@@ -59,6 +60,7 @@ export function ModeEffects() {
       </>
     );
   }
+  if (mode === 'forge') return effects.pointer || effects.background ? <ForgeEffects pointer={effects.pointer} background={effects.background} /> : null;
   const on = mode === 'wizard' && (effects.pointer || effects.background || effects.elements);
   if (!on) return null;
   return <WizardCanvas pointer={effects.pointer} background={effects.background} elements={effects.elements} />;

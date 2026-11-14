@@ -2605,6 +2605,7 @@
   "h2: What the panel makes as it runs",
   "h2: config.env",
   "h3: Circuit",
+  "h3: Forge",
   "h3: Its data",
   "h3: Other things it made",
   "h3: System files it wrote",

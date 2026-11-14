@@ -119,6 +119,34 @@ The same rules as Wizard's hold: only labels change, addresses and the words
 inside pages stay, and errors, warnings, status labels and anything that
 removes something stay plain.
 
+## Forge
+
+A smithy: iron plates with a faint highlight along the top and thin molten
+cracks in one corner, ember orange and molten gold, warm off-white plates and
+burnt orange in the light theme, and names in a sturdy slab serif. Whatever is
+chosen gets a soft ember tint with a gold line. The effects add a few embers
+rising from the bottom of the page over a faint warm glow (Background); sparks
+from a click, and nothing that follows the cursor (Pointer); and cracks that
+breathe slowly, a broken site's plate glowing like hot metal at its edge and a
+healthy site's dot glowing softly (Elements). A gear turns where something
+runs. Pages it names its own way:
+
+| Classic | Forge |
+| --- | --- |
+| Demo | Prototype |
+| Sites | Foundry |
+| Mail | Dispatch |
+| Services | Furnaces |
+| WP Cores | Ingots |
+| Activity | Workbench |
+| Updates | Smelter |
+| Settings | Blueprints |
+| Modes | Alloys |
+| Developer options | Toolroom |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks
