@@ -169,6 +169,14 @@ export function CommandPalette({ sites }: { sites: Site[] }) {
   ).slice(0, here ? 30 : 12);
 
   useEffect(() => setActive(0), [query]);
+  // The arrows move past what the list shows: keep the chosen one in view, its group heading too at the top.
+  const activeId = shown[active]?.id;
+  useEffect(() => {
+    if (!open || !activeId) return;
+    const option = document.getElementById(`cmd-${activeId}`);
+    if (active === 0) document.getElementById('palette-list')?.scrollTo({ top: 0 });
+    else (option?.parentElement ?? option)?.scrollIntoView({ block: 'nearest' });
+  }, [open, activeId, active]);
 
   function close() {
     setOpen(false);

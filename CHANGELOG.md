@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.48.1 (2026-11-14)
+* **Command palette:** the list scrolls with the arrow keys, so the one you move to is always in view, with its group's heading at the top
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.48.0 (2026-11-14)
 * **Sanctum:** the vulnerability check is a background task: while it is on in Aura it looks hourly whether a day passed since the last round and checks then, so a restart or a closed Aura never skips a day, with its last runs and Run now, which checks at once. **Watching all the time** lists the .htaccess watcher of the sites on nginx, and Background tasks links to the crontab tasks in Services, Cron
 * **Developer options:** the services include nginx, cron and PHP-FPM of each version that has it. What the panel makes is in three groups: its data (now with the Files tab's deletes, MySQL settings backups, profiles, tools, caches, snapshots and Undo copies), the system files dmp-root wrote for PHP, Apache, nginx and MySQL with its state, and other things it made: its crontab block, the MySQL accounts it signs in with (names only) and how many sites have its mu-plugins
