@@ -283,7 +283,7 @@ describe('modes', () => {
     expect((await app.inject({ method: 'GET', url: '/api/modes', headers: { host: HOST } })).statusCode).toBe(401);
     const first = (await app.inject({ method: 'GET', url: '/api/modes', headers })).json();
     expect(first.fresh).toEqual([]);
-    expect(first.modes.map((m: { id: string; unlocked: boolean }) => [m.id, m.unlocked])).toEqual([['classic', true], ['wizard', false], ['circuit', false], ['forge', false], ['grove', false], ['abyss', false], ['neon', false], ['ink', false]]);
+    expect(first.modes.map((m: { id: string; unlocked: boolean }) => [m.id, m.unlocked])).toEqual([['classic', true], ['wizard', false], ['circuit', false], ['forge', false], ['grove', false], ['abyss', false], ['neon', false], ['ink', false], ['dune', false]]);
     expect(first.modes[1].riddles).toHaveLength(3);
     expect(first.modes[2].riddles).toHaveLength(3);
     expect(first.modes[3].riddles).toHaveLength(3);
@@ -291,7 +291,8 @@ describe('modes', () => {
     expect(first.modes[5].riddles).toHaveLength(3);
     expect(first.modes[6].riddles).toHaveLength(3);
     expect(first.modes[7].riddles).toHaveLength(3);
-    expect(JSON.stringify(first)).not.toMatch(/abracadabra|overclock|ignite|bloom|dive|afterglow|calligraphy/);
+    expect(first.modes[8].riddles).toHaveLength(3);
+    expect(JSON.stringify(first)).not.toMatch(/abracadabra|overclock|ignite|bloom|dive|afterglow|calligraphy|sandstorm/);
     expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard' } })).statusCode).toBe(400);
 
     expect((await app.inject({ method: 'POST', url: '/api/modes/word', headers, payload: { word: 'hocus' } })).json().unlocked).toBeNull();

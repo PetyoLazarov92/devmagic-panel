@@ -131,18 +131,18 @@ describe('mode progress', () => {
     let now = new Date(2026, 10, 15, 1, 30);
     const progress = new ModeProgress(memory(), () => now);
     const count = (id: string) => progress.developerView().counters.find((c) => c.id === id)?.count ?? 0;
-    progress.noteLateNight();
-    progress.noteLateNight();
+    progress.noteUse();
+    progress.noteUse();
     now = new Date(2026, 10, 15, 3, 59);
-    progress.noteLateNight();
+    progress.noteUse();
     now = new Date(2026, 10, 15, 4, 0);
-    progress.noteLateNight();
+    progress.noteUse();
     now = new Date(2026, 10, 15, 23, 59);
-    progress.noteLateNight();
+    progress.noteUse();
     expect(count('lateNight')).toBe(1);
     for (let d = 16; d <= 19; d++) {
       now = new Date(2026, 10, d, 0, 5);
-      progress.noteLateNight();
+      progress.noteUse();
     }
     expect(progress.developerView().modes.find((m) => m.id === 'neon')?.unlocked?.by).toBe('neon.nights');
     countAction(progress, 'site.login', { domain: 'local.spellbook.example' });
@@ -163,6 +163,25 @@ describe('mode progress', () => {
     expect([count('fileSave'), count('certReissue'), count('dbClean')]).toEqual([1, 1, 3]);
     for (let i = 0; i < 9; i++) countAction(progress, 'cert.reissue', {});
     expect(progress.developerView().modes.find((m) => m.id === 'ink')?.unlocked?.by).toBe('ink.seals');
+  });
+
+  it("counts Dune's days once a day each, its snapshots and its cron tasks", () => {
+    let now = new Date(2026, 10, 20, 9, 0);
+    const progress = new ModeProgress(memory(), () => now);
+    const count = (id: string) => progress.developerView().counters.find((c) => c.id === id)?.count ?? 0;
+    progress.noteUse();
+    now = new Date(2026, 10, 20, 18, 0);
+    progress.noteUse();
+    expect(count('usedDay')).toBe(1);
+    expect(count('lateNight')).toBe(0);
+    now = new Date(2026, 10, 21, 2, 0);
+    progress.noteUse();
+    expect([count('usedDay'), count('lateNight')]).toEqual([2, 1]);
+    countAction(progress, 'db.snapshot', { domain: 'local.spellbook.example' });
+    countAction(progress, 'cron.add', {});
+    expect([count('dbSnapshot'), count('cronTask')]).toEqual([1, 1]);
+    for (let i = 0; i < 4; i++) countAction(progress, 'cron.add', {});
+    expect(progress.developerView().modes.find((m) => m.id === 'dune')?.unlocked?.by).toBe('dune.sundial');
   });
 
   it('tells a newer version from an older or the same one', () => {

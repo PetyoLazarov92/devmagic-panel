@@ -30,8 +30,9 @@ const BROWSER_EVENT_GAP_MS = 1000;
  */
 export class ModeProgress {
   private readonly lastBrowserEvent = new Map<BrowserCounter, number>();
-  /** The last late night counted, so the requests after it in the same night skip the database. */
+  /** The last late night and the last day counted, so the requests after them on the same day skip the database. */
   private lastNight: string | undefined;
+  private lastDay: string | undefined;
 
   constructor(private readonly store: MetaStore, private readonly now: () => Date = () => new Date()) {
     // A mode this release added starts its paths now, from what the counters hold.
@@ -55,14 +56,23 @@ export class ModeProgress {
     return this.change((state, now) => countMode(state, counter, now, key, amount));
   }
 
-  /** Something done in the panel: between midnight and 4 in the morning by this machine's clock, that night counts once. */
-  noteLateNight(): SealedModeId[] {
+  /**
+   * Something done in the panel: that day counts once, by this machine's
+   * date, and between midnight and 4 in the morning that night counts too.
+   */
+  noteUse(): SealedModeId[] {
     const now = this.now();
-    if (now.getHours() >= LATE_NIGHT_ENDS) return [];
-    const night = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (night === this.lastNight) return [];
-    this.lastNight = night;
-    return this.count('lateNight', night);
+    const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const opened: SealedModeId[] = [];
+    if (day !== this.lastDay) {
+      this.lastDay = day;
+      opened.push(...this.count('usedDay', day));
+    }
+    if (now.getHours() < LATE_NIGHT_ENDS && day !== this.lastNight) {
+      this.lastNight = day;
+      opened.push(...this.count('lateNight', day));
+    }
+    return opened;
   }
 
   /** The panel started on `version`: one panel update when it is newer than the one it ran before (a switch back is not one). */
@@ -137,6 +147,8 @@ export function countAction(progress: ModeProgress, id: string, input: unknown):
   if (id === 'site.login') progress.count('wpLogin');
   if (id === 'file.write') progress.count('fileSave');
   if (id === 'cert.reissue') progress.count('certReissue');
+  if (id === 'db.snapshot') progress.count('dbSnapshot');
+  if (id === 'cron.add') progress.count('cronTask');
   if (id === 'db.cleanTransients' || id === 'db.cleanContent' || id === 'db.cleanOrphans') progress.count('dbClean');
   if (id === 'db.restore' || id === 'db.restoreKept' || id === 'trash.restore' || id === 'file.restore') progress.count('restore');
   if (id === 'mysql.undoRowChange' || id === 'mysql.undoCleanup' || id === 'cron.undo' || id === 'wpcron.undo') progress.count('undo');

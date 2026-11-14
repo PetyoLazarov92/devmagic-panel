@@ -403,8 +403,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     };
     api.addHook('onRequest', async (request, reply) => {
       if (!authenticated(request)) return reply.code(401).send({ error: 'Log in first' });
-      // Something done late at night, not a page polling: counted for a mode's path, once a night.
-      if (request.method !== 'GET') modes.noteLateNight();
+      // Something done, not a page polling: counted for the modes' paths, once a day and once a late night.
+      if (request.method !== 'GET') modes.noteUse();
     });
 
     // The panel password: when it was set, and changing it with the current one.

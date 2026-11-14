@@ -1,0 +1,420 @@
+/*
+ * Dune: sand and terracotta. Sand in light and a desert night in dark, names
+ * in a widely spaced geometric face in capitals, terracotta for what is chosen
+ * with sun gold beside it, and dune lines under a low sun in each card's
+ * corner. data-mode="dune" on the root, data-fx while Elements is on,
+ * data-fx-bg while Background is on (the warm haze is CSS); the grains behind
+ * the cursor and the drifts of sand on one canvas
+ * (features/modes/dune-effects.tsx).
+ */
+:root[data-mode='dune']:not(.dark) {
+  --background: #f4ead8;
+  --foreground: #3a2412;
+  --card: #fcf6ec;
+  --muted: #efe2cc;
+  --muted-foreground: #765636;
+  --border: #e2cfae;
+  --input: #d4bb92;
+  --ring: #b0562e;
+  --primary: #b0562e;
+  --primary-foreground: #fffaf2;
+  --secondary: #f2e4cc;
+  --secondary-foreground: #6e3a18;
+  --success: #4f6e18;
+  --warning: #8a5a00;
+  --danger: #b8322a;
+  --du-sand: #c0623a;
+  --du-sun: #d08a1a;
+  --du-raised: #fefaf2;
+  --du-chosen-ink: #8a3e1c;
+  --du-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cg fill='none' stroke='%23c0623a' stroke-linecap='round'%3E%3Cpath d='M44 114c32-18 62-18 90-5s48 11 68-5' stroke-opacity='.34' stroke-width='1.6'/%3E%3Cpath d='M78 98c26-13 48-13 70-2s36 9 52-2' stroke-opacity='.26' stroke-width='1.2'/%3E%3Cpath d='M112 82c20-10 35-10 50-2s27 7 38-2' stroke-opacity='.2'/%3E%3C/g%3E%3Ccircle cx='166' cy='42' r='11' fill='%23e0902a' fill-opacity='.28'/%3E%3C/svg%3E");
+}
+:root[data-mode='dune'].dark {
+  --background: #1a120c;
+  --foreground: #f6e6cf;
+  --card: #26190f;
+  --muted: #2e2014;
+  --muted-foreground: #c2a27e;
+  --border: #4a3220;
+  --input: #5a3d24;
+  --ring: #eba06a;
+  --primary: #eba06a;
+  --primary-foreground: #1a120c;
+  --secondary: #2f2115;
+  --secondary-foreground: #f2dcc0;
+  --success: #b8d68a;
+  --warning: #f0c060;
+  --danger: #f07a62;
+  --du-sand: #e2955a;
+  --du-sun: #f0b45a;
+  --du-raised: #2c1d12;
+  --du-chosen-ink: #ffd9b4;
+  --du-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cg fill='none' stroke='%23e2955a' stroke-linecap='round'%3E%3Cpath d='M44 114c32-18 62-18 90-5s48 11 68-5' stroke-opacity='.4' stroke-width='1.6'/%3E%3Cpath d='M78 98c26-13 48-13 70-2s36 9 52-2' stroke-opacity='.3' stroke-width='1.2'/%3E%3Cpath d='M112 82c20-10 35-10 50-2s27 7 38-2' stroke-opacity='.22'/%3E%3C/g%3E%3Ccircle cx='166' cy='42' r='11' fill='%23f0b45a' fill-opacity='.24'/%3E%3C/svg%3E");
+}
+:root[data-mode='dune'] {
+  --font-dune: 'Josefin Sans', 'Futura', 'Century Gothic', 'URW Gothic', 'TeX Gyre Adventor', 'Ubuntu', system-ui, sans-serif;
+  --du-chosen: color-mix(in srgb, var(--du-sand) 12%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --du-veil: 82%;
+  scrollbar-color: color-mix(in srgb, var(--du-sand) 32%, var(--border)) transparent;
+}
+:root[data-mode='dune'].dark {
+  --du-chosen: color-mix(in srgb, var(--du-sand) 16%, var(--card));
+}
+
+/* Names: page titles, card titles and dialogs in a geometric face, in capitals with air between the letters. */
+:root[data-mode='dune'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-dune);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+:root[data-mode='dune'] [data-ui='card-title'] {
+  font-size: 0.9em;
+}
+:root[data-mode='dune'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-dune);
+  letter-spacing: 0.02em;
+}
+:root[data-mode='dune'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-dune);
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* Cards: a little rounded, a warm shadow, dune lines under a low sun in the bottom right corner (::after); the sun glows slowly while Elements is on (::before). */
+:root[data-mode='dune'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 6px;
+  border-color: var(--border);
+  box-shadow: 0 8px 20px -14px color-mix(in srgb, #3a2412 40%, transparent);
+}
+:root[data-mode='dune'].dark [data-ui='card'] {
+  box-shadow: 0 8px 22px -14px #000;
+}
+:root[data-mode='dune'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 200px;
+  height: 120px;
+  max-width: 100%;
+  max-height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0 0 6px 0;
+  background: var(--du-corner) right bottom / 200px 120px no-repeat;
+}
+/* The sun's glow sits where the corner's sun is: 34px from the right, 78px from the bottom, on a card tall enough to show it. */
+:root[data-mode='dune'][data-fx] [data-ui='card']:not([data-health='fail'])::before {
+  content: '';
+  position: absolute;
+  right: 6px;
+  bottom: 50px;
+  width: 56px;
+  height: 56px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--du-sun) 30%, transparent), transparent);
+  will-change: opacity;
+  animation: du-sun 8s ease-in-out infinite;
+}
+:root[data-mode='dune'][data-fx] [data-ui='card']:nth-of-type(2n):not([data-health='fail'])::before {
+  animation-delay: -3s;
+}
+:root[data-mode='dune'][data-fx] [data-ui='card']:nth-of-type(3n):not([data-health='fail'])::before {
+  animation-delay: -5.5s;
+}
+@keyframes du-sun {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+:root[data-mode='dune'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='dune'] dialog [data-ui='card']::after,
+:root[data-mode='dune'] dialog [data-ui='card']::before {
+  display: none;
+}
+
+/* A broken site: its card's edge glows red like heat, breathing slowly while Elements is on. */
+:root[data-mode='dune'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+}
+:root[data-mode='dune'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 6px;
+  box-shadow: inset 0 0 20px -6px color-mix(in srgb, var(--danger) 45%, transparent), 0 0 16px -8px var(--danger);
+}
+:root[data-mode='dune'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: du-heat 6s ease-in-out infinite;
+}
+@keyframes du-heat {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+/* A healthy dot glows warm like a small sun; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='dune'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='dune'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--du-sun) 55%, transparent);
+  animation: du-sun 5s ease-in-out infinite;
+}
+
+/* Everything else with a frame: a little rounded. */
+:root[data-mode='dune'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 6px;
+}
+:root[data-mode='dune'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='dune'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #3a2412 40%, transparent);
+}
+:root[data-mode='dune'] [data-ui='tile'] {
+  border-radius: 6px;
+}
+:root[data-mode='dune']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='dune'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 6px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--du-veil), transparent);
+}
+:root[data-mode='dune'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='dune'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='dune'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='dune'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--du-veil), transparent);
+}
+:root[data-mode='dune'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--du-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='dune'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='dune'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--du-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #1a120c 50%, transparent);
+}
+:root[data-mode='dune'] [data-ui='dialog'] {
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--du-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #1a120c 60%, transparent);
+}
+:root[data-mode='dune'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='dune'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #1a120c 50%, transparent);
+}
+:root[data-mode='dune'] :is([role='menuitem'], [role='option']) {
+  border-radius: 6px;
+}
+:root[data-mode='dune'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--du-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='dune'] select.dmp-select::picker(select) {
+    border-radius: 8px;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--du-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #1a120c 50%, transparent);
+  }
+  :root[data-mode='dune'] select.dmp-select option {
+    border-radius: 8px;
+  }
+  :root[data-mode='dune'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--du-chosen);
+  }
+  :root[data-mode='dune'] select.dmp-select option:checked {
+    background: var(--du-chosen);
+    color: var(--du-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, a terracotta edge while you type. */
+:root[data-mode='dune'] [data-ui='input'] {
+  border-radius: 6px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='dune'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='dune'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: a little rounded; the main one a soft terracotta. */
+:root[data-mode='dune'] [data-ui='button'],
+:root[data-mode='dune'] [data-ui='chip'] {
+  border-radius: 6px;
+}
+:root[data-mode='dune'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--du-sand) 50%, transparent);
+  background-color: var(--du-chosen);
+  color: var(--du-chosen-ink);
+}
+:root[data-mode='dune'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--du-sand) 20%, var(--card));
+}
+:root[data-mode='dune'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--du-veil), transparent);
+}
+
+/* Whatever is chosen: a soft terracotta fill. */
+:root[data-mode='dune'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--du-sand) 50%, transparent);
+  background: var(--du-chosen);
+  color: var(--du-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='dune'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 6px;
+  background: var(--du-chosen);
+  color: var(--du-chosen-ink);
+}
+:root[data-mode='dune'] [data-ui='segmented'],
+:root[data-mode='dune'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 6px;
+}
+:root[data-mode='dune'] [role='tab'][aria-selected='true'] {
+  border-color: var(--du-sand);
+  color: var(--du-chosen-ink);
+}
+
+/* Switches: a soft terracotta when on. */
+:root[data-mode='dune'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='dune'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='dune'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: a little rounded, a terracotta mark when ticked. */
+:root[data-mode='dune'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 6px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='dune'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='dune'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--du-sand);
+  background-color: var(--du-chosen);
+}
+:root[data-mode='dune'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--du-sand);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='dune'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--du-sand);
+}
+:root[data-mode='dune'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='dune'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: terracotta warming into sun gold, softly. */
+:root[data-mode='dune'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--du-sand) 60%, var(--card)), color-mix(in oklab, var(--du-sun) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint sand rule; the page you are on in a soft terracotta fill. */
+:root[data-mode='dune'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='dune'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 6px;
+  background: var(--du-chosen);
+  color: var(--du-chosen-ink);
+}
+
+/* The background effect's still part: a warm haze along the bottom of the page. The drifts of sand are on the canvas. */
+:root[data-mode='dune'][data-fx-bg] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(90% 32% at 50% 100%, color-mix(in srgb, var(--du-sun) 13%, transparent), transparent 75%),
+    radial-gradient(50% 24% at 80% 100%, color-mix(in srgb, var(--du-sand) 10%, transparent), transparent 75%),
+    radial-gradient(45% 30% at 85% 0%, color-mix(in srgb, var(--du-sun) 7%, transparent), transparent 70%);
+}
+
+/* Dune's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='dune'] {
+  --t-bg: #f4ead8;
+  --t-side: #efe2cc;
+  --t-line: #d4bb92;
+  --t-accent: #c0623a;
+  --t-ink: #3a2412;
+  --t-card: #fcf6ec;
+}
+.dark .mode-thumb[data-thumb='dune'] {
+  --t-bg: #1a120c;
+  --t-side: #1f150d;
+  --t-line: #4a3220;
+  --t-accent: #e2955a;
+  --t-ink: #f6e6cf;
+  --t-card: #26190f;
+}
+.mode-thumb[data-thumb='dune'] .mt-main i {
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='dune'] :not(.rune-turning),
+  :root[data-mode='dune'] *::before,
+  :root[data-mode='dune'] *::after {
+    animation: none !important;
+  }
+}

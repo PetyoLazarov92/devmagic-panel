@@ -271,6 +271,36 @@ circle draws itself where something runs. Pages it names its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Dune
+
+Sand and terracotta: cards a little rounded, with three dune lines under a low
+sun in one corner, sand in the light theme and a desert night in the dark one,
+names in a widely spaced geometric face in capitals, and terracotta for
+whatever is chosen with sun gold beside it. The effects add a warm haze along
+the bottom of the page and, now and then, a thin drift of sand blowing across
+it (Background); a few grains of sand behind a moving cursor that settle and
+fade, with nothing left by a resting one (Pointer); and the sun in each card's
+corner glowing slowly, a broken site's card glowing red like heat at its edge
+and a healthy site's dot glowing warm (Elements). An hourglass turns where
+something runs. Pages it names its own way:
+
+| Classic | Dune |
+| --- | --- |
+| Demo | Oasis |
+| Sites | Dunes |
+| Aura | Horizon |
+| Mail | Messengers |
+| Services | Wells |
+| WP Cores | Bedrock |
+| Activity | Footprints |
+| Updates | Trade winds |
+| Settings | Tent |
+| Modes | Caravans |
+| Developer options | Camp |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks

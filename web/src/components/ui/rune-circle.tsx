@@ -106,3 +106,17 @@ export function Enso({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Dune's turning icon: an hourglass, sand in its lower half, turning slowly as
+ * one while something runs.
+ */
+export function Hourglass({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} style={{ animationDuration: '2.8s' }} aria-hidden>
+      <path d="M18 8h28M18 56h28" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <path d="M21 8c0 14 22 16 22 24S21 42 21 56M43 8c0 14-22 16-22 24s22 10 22 24" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinejoin="round" />
+      <path d="M24 54c2-6 5-8 8-9 3 1 6 3 8 9Z" fill="currentColor" fillOpacity="0.55" />
+    </svg>
+  );
+}

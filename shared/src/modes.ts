@@ -8,7 +8,7 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink', 'dune'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
@@ -21,6 +21,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   abyss: { title: 'Abyss', description: 'The deep sea: glowing coral, a jellyfish light and rising bubbles, and a few pages named for the ocean.' },
   neon: { title: 'Neon', description: 'An 80s night: magenta and sunset orange, a light trail, a glowing grid, and a few pages named for the arcade.' },
   ink: { title: 'Ink', description: 'Black ink on rice paper: a brushed circle and a red seal, a drop of ink where you click, and a few pages named for the scroll.' },
+  dune: { title: 'Dune', description: 'Sand and terracotta: dune lines under a low sun, a trail of sand behind your cursor, and a few pages named for the desert.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -69,10 +70,15 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: "A brush line draws itself under a page's title, a broken site bleeds red ink at its edge, a healthy site's dot spreads softly, a brushed circle draws itself where something runs.",
     background: 'A faint paper grain, and a soft wash of ink drifting slowly across the page.',
   },
+  dune: {
+    pointer: 'A few grains of sand trail your cursor while it moves, then settle and fade.',
+    elements: "The sun in each card's corner glows slowly, a broken site's edge glows red like heat, a healthy site's dot glows warm, an hourglass turns where something runs.",
+    background: 'A warm haze along the bottom of the page, and now and then a thin drift of sand crossing it.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
-export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy', 'fileSave', 'certReissue', 'dbClean'] as const;
+export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy', 'fileSave', 'certReissue', 'dbClean', 'usedDay', 'dbSnapshot', 'cronTask'] as const;
 export type ModeCounter = (typeof MODE_COUNTERS)[number];
 /** The counters the browser reports itself; the rest the server counts as things finish. */
 export const BROWSER_COUNTERS = ['auraFix', 'paletteCommand'] as const satisfies readonly ModeCounter[];
@@ -119,13 +125,16 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'ink.pages', mode: 'ink', counter: 'fileSave', goal: 30, riddle: 'Fill thirty pages by your own hand.', line: 'Thirty pages, filled by your own hand.', rule: 'Save 30 files in the Files tab', startsFresh: true },
   { id: 'ink.seals', mode: 'ink', counter: 'certReissue', goal: 10, riddle: 'Press the seal ten times.', line: 'Ten seals, pressed.', rule: "Reissue a site's certificate 10 times", startsFresh: true },
   { id: 'ink.wash', mode: 'ink', counter: 'dbClean', goal: 10, riddle: 'Rinse the stone clean ten times.', line: 'Ten times the stone rinsed clean.', rule: "Clean up a site's database 10 times: transients, revisions and the like, or leftovers", startsFresh: true },
+  { id: 'dune.crossing', mode: 'dune', counter: 'usedDay', goal: 30, riddle: 'Thirty days across the sand.', line: 'Thirty days across the sand.', rule: 'Do something in the panel on 30 different days', startsFresh: true },
+  { id: 'dune.water', mode: 'dune', counter: 'dbSnapshot', goal: 10, riddle: 'Carry water ten times before the crossing.', line: 'Ten skins of water, carried for the crossing.', rule: 'Take 10 database snapshots yourself', startsFresh: true },
+  { id: 'dune.sundial', mode: 'dune', counter: 'cronTask', goal: 5, riddle: 'Set the sundial five times.', line: 'Five shadows, set on the sundial.', rule: 'Add 5 scheduled tasks on the Cron page', startsFresh: true },
 ];
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.', ink: 'The ink took to the paper.' };
+export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy', dune: 'sandstorm' };
+export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.', ink: 'The ink took to the paper.', dune: 'The storm let you through.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.', dune: 'The dunes are shifting.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;

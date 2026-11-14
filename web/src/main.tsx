@@ -12,6 +12,7 @@ import './styles/grove.css';
 import './styles/abyss.css';
 import './styles/neon.css';
 import './styles/ink.css';
+import './styles/dune.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>
