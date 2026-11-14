@@ -143,6 +143,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (view.status === 'done' && view.kind === 'site.create') modes.count('siteWizard');
     if (view.status === 'undone') modes.count('undo');
     if (view.status === 'done' && (view.kind === 'site.copyFromServer' || view.kind === 'site.copyUploads')) modes.count('serverCopy');
+    if (view.status === 'done' && view.kind === 'site.takeOver') modes.count('siteTakeOver');
   });
   const limiter = new LoginLimiter();
   const resetLock = new GlobalLock();

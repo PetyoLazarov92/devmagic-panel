@@ -1,0 +1,445 @@
+/*
+ * Art Deco: gold on black, or on ivory in light. Nearly square corners, a
+ * fine gold frame drawn inside every card, names in a light geometric face in
+ * capitals with wide spacing, gold for what is chosen, and a sunburst fan in
+ * each card's corner. data-mode="deco" on the root, data-fx while Elements is
+ * on, data-fx-bg while Background is on (the pattern and the shimmer are
+ * CSS); a click's gold fan on one canvas (features/modes/deco-effects.tsx).
+ */
+:root[data-mode='deco']:not(.dark) {
+  --background: #f6f1e4;
+  --foreground: #1d1a14;
+  --card: #fffcf4;
+  --muted: #f0e9d8;
+  --muted-foreground: #645a48;
+  --border: #dccfae;
+  --input: #cbbb94;
+  --ring: #8a6a1e;
+  --primary: #8a6a1e;
+  --primary-foreground: #fffcf4;
+  --secondary: #f2ead6;
+  --secondary-foreground: #5e4610;
+  --success: #4a6a1e;
+  --warning: #8a5a00;
+  --danger: #b0302a;
+  --dc-gold: #a07a24;
+  --dc-gold-light: #c89a36;
+  --dc-frame: color-mix(in srgb, #a07a24 38%, transparent);
+  --dc-raised: #fffdf8;
+  --dc-chosen-ink: #6e5214;
+  --dc-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cg fill='none' stroke='%23a07a24' stroke-opacity='.4'%3E%3Cpath d='M200 120L200 46M200 120L168 50M200 120L142 64M200 120L124 88M200 120L116 114'/%3E%3Cpath d='M200 76a44 44 0 0 0-44 44M200 96a24 24 0 0 0-24 24' stroke-width='1.4'/%3E%3C/g%3E%3Cg fill='none' stroke='%23a07a24' stroke-opacity='.28'%3E%3Cpath d='M108 114h-9v-9h-9M108 105h-5v-5h-5'/%3E%3C/g%3E%3C/svg%3E");
+}
+:root[data-mode='deco'].dark {
+  --background: #0f0e0c;
+  --foreground: #f3ead6;
+  --card: #17150f;
+  --muted: #1e1b14;
+  --muted-foreground: #b8a88a;
+  --border: #3d3424;
+  --input: #4e4330;
+  --ring: #d4af5a;
+  --primary: #d4af5a;
+  --primary-foreground: #0f0e0c;
+  --secondary: #221f17;
+  --secondary-foreground: #f0d79a;
+  --success: #b9d38a;
+  --warning: #f0c060;
+  --danger: #f0766a;
+  --dc-gold: #d4af5a;
+  --dc-gold-light: #f0d79a;
+  --dc-frame: color-mix(in srgb, #d4af5a 35%, transparent);
+  --dc-raised: #1c1a13;
+  --dc-chosen-ink: #f0d79a;
+  --dc-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cg fill='none' stroke='%23d4af5a' stroke-opacity='.45'%3E%3Cpath d='M200 120L200 46M200 120L168 50M200 120L142 64M200 120L124 88M200 120L116 114'/%3E%3Cpath d='M200 76a44 44 0 0 0-44 44M200 96a24 24 0 0 0-24 24' stroke-width='1.4'/%3E%3C/g%3E%3Cg fill='none' stroke='%23d4af5a' stroke-opacity='.3'%3E%3Cpath d='M108 114h-9v-9h-9M108 105h-5v-5h-5'/%3E%3C/g%3E%3C/svg%3E");
+}
+:root[data-mode='deco'] {
+  --font-deco: 'Poiret One', 'Josefin Sans', 'Futura', 'URW Gothic', 'TeX Gyre Adventor', 'Ubuntu', system-ui, sans-serif;
+  --dc-chosen: color-mix(in srgb, var(--dc-gold) 14%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --dc-veil: 85%;
+  scrollbar-color: color-mix(in srgb, var(--dc-gold) 40%, var(--border)) transparent;
+}
+
+/* Names: page titles, card titles and dialogs in a light geometric face, in capitals with wide spacing. */
+:root[data-mode='deco'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-deco);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+:root[data-mode='deco'] [data-ui='card-title'] {
+  font-size: 0.86em;
+}
+:root[data-mode='deco'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-deco);
+  letter-spacing: 0.05em;
+}
+:root[data-mode='deco'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-deco);
+  letter-spacing: 0.08em;
+  color: var(--primary);
+}
+
+/* Cards: nearly square, a fine gold frame inside the edge, a sunburst fan in the bottom right corner (::after); a sheen passes over it now and then while Elements is on (::before). */
+:root[data-mode='deco'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 2px;
+  border-color: var(--border);
+  box-shadow: inset 0 0 0 3px var(--card), inset 0 0 0 4px var(--dc-frame), 0 8px 20px -16px color-mix(in srgb, #1d1a14 50%, transparent);
+}
+:root[data-mode='deco'].dark [data-ui='card'] {
+  box-shadow: inset 0 0 0 3px var(--card), inset 0 0 0 4px var(--dc-frame), 0 10px 24px -16px #000;
+}
+:root[data-mode='deco'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 200px;
+  height: 120px;
+  max-width: calc(100% - 8px);
+  max-height: calc(100% - 8px);
+  z-index: -1;
+  pointer-events: none;
+  background: var(--dc-corner) right bottom / 200px 120px no-repeat;
+}
+:root[data-mode='deco'][data-fx] [data-ui='card']:not([data-health='fail'])::before {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 120px;
+  height: 90px;
+  max-width: calc(100% - 8px);
+  max-height: calc(100% - 8px);
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, color-mix(in srgb, var(--dc-gold-light) 22%, transparent) 50%, transparent 65%) 0 0 / 300% 100% no-repeat;
+  animation: dc-sheen 12s ease-in-out infinite;
+}
+:root[data-mode='deco'][data-fx] [data-ui='card']:nth-of-type(2n):not([data-health='fail'])::before {
+  animation-delay: -4s;
+}
+:root[data-mode='deco'][data-fx] [data-ui='card']:nth-of-type(3n):not([data-health='fail'])::before {
+  animation-delay: -8s;
+}
+@keyframes dc-sheen {
+  0%, 80% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+:root[data-mode='deco'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='deco'] dialog [data-ui='card']::after,
+:root[data-mode='deco'] dialog [data-ui='card']::before {
+  display: none;
+}
+
+/* A broken site: its inner frame turns red and breathes slowly while Elements is on. */
+:root[data-mode='deco'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  box-shadow: inset 0 0 0 3px var(--card), inset 0 0 0 4px color-mix(in srgb, var(--danger) 55%, transparent), 0 8px 20px -16px #000;
+}
+:root[data-mode='deco'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  box-shadow: inset 0 0 18px -6px color-mix(in srgb, var(--danger) 40%, transparent);
+}
+:root[data-mode='deco'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: dc-breathe 6s ease-in-out infinite;
+}
+@keyframes dc-breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+/* A healthy dot becomes a small diamond glowing gold; a broken one keeps its round pulse right over the dot. */
+:root[data-mode='deco'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+  border-radius: 1px;
+  rotate: 45deg;
+  scale: 0.85;
+}
+:root[data-mode='deco'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--dc-gold) 60%, transparent);
+  animation: dc-breathe 5s ease-in-out infinite;
+}
+
+/* Everything else with a frame: nearly square. */
+:root[data-mode='deco'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 2px;
+}
+:root[data-mode='deco'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='deco'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #1d1a14 40%, transparent);
+}
+:root[data-mode='deco'] [data-ui='tile'] {
+  border-radius: 2px;
+}
+:root[data-mode='deco']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='deco'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 2px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--dc-veil), transparent);
+}
+:root[data-mode='deco'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='deco'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='deco'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='deco'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--dc-veil), transparent);
+}
+:root[data-mode='deco'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--dc-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='deco'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='deco'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--dc-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #0f0e0c 50%, transparent);
+}
+:root[data-mode='deco'] [data-ui='dialog'] {
+  border-radius: 4px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--dc-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #0f0e0c 60%, transparent);
+}
+:root[data-mode='deco'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='deco'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #0f0e0c 50%, transparent);
+}
+:root[data-mode='deco'] :is([role='menuitem'], [role='option']) {
+  border-radius: 2px;
+}
+:root[data-mode='deco'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--dc-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='deco'] select.dmp-select::picker(select) {
+    border-radius: 4px;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--dc-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #0f0e0c 50%, transparent);
+  }
+  :root[data-mode='deco'] select.dmp-select option {
+    border-radius: 4px;
+  }
+  :root[data-mode='deco'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--dc-chosen);
+  }
+  :root[data-mode='deco'] select.dmp-select option:checked {
+    background: var(--dc-chosen);
+    color: var(--dc-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, a gold edge while you type. */
+:root[data-mode='deco'] [data-ui='input'] {
+  border-radius: 2px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='deco'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='deco'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: nearly square; the main one a soft gold. */
+:root[data-mode='deco'] [data-ui='button'],
+:root[data-mode='deco'] [data-ui='chip'] {
+  border-radius: 2px;
+}
+:root[data-mode='deco'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--dc-gold) 50%, transparent);
+  background-color: var(--dc-chosen);
+  color: var(--dc-chosen-ink);
+}
+:root[data-mode='deco'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--dc-gold) 20%, var(--card));
+}
+:root[data-mode='deco'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--dc-veil), transparent);
+}
+
+/* Whatever is chosen: a soft gold fill. */
+:root[data-mode='deco'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--dc-gold) 50%, transparent);
+  background: var(--dc-chosen);
+  color: var(--dc-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='deco'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 2px;
+  background: var(--dc-chosen);
+  color: var(--dc-chosen-ink);
+}
+:root[data-mode='deco'] [data-ui='segmented'],
+:root[data-mode='deco'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 2px;
+}
+:root[data-mode='deco'] [role='tab'][aria-selected='true'] {
+  border-color: var(--dc-gold);
+  color: var(--dc-chosen-ink);
+}
+
+/* Switches: a soft gold when on. */
+:root[data-mode='deco'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='deco'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='deco'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: nearly square, a gold mark when ticked. */
+:root[data-mode='deco'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 2px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='deco'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='deco'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--dc-gold);
+  background-color: var(--dc-chosen);
+}
+:root[data-mode='deco'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--dc-gold);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='deco'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--dc-gold);
+}
+:root[data-mode='deco'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='deco'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: antique gold into bright gold, softly. */
+:root[data-mode='deco'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--dc-gold) 60%, var(--card)), color-mix(in oklab, var(--dc-gold-light) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint gold rule; the page you are on in a soft gold fill. */
+:root[data-mode='deco'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='deco'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 2px;
+  background: var(--dc-chosen);
+  color: var(--dc-chosen-ink);
+}
+
+/* Dialogs carry the same fine gold frame inside their edge. */
+:root[data-mode='deco'] [data-ui='dialog'] {
+  box-shadow: inset 0 0 0 4px var(--dc-raised), inset 0 0 0 5px var(--dc-frame), 0 20px 48px -16px color-mix(in srgb, #0f0e0c 60%, transparent);
+}
+
+/*
+ * The background effect, CSS only: a fine diagonal pattern behind the pages
+ * (body::before), and now and then a faint band of gold shimmer crossing it
+ * (body::after, moved by transform alone, resting most of its cycle).
+ */
+:root[data-mode='deco'][data-fx-bg] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(45deg, color-mix(in srgb, var(--dc-gold) 6%, transparent) 0 1px, transparent 1px 14px),
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--dc-gold) 6%, transparent) 0 1px, transparent 1px 14px);
+}
+:root[data-mode='deco'][data-fx-bg] body::after {
+  content: '';
+  position: fixed;
+  top: -50vh;
+  left: 0;
+  width: 30vw;
+  height: 200vh;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--dc-gold-light) 9%, transparent), transparent);
+  rotate: 25deg;
+  translate: -60vw 0;
+  animation: dc-shimmer 20s ease-in-out infinite;
+}
+@keyframes dc-shimmer {
+  0%, 70% { translate: -60vw 0; }
+  100% { translate: 140vw 0; }
+}
+
+/* Art Deco's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='deco'] {
+  --t-bg: #f6f1e4;
+  --t-side: #f0e9d8;
+  --t-line: #cbbb94;
+  --t-accent: #a07a24;
+  --t-ink: #1d1a14;
+  --t-card: #fffcf4;
+}
+.dark .mode-thumb[data-thumb='deco'] {
+  --t-bg: #0f0e0c;
+  --t-side: #13110d;
+  --t-line: #3d3424;
+  --t-accent: #d4af5a;
+  --t-ink: #f3ead6;
+  --t-card: #17150f;
+}
+.mode-thumb[data-thumb='deco'] .mt-main i {
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 2px var(--t-card), inset 0 0 0 3px color-mix(in srgb, var(--t-accent) 40%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='deco'] :not(.rune-turning),
+  :root[data-mode='deco'] *::before,
+  :root[data-mode='deco'] *::after {
+    animation: none !important;
+  }
+}

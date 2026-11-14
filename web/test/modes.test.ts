@@ -66,6 +66,12 @@ describe('mode names and lines', () => {
     expect(modeText('palette', 'sorbet')).toBe('What flavor?');
   });
 
+  it("gives pages Art Deco's names", () => {
+    expect(pageName('Sites', 'deco')).toBe('Suites');
+    expect(pageName('Aura', 'deco')).toBe('Concierge');
+    expect(modeText('allGood', 'deco')).toBe('All in order');
+  });
+
   it('says a line its own way in Wizard, and the plain one in Classic', () => {
     expect(modeText('newSite', 'wizard')).toBe('Conjure a site');
     expect(modeText('newSite', 'classic')).toBe('New site');

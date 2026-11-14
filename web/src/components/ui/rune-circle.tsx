@@ -148,3 +148,18 @@ export function Scoops({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Art Deco's turning icon: a sunburst of twelve thin rays, every other one
+ * longer, around a small ring, turning slowly while something runs.
+ */
+export function Sunburst({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} style={{ animationDuration: '3s' }} aria-hidden>
+      <circle cx="32" cy="32" r="7" fill="none" stroke="currentColor" strokeWidth="4" />
+      {Array.from({ length: 12 }, (_, i) => (
+        <path key={i} d={i % 2 ? 'M32 18V9' : 'M32 18V3'} stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeOpacity={i % 2 ? 0.55 : 1} transform={`rotate(${i * 30} 32 32)`} />
+      ))}
+    </svg>
+  );
+}

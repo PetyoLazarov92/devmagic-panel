@@ -364,6 +364,37 @@ something runs. Pages it names its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Art Deco
+
+Gold on black, or on ivory in the light theme: nearly square corners, a fine
+gold frame drawn inside every card and dialog, a sunburst fan in one corner of
+each card, names in a light geometric face in capitals with wide spacing, and
+gold for whatever is chosen. A healthy site's dot is a small diamond. The
+effects add a fine diagonal pattern behind the pages and, now and then, a faint
+band of gold shimmer crossing it (Background, CSS only); a thin gold fan of
+lines rising where you click a button or link, with nothing following the
+cursor (Pointer); and a sheen passing over each sunburst now and then, a broken
+site's inner frame turning red and breathing, and the healthy diamond glowing
+gold (Elements). A sunburst turns where something runs. Pages it names its own
+way:
+
+| Classic | Art Deco |
+| --- | --- |
+| Demo | Rehearsal |
+| Sites | Suites |
+| Aura | Concierge |
+| Mail | Telegrams |
+| Services | Boiler room |
+| WP Cores | Vault |
+| Activity | Guest book |
+| Updates | Premiere |
+| Settings | Cloakroom |
+| Modes | Ballroom |
+| Developer options | Back of house |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks

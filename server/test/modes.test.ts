@@ -226,6 +226,20 @@ describe('mode progress', () => {
     expect(progress.developerView().modes.find((m) => m.id === 'sorbet')?.unlocked?.by).toBe('sorbet.flavors');
   });
 
+  it("counts Art Deco's aliases one by one and its table care of any kind", () => {
+    const progress = new ModeProgress(memory());
+    const count = (id: string) => progress.developerView().counters.find((c) => c.id === id)?.count ?? 0;
+    countAction(progress, 'site.addAliases', { domain: 'local.spellbook.example', aliases: ['www.local.spellbook.example', 'shop.spellbook.test'] });
+    countAction(progress, 'mysql.optimize', {});
+    countAction(progress, 'mysql.analyze', {});
+    countAction(progress, 'db.fixTables', {});
+    countAction(progress, 'db.toInnodb', {});
+    countAction(progress, 'db.fixTable', {});
+    expect([count('aliasAdd'), count('tablePolish')]).toEqual([2, 4]);
+    countAction(progress, 'site.addAliases', { domain: 'local.spellbook.example', aliases: Array.from({ length: 10 }, (_, i) => `a${i}.spellbook.test`) });
+    expect(progress.developerView().modes.find((m) => m.id === 'deco')?.unlocked?.by).toBe('deco.guests');
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);
