@@ -9,7 +9,7 @@ import { savePreferences, usePreferences } from '@/lib/preferences';
 import { toast } from '@/lib/toast';
 
 /** Whether now is a good moment: no other dialog open, no form with unsaved changes. */
-function quietMoment(): boolean {
+export function quietMoment(): boolean {
   return !document.querySelector('dialog[open]') && !document.querySelector('[role="region"][aria-label="Unsaved changes"]');
 }
 

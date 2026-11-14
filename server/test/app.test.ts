@@ -336,6 +336,18 @@ describe('modes', () => {
     expect((await app.inject({ method: 'POST', url: '/api/modes/dragon/unlock', headers })).statusCode).toBe(404);
   });
 
+  it('gives the daily line, opening by itself until it was seen today', async () => {
+    const cookie = await login();
+    const headers = { host: HOST, origin: ORIGIN, cookie };
+    const first = (await app.inject({ method: 'GET', url: '/api/modes/line', headers })).json();
+    expect(first.seen).toBe(false);
+    expect(first.text).toMatch(/\*\*.+\*\*/);
+    expect((await app.inject({ method: 'POST', url: '/api/modes/line/seen', headers })).json().seen).toBe(true);
+    const again = (await app.inject({ method: 'GET', url: '/api/modes/line', headers })).json();
+    expect(again).toEqual({ ...first, seen: true });
+    expect((await app.inject({ method: 'GET', url: '/api/modes/line', headers: { host: HOST } })).statusCode).toBe(401);
+  });
+
   it('keeps the paths, progress and words back until the puzzle is solved, and again once locked', async () => {
     const cookie = await login();
     const headers = { host: HOST, origin: ORIGIN, cookie };

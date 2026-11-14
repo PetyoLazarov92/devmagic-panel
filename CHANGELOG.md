@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.62.0 (2026-11-14)
+* **Modes:** a line for today: the first time you open the panel each day, a short thought shows as a quote, one word in bold; the quote icon in the top bar opens it again all day
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.61.0 (2026-11-14)
 * **Modes:** the way to the Modes page appears in the menu and in Ctrl+K once you find your first mode. Developer options' Modes card lists each mode and its status, and keeps how they open behind a small puzzle; switching the options off locks it again
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

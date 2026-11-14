@@ -28,6 +28,7 @@ export * from './org.js';
 export * from './preferences.js';
 export * from './modes.js';
 export * from './modes-puzzle.js';
+export * from './daily-line.js';
 export * from './mysql.js';
 export * from './db-browser.js';
 export * from './apache.js';

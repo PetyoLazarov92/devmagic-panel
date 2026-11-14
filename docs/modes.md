@@ -25,6 +25,14 @@ use for the first time comes with its effects on. A sealed one is blurred
 behind a lock and shows a riddle for each way it opens; once you are past half
 way on one of them, its riddle says **The seal is weakening**.
 
+## A line for today
+
+The first time you open the panel each day, a short line shows in a small
+dialog: a thought, a bit of wisdom or a fact, set as a quote with where it
+comes from. One word in it is in bold. The quote icon in the top bar opens it
+again for the rest of the day; the panel remembers it showed it, so another
+browser does not show it again that day.
+
 ## When a mode opens
 
 The panel shows it once, in a dialog: **You unlocked Wizard mode**, what

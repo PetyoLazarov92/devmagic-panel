@@ -1,6 +1,6 @@
 import type { BackgroundTask, PanelStorage, HtaccessReport, HtaccessRule, WpDbReport, AccessReport, ActionRunResult, ApacheReport, NginxReport, MysqlBackup, MysqlReport, AssistantSettings, AuraItem, AuraReport, Briefing, ChatReply, CleanCopyInfo, CleanPreview, CoresReport, EnvironmentReport, FolderEntry, GitDetails, GitPullRequest, GitTidyPreview, InstallDraft, JobView, KeptDatabaseInfo, MailSummary, NetworkAdmins, LocalConstant, OrgRepo, OrgSettings, Preferences, SiteConstant, SiteSalts, QueuedProposal, RememberedRepo, ProductionSettings, ServerSignIn, ServerTables, WporgDetails, RepoBuild, TrustedOwner, DumpPlugin, MissingScanState, RepoFacts, SiteVulnerabilities, RepoInspection, RunStep, ServicesReport, Site, SitePlugin, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, WizardSuggestion } from '@devmagic-panel/shared';
 import { mockApplyMysqlSettings, mockMysqlSettings } from './mysql-settings';
-import { nextPuzzle, type ModePuzzle, puzzleQuestion, countMode, startFreshPaths, emptyModesState, isUnlocked, type ModesState, modesDeveloper, modesDeveloperView, modesView, readModesState, speakWord, accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
+import { dailyLine, localDate, nextPuzzle, type ModePuzzle, puzzleQuestion, countMode, startFreshPaths, emptyModesState, isUnlocked, type ModesState, modesDeveloper, modesDeveloperView, modesView, readModesState, speakWord, accessKey, actions, knownLeftOut, apacheModuleLock, DEFAULT_CLAUDE_RUN, isActionId, isLocalName, localDomainFor, LEGACY_SALT_KEYS, readKey, WP_SALT_KEYS } from '@devmagic-panel/shared';
 import { previewSteps } from '@/lib/plan';
 import type { Api } from '@/lib/api';
 import { coreVersions, debugLog, runs, sites } from './fixtures';
@@ -1074,6 +1074,14 @@ const mockPreferences: Preferences = (() => {
   }
 })();
 
+function mockLineSeen(): string | null {
+  try {
+    return localStorage.getItem('dmp-mock-line-seen');
+  } catch {
+    return null;
+  }
+}
+
 // Developer options' puzzle in the demo: the question asked, and whether it was solved in this tab.
 let mockPuzzle: ModePuzzle | undefined;
 const MOCK_MODES_OPEN = 'dmp-mock-modes-open';
@@ -1444,6 +1452,16 @@ export const mockApi: Api = {
   modesLock: async () => {
     setMockModesOpen(false);
     return { open: false };
+  },
+  // The daily line as the panel picks it, shown once a day in this browser.
+  dailyLine: async () => ({ ...dailyLine(mockModes(), localDate()), seen: mockLineSeen() === localDate() }),
+  dailyLineSeen: async () => {
+    try {
+      localStorage.setItem('dmp-mock-line-seen', localDate());
+    } catch {
+      // the demo shows it again then
+    }
+    return { ...dailyLine(mockModes(), localDate()), seen: true };
   },
   savePreferences: async (update) => {
     if (update.mode && !isUnlocked(mockModes(), update.mode)) throw new Error('That mode is still sealed');

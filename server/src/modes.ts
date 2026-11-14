@@ -1,7 +1,9 @@
-import { type BrowserCounter, countMode, startFreshPaths, isUnlocked as unlockedIn, type ModeCounter, type ModesDeveloperView, modesDeveloper, modesDeveloperView, type ModesState, type ModesView, modesView, readModesState, type SealedModeId, speakWord } from '@devmagic-panel/shared';
+import { type BrowserCounter, countMode, type DailyLine, dailyLine, localDate, startFreshPaths, isUnlocked as unlockedIn, type ModeCounter, type ModesDeveloperView, modesDeveloper, modesDeveloperView, type ModesState, type ModesView, modesView, readModesState, type SealedModeId, speakWord } from '@devmagic-panel/shared';
 
 /** The meta row that holds the counters, where each path started and what is unlocked. */
 export const MODES_KEY = 'modes';
+/** The day the daily line was last shown, so it opens by itself once a day across browsers. */
+export const LINE_SEEN_KEY = 'modes-line-seen';
 /** The panel version the modes last saw running, to notice an update. */
 export const VERSION_KEY = 'modes-version';
 
@@ -97,6 +99,16 @@ export class ModeProgress {
 
   view(): ModesView {
     return modesView(this.state());
+  }
+
+  /** Today's line, by this machine's date, and whether it was shown today in any browser. */
+  line(): DailyLine & { seen: boolean } {
+    const date = localDate(this.now());
+    return { ...dailyLine(this.state(), date), seen: this.store.getMeta(LINE_SEEN_KEY) === date };
+  }
+
+  lineSeen(): void {
+    this.store.setMeta(LINE_SEEN_KEY, localDate(this.now()));
   }
 
   isUnlocked(mode: string): boolean {

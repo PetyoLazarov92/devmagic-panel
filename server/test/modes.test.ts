@@ -1,4 +1,4 @@
-import { countMode, emptyModesState, MODE_PATHS, MODE_PUZZLES, MODE_WORDS, modesDeveloper, modesDeveloperView, modesView, nextPuzzle, pathProgress, readModesState, speakWord } from '@devmagic-panel/shared';
+import { DAILY_LINES, dailyLine, dailyLineParts, countMode, emptyModesState, MODE_PATHS, MODE_PUZZLES, MODE_WORDS, modesDeveloper, modesDeveloperView, modesView, nextPuzzle, pathProgress, readModesState, speakWord } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { countAction, ModeProgress, newerVersion } from '../src/modes.js';
 
@@ -277,6 +277,31 @@ describe('mode progress', () => {
       for (const w of words) expect(text).not.toContain(w);
     }
     expect(nextPuzzle('double').id).not.toBe('double');
+  });
+
+  it('writes each daily line around its own word, in bold once, with a made-up source', () => {
+    for (const [mode, lines] of Object.entries(DAILY_LINES)) {
+      expect(lines.length).toBeGreaterThanOrEqual(4);
+      for (const line of lines) {
+        expect(dailyLineParts(line.text).word).toBe(MODE_WORDS[mode as keyof typeof MODE_WORDS]);
+        expect(line.text.match(/\*\*/g)).toHaveLength(2);
+        expect(line.source).not.toBe('');
+        expect(`${line.text} ${line.source}`).not.toMatch(/\u2014/);
+      }
+    }
+  });
+
+  it('picks the daily line from a mode still sealed, the same all day, another the next day, and any word once all are open', () => {
+    const state = emptyModesState();
+    for (const m of Object.keys(MODE_WORDS)) if (m !== 'forge' && m !== 'grove') modesDeveloper.unlock(state, m as 'wizard');
+    const today = dailyLine(state, '2026-11-14');
+    const tomorrow = dailyLine(state, '2026-11-15');
+    expect(dailyLine(state, '2026-11-14')).toEqual(today);
+    const words = [today, tomorrow].map((l) => dailyLineParts(l.text).word).sort();
+    expect(words).toEqual(['bloom', 'ignite']);
+    modesDeveloper.unlock(state, 'forge');
+    modesDeveloper.unlock(state, 'grove');
+    expect(Object.values(MODE_WORDS)).toContain(dailyLineParts(dailyLine(state, '2026-11-16').text).word);
   });
 
   it('tells a newer version from an older or the same one', () => {

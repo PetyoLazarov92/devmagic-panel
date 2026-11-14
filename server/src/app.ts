@@ -796,6 +796,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const unlocked = typeof word === 'string' && word.length <= 40 ? modes.word(word) : null;
       return { ...modes.view(), unlocked };
     });
+    // The daily line: one thought a day with a secret word in bold; it opens by itself the first time the panel is opened that day.
+    api.get('/api/modes/line', async () => modes.line());
+    api.post('/api/modes/line/seen', async () => {
+      modes.lineSeen();
+      return modes.line();
+    });
     // Developer options: the rules, each path's progress and the words show only after the puzzle is solved, until
     // Developer options are switched off (or the panel restarts). Kept in memory only.
     let modesOpen = false;

@@ -18,6 +18,7 @@ import { useMailUnread } from '@/lib/mail-unread';
 import { useHtaccessNotices } from '@/lib/htaccess-notices';
 import { navActive } from '@/lib/nav';
 import { refreshModes, useModeText, useModesEntry, usePageName } from '@/lib/modes';
+import { DailyLine } from '@/features/modes/daily-line';
 import { ModeEffects } from '@/features/modes/mode-effects';
 import { UnlockDialog } from '@/features/modes/unlock-dialog';
 import { navigate } from '@/lib/router';
@@ -155,6 +156,7 @@ export function AppShell({ path, user, version, onLogout, children, siteCount }:
             <PanelStatusIndicator />
             <JobsIndicator />
             <QueuedProposals />
+            <DailyLine />
             <ThemeToggle className="hidden md:inline-flex" />
             {assistantOn && (
               <Button variant="outline" onClick={() => setAssistantOpen(true)} title="Ask Claude about your sites">
