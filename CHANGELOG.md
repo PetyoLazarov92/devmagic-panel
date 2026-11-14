@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.55.0 (2026-11-14)
+* **Modes:** one more mode is waiting to be found. A mode's own names for pages and a few lines can be switched off on the Modes page, keeping its look and effects. The mode you use is laid out anew there: its picture, name and theme on one side, its switches in one list on the other
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.54.0 (2026-11-14)
 * **Modes:** one more mode is waiting to be found
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

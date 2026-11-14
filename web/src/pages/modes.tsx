@@ -1,6 +1,6 @@
 import { EFFECTS_OFF, EFFECTS_ON, MODE_EFFECT_INFO, MODE_EFFECT_LABEL, MODE_EFFECTS, type ModeEffect, type ModeId, type ModeView } from '@devmagic-panel/shared';
 import { Eye } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Notice, PageHeader } from '@/components/layout/page';
 import { CardsSkeleton } from '@/components/layout/skeletons';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
@@ -107,10 +107,16 @@ function ActiveMode({ mode }: { mode: ModeView }) {
     if (classic) return;
     savePreferences({ effects: { ...prefs.effects, [mode.id]: { ...effects, [effect]: on } } });
   }
+  const ownNames = mode.id !== 'classic' && prefs.modeNames?.[mode.id] !== false;
+  function setNames(on: boolean) {
+    if (mode.id === 'classic') return;
+    savePreferences({ modeNames: { ...prefs.modeNames, [mode.id]: on } });
+  }
   return (
-    <Card className="mt-6 grid gap-6 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-      <ModeThumb mode={mode.id} />
+    <Card className="mt-6 grid gap-6 p-5 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      {/* The mode itself: its picture, name and theme. */}
       <div className="grid content-start gap-4">
+        <ModeThumb mode={mode.id} />
         <div>
           <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold">
             {mode.title}
@@ -118,26 +124,60 @@ function ActiveMode({ mode }: { mode: ModeView }) {
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">{mode.description}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="w-24 text-muted-foreground">Theme</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">Theme</span>
           <ThemeToggle />
         </div>
-        <div className="grid gap-3">
-          <p className="text-sm text-muted-foreground">Effects</p>
+      </div>
+      {/* Its switches, one list per group, each switch at the right edge of its row. */}
+      <div className="grid content-start gap-5">
+        <SettingGroup title="Effects" note={classic ? 'Effects come with the other modes.' : reduced ? "Your system asks for reduced motion, so the effects stay off. Your switches are kept for when it doesn't." : undefined}>
           {MODE_EFFECTS.map((effect) => (
-            <div key={effect} className={cn('flex items-start gap-3', (classic || reduced) && 'opacity-60')}>
-              <Switch checked={!reduced && effects[effect]} disabled={classic || reduced} label={MODE_EFFECT_LABEL[effect]} onChange={(on) => set(effect, on)} />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{MODE_EFFECT_LABEL[effect]}</p>
-                <p className="text-xs text-muted-foreground">{mode.id === 'classic' ? ANY_EFFECT[effect] : MODE_EFFECT_INFO[mode.id][effect]}</p>
-              </div>
-            </div>
+            <SettingRow
+              key={effect}
+              label={MODE_EFFECT_LABEL[effect]}
+              detail={mode.id === 'classic' ? ANY_EFFECT[effect] : MODE_EFFECT_INFO[mode.id][effect]}
+              checked={!reduced && effects[effect]}
+              disabled={classic || reduced}
+              onChange={(on) => set(effect, on)}
+            />
           ))}
-          {classic && <p className="text-xs text-muted-foreground">Effects come with the other modes.</p>}
-          {!classic && reduced && <p className="text-xs text-muted-foreground">Your system asks for reduced motion, so the effects stay off. Your switches are kept for when it doesn't.</p>}
-        </div>
+        </SettingGroup>
+        <SettingGroup title="Words">
+          <SettingRow
+            label="Own names"
+            detail={classic ? 'The other modes name pages and a few lines their own way.' : `Pages and a few lines in ${mode.title}'s own words. Off keeps the panel's usual names and texts, with the look and the effects as they are.`}
+            checked={ownNames}
+            disabled={classic}
+            onChange={setNames}
+          />
+        </SettingGroup>
       </div>
     </Card>
+  );
+}
+
+/** A group of the active mode's switches: a small heading and its rows in one framed list, with a note under it. */
+function SettingGroup({ title, note, children }: { title: string; note?: string | undefined; children: ReactNode }) {
+  return (
+    <section className="grid gap-2" aria-label={title}>
+      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h3>
+      <div className="divide-y rounded-lg border bg-card">{children}</div>
+      {note && <p className="text-xs text-muted-foreground">{note}</p>}
+    </section>
+  );
+}
+
+/** One switch of the active mode: what it is and what it does on the left, the switch at the right edge, centered on the row. */
+function SettingRow({ label, detail, checked, disabled, onChange }: { label: string; detail: string; checked: boolean; disabled: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className={cn('flex items-center justify-between gap-4 px-4 py-3', disabled && 'opacity-60')}>
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
+      </div>
+      <Switch checked={checked} disabled={disabled} label={label} onChange={onChange} />
+    </div>
   );
 }
 

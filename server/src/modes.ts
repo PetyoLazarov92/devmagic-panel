@@ -135,6 +135,9 @@ export function countAction(progress: ModeProgress, id: string, input: unknown):
   }
   if (id === 'site.setPhp') progress.count('phpSwitch');
   if (id === 'site.login') progress.count('wpLogin');
+  if (id === 'file.write') progress.count('fileSave');
+  if (id === 'cert.reissue') progress.count('certReissue');
+  if (id === 'db.cleanTransients' || id === 'db.cleanContent' || id === 'db.cleanOrphans') progress.count('dbClean');
   if (id === 'db.restore' || id === 'db.restoreKept' || id === 'trash.restore' || id === 'file.restore') progress.count('restore');
   if (id === 'mysql.undoRowChange' || id === 'mysql.undoCleanup' || id === 'cron.undo' || id === 'wpcron.undo') progress.count('undo');
   if (id === 'site.setServer' && input && typeof input === 'object') {

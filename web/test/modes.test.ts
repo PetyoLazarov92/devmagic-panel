@@ -42,6 +42,12 @@ describe('mode names and lines', () => {
     expect(modeText('palette', 'neon')).toBe('Press start...');
   });
 
+  it("gives pages Ink's names", () => {
+    expect(pageName('Sites', 'ink')).toBe('Scrolls');
+    expect(pageName('Aura', 'ink')).toBe('Proofreading');
+    expect(modeText('noJobs', 'ink')).toBe('Blank page');
+  });
+
   it('says a line its own way in Wizard, and the plain one in Classic', () => {
     expect(modeText('newSite', 'wizard')).toBe('Conjure a site');
     expect(modeText('newSite', 'classic')).toBe('New site');

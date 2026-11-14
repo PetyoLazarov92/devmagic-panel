@@ -11,6 +11,7 @@ import './styles/forge.css';
 import './styles/grove.css';
 import './styles/abyss.css';
 import './styles/neon.css';
+import './styles/ink.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>

@@ -1,0 +1,441 @@
+/*
+ * Ink: black ink on rice paper. Warm paper in light and charcoal in dark,
+ * nearly square corners, names in a calm serif, vermilion as the one color
+ * (the seal's), and a brushed circle with a red seal in each card's corner.
+ * data-mode="ink" on the root, data-fx while Elements is on, data-fx-bg while
+ * Background is on (the grain and the wash are CSS); a click's drop of ink on
+ * one canvas (features/modes/ink-effects.tsx).
+ */
+:root[data-mode='ink']:not(.dark) {
+  --background: #f2ece0;
+  --foreground: #1c1a17;
+  --card: #faf7f0;
+  --muted: #ebe4d6;
+  --muted-foreground: #665e50;
+  --border: #ddd4c2;
+  --input: #cbbfa8;
+  --ring: #a83c2a;
+  --primary: #a83c2a;
+  --primary-foreground: #fffaf4;
+  --secondary: #ede5d6;
+  --secondary-foreground: #4a3a2c;
+  --success: #4a6a2a;
+  --warning: #8a5a00;
+  --danger: #b8322a;
+  --ik-ink: #1c1a17;
+  --ik-seal: #b8432f;
+  --ik-raised: #fdfbf6;
+  --ik-chosen-ink: #8e2e1e;
+  --ik-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cpath d='M178 74a30 30 0 1 1-13-26' fill='none' stroke='%231c1a17' stroke-opacity='.15' stroke-width='7' stroke-linecap='round'/%3E%3Crect x='100' y='92' width='16' height='16' rx='2' fill='%23b8432f' fill-opacity='.5'/%3E%3Crect x='103' y='95' width='10' height='10' fill='none' stroke='%23faf7f0' stroke-opacity='.75'/%3E%3C/svg%3E");
+  --ik-brush: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5C25 2 70 2 99 3.6C70 5.6 30 7.4 1 5Z' fill='%23b8432f' fill-opacity='.55'/%3E%3C/svg%3E");
+}
+:root[data-mode='ink'].dark {
+  --background: #141311;
+  --foreground: #ece6d8;
+  --card: #1c1a17;
+  --muted: #232019;
+  --muted-foreground: #a69e8e;
+  --border: #3a3630;
+  --input: #4a453c;
+  --ring: #e8806a;
+  --primary: #e8806a;
+  --primary-foreground: #141311;
+  --secondary: #26231e;
+  --secondary-foreground: #e6dccb;
+  --success: #b9c9a0;
+  --warning: #e0b860;
+  --danger: #f07060;
+  --ik-ink: #ece6d8;
+  --ik-seal: #e0664c;
+  --ik-raised: #211f1b;
+  --ik-chosen-ink: #ffd8cc;
+  --ik-corner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cpath d='M178 74a30 30 0 1 1-13-26' fill='none' stroke='%23ece6d8' stroke-opacity='.18' stroke-width='7' stroke-linecap='round'/%3E%3Crect x='100' y='92' width='16' height='16' rx='2' fill='%23e0664c' fill-opacity='.55'/%3E%3Crect x='103' y='95' width='10' height='10' fill='none' stroke='%231c1a17' stroke-opacity='.7'/%3E%3C/svg%3E");
+  --ik-brush: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5C25 2 70 2 99 3.6C70 5.6 30 7.4 1 5Z' fill='%23e0664c' fill-opacity='.6'/%3E%3C/svg%3E");
+}
+:root[data-mode='ink'] {
+  --font-ink: 'Shippori Mincho', 'Noto Serif', 'Source Serif 4', 'DejaVu Serif', Georgia, serif;
+  --ik-chosen: color-mix(in srgb, var(--ik-seal) 10%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --ik-veil: 82%;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 22%, var(--border)) transparent;
+}
+:root[data-mode='ink'].dark {
+  --ik-chosen: color-mix(in srgb, var(--ik-seal) 14%, var(--card));
+}
+
+/* Names: page titles, card titles, the menu and dialogs in a calm serif. */
+:root[data-mode='ink'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-family: var(--font-ink);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+:root[data-mode='ink'] nav[aria-label='Main'] a > span:first-of-type {
+  font-family: var(--font-ink);
+}
+:root[data-mode='ink'] [data-ui='tile'] > span:first-child {
+  font-family: var(--font-ink);
+  font-weight: 600;
+  color: var(--primary);
+}
+/* A brush line under the page's title; it draws itself once as a page opens while Elements is on. */
+:root[data-mode='ink'] [data-ui='page-title'] {
+  padding-bottom: 0.4rem;
+  background: var(--ik-brush) left bottom / 4.5em 0.4rem no-repeat;
+}
+:root[data-mode='ink'][data-fx] [data-ui='page-title'] {
+  animation: ik-brush 1.4s cubic-bezier(0.3, 0.6, 0.3, 1) both;
+}
+@keyframes ik-brush {
+  from { background-size: 0 0.4rem; }
+  to { background-size: 4.5em 0.4rem; }
+}
+
+/* Cards: nearly square, a fine shadow, a brushed circle and a red seal in the bottom right corner (::after). */
+:root[data-mode='ink'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 4px;
+  border-color: var(--border);
+  box-shadow: 0 6px 18px -14px color-mix(in srgb, #1c1a17 45%, transparent);
+}
+:root[data-mode='ink'].dark [data-ui='card'] {
+  box-shadow: 0 8px 20px -14px #000;
+}
+:root[data-mode='ink'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 200px;
+  height: 120px;
+  max-width: 100%;
+  max-height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0 0 4px 0;
+  background: var(--ik-corner) right bottom / 200px 120px no-repeat;
+}
+:root[data-mode='ink'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='ink'] dialog [data-ui='card']::after {
+  display: none;
+}
+
+/* A broken site: red ink bleeds in at its card's edge, breathing slowly while Elements is on. */
+:root[data-mode='ink'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+}
+:root[data-mode='ink'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 4px;
+  box-shadow: inset 0 0 22px -6px color-mix(in srgb, var(--danger) 45%, transparent);
+}
+:root[data-mode='ink'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: ik-bleed 6s ease-in-out infinite;
+}
+@keyframes ik-bleed {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+/* A healthy dot spreads softly, like ink on paper; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='ink'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='ink'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--success) 40%, transparent), transparent);
+  animation: ik-spread 5s ease-in-out infinite;
+}
+@keyframes ik-spread {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* The spinner: a brushed circle draws itself, fades and draws again. */
+:root[data-mode='ink'] .ink-enso {
+  animation: ik-enso 2.4s ease-in-out infinite;
+}
+@keyframes ik-enso {
+  0% { stroke-dasharray: 0 100; opacity: 1; }
+  60% { stroke-dasharray: 100 0; opacity: 1; }
+  100% { stroke-dasharray: 100 0; opacity: 0.15; }
+}
+
+/* Everything else with a frame: nearly square. */
+:root[data-mode='ink'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 4px;
+}
+:root[data-mode='ink'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='ink'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #1c1a17 40%, transparent);
+}
+:root[data-mode='ink'] [data-ui='tile'] {
+  border-radius: 4px;
+}
+:root[data-mode='ink']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='ink'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 4px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--ik-veil), transparent);
+}
+:root[data-mode='ink'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='ink'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='ink'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='ink'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--ik-veil), transparent);
+}
+:root[data-mode='ink'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 9%, var(--card)) var(--ik-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, a fine edge, a soft shadow. */
+:root[data-mode='ink'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='ink'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 6px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--ik-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #141311 50%, transparent);
+}
+:root[data-mode='ink'] [data-ui='dialog'] {
+  border-radius: 6px;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: var(--ik-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #141311 60%, transparent);
+}
+:root[data-mode='ink'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='ink'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #141311 50%, transparent);
+}
+:root[data-mode='ink'] :is([role='menuitem'], [role='option']) {
+  border-radius: 4px;
+}
+:root[data-mode='ink'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--ik-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='ink'] select.dmp-select::picker(select) {
+    border-radius: 6px;
+    border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+    background: var(--ik-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #141311 50%, transparent);
+  }
+  :root[data-mode='ink'] select.dmp-select option {
+    border-radius: 6px;
+  }
+  :root[data-mode='ink'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--ik-chosen);
+  }
+  :root[data-mode='ink'] select.dmp-select option:checked {
+    background: var(--ik-chosen);
+    color: var(--ik-chosen-ink);
+  }
+}
+
+/* Fields: on a deeper ground, a vermilion edge while you type. */
+:root[data-mode='ink'] [data-ui='input'] {
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='ink'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='ink'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: nearly square; the main one a soft vermilion. */
+:root[data-mode='ink'] [data-ui='button'],
+:root[data-mode='ink'] [data-ui='chip'] {
+  border-radius: 4px;
+}
+:root[data-mode='ink'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--ik-seal) 50%, transparent);
+  background-color: var(--ik-chosen);
+  color: var(--ik-chosen-ink);
+}
+:root[data-mode='ink'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--ik-seal) 20%, var(--card));
+}
+:root[data-mode='ink'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--ik-veil), transparent);
+}
+
+/* Whatever is chosen: a soft vermilion fill. */
+:root[data-mode='ink'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--ik-seal) 50%, transparent);
+  background: var(--ik-chosen);
+  color: var(--ik-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='ink'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 4px;
+  background: var(--ik-chosen);
+  color: var(--ik-chosen-ink);
+}
+:root[data-mode='ink'] [data-ui='segmented'],
+:root[data-mode='ink'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 4px;
+}
+:root[data-mode='ink'] [role='tab'][aria-selected='true'] {
+  border-color: var(--ik-seal);
+  color: var(--ik-chosen-ink);
+}
+
+/* Switches: a soft vermilion when on. */
+:root[data-mode='ink'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='ink'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='ink'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: nearly square, a vermilion mark when ticked. */
+:root[data-mode='ink'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='ink'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='ink'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--ik-seal);
+  background-color: var(--ik-chosen);
+}
+:root[data-mode='ink'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--ik-seal);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='ink'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ik-seal);
+}
+:root[data-mode='ink'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='ink'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: ink deepening into the seal's red, softly. */
+:root[data-mode='ink'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--ik-ink) 55%, var(--card)), color-mix(in oklab, var(--ik-seal) 70%, var(--card)));
+}
+
+/* The top bar and the sidebar: a faint ink rule; the page you are on in a soft vermilion fill. */
+:root[data-mode='ink'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+}
+:root[data-mode='ink'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 4px;
+  background: var(--ik-chosen);
+  color: var(--ik-chosen-ink);
+}
+
+/*
+ * The background effect, CSS only: a faint paper grain (body::before) and a
+ * soft wash of ink drifting across the page once a minute (body::after, moved
+ * by transform alone, so the page is never painted again for it).
+ */
+:root[data-mode='ink'][data-fx-bg] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.09 0 0 0 0 0.08 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)'/%3E%3C/svg%3E");
+  opacity: 0.09;
+}
+:root[data-mode='ink'][data-fx-bg].dark body::before {
+  opacity: 0.16;
+  filter: invert(1);
+}
+:root[data-mode='ink'][data-fx-bg] body::after {
+  content: '';
+  position: fixed;
+  top: 10vh;
+  left: 0;
+  width: 70vw;
+  height: 70vh;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--ik-ink) 7%, transparent), color-mix(in srgb, var(--ik-ink) 3%, transparent) 55%, transparent);
+  animation: ik-wash 60s ease-in-out infinite alternate;
+}
+:root[data-mode='ink'][data-fx-bg].dark body::after {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--ik-ink) 5%, transparent), color-mix(in srgb, var(--ik-ink) 2%, transparent) 55%, transparent);
+}
+@keyframes ik-wash {
+  from { transform: translate(-30vw, 0) scale(1, 0.8); }
+  to { transform: translate(60vw, 8vh) scale(1.2, 1); }
+}
+
+/* Ink's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='ink'] {
+  --t-bg: #f2ece0;
+  --t-side: #ebe4d6;
+  --t-line: #cbbfa8;
+  --t-accent: #b8432f;
+  --t-ink: #1c1a17;
+  --t-card: #faf7f0;
+}
+.dark .mode-thumb[data-thumb='ink'] {
+  --t-bg: #141311;
+  --t-side: #18170f;
+  --t-line: #3a3630;
+  --t-accent: #e0664c;
+  --t-ink: #ece6d8;
+  --t-card: #1c1a17;
+}
+.mode-thumb[data-thumb='ink'] .mt-main i {
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='ink'] :not(.rune-turning),
+  :root[data-mode='ink'] *::before,
+  :root[data-mode='ink'] *::after {
+    animation: none !important;
+  }
+}

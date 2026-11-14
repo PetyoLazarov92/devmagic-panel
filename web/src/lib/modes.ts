@@ -83,14 +83,16 @@ export function useReducedMotion(): boolean {
 }
 
 /** The mode on screen (a preview wins over the saved one) and the effects that run, none with reduced motion. */
-export function useActiveMode(): { mode: ModeId; effects: ModeEffects; reduced: boolean } {
+export function useActiveMode(): { mode: ModeId; effects: ModeEffects; reduced: boolean; names: boolean } {
   const prefs = usePreferences();
   const previewing = usePreviewMode();
   const reduced = useReducedMotion();
   const saved = (MODES as readonly string[]).includes(prefs.mode) ? prefs.mode : 'classic';
   const mode = previewing ?? saved;
   const chosen = mode === 'classic' ? EFFECTS_OFF : previewing ? { pointer: true, elements: true, background: true } : (prefs.effects[mode] ?? EFFECTS_OFF);
-  return { mode, effects: reduced ? EFFECTS_OFF : chosen, reduced };
+  // Its own names for pages and a few lines: on unless switched off for this mode, and always in a preview.
+  const names = mode !== 'classic' && (previewing !== null || prefs.modeNames?.[mode] !== false);
+  return { mode, effects: reduced ? EFFECTS_OFF : chosen, reduced, names };
 }
 
 /** Puts the mode on the page's root, where its styles hang: `data-mode`, `data-fx` for the elements effect and `data-fx-bg` for the background's glow. */
@@ -110,11 +112,11 @@ export function useApplyMode(): void {
 
 /** A page's name in the mode on screen. */
 export function usePageName(): (classic: string) => string {
-  const { mode } = useActiveMode();
-  return (classic) => pageName(classic, mode);
+  const { mode, names } = useActiveMode();
+  return (classic) => (names ? pageName(classic, mode) : classic);
 }
 
 export function useModeText(): (key: ModeTextKey) => string {
-  const { mode } = useActiveMode();
-  return (key) => modeText(key, mode);
+  const { mode, names } = useActiveMode();
+  return (key) => modeText(key, names ? mode : 'classic');
 }

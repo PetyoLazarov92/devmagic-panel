@@ -4,6 +4,7 @@ import { ForgeEffects } from '@/features/modes/forge-effects';
 import { GroveEffects } from '@/features/modes/grove-effects';
 import { AbyssEffects } from '@/features/modes/abyss-effects';
 import { NeonEffects } from '@/features/modes/neon-effects';
+import { InkEffects } from '@/features/modes/ink-effects';
 import { useActiveMode } from '@/lib/modes';
 
 /** The most particles alive at once, so a long drag never piles them up. */
@@ -68,6 +69,8 @@ export function ModeEffects() {
   if (mode === 'abyss') return effects.pointer || effects.background ? <AbyssEffects pointer={effects.pointer} background={effects.background} /> : null;
   // Neon's grid and stars are CSS; only the pointer's trail and rings need a canvas.
   if (mode === 'neon') return effects.pointer ? <NeonEffects /> : null;
+  // Ink's grain and wash are CSS; only a click's drop of ink needs a canvas.
+  if (mode === 'ink') return effects.pointer ? <InkEffects /> : null;
   const on = mode === 'wizard' && (effects.pointer || effects.background || effects.elements);
   if (!on) return null;
   return <WizardCanvas pointer={effects.pointer} background={effects.background} elements={effects.elements} />;

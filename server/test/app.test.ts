@@ -264,15 +264,15 @@ describe('preferences', () => {
     const cookie = await login();
     const headers = { host: HOST, origin: ORIGIN, cookie };
     expect((await app.inject({ method: 'GET', url: '/api/preferences', headers: { host: HOST } })).statusCode).toBe(401);
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {} });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} });
     const saved = await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { theme: 'dark', sitesView: 'list' } });
-    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {} });
+    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} });
     await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { sitesSort: 'newest', tablesSort: 'size', sidebar: 'rail' } });
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {} });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} });
     for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }, { sidebar: 'hidden' }, { useClaude: 'sometimes' }]) {
       expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload })).statusCode).toBe(400);
     }
-    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {} });
+    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} });
   });
 });
 
@@ -283,14 +283,15 @@ describe('modes', () => {
     expect((await app.inject({ method: 'GET', url: '/api/modes', headers: { host: HOST } })).statusCode).toBe(401);
     const first = (await app.inject({ method: 'GET', url: '/api/modes', headers })).json();
     expect(first.fresh).toEqual([]);
-    expect(first.modes.map((m: { id: string; unlocked: boolean }) => [m.id, m.unlocked])).toEqual([['classic', true], ['wizard', false], ['circuit', false], ['forge', false], ['grove', false], ['abyss', false], ['neon', false]]);
+    expect(first.modes.map((m: { id: string; unlocked: boolean }) => [m.id, m.unlocked])).toEqual([['classic', true], ['wizard', false], ['circuit', false], ['forge', false], ['grove', false], ['abyss', false], ['neon', false], ['ink', false]]);
     expect(first.modes[1].riddles).toHaveLength(3);
     expect(first.modes[2].riddles).toHaveLength(3);
     expect(first.modes[3].riddles).toHaveLength(3);
     expect(first.modes[4].riddles).toHaveLength(3);
     expect(first.modes[5].riddles).toHaveLength(3);
     expect(first.modes[6].riddles).toHaveLength(3);
-    expect(JSON.stringify(first)).not.toMatch(/abracadabra|overclock|ignite|bloom|dive|afterglow/);
+    expect(first.modes[7].riddles).toHaveLength(3);
+    expect(JSON.stringify(first)).not.toMatch(/abracadabra|overclock|ignite|bloom|dive|afterglow|calligraphy/);
     expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard' } })).statusCode).toBe(400);
 
     expect((await app.inject({ method: 'POST', url: '/api/modes/word', headers, payload: { word: 'hocus' } })).json().unlocked).toBeNull();
@@ -301,6 +302,9 @@ describe('modes', () => {
     expect(store.getMeta('modes')).not.toContain('abracadabra');
     expect((await app.inject({ method: 'POST', url: '/api/modes/wizard/seen', headers })).json().fresh).toEqual([]);
     expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { mode: 'wizard', effects: { wizard: { pointer: true, elements: true, background: false } } } })).statusCode).toBe(200);
+    // Its own names can be switched off, per mode; a mode that is not one is refused.
+    expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { modeNames: { wizard: false } } })).json().modeNames).toEqual({ wizard: false });
+    expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { modeNames: { wizard: 'no' } } })).statusCode).toBe(400);
 
     // Sealing the mode in use from Developer options puts the panel back on Classic.
     const sealed = (await app.inject({ method: 'POST', url: '/api/modes/wizard/seal', headers })).json();

@@ -94,3 +94,15 @@ export function Reel({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/**
+ * Ink's turning icon: a brushed circle that draws itself, fades and draws
+ * again (styles/ink.css), turning slowly as one while something runs.
+ */
+export function Enso({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={cn('rune-turning', className)} style={{ animationDuration: '4s' }} aria-hidden>
+      <path className="ink-enso" d="M44 12A24 24 0 1 1 22 11" pathLength={100} fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+    </svg>
+  );
+}

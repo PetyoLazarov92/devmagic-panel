@@ -151,6 +151,20 @@ describe('mode progress', () => {
     expect(count('serverCopy')).toBe(1);
   });
 
+  it("counts Ink's file saves, certificate reissues and database cleanups", () => {
+    const progress = new ModeProgress(memory());
+    const count = (id: string) => progress.developerView().counters.find((c) => c.id === id)?.count ?? 0;
+    countAction(progress, 'file.write', {});
+    countAction(progress, 'cert.reissue', { domain: 'local.spellbook.example' });
+    countAction(progress, 'db.cleanTransients', {});
+    countAction(progress, 'db.cleanContent', {});
+    countAction(progress, 'db.cleanOrphans', {});
+    countAction(progress, 'db.cleanCopy', {});
+    expect([count('fileSave'), count('certReissue'), count('dbClean')]).toEqual([1, 1, 3]);
+    for (let i = 0; i < 9; i++) countAction(progress, 'cert.reissue', {});
+    expect(progress.developerView().modes.find((m) => m.id === 'ink')?.unlocked?.by).toBe('ink.seals');
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);

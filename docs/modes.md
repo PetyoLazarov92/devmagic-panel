@@ -12,7 +12,11 @@ in Ctrl+K. The mode you use is the wide card on top, with:
 
 - a small picture of the panel in that mode,
 - the theme switch (Light, Dark, System), the same as in the top bar,
-- its effects, each a switch of its own (Classic has none).
+- its effects, each a switch of its own (Classic has none),
+- **Own names**, on unless you switch it off: the mode's names for pages and
+  its few lines of its own. Off keeps the panel's usual names and texts, with
+  the mode's look and effects as they are. It is kept per mode and stays on
+  with reduced motion, since nothing moves.
 
 Below are the other modes. An unlocked one has **Activate** and **Preview**,
 which shows it on the Modes page for 20 seconds without saving it. A mode you
@@ -233,6 +237,36 @@ its own way:
 | Settings | Mixing desk |
 | Modes | Jukebox |
 | Developer options | Back room |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
+## Ink
+
+Black ink on rice paper: nearly square cards with a brushed circle and a red
+seal in one corner, warm paper in the light theme and charcoal in the dark
+one, names in a calm serif, and vermilion, the seal's color, as the one color
+for whatever is chosen. A brush line sits under each page's title. The effects
+add a faint paper grain and a soft wash of ink drifting slowly across the page
+(Background, CSS only); a drop of ink that spreads and fades where you click a
+button or link, with nothing following the cursor (Pointer); and the brush
+line drawing itself as a page opens, a broken site's card bleeding red ink at
+its edge and a healthy site's dot spreading softly (Elements). A brushed
+circle draws itself where something runs. Pages it names its own way:
+
+| Classic | Ink |
+| --- | --- |
+| Demo | Sketchbook |
+| Sites | Scrolls |
+| Aura | Proofreading |
+| Mail | Letters |
+| Services | Inkstone |
+| WP Cores | Woodblocks |
+| Activity | Journal |
+| Updates | New edition |
+| Settings | Desk |
+| Modes | Styles |
+| Developer options | Studio |
 
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.

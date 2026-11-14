@@ -8,7 +8,7 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss', 'neon', 'ink'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
@@ -20,6 +20,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   grove: { title: 'Grove', description: 'Rounded leaves, fireflies and a falling leaf, and a few pages named like a garden.' },
   abyss: { title: 'Abyss', description: 'The deep sea: glowing coral, a jellyfish light and rising bubbles, and a few pages named for the ocean.' },
   neon: { title: 'Neon', description: 'An 80s night: magenta and sunset orange, a light trail, a glowing grid, and a few pages named for the arcade.' },
+  ink: { title: 'Ink', description: 'Black ink on rice paper: a brushed circle and a red seal, a drop of ink where you click, and a few pages named for the scroll.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -63,10 +64,15 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: 'Card titles glow like neon, a healthy site glows like a tube, a broken one flickers like a failing sign, a cassette reel turns where something runs.',
     background: 'A glowing grid drifts very slowly toward you along the bottom of the page, under a few stars.',
   },
+  ink: {
+    pointer: 'A click leaves a drop of ink that spreads and fades.',
+    elements: "A brush line draws itself under a page's title, a broken site bleeds red ink at its edge, a healthy site's dot spreads softly, a brushed circle draws itself where something runs.",
+    background: 'A faint paper grain, and a soft wash of ink drifting slowly across the page.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
-export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy'] as const;
+export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay', 'lateNight', 'wpLogin', 'serverCopy', 'fileSave', 'certReissue', 'dbClean'] as const;
 export type ModeCounter = (typeof MODE_COUNTERS)[number];
 /** The counters the browser reports itself; the rest the server counts as things finish. */
 export const BROWSER_COUNTERS = ['auraFix', 'paletteCommand'] as const satisfies readonly ModeCounter[];
@@ -110,13 +116,16 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'neon.nights', mode: 'neon', counter: 'lateNight', goal: 5, riddle: 'Five nights when only the signs are still awake.', line: 'Five nights awake with the signs.', rule: 'Do something in the panel between midnight and 4 in the morning on 5 different nights', startsFresh: true },
   { id: 'neon.doors', mode: 'neon', counter: 'wpLogin', goal: 50, riddle: 'Fifty doors opened without a key.', line: 'Fifty doors, opened without a key.', rule: "Sign in to wp-admin with the panel's one-click login 50 times", startsFresh: true },
   { id: 'neon.tapes', mode: 'neon', counter: 'serverCopy', goal: 5, riddle: 'Five tapes brought home from the city.', line: 'Five tapes, brought home from the city.', rule: "Copy plugins, themes or uploads from a site's server 5 times", startsFresh: true },
+  { id: 'ink.pages', mode: 'ink', counter: 'fileSave', goal: 30, riddle: 'Fill thirty pages by your own hand.', line: 'Thirty pages, filled by your own hand.', rule: 'Save 30 files in the Files tab', startsFresh: true },
+  { id: 'ink.seals', mode: 'ink', counter: 'certReissue', goal: 10, riddle: 'Press the seal ten times.', line: 'Ten seals, pressed.', rule: "Reissue a site's certificate 10 times", startsFresh: true },
+  { id: 'ink.wash', mode: 'ink', counter: 'dbClean', goal: 10, riddle: 'Rinse the stone clean ten times.', line: 'Ten times the stone rinsed clean.', rule: "Clean up a site's database 10 times: transients, revisions and the like, or leftovers", startsFresh: true },
 ];
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.' };
+export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive', neon: 'afterglow', ink: 'calligraphy' };
+export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.', neon: 'The lights flickered on.', ink: 'The ink took to the paper.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.', neon: 'The city never sleeps.', ink: 'The page is yours.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;

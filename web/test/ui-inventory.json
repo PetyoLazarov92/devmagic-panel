@@ -2561,12 +2561,15 @@
   "h1: Modes",
   "h2: ClassicActive",
   "h2: More modes · # sealed",
+  "h3: Effects",
   "h3: Sealed",
+  "h3: Words",
   "radio: Dark",
   "radio: Light",
   "radio: System",
   "switch: Background",
   "switch: Elements",
+  "switch: Own names",
   "switch: Pointer"
  ],
  "/developer": [
@@ -2608,6 +2611,7 @@
   "h3: Circuit",
   "h3: Forge",
   "h3: Grove",
+  "h3: Ink",
   "h3: Its data",
   "h3: Neon",
   "h3: Other things it made",
