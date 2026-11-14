@@ -214,7 +214,7 @@ export interface Api {
   modeEvent: (event: BrowserCounter) => Promise<ModesView>;
   modeWord: (word: string) => Promise<ModesView & { unlocked: string | null }>;
   modesDeveloper: () => Promise<ModesDeveloperView>;
-  modeDeveloper: (mode: SealedModeId, what: 'unlock' | 'seal' | 'replay' | 'reset') => Promise<ModesDeveloperView>;
+  modeDeveloper: (mode: SealedModeId, what: 'unlock' | 'seal' | 'reset') => Promise<ModesDeveloperView>;
   modePath: (path: string, what: 'reset' | 'complete') => Promise<ModesDeveloperView>;
   /** The constants every local site should have, from Settings. */
   localConstants: () => Promise<LocalConstant[]>;

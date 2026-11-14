@@ -801,8 +801,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         // Sealing the mode in use puts the panel back on Classic.
         const prefs = readPreferences();
         if (prefs.mode === mode) deps.store.setMeta(PREFERENCES_KEY, JSON.stringify({ ...prefs, mode: 'classic' }));
-      } else if (what === 'replay') modes.replay(mode);
-      else if (what === 'reset') modes.resetMode(mode);
+      } else if (what === 'reset') modes.resetMode(mode);
       else return reply.code(404).send({ error: `Nothing called ${what.slice(0, 20)} to do with a mode` });
       return modes.developerView();
     });

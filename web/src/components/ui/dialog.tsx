@@ -84,7 +84,11 @@ export function Dialog({ open, onClose, title, description, children, size = 'md
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (open && !el.open) el.showModal();
+    if (open && !el.open) {
+      el.showModal();
+      // The browser focuses the first button (often the ×); a dialog that marks its main control data-autofocus gets it instead.
+      el.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+    }
     if (!open && el.open) el.close();
     // Full screen is never kept: the next open is at the usual size.
     if (!open && full.on) full.onChange(false);

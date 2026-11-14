@@ -97,9 +97,6 @@ export class ModeProgress {
     this.change((state) => modesDeveloper.seal(state, mode));
   }
 
-  replay(mode: SealedModeId): void {
-    this.change((state) => modesDeveloper.replay(state, mode));
-  }
 
   resetMode(mode: SealedModeId): void {
     this.change((state, now) => modesDeveloper.resetMode(state, mode, now));

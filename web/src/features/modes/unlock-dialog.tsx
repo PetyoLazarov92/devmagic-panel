@@ -61,7 +61,7 @@ export function UnlockDialog({ path }: { path: string }) {
       footer={
         <>
           <Button variant="soft" onClick={close}>Later</Button>
-          <Button autoFocus onClick={switchNow}>Switch to {title}</Button>
+          <Button data-autofocus onClick={switchNow}>Switch to {title}</Button>
         </>
       }
     >

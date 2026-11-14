@@ -150,5 +150,7 @@ and anything that removes something stay plain.
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks
-and seals each mode, fills or resets its paths, and shows the unlock dialog
-again.
+and seals each mode and fills or resets its paths; an unlock from there shows
+the unlock dialog, as any other. The dialog opens with its Switch button
+ready, so Enter switches. To see it again, seal the mode and unlock it once
+more.

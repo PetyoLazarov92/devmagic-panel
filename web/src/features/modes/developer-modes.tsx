@@ -39,7 +39,7 @@ export function DeveloperModes() {
       setBusy(false);
     }
   }
-  const onMode = (mode: SealedModeId, what: 'unlock' | 'seal' | 'replay' | 'reset') => () => void run(() => api.modeDeveloper(mode, what));
+  const onMode = (mode: SealedModeId, what: 'unlock' | 'seal' | 'reset') => () => void run(() => api.modeDeveloper(mode, what));
   const onPath = (path: string, what: 'reset' | 'complete') => () => void run(() => api.modePath(path, what));
 
   return (
@@ -103,7 +103,6 @@ export function DeveloperModes() {
               ) : (
                 <Button size="sm" variant="soft" disabled={busy} onClick={onMode(m.id, 'unlock')}>Unlock</Button>
               )}
-              {m.unlocked && <Button size="sm" variant="soft" disabled={busy} onClick={onMode(m.id, 'replay')}>Show the dialog again</Button>}
               <Button size="sm" variant="soft" disabled={busy} onClick={onMode(m.id, 'reset')}>Reset all paths</Button>
             </div>
           </section>

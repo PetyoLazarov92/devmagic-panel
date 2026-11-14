@@ -247,17 +247,17 @@ export function modesDeveloperView(state: ModesState): ModesDeveloperView {
   };
 }
 
-/** Developer options: unlock by hand, seal again, show the dialog again, start a path over or fill it. Each changes `state`. */
+/**
+ * Developer options: unlock by hand, seal again, start a path over or fill it.
+ * An unlock from there brings up the unlock dialog, as any other. Each changes
+ * `state`.
+ */
 export const modesDeveloper = {
   unlock(state: ModesState, mode: SealedModeId, now = new Date()): void {
     if (!isUnlocked(state, mode)) unlock(state, mode, 'developer', now);
   },
   seal(state: ModesState, mode: SealedModeId): void {
     delete state.unlocks[mode];
-  },
-  replay(state: ModesState, mode: SealedModeId): void {
-    const done = state.unlocks[mode];
-    if (done) done.seen = false;
   },
   resetPath(state: ModesState, pathId: string, now = new Date()): void {
     const path = MODE_PATHS.find((p) => p.id === pathId);
@@ -266,7 +266,7 @@ export const modesDeveloper = {
   resetMode(state: ModesState, mode: SealedModeId, now = new Date()): void {
     for (const p of MODE_PATHS.filter((x) => x.mode === mode)) modesDeveloper.resetPath(state, p.id, now);
   },
-  /** Fills a path to its goal, so the real unlock runs: the dialog and its line for that path. */
+  /** Fills a path to its goal, so the real unlock runs: the dialog, with that path's line. */
   completePath(state: ModesState, pathId: string, now = new Date()): SealedModeId[] {
     const path = MODE_PATHS.find((p) => p.id === pathId);
     if (!path) return [];

@@ -1401,7 +1401,6 @@ export const mockApi: Api = {
     const state = changeMockModes((st) => {
       if (what === 'unlock') modesDeveloper.unlock(st, mode);
       if (what === 'seal') modesDeveloper.seal(st, mode);
-      if (what === 'replay') modesDeveloper.replay(st, mode);
       if (what === 'reset') modesDeveloper.resetMode(st, mode);
     });
     if (what === 'seal' && mockPreferences.mode === mode) await mockApi.savePreferences({ mode: 'classic' });
