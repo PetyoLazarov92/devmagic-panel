@@ -66,6 +66,8 @@ export interface SiteRouteDeps {
   cron: () => CronContext;
   /** Told each time the sites are listed, with their health: the modes count a day with every site Healthy. */
   onSites?: (sites: Site[]) => void;
+  /** Told each time the Files tab's find searched: the modes count it. */
+  onFind?: () => void;
 }
 
 const CACHE_MS = 3000;
@@ -261,8 +263,11 @@ export function registerSiteRoutes(api: FastifyInstance, deps: SiteRouteDeps): {
   };
   // A search under a folder: entries by name, or lines of its text files.
   api.get<{ Params: { domain: string }; Querystring: { path?: string; dir?: string; q?: string; in?: string } }>('/api/sites/:domain/files/find', async (request, reply): Promise<FileFindResult | FastifyReply> =>
-    filesAsk(request.params.domain, request.query.path, reply, async (ctx) =>
-      request.query.in === 'text' ? findInFiles(deps.exec, ctx, request.query.dir ?? '', request.query.q ?? '') : findByName(ctx, request.query.dir ?? '', request.query.q ?? '')));
+    filesAsk(request.params.domain, request.query.path, reply, async (ctx) => {
+      const found = await (request.query.in === 'text' ? findInFiles(deps.exec, ctx, request.query.dir ?? '', request.query.q ?? '') : findByName(ctx, request.query.dir ?? '', request.query.q ?? ''));
+      deps.onFind?.();
+      return found;
+    }));
   // How much a folder holds, when you ask: counting it for every row would make a listing slow.
   api.get<{ Params: { domain: string }; Querystring: { path?: string; dir?: string } }>('/api/sites/:domain/files/size', async (request, reply): Promise<FileSize | FastifyReply> =>
     filesAsk(request.params.domain, request.query.path, reply, (ctx) => folderSize(deps.exec, ctx, request.query.dir ?? '')));

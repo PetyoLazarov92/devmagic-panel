@@ -111,7 +111,7 @@ export class ModeProgress {
   }
 }
 
-/** Action runs that count, once they started or finished well: an Undo, a site moved onto nginx (once per site), the plugins and themes updated, a site's PHP switched. */
+/** Action runs that count, once they started or finished well: an Undo, a site moved onto nginx (once per site), the plugins and themes updated, a site's PHP switched, something restored. */
 export function countAction(progress: ModeProgress, id: string, input: unknown): void {
   if (id === 'site.updatePlugins' && input && typeof input === 'object') {
     const { plugins, themes } = input as { plugins?: unknown; themes?: unknown };
@@ -119,6 +119,7 @@ export function countAction(progress: ModeProgress, id: string, input: unknown):
     if (n > 0) progress.count('pluginUpdate', undefined, n);
   }
   if (id === 'site.setPhp') progress.count('phpSwitch');
+  if (id === 'db.restore' || id === 'db.restoreKept' || id === 'trash.restore' || id === 'file.restore') progress.count('restore');
   if (id === 'mysql.undoRowChange' || id === 'mysql.undoCleanup' || id === 'cron.undo' || id === 'wpcron.undo') progress.count('undo');
   if (id === 'site.setServer' && input && typeof input === 'object') {
     const { domain, server } = input as { domain?: unknown; server?: unknown };

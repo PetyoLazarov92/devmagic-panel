@@ -9,6 +9,7 @@ import './styles/modes.css';
 import './styles/circuit.css';
 import './styles/forge.css';
 import './styles/grove.css';
+import './styles/abyss.css';
 
 if (isMockup) {
   keepLinksInMockup((url) =>

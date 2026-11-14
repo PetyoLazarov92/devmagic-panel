@@ -177,6 +177,35 @@ its own way:
 The same rules hold: only labels change, and errors, warnings, status labels
 and anything that removes something stay plain.
 
+## Abyss
+
+The deep sea: rounded cards with a soft glow and pink coral growing into one
+corner, deep ocean blue in the dark theme and pale aqua in the light one, and
+a soft coral-pink tint for whatever is chosen. The effects add bubbles rising
+slowly under light falling from the surface (Background); a jellyfish glow
+that follows the cursor slowly with a short trail, drifts on its own when the
+cursor leaves the page, and a few bubbles from a click (Pointer); and coral
+that breathes, a healthy site's dot glowing aqua and a broken site's card
+glowing anemone red at its edge (Elements). A spiral shell turns where
+something runs. Pages it names its own way:
+
+| Classic | Abyss |
+| --- | --- |
+| Demo | Aquarium |
+| Sites | Reefs |
+| Aura | Currents |
+| Mail | Bottles |
+| Services | Hull |
+| WP Cores | Pearls |
+| Activity | Logbook |
+| Updates | Surface |
+| Settings | Charts |
+| Modes | Shells |
+| Developer options | Engine room |
+
+The same rules hold: only labels change, and errors, warnings, status labels
+and anything that removes something stay plain.
+
 ## Trying it out
 
 [Developer options](pages.md#developer-options) has a Modes card that unlocks

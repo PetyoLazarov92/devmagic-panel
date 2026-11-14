@@ -886,7 +886,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       if (site && !site.success) return reply.code(400).send({ error: 'Give a local site name' });
       const start = Math.max(0, Math.min(100_000, Number(request.query.start ?? 0) || 0));
       try {
-        return await listMail(mailpit, site?.data, start);
+        const page = await listMail(mailpit, site?.data, start);
+        // A day Mail was opened counts once for that day.
+        if (start === 0) modes.count('mailDay', new Date().toISOString().slice(0, 10));
+        return page;
       } catch (error) {
         return reply.code(503).send({ error: `Mailpit is not reachable: ${(error as Error).message}` });
       }
@@ -926,6 +929,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const siteRoutes = registerSiteRoutes(api, {
       vulnerabilities,
       // A day with 3 sites or more, all Healthy, counts once for that day.
+      onFind: () => modes.count('fileFind'),
       onSites: (list) => {
         if (list.length >= 3 && list.every((x) => x.health === 'ok')) modes.count('healthyDay', new Date().toISOString().slice(0, 10));
       },

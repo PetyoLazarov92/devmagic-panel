@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { CircuitBoard, CircuitGlint, CircuitPointer } from '@/features/modes/circuit-effects';
 import { ForgeEffects } from '@/features/modes/forge-effects';
 import { GroveEffects } from '@/features/modes/grove-effects';
+import { AbyssEffects } from '@/features/modes/abyss-effects';
 import { useActiveMode } from '@/lib/modes';
 
 /** The most particles alive at once, so a long drag never piles them up. */
@@ -63,6 +64,7 @@ export function ModeEffects() {
   }
   if (mode === 'forge') return effects.pointer || effects.background ? <ForgeEffects pointer={effects.pointer} background={effects.background} /> : null;
   if (mode === 'grove') return effects.pointer || effects.background ? <GroveEffects pointer={effects.pointer} background={effects.background} /> : null;
+  if (mode === 'abyss') return effects.pointer || effects.background ? <AbyssEffects pointer={effects.pointer} background={effects.background} /> : null;
   const on = mode === 'wizard' && (effects.pointer || effects.background || effects.elements);
   if (!on) return null;
   return <WizardCanvas pointer={effects.pointer} background={effects.background} elements={effects.elements} />;

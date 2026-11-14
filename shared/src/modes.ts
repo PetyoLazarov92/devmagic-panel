@@ -8,7 +8,7 @@ import { z } from 'zod';
  * The rules live here and nowhere else: the docs, the changelog, commit
  * messages and the UI never spell out how a mode unlocks before it does.
  */
-export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove'] as const;
+export const MODES = ['classic', 'wizard', 'circuit', 'forge', 'grove', 'abyss'] as const;
 export type ModeId = (typeof MODES)[number];
 export type SealedModeId = Exclude<ModeId, 'classic'>;
 
@@ -18,6 +18,7 @@ export const MODE_INFO: Record<ModeId, { title: string; description: string }> =
   circuit: { title: 'Circuit', description: 'Glass panels, a live circuit board behind the pages, and a lock on whatever you point at.' },
   forge: { title: 'Forge', description: 'Iron plates with molten cracks, sparks and embers, and a few pages named for the work.' },
   grove: { title: 'Grove', description: 'Rounded leaves, fireflies and a falling leaf, and a few pages named like a garden.' },
+  abyss: { title: 'Abyss', description: 'The deep sea: glowing coral, a jellyfish light and rising bubbles, and a few pages named for the ocean.' },
 };
 
 /** What a mode's effects can do, each switched on its own. */
@@ -51,10 +52,15 @@ export const MODE_EFFECT_INFO: Record<SealedModeId, Record<ModeEffect, string>> 
     elements: 'A healthy site glows like a firefly, a broken one turns autumn brown at its edge, a seed sprouts where something runs.',
     background: 'A few fireflies drift, and leaves fall now and then, a few at a time.',
   },
+  abyss: {
+    pointer: 'A jellyfish glow follows your cursor, and a click sends up a few bubbles.',
+    elements: 'The coral in each card breathes, a healthy site glows aqua, a broken one glows anemone red, a shell turns where something runs.',
+    background: 'Bubbles rise slowly under light falling from the surface.',
+  },
 };
 
 /** What the panel counts. A path reads one counter from the point it started. */
-export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay'] as const;
+export const MODE_COUNTERS = ['siteWizard', 'undo', 'auraFix', 'paletteCommand', 'nginxSite', 'sqlQuery', 'panelUpdate', 'pluginUpdate', 'phpSwitch', 'healthyDay', 'vulnCheckDay', 'restore', 'fileFind', 'mailDay'] as const;
 export type ModeCounter = (typeof MODE_COUNTERS)[number];
 /** The counters the browser reports itself; the rest the server counts as things finish. */
 export const BROWSER_COUNTERS = ['auraFix', 'paletteCommand'] as const satisfies readonly ModeCounter[];
@@ -92,13 +98,16 @@ export const MODE_PATHS: ModePath[] = [
   { id: 'grove.bloom', mode: 'grove', counter: 'healthyDay', goal: 7, riddle: 'Seven days of every garden flowering.', line: 'Seven days with every garden flowering.', rule: 'Have every site Healthy (3 or more) on 7 different days', startsFresh: true },
   { id: 'grove.tend', mode: 'grove', counter: 'auraFix', goal: 15, riddle: 'Tend fifteen hurts.', line: 'Fifteen hurts, tended.', rule: 'Apply 15 fixes from Aura', startsFresh: true },
   { id: 'grove.watch', mode: 'grove', counter: 'vulnCheckDay', goal: 30, riddle: 'Keep watch for thirty days.', line: 'Thirty days of keeping watch.', rule: 'Let the vulnerability check run on 30 different days', startsFresh: true },
+  { id: 'abyss.salvage', mode: 'abyss', counter: 'restore', goal: 3, riddle: 'Bring three things back from the deep.', line: 'Three things, brought back from the deep.', rule: 'Restore 3 times: a database, kept tables, a removed site or a deleted file', startsFresh: true },
+  { id: 'abyss.search', mode: 'abyss', counter: 'fileFind', goal: 20, riddle: 'Search the depths twenty times.', line: 'Twenty searches of the depths.', rule: "Search with the Files tab's find 20 times", startsFresh: true },
+  { id: 'abyss.bottles', mode: 'abyss', counter: 'mailDay', goal: 10, riddle: 'Ten days of messages in bottles.', line: 'Ten days of messages in bottles.', rule: 'Open Mail on 10 different days', startsFresh: true },
 ];
 
 /** Typed in Ctrl+K, a word unlocks its mode at once. */
-export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom' };
-export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.' };
+export const MODE_WORDS: Record<SealedModeId, string> = { wizard: 'abracadabra', circuit: 'overclock', forge: 'ignite', grove: 'bloom', abyss: 'dive' };
+export const MODE_WORD_LINE: Record<SealedModeId, string> = { wizard: 'You spoke the word.', circuit: 'Override accepted.', forge: 'The fire caught.', grove: 'Something took root.', abyss: 'You took the plunge.' };
 /** Ends every line of a mode's unlock dialog. */
-export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.' };
+export const MODE_UNLOCK_TAIL: Record<SealedModeId, string> = { wizard: 'The panel thinks you have earned a robe.', circuit: 'Systems online.', forge: 'The forge is lit.', grove: 'The grove is growing.', abyss: 'The deep opens.' };
 
 /** How a mode was unlocked: a path's id, its word, or by hand in Developer options. */
 export type UnlockedBy = string;

@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.53.0 (2026-11-14)
+* **Modes:** one more mode is waiting to be found
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.52.0 (2026-11-14)
 * **Modes:** one more mode is waiting to be found. A broken site's pulsing dot sits on the dot again in every mode
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

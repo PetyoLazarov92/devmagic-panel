@@ -119,6 +119,14 @@ describe('mode progress', () => {
     expect(state.unlocks.grove?.by).toBe('grove.bloom');
   });
 
+  it("counts Abyss's restores of any kind", () => {
+    const progress = new ModeProgress(memory());
+    countAction(progress, 'db.restore', { domain: 'local.spellbook.example' });
+    countAction(progress, 'trash.restore', {});
+    countAction(progress, 'file.restore', {});
+    expect(progress.developerView().modes.find((m) => m.id === 'abyss')?.unlocked?.by).toBe('abyss.salvage');
+  });
+
   it('tells a newer version from an older or the same one', () => {
     expect(newerVersion('1.51.0', '1.50.9')).toBe(true);
     expect(newerVersion('v2.0.0', '1.99.99')).toBe(true);

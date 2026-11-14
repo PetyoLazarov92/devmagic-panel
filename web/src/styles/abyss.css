@@ -1,0 +1,407 @@
+/*
+ * Abyss: the deep sea. Rounded cards with a soft glow and pink coral growing
+ * into one corner, deep ocean blue in dark and pale aqua in light, a soft
+ * coral-pink tint for what is chosen. data-mode="abyss" on the root, data-fx
+ * while Elements is on; the jellyfish light and the bubbles on one canvas
+ * (features/modes/abyss-effects.tsx).
+ */
+:root[data-mode='abyss']:not(.dark) {
+  --background: #e8f3f7;
+  --foreground: #0d2a40;
+  --card: #f8fcfd;
+  --muted: #e0eef3;
+  --muted-foreground: #4c6b80;
+  --border: #c4dce6;
+  --input: #b3cfdb;
+  --ring: #2878aa;
+  --primary: #2878aa;
+  --primary-foreground: #f4fbff;
+  --secondary: #dcecf5;
+  --secondary-foreground: #134a6e;
+  --success: #167a5c;
+  --warning: #9a6a00;
+  --danger: #c03a52;
+  --ab-coral: #c2407e;
+  --ab-aqua: #2a9db8;
+  --ab-raised: #fbfeff;
+  --ab-chosen-ink: #8a2458;
+  --ab-coral-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cg fill='none' stroke-linecap='round'%3E%3Cpath d='M166 122c0-20-9-33-2-49M166 73c-11-7-16-18-13-29M166 73c11-4 18-13 18-24M153 95c-13-2-20-11-22-20M180 102c11-7 16-16 16-25M153 44c-4-6-4-12 0-16M184 49c4-6 3-12-1-15' stroke='%23c2407e' stroke-opacity='.38' stroke-width='3.2'/%3E%3C/g%3E%3Cg fill='none' stroke='%232878aa' stroke-opacity='.38'%3E%3Ccircle cx='120' cy='76' r='4.5'/%3E%3Ccircle cx='131' cy='56' r='2.8'/%3E%3Ccircle cx='111' cy='42' r='2'/%3E%3Ccircle cx='124' cy='26' r='1.4'/%3E%3C/g%3E%3C/svg%3E");
+}
+:root[data-mode='abyss'].dark {
+  --background: #04101f;
+  --foreground: #dcefff;
+  --card: #0a1d33;
+  --muted: #0e2640;
+  --muted-foreground: #8fb0cc;
+  --border: #1d4366;
+  --input: #245276;
+  --ring: #7ec8ff;
+  --primary: #7ec8ff;
+  --primary-foreground: #04101f;
+  --secondary: #0f2c4a;
+  --secondary-foreground: #cfe8ff;
+  --success: #7ef0c8;
+  --warning: #f0c46a;
+  --danger: #ff6f8e;
+  --ab-coral: #ff7ab6;
+  --ab-aqua: #7ef0c8;
+  --ab-raised: #0f2744;
+  --ab-chosen-ink: #ffd1e6;
+  --ab-coral-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120'%3E%3Cg fill='none' stroke-linecap='round'%3E%3Cpath d='M166 122c0-20-9-33-2-49M166 73c-11-7-16-18-13-29M166 73c11-4 18-13 18-24M153 95c-13-2-20-11-22-20M180 102c11-7 16-16 16-25M153 44c-4-6-4-12 0-16M184 49c4-6 3-12-1-15' stroke='%23ff7ab6' stroke-opacity='.5' stroke-width='3.2'/%3E%3C/g%3E%3Cg fill='none' stroke='%23a0e6ff' stroke-opacity='.45'%3E%3Ccircle cx='120' cy='76' r='4.5'/%3E%3Ccircle cx='131' cy='56' r='2.8'/%3E%3Ccircle cx='111' cy='42' r='2'/%3E%3Ccircle cx='124' cy='26' r='1.4'/%3E%3C/g%3E%3C/svg%3E");
+}
+:root[data-mode='abyss'] {
+  --ab-chosen: color-mix(in srgb, var(--ab-coral) 13%, var(--card));
+  /* How solid a see-through fill is in this mode, as Circuit's --ck-veil. */
+  --ab-veil: 80%;
+  scrollbar-color: color-mix(in srgb, var(--primary) 30%, var(--border)) transparent;
+}
+:root[data-mode='abyss'].dark {
+  --ab-chosen: color-mix(in srgb, var(--ab-coral) 16%, var(--card));
+}
+
+/* Names: a touch more weight and air. */
+:root[data-mode='abyss'] :is([data-ui='page-title'], [data-ui='card-title'], [data-ui='dialog-title']) {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+:root[data-mode='abyss'] [data-ui='tile'] > span:first-child {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Cards: rounded, glowing softly, with pink coral growing into the bottom right corner (::after); it breathes while Elements is on. */
+:root[data-mode='abyss'] [data-ui='card'] {
+  position: relative;
+  isolation: isolate;
+  border-radius: 12px;
+  border-color: var(--border);
+  box-shadow: 0 8px 22px -14px color-mix(in srgb, #04101f 45%, transparent);
+}
+:root[data-mode='abyss'].dark [data-ui='card'] {
+  box-shadow: 0 0 26px -14px color-mix(in srgb, var(--ab-aqua) 40%, transparent);
+}
+:root[data-mode='abyss'] [data-ui='card']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 200px;
+  height: 120px;
+  max-width: 100%;
+  max-height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0 0 12px 0;
+  background: var(--ab-coral-img) right bottom / 200px 120px no-repeat;
+}
+:root[data-mode='abyss'][data-fx] [data-ui='card']::after {
+  will-change: opacity;
+  animation: ab-breathe 6s ease-in-out infinite;
+}
+:root[data-mode='abyss'][data-fx] [data-ui='card']:nth-of-type(2n)::after {
+  animation-delay: -2.4s;
+}
+:root[data-mode='abyss'][data-fx] [data-ui='card']:nth-of-type(3n)::after {
+  animation-delay: -4.1s;
+}
+@keyframes ab-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+:root[data-mode='abyss'] dialog [data-ui='card'] {
+  box-shadow: none;
+}
+:root[data-mode='abyss'] dialog [data-ui='card']::after {
+  display: none;
+}
+/* A broken site: its card glows anemone red at the edge, pulsing by its opacity while Elements is on. */
+:root[data-mode='abyss'] [data-health='fail'][data-ui='card'] {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+}
+:root[data-mode='abyss'] [data-health='fail'][data-ui='card']::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 12px;
+  box-shadow: inset 0 0 18px -4px color-mix(in srgb, var(--danger) 55%, transparent), 0 0 18px -8px var(--danger);
+}
+:root[data-mode='abyss'][data-fx] [data-health='fail'][data-ui='card']::before {
+  will-change: opacity;
+  animation: ab-sting 3.6s ease-in-out infinite;
+}
+@keyframes ab-sting {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+/* Only a healthy dot gets a halo, aqua; a broken one keeps its pulse ring right over the dot. */
+:root[data-mode='abyss'] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only) {
+  position: relative;
+}
+:root[data-mode='abyss'][data-fx] [data-ui='status-dot'][data-status='ok'] > span:not(.sr-only)::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px 2px color-mix(in srgb, var(--ab-aqua) 60%, transparent);
+  opacity: 0;
+  animation: ab-glow 3.4s ease-in-out infinite;
+}
+@keyframes ab-glow {
+  50% { opacity: 1; }
+}
+
+/* Everything else with a frame: rounded, a soft edge. */
+:root[data-mode='abyss'] :is(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl).border:not([data-ui='card'], [data-ui='dialog']) {
+  border-radius: 10px;
+}
+:root[data-mode='abyss'] .border.bg-card:not([data-ui='card'], [data-ui='button'], [data-ui='input'], [data-ui='chip'], [data-ui='dialog'], [role='menu'], [role='listbox']),
+:root[data-mode='abyss'] [data-ui='tile'] {
+  border-color: var(--border);
+  box-shadow: 0 4px 12px -10px color-mix(in srgb, #04101f 40%, transparent);
+}
+:root[data-mode='abyss'] [data-ui='tile'] {
+  border-radius: 12px;
+}
+:root[data-mode='abyss']:not(.dark) :is([class~='bg-muted'], [class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90'])[class*='rounded']:not(.border) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+/* Tints on the page (notices, muted boxes, a tile's hover, soft buttons): mostly solid, as in the other modes. */
+:root[data-mode='abyss'] [data-ui='notice'] {
+  --tone: var(--muted-foreground);
+  border-radius: 12px;
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--tone) 10%, var(--card)) var(--ab-veil), transparent);
+}
+:root[data-mode='abyss'] [data-ui='notice'][data-tone='danger'] {
+  --tone: var(--danger);
+}
+:root[data-mode='abyss'] [data-ui='notice'][data-tone='warning'] {
+  --tone: var(--warning);
+}
+:root[data-mode='abyss'] [data-ui='notice'][data-tone='success'] {
+  --tone: var(--success);
+}
+:root[data-mode='abyss'] :is([class~='bg-muted/30'], [class~='bg-muted/40'], [class~='bg-muted/50'], [class~='bg-muted/60'], [class~='bg-muted/70'], [class~='bg-muted/90']) {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--muted) 70%, var(--card)) var(--ab-veil), transparent);
+}
+:root[data-mode='abyss'] [data-ui='tile']:is(a, button):hover {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--primary) 10%, var(--card)) var(--ab-veil), transparent);
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* Sheets over the page (menus, a select's list, modals, the unsaved bar): raised, rounded, a soft glow. */
+:root[data-mode='abyss'] :is([role='menu'], [role='listbox']).border,
+:root[data-mode='abyss'] [aria-label='Unsaved changes'][data-ui='card'] {
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: var(--ab-raised);
+  box-shadow: 0 14px 32px -12px color-mix(in srgb, #04101f 50%, transparent);
+}
+:root[data-mode='abyss'] [data-ui='dialog'] {
+  border-radius: 18px;
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  background: var(--ab-raised);
+  box-shadow: 0 20px 48px -16px color-mix(in srgb, #04101f 60%, transparent);
+}
+:root[data-mode='abyss'] [aria-label='Unsaved changes'][data-ui='card']::after {
+  display: none;
+}
+:root[data-mode='abyss'] [data-ui='dialog']::backdrop {
+  background: color-mix(in srgb, #04101f 50%, transparent);
+}
+:root[data-mode='abyss'] :is([role='menuitem'], [role='option']) {
+  border-radius: 8px;
+}
+:root[data-mode='abyss'] :is([role='menuitem'], [role='option']):is(:hover, :focus-visible, [aria-selected='true']) {
+  background-color: var(--ab-chosen);
+}
+@supports (appearance: base-select) {
+  :root[data-mode='abyss'] select.dmp-select::picker(select) {
+    border-radius: 14px;
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+    background: var(--ab-raised);
+    box-shadow: 0 14px 32px -12px color-mix(in srgb, #04101f 50%, transparent);
+  }
+  :root[data-mode='abyss'] select.dmp-select option {
+    border-radius: 8px;
+  }
+  :root[data-mode='abyss'] select.dmp-select option:is(:hover, :focus-visible) {
+    background: var(--ab-chosen);
+  }
+  :root[data-mode='abyss'] select.dmp-select option:checked {
+    background: var(--ab-chosen);
+    color: var(--ab-chosen-ink);
+  }
+}
+
+/* Fields: rounded, on a deeper ground, a blue edge while you type. */
+:root[data-mode='abyss'] [data-ui='input'] {
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+}
+:root[data-mode='abyss'] [data-ui='input']:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+:root[data-mode='abyss'] [data-ui='input']:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Buttons and chips: rounded; the main one a soft coral-pink. */
+:root[data-mode='abyss'] [data-ui='button'],
+:root[data-mode='abyss'] [data-ui='chip'] {
+  border-radius: 10px;
+}
+:root[data-mode='abyss'] [data-ui='button'].bg-primary {
+  border: 1px solid color-mix(in srgb, var(--ab-coral) 45%, transparent);
+  background-color: var(--ab-chosen);
+  color: var(--ab-chosen-ink);
+}
+:root[data-mode='abyss'] [data-ui='button'].bg-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--ab-coral) 22%, var(--card));
+}
+:root[data-mode='abyss'] [data-ui='button'][class~='bg-foreground/4'] {
+  background-color: color-mix(in srgb, color-mix(in srgb, var(--foreground) 6%, var(--card)) var(--ab-veil), transparent);
+}
+:root[data-mode='abyss'][data-fx] [data-ui='button']:hover {
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--ab-aqua) 45%, transparent);
+}
+
+/* Whatever is chosen: a soft coral-pink fill. */
+:root[data-mode='abyss'] :is(:is([aria-checked='true'], [aria-pressed='true'], [aria-selected='true']).bg-primary:not([role='switch']), [data-ui='segmented'] > [aria-checked='true'], [aria-current='step']) {
+  border-color: color-mix(in srgb, var(--ab-coral) 45%, transparent);
+  background: var(--ab-chosen);
+  color: var(--ab-chosen-ink);
+  box-shadow: none;
+}
+:root[data-mode='abyss'] [data-ui='section-nav'] [aria-current='page'] {
+  border-radius: 10px;
+  background: var(--ab-chosen);
+  color: var(--ab-chosen-ink);
+}
+:root[data-mode='abyss'] [data-ui='segmented'],
+:root[data-mode='abyss'] [data-ui='segmented'] > [role='radio'] {
+  border-radius: 10px;
+}
+:root[data-mode='abyss'] [role='tab'][aria-selected='true'] {
+  border-color: var(--ab-coral);
+  color: var(--ab-chosen-ink);
+}
+
+/* Switches: round, a soft aqua-blue when on, the knob glowing. */
+:root[data-mode='abyss'] [data-ui='switch'][aria-checked='false'] {
+  background-color: color-mix(in srgb, var(--muted) 60%, var(--input));
+}
+:root[data-mode='abyss'] [data-ui='switch'][aria-checked='true'] {
+  background-color: color-mix(in srgb, var(--primary) 50%, var(--card));
+}
+:root[data-mode='abyss'] [data-ui='switch'][aria-checked='true'] > span {
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--ab-aqua) 60%, transparent);
+}
+:root[data-mode='abyss'].dark [data-ui='switch'] > span {
+  background: color-mix(in srgb, var(--foreground) 88%, var(--primary));
+}
+
+/* Checkboxes and radios: rounded, a coral mark when ticked. */
+:root[data-mode='abyss'] input:is([type='checkbox'], [type='radio']) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--input));
+  border-radius: 5px;
+  background-color: color-mix(in srgb, var(--card) 70%, var(--muted));
+  cursor: inherit;
+}
+:root[data-mode='abyss'] input[type='radio'] {
+  border-radius: 50%;
+}
+:root[data-mode='abyss'] input:is([type='checkbox'], [type='radio']):checked {
+  border-color: var(--ab-coral);
+  background-color: var(--ab-chosen);
+}
+:root[data-mode='abyss'] input[type='checkbox']:checked::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  background-color: var(--ab-coral);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+:root[data-mode='abyss'] input[type='radio']:checked::before {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ab-coral);
+}
+:root[data-mode='abyss'] input:is([type='checkbox'], [type='radio']):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+:root[data-mode='abyss'] input:is([type='checkbox'], [type='radio']):disabled {
+  opacity: 0.5;
+}
+
+/* Progress: from deep blue into aqua, softly. */
+:root[data-mode='abyss'] .bg-primary[style*='width'] {
+  background-image: linear-gradient(90deg in oklab, color-mix(in oklab, var(--primary) 65%, var(--card)), color-mix(in oklab, var(--ab-aqua) 60%, var(--card)));
+}
+
+/* The top bar and the sidebar: a soft blue rule; the page you are on in a rounded coral-pink fill. */
+:root[data-mode='abyss'] [data-ui='topbar'] {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+}
+:root[data-mode='abyss'] nav[aria-label='Main'] a[aria-current='page'] {
+  border-radius: 10px;
+  background: var(--ab-chosen);
+  color: var(--ab-chosen-ink);
+}
+
+/* The background effect's still part: faint light falling from the surface in a few soft beams. */
+:root[data-mode='abyss'][data-fx-bg] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(100deg, transparent 18%, color-mix(in srgb, var(--ab-aqua) 6%, transparent) 22%, transparent 27%),
+    linear-gradient(97deg, transparent 44%, color-mix(in srgb, var(--ab-aqua) 5%, transparent) 49%, transparent 55%),
+    linear-gradient(103deg, transparent 68%, color-mix(in srgb, var(--ab-aqua) 4%, transparent) 72%, transparent 76%),
+    radial-gradient(80% 40% at 50% 0%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 70%);
+  -webkit-mask: linear-gradient(180deg, #000, transparent 75%);
+  mask: linear-gradient(180deg, #000, transparent 75%);
+}
+
+/* Abyss's thumbnail on the Modes page and in the unlock dialog. */
+.mode-thumb[data-thumb='abyss'] {
+  --t-bg: #e8f3f7;
+  --t-side: #e0eef3;
+  --t-line: #b3cfdb;
+  --t-accent: #c2407e;
+  --t-ink: #0d2a40;
+  --t-card: #f8fcfd;
+}
+.dark .mode-thumb[data-thumb='abyss'] {
+  --t-bg: #04101f;
+  --t-side: #071628;
+  --t-line: #1d4366;
+  --t-accent: #ff7ab6;
+  --t-ink: #dcefff;
+  --t-card: #0a1d33;
+}
+.mode-thumb[data-thumb='abyss'] .mt-main i {
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-mode='abyss'] :not(.rune-turning),
+  :root[data-mode='abyss'] *::before,
+  :root[data-mode='abyss'] *::after {
+    animation: none !important;
+  }
+}
