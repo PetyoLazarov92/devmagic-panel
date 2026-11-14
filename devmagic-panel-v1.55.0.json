@@ -1,0 +1,31 @@
+{
+  "name": "v1.55.0",
+  "version": "1.55.0",
+  "commit": "235327c0bf8a7994c61de9cb101a0d70f50c30b8",
+  "built": "2026-11-14T14:03:40Z",
+  "installer": "d0ddf29bebf06f5faefd9b0e79f2623850fbb7614f357ae3ae9c14c190c5c6db",
+  "scripts": {
+    "bin/dmp-restore": "3e0496642e6323f05fa1a9b0f69a3650c207ad0cfa72a5bfb1c66ad8f7db17a2",
+    "bin/dmp-root": "51471c91f71d5d9f74c45aa8c7878145c349f2701c6cb9c62c277aae241f9c45",
+    "bin/wpcore": "49ec6268f000994b23cfa7439df0d5c22087dea4f03fb47acefacc2215e09dca",
+    "lib/apache.sh": "ea9a4272423ae40245921017dd2ede2f462b0c11b802598b3a41013942ac8b50",
+    "lib/backup.sh": "bcd1c21c0118000bed607814c27e282542f6199105d6f0fa721c232cbc7ec9df",
+    "lib/ca.sh": "ee637c19fe3dd5117837dd62895d5ab1f21e0e0492dfa6a20bb1f3452b7dca6a",
+    "lib/cert.sh": "1b48f30c20f18cba58d660aed53ddeffd68129c4c054bec88d69e2e8d33fc901",
+    "lib/config.sh": "111f20e52c7b8a1be172a5c8453b79b5f032ba58306951571749f6ee714c0ff9",
+    "lib/fpm.sh": "faf183072319aa47ab586e55173b79a388e76878528cdeeeb8ccf719bcb1c212",
+    "lib/hosts.sh": "778987e8e0d99dbe13e88f1eee22f0b546f14a260b5bdb0a78bd7a9d5ca2551f",
+    "lib/log.sh": "18643a316b62cb1ebd0466015ecca210de9c15fce04ab3eb04aa6fa41e7bc9aa",
+    "lib/mysql.sh": "8fa602f122d721c00542701a5f9a1613897fd8e51572dd73b840cf5cc4d6f891",
+    "lib/nginx.sh": "c2bcc8ccb7c0965d8dc57ce03192062cf9321b858c0a6c18852004b8b011f259",
+    "lib/php-apt.sh": "0a16f3b81b91e5890c31f31e6cd8edb4f4b18e4737cfa5bc9e3f836facc8b46d",
+    "lib/php.sh": "0ec6e7eb99286c6bc606f0751f55c9b9d86f1e5fbe22a676c64b7c2478bd8354",
+    "lib/site.sh": "3fb76fc6a38b1b8cb13b61a4045a94d9b3bbfb52cdda444536e8eabf3a456f31",
+    "lib/takeover.sh": "20dc4bc010faf89b59659743afd558845bbeba93dea3b145cb460796dbf081cf",
+    "lib/trash.sh": "554b72f3cdaced3aba578a2c00a664d6a045f2879a9856a17b7dab524fdec8b3",
+    "lib/validate.sh": "ae430a4bad1170689586d3de0fa6be5e704c6970a1539788576e2e651613dd18",
+    "lib/vhost.sh": "3731382d103504aab443385148bf545e78e5994b2568c370384e544e02712918",
+    "php/info.php": "039344f99e17ad3183eceb18d42c69997ab1ff378373502be22858981ada3f2c",
+    "php/starting.html": "aa65829dfd15a33ad4aa30e0c78930c3db40193c4526424c36ecb5ca607381c4"
+  }
+}
