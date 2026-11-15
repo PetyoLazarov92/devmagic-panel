@@ -147,17 +147,17 @@ Describe 'Install-DmpHelperFile' {
   It 'copies nothing when the same helper is there already' {
     New-Item -ItemType Directory -Path $script:Target | Out-Null
     Copy-Item -LiteralPath $script:Helper -Destination $script:Target
-    Mock Invoke-DmpElevatedProgram { 0 }
+    Mock Invoke-DmpHelper { 0 }
     Install-DmpHelperFile | Should -BeTrue
-    Should -Invoke Invoke-DmpElevatedProgram -Times 0 -Exactly
+    Should -Invoke Invoke-DmpHelper -Times 0 -Exactly
   }
 
-  It 'copies the helper elevated, one file with robocopy, and says when UAC was declined' {
-    Mock Invoke-DmpElevatedProgram { New-Item -ItemType Directory -Force -Path $script:Target | Out-Null; Copy-Item -LiteralPath $script:Helper -Destination $script:Target; 1 }
+  It 'has the helper copy itself, needing no other program, and says when UAC was declined' {
+    Mock Invoke-DmpHelper { New-Item -ItemType Directory -Force -Path $script:Target | Out-Null; Copy-Item -LiteralPath $script:Helper -Destination $script:Target; 0 }
     Install-DmpHelperFile | Should -BeTrue
-    Should -Invoke Invoke-DmpElevatedProgram -Times 1 -Exactly -ParameterFilter { $File -like '*Robocopy.exe' -and $ArgumentList -contains 'dmp-win.ps1' }
+    Should -Invoke Invoke-DmpHelper -Times 1 -Exactly -ParameterFilter { ($ArgumentList -join ' ') -eq 'self-install' }
     Remove-Item -LiteralPath $script:Target -Recurse -Force
-    Mock Invoke-DmpElevatedProgram { 3 }
+    Mock Invoke-DmpHelper { 3 }
     Install-DmpHelperFile | Should -BeFalse
     Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like 'UAC was declined*' }
   }

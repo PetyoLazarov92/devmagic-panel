@@ -213,3 +213,42 @@ Describe 'Invoke-DmpCommand' {
     Invoke-DmpCommand 'wsl-restart' @() 2>$null | Should -Be 4
   }
 }
+
+Describe 'self-install and self-remove' {
+  BeforeEach {
+    $script:Folder = Join-Path ([IO.Path]::GetTempPath()) ("dmp-pf-{0}\devmagic-panel" -f ([guid]::NewGuid().ToString('N')))
+    $script:Source = Join-Path ([IO.Path]::GetTempPath()) ("dmp-src-{0}.ps1" -f ([guid]::NewGuid().ToString('N')))
+    [IO.File]::WriteAllText($script:Source, '# a helper')
+  }
+
+  It 'copies the running script into the folder once, and keeps a copy that is the same' {
+    Install-DmpSelf $script:Source $script:Folder | Should -Be 'copied'
+    [IO.File]::ReadAllText((Join-Path $script:Folder 'dmp-win.ps1')) | Should -Be '# a helper'
+    Install-DmpSelf $script:Source $script:Folder | Should -Be 'already'
+    [IO.File]::WriteAllText($script:Source, '# a newer helper')
+    Install-DmpSelf $script:Source $script:Folder | Should -Be 'copied'
+    [IO.File]::ReadAllText((Join-Path $script:Folder 'dmp-win.ps1')) | Should -Be '# a newer helper'
+  }
+
+  It 'removes only a folder named devmagic-panel that holds the helper' {
+    Remove-DmpSelf $script:Folder | Should -Be 'none'
+    Install-DmpSelf $script:Source $script:Folder | Out-Null
+    Remove-DmpSelf $script:Folder | Should -Be 'removed'
+    Test-Path -LiteralPath $script:Folder | Should -BeFalse
+    $other = Join-Path ([IO.Path]::GetTempPath()) ("dmp-other-{0}" -f ([guid]::NewGuid().ToString('N')))
+    New-Item -ItemType Directory -Path $other | Out-Null
+    { Remove-DmpSelf $other } | Should -Throw "*not the helper's folder*"
+    Test-Path -LiteralPath $other | Should -BeTrue
+    $empty = Join-Path $other 'devmagic-panel'
+    New-Item -ItemType Directory -Path $empty | Out-Null
+    { Remove-DmpSelf $empty } | Should -Throw "*not the helper's folder*"
+  }
+
+  It 'take no arguments, and ask UAC when not elevated' {
+    Mock Test-DmpAdmin { $false }
+    Mock Invoke-DmpElevated { 0 }
+    { Invoke-DmpCommand 'self-install' @('c:/temp') } | Should -Throw -ExceptionType ([DmpInputError])
+    Invoke-DmpCommand 'self-remove' @() | Should -Be 0
+    Should -Invoke Invoke-DmpElevated -Times 1 -Exactly -ParameterFilter { $Name -eq 'self-remove' }
+  }
+}

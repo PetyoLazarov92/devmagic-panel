@@ -18,6 +18,9 @@ calls and programs started with an argument array only.
   autostart-remove             remove it
   wsl-restart                  wsl --shutdown with a time limit; says when only a restart of
                                Windows helps (WSL can hang that way)
+  self-install                 copy this script into C:\Program Files\devmagic-panel, where the
+                               panel calls it and only admins may change it. Admin.
+  self-remove                  remove that folder again (an uninstall). Admin.
 
 Exit codes: 0 done, 1 failed, 2 bad input, 3 UAC declined, 4 WSL not answering.
 An admin command run without admin starts this script again elevated for that
@@ -32,8 +35,8 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart')
-$script:DmpAdminCommands = @('hosts-sync')
+$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove')
+$script:DmpAdminCommands = @('hosts-sync', 'self-install', 'self-remove')
 $script:DmpBegin = '# BEGIN devmagic-panel'
 $script:DmpEnd = '# END devmagic-panel'
 $script:DmpAddresses = @('127.0.0.1', '127.0.0.2')
@@ -282,6 +285,25 @@ function Get-DmpDistro() {
 function Get-DmpCaPath([string]$Distro) { "\\wsl.localhost\$Distro\etc\ssl\localcerts\devmagic-panel-ca\ca.pem" }
 function Get-DmpHostsPath() { Join-Path $env:SystemRoot 'System32\drivers\etc\hosts' }
 function Get-DmpBackupDir() { Join-Path $env:ProgramData 'devmagic-panel\backups' }
+function Get-DmpInstallDir() { Join-Path $env:ProgramFiles 'devmagic-panel' }
+
+# Copies this very script into the install folder: no path from the caller,
+# only the file that runs. A copy that is there already and the same is kept.
+function Install-DmpSelf([string]$Source, [string]$Folder) {
+  $target = Join-Path $Folder 'dmp-win.ps1'
+  if ((Test-Path -LiteralPath $target) -and ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash)) { return 'already' }
+  New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+  Copy-Item -LiteralPath $Source -Destination $target -Force
+  return 'copied'
+}
+
+# Removes the install folder, and only a folder named devmagic-panel holding the helper.
+function Remove-DmpSelf([string]$Folder) {
+  if (-not (Test-Path -LiteralPath $Folder)) { return 'none' }
+  if ((Split-Path -Leaf $Folder) -ne 'devmagic-panel' -or -not (Test-Path -LiteralPath (Join-Path $Folder 'dmp-win.ps1'))) { throw "$Folder is not the helper's folder: leaving it as it is" }
+  Remove-Item -LiteralPath $Folder -Recurse -Force
+  return 'removed'
+}
 
 function Test-DmpAdmin() {
   ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -387,6 +409,14 @@ function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
         return 4
       }
       Write-DmpOk 'WSL stopped; the logon task or the next wsl command starts the distro again'
+    }
+    'self-install' {
+      $folder = Get-DmpInstallDir
+      Write-DmpOk "the helper in $folder ($(Install-DmpSelf $PSCommandPath $folder))"
+    }
+    'self-remove' {
+      $folder = Get-DmpInstallDir
+      Write-DmpOk "the helper's folder $folder ($(Remove-DmpSelf $folder))"
     }
   }
   return 0

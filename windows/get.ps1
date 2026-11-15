@@ -308,11 +308,10 @@ function Install-DmpHelperFile() {
     return $true
   }
   Write-DmpStep "Putting the helper in $target, where the panel calls it (Windows asks with UAC)"
-  # robocopy elevated: one file, the folder made with Program Files' own permissions. 0 to 7 mean done.
-  $robocopy = Join-Path $env:SystemRoot 'System32\Robocopy.exe'
-  $code = Invoke-DmpElevatedProgram $robocopy @(('"' + $script:Here + '"'), ('"' + $target + '"'), 'dmp-win.ps1', '/NJH', '/NJS', '/NP')
+  # The helper copies itself, elevated, with PowerShell's own Copy-Item: no other program needed.
+  $code = Invoke-DmpHelper @('self-install')
   if ($code -eq 3) { Write-DmpWarn 'UAC was declined: the panel cannot do the Windows steps until you run this script again'; return $false }
-  if ($code -gt 7 -or -not (Test-Path -LiteralPath $installed)) { Write-DmpWarn "the helper was not copied (robocopy exit $code)"; return $false }
+  if ($code -ne 0 -or -not (Test-Path -LiteralPath $installed)) { Write-DmpWarn "the helper was not copied (exit $code)"; return $false }
   Write-DmpOk "the helper is in $target"
   return $true
 }
@@ -364,7 +363,7 @@ function Invoke-DmpElevatedProgram([string]$File, [string[]]$ArgumentList) {
 
 function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro) {
   Write-DmpStep "Removing the Windows side: hosts block (UAC), the logon task, the panel's CA"
-  foreach ($command in @('hosts-sync', 'autostart-remove', 'ca-untrust')) {
+  foreach ($command in @('hosts-sync', 'autostart-remove', 'ca-untrust', 'self-remove')) {
     $code = Invoke-DmpHelper @($command)
     if ($code -ne 0) { Write-DmpWarn "$command did not finish (exit $code)" }
   }
