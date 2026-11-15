@@ -371,4 +371,15 @@ describe('WSL on Windows', () => {
     expect(byId(report, 'wsl.webDir')).toMatchObject({ status: 'fail', detail: expect.stringContaining('/mnt/c/sites, on a Windows drive') });
     expect(byId(report, 'wsl.interop')).toMatchObject({ status: 'warn', optional: true });
   });
+
+  it('offers to register interop again when another distro took it away, but not when wsl.conf turns it off', async () => {
+    const taken = wslTree();
+    rmSync(join(taken.root, 'binfmt_misc/WSLInterop'));
+    expect(byId(await check(taken), 'wsl.interop')).toMatchObject({ status: 'warn', fixes: [{ action: 'wsl.repairInterop', input: {} }] });
+    const off = wslTree('[boot]\nsystemd=true\n\n[network]\ngenerateHosts = false\n\n[interop]\nenabled = false\n');
+    rmSync(join(off.root, 'binfmt_misc/WSLInterop'));
+    const check2 = byId(await check(off), 'wsl.interop');
+    expect(check2).toMatchObject({ status: 'warn', detail: expect.stringContaining('turned off in /etc/wsl.conf') });
+    expect(check2?.fixes).toBeUndefined();
+  });
 });

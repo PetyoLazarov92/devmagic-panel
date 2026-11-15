@@ -622,6 +622,7 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'windows.hostsSync': async (ctx) => [await windowsStep(ctx, 'hosts-sync', windowsHostsPairs(ctx.config))],
   'windows.trustCa': async (ctx) => [await windowsStep(ctx, 'ca-trust')],
   'windows.autostart': async (ctx) => [await windowsStep(ctx, 'autostart-install')],
+  'wsl.repairInterop': (ctx) => steps(() => root(ctx, 'wsl-interop')),
   'site.skippedDone': async (ctx, input) => {
     const site = `${input.domain}${input.path ?? ''}`;
     if (!ctx.store.skippedDone(input.domain, input.path, input.label)) throw new ActionInputError(`${site} has no skipped step called ${input.label}`);

@@ -18,7 +18,7 @@ import { selfChecks } from './self-check.js';
 import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
 import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
-import { hostsKept, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
+import { hostsKept, interopDisabled, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
 import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsStatus, type WindowsPaths } from './windows.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
@@ -587,11 +587,19 @@ async function wslChecks(ctx: CheckContext): Promise<Check[]> {
   }
 
   const interop = interopOn(paths);
-  checks.push(
-    interop
-      ? ok('wsl.interop', 'Windows programs', 'the panel can start Windows programs, like Windows Terminal', { optional: true })
-      : warn('wsl.interop', 'Windows programs', 'Windows programs cannot be started from this distro (interop is off in /etc/wsl.conf, or another distro stopping took it away: restart this one): steps on the Windows side show commands to run there instead', { optional: true }),
-  );
+  if (interop) {
+    checks.push(ok('wsl.interop', 'Windows programs', 'the panel can start Windows programs, like Windows Terminal', { optional: true }));
+  } else if (interopDisabled(paths)) {
+    checks.push(warn('wsl.interop', 'Windows programs', 'turned off in /etc/wsl.conf ([interop] enabled = false): the panel cannot do the Windows steps; take that line out and restart the distro', { optional: true }));
+  } else {
+    // Another distro starting can take WSL's registration away from this one (finding N); dmp-root puts it back.
+    checks.push(
+      warn('wsl.interop', 'Windows programs', 'cannot be started from this distro: another WSL distro starting took the registration away, which WSL leaves that way until this distro restarts', {
+        optional: true,
+        fixes: [{ action: 'wsl.repairInterop', input: {}, label: 'Register it again' }],
+      }),
+    );
+  }
   if (interop) checks.push(...(await windowsSideChecks(ctx)));
   return checks;
 }

@@ -1245,6 +1245,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({}),
   },
+  'wsl.repairInterop': {
+    title: 'Let WSL start Windows programs again',
+    description:
+      "Under WSL: registers WSL's interop with Windows programs again (dmp-root wsl-interop, the line WSL itself writes), when another distro starting took it away and Windows programs fail with Exec format error. Needs no restart of the distro; changes nothing when it is registered.",
+    changesSystem: true,
+    input: z.object({}),
+  },
   'org.readRepo': {
     title: 'Read a repo with Claude Code',
     description:

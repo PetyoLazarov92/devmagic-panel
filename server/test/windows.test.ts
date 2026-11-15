@@ -89,4 +89,10 @@ describe('the windows actions', () => {
     expect(await runAction(noHelper.ctx, 'windows.hostsSync', {})).toMatchObject({ ok: false, output: expect.stringContaining('run get.ps1') });
     expect([...notWsl.calls, ...noHelper.calls]).toEqual([]);
   });
+
+  it('wsl.repairInterop goes through dmp-root, which registers it again', async () => {
+    const s = setup();
+    await runAction(s.ctx, 'wsl.repairInterop', {});
+    expect(s.calls[0]).toMatchObject({ file: 'sudo', args: ['-n', DMP, 'wsl-interop'] });
+  });
 });

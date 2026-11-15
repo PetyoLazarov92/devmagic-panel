@@ -57,6 +57,12 @@ export function hostsKept(paths: WslPaths = {}): boolean {
   return text !== null && iniValue(text, 'network', 'generateHosts') === 'false';
 }
 
+/** True when wsl.conf turns interop off on purpose ([interop] enabled = false), which only a person changes. */
+export function interopDisabled(paths: WslPaths = {}): boolean {
+  const text = read(paths.wslConf ?? '/etc/wsl.conf');
+  return text !== null && iniValue(text, 'interop', 'enabled') === 'false';
+}
+
 /** True when Windows programs can be started from this distro (WSLInterop registered in binfmt_misc). */
 export function interopOn(paths: WslPaths = {}): boolean {
   const dir = paths.binfmtDir ?? '/proc/sys/fs/binfmt_misc';
