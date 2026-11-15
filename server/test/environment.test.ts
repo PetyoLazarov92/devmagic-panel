@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { checkEnvironment, enabledSiteNames, hostsNames } from '../src/environment.js';
 import type { Secrets } from '../src/secrets.js';
+import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { DMP, fakeExec, healthyResponses, tempTree } from './helpers.js';
 
 const secrets: Secrets = { panelPasswordHash: 'x', mysql: { user: 'root', host: 'localhost', password: 'pw' } };
@@ -261,7 +262,7 @@ describe("MySQL's memory for site data", () => {
 });
 
 describe('WSL on Windows', () => {
-  /** WSL 2 as install.sh leaves it: hosts kept, Apache on 127.0.0.1, interop on. */
+  /** WSL 2 as install.sh and get.ps1 leave it: hosts kept, Apache on 127.0.0.1, interop on, the helper in place. */
   function wslTree(wslConf = '[boot]\nsystemd=true\n\n[network]\ngenerateHosts = false\n') {
     const tree = healthyTree();
     tree.write('osrelease', '6.6.87.2-microsoft-standard-WSL2\n');
@@ -269,10 +270,29 @@ describe('WSL on Windows', () => {
     tree.write('ports.conf', 'Listen 127.0.0.1:80\n<IfModule ssl_module>\n\tListen 127.0.0.1:443\n</IfModule>\n');
     mkdirSync(join(tree.root, 'binfmt_misc'), { recursive: true });
     tree.write('binfmt_misc/WSLInterop');
+    tree.write('dmp-win.ps1', '# the helper');
+    tree.write('hosts', `127.0.0.1 localhost\n${HOSTS_BEGIN}\n127.0.0.1 local.devmagic\n127.0.0.2 local.wandworks-store.example\n${HOSTS_END}\n`);
     return tree;
   }
-  const check = (tree: ReturnType<typeof healthyTree>, linger = 'yes\n', config = tree.config) =>
-    checkEnvironment({ config, exec: fakeExec({ ...healthyResponses(), 'loginctl show-user': { stdout: linger } }).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+  /** The helper's status as it reads a machine get.ps1 set up, with changes. */
+  const windowsStatus = (changes: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      distro: 'devmagic-panel',
+      wsl: { answering: true, distroState: 'Running' },
+      hosts: { path: 'C:\\Windows\\System32\\drivers\\etc\\hosts', block: ['127.0.0.1 local.devmagic', '127.0.0.2 local.wandworks-store.example'] },
+      ca: { readable: true, thumbprint: 'ABC123', trusted: true },
+      logonTask: { installed: true },
+      ports: ['127.0.0.1:443'],
+      uac: { enabled: true, promptsAdmins: true },
+      ...changes,
+    });
+  const check = (tree: ReturnType<typeof healthyTree>, linger = 'yes\n', config = tree.config, status = windowsStatus()) => {
+    const powershell = `${join(tree.root, 'Windows')}/System32/WindowsPowerShell/v1.0/powershell.exe`;
+    const fake = fakeExec({ ...healthyResponses(), 'loginctl show-user': { stdout: linger }, [powershell]: { stdout: status } });
+    lastCalls = fake.calls;
+    return checkEnvironment({ config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+  };
+  let lastCalls: Array<{ file: string; args: string[] }> = [];
   const wsl = (report: Awaited<ReturnType<typeof checkEnvironment>>) => report.checks.filter((c) => c.group === 'wsl');
 
   it('shows nothing on a machine that is not WSL, or under WSL 1', async () => {
@@ -282,7 +302,7 @@ describe('WSL on Windows', () => {
     expect(wsl(await check(tree))).toEqual([]);
   });
 
-  it('is all ok as install.sh leaves WSL 2', async () => {
+  it('is all ok as install.sh and get.ps1 leave WSL 2, and asks the helper by its full Windows path', async () => {
     const report = await check(wslTree());
     expect(wsl(report).map((c) => [c.id, c.status])).toEqual([
       ['wsl.hosts', 'ok'],
@@ -290,7 +310,43 @@ describe('WSL on Windows', () => {
       ['wsl.linger', 'ok'],
       ['wsl.webDir', 'ok'],
       ['wsl.interop', 'ok'],
+      ['windows.hosts', 'ok'],
+      ['windows.ca', 'ok'],
+      ['windows.logonTask', 'ok'],
     ]);
+    const call = lastCalls.find((c) => c.file.endsWith('powershell.exe'));
+    expect(call?.args).toEqual(['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1', 'status']);
+  });
+
+  it('offers each Windows step as a fix when it is not in place', async () => {
+    const status = windowsStatus({
+      hosts: { path: 'C:\\Windows\\System32\\drivers\\etc\\hosts', block: ['127.0.0.1 local.devmagic', '127.0.0.1 local.old-site.test'] },
+      ca: { readable: true, thumbprint: 'ABC123', trusted: false },
+      logonTask: { installed: false },
+      uac: { enabled: true, promptsAdmins: false },
+    });
+    const report = await check(wslTree(), 'yes\n', undefined, status);
+    expect(byId(report, 'windows.hosts')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringMatching(/^missing local\.wandworks-store\.example; left over local\.old-site\.test/),
+      fixes: [{ action: 'windows.hostsSync', input: {}, confirm: expect.stringContaining('UAC') }],
+    });
+    expect(byId(report, 'windows.ca')).toMatchObject({ status: 'warn', fixes: [{ action: 'windows.trustCa', input: {} }] });
+    expect(byId(report, 'windows.logonTask')).toMatchObject({ status: 'warn', fixes: [{ action: 'windows.autostart', input: {} }] });
+    expect(byId(report, 'windows.uac')).toMatchObject({ status: 'warn', optional: true });
+  });
+
+  it('says to run get.ps1 when the helper is not there, and asks Windows nothing then, or without interop', async () => {
+    const tree = wslTree();
+    rmSync(join(tree.root, 'dmp-win.ps1'));
+    const report = await check(tree);
+    expect(byId(report, 'windows.helper')).toMatchObject({ status: 'warn', detail: expect.stringContaining('run get.ps1') });
+    expect(lastCalls.some((c) => c.file.endsWith('powershell.exe'))).toBe(false);
+    const noInterop = wslTree();
+    rmSync(join(noInterop.root, 'binfmt_misc/WSLInterop'));
+    const quiet = await check(noInterop);
+    expect(wsl(quiet).some((c) => c.id.startsWith('windows.'))).toBe(false);
+    expect(lastCalls.some((c) => c.file.endsWith('powershell.exe'))).toBe(false);
   });
 
   it('fails when WSL writes /etc/hosts anew, and warns about Apache on every address and lingering off', async () => {

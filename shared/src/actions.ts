@@ -1224,6 +1224,27 @@ export const actions = {
     changesSystem: true,
     input: z.object({}),
   },
+  'windows.hostsSync': {
+    title: 'Copy the hosts lines to Windows',
+    description:
+      "Under WSL: makes the devmagic-panel block of Windows' hosts file hold the same names as this distro's, one name per line, so Windows' browsers reach the sites. Through the Windows helper, which Windows asks to run as admin (UAC) and which keeps a copy of the file first. Lines outside the block stay as they are.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'windows.trustCa': {
+    title: "Trust the panel's CA in Windows",
+    description:
+      "Under WSL: adds the panel's local CA to your Windows user's trusted roots, so Chrome, Edge and Firefox accept the panel's certificates. Windows asks you to confirm. Through the Windows helper, which checks it is the panel's CA first.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'windows.autostart': {
+    title: 'Keep WSL running in Windows',
+    description:
+      'Under WSL: adds a task at your Windows logon that keeps this distro running without a window, since WSL stops a distro a few minutes after its last window closes, the panel and sites included. Through the Windows helper; no admin needed.',
+    changesSystem: true,
+    input: z.object({}),
+  },
   'org.readRepo': {
     title: 'Read a repo with Claude Code',
     description:

@@ -23,6 +23,13 @@ function hostsLines(text: string): Array<{ inside: boolean; address: string; nam
   return out;
 }
 
+/** Every name in the panel's block with its address, in the block's order: what Windows' hosts file mirrors under WSL. */
+export function hostsBlockNames(text: string): Array<{ name: string; address: string }> {
+  return hostsLines(text)
+    .filter((l) => l.inside)
+    .flatMap((l) => l.names.map((name) => ({ name, address: l.address })));
+}
+
 /** The address of a site's line in the panel's block, keyed by its primary domain, as dmp-root writes it. */
 export function hostsBlockAddress(text: string, domain: string): string | undefined {
   return hostsLines(text).find((l) => l.inside && l.names[0] === domain)?.address;

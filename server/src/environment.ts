@@ -19,6 +19,7 @@ import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
 import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
 import { hostsKept, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
+import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsStatus, type WindowsPaths } from './windows.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
 export interface HostPaths {
@@ -33,6 +34,8 @@ export interface HostPaths {
   mounts?: string;
   /** The kernel's name, wsl.conf and binfmt_misc, to see WSL; the system's by default. */
   wsl?: WslPaths;
+  /** Windows' folder and the helper as WSL sees them; /mnt/c by default. */
+  windows?: WindowsPaths;
 }
 
 export const defaultHostPaths = (home: string): HostPaths => ({
@@ -583,11 +586,58 @@ async function wslChecks(ctx: CheckContext): Promise<Check[]> {
     checks.push(ok('wsl.webDir', 'Sites on WSL\'s own disk', ctx.config.WEB_DIR));
   }
 
+  const interop = interopOn(paths);
   checks.push(
-    interopOn(paths)
+    interop
       ? ok('wsl.interop', 'Windows programs', 'the panel can start Windows programs, like Windows Terminal', { optional: true })
-      : warn('wsl.interop', 'Windows programs', 'Windows programs cannot be started from this distro ([interop] enabled = false in /etc/wsl.conf): steps on the Windows side show commands to run there instead', { optional: true }),
+      : warn('wsl.interop', 'Windows programs', 'Windows programs cannot be started from this distro (interop is off in /etc/wsl.conf, or another distro stopping took it away: restart this one): steps on the Windows side show commands to run there instead', { optional: true }),
   );
+  if (interop) checks.push(...(await windowsSideChecks(ctx)));
+  return checks;
+}
+
+/** The Windows side, from the helper's read-only status: what get.ps1 sets up, each with its fix. */
+async function windowsSideChecks(ctx: CheckContext): Promise<Check[]> {
+  const paths = ctx.paths.windows ?? {};
+  if (!helperInstalled(paths)) {
+    return [warn('windows.helper', 'Windows helper', 'not installed in C:\\Program Files\\devmagic-panel: run get.ps1 in Windows (docs/installation.md, Windows), which sets up the hosts lines, the CA and the logon task')];
+  }
+  const status = await windowsStatus(ctx.exec, paths);
+  if (!status) return [warn('windows.helper', 'Windows helper', 'did not answer: run get.ps1 in Windows again to repair it')];
+  const fix = (action: 'windows.hostsSync' | 'windows.trustCa' | 'windows.autostart', label: string): CheckFix[] => [{ action, input: {}, label }];
+  const checks: Check[] = [];
+
+  const want = windowsHostsPairs(ctx.config);
+  const have = new Set(windowsBlockPairs(status));
+  const missing = want.filter((p) => !have.has(p));
+  const extra = [...have].filter((p) => !want.includes(p));
+  checks.push(
+    missing.length === 0 && extra.length === 0
+      ? ok('windows.hosts', "Windows' hosts file", `${want.length} name(s), the same as this distro's`)
+      : warn('windows.hosts', "Windows' hosts file", `${missing.length ? `missing ${missing.map((p) => p.split('=')[0]).join(', ')}` : ''}${missing.length && extra.length ? '; ' : ''}${extra.length ? `left over ${extra.map((p) => p.split('=')[0]).join(', ')}` : ''}: Windows' browsers do not reach those sites as they should`, {
+          fixes: [{ ...fix('windows.hostsSync', 'Copy them to Windows')[0]!, confirm: 'Windows asks to run the helper as admin (UAC) and keeps a copy of its hosts file first.' }],
+        }),
+  );
+
+  checks.push(
+    status.ca.trusted
+      ? ok('windows.ca', 'Local CA in Windows', `trusted for your Windows user (${status.ca.thumbprint})`)
+      : warn('windows.ca', 'Local CA in Windows', status.ca.readable ? "not trusted for your Windows user: Windows' browsers warn about every site" : `Windows cannot read it (${status.ca.error ?? 'no CA'})`, {
+          ...(status.ca.readable ? { fixes: fix('windows.trustCa', 'Trust it in Windows') } : {}),
+        }),
+  );
+
+  checks.push(
+    status.logonTask.installed
+      ? ok('windows.logonTask', 'Runs after Windows logon', 'a logon task keeps this distro running without a window')
+      : warn('windows.logonTask', 'Runs after Windows logon', 'no logon task: WSL stops this distro a few minutes after its last window closes, the panel and every site with it', {
+          fixes: fix('windows.autostart', 'Add the logon task'),
+        }),
+  );
+
+  if (status.uac.enabled && !status.uac.promptsAdmins) {
+    checks.push(warn('windows.uac', 'UAC', "set to never notify: any program you run, this distro included, gets admin rights in Windows without asking. The panel works either way; Windows' default UAC level keeps that boundary", { optional: true }));
+  }
   return checks;
 }
 

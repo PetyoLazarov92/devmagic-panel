@@ -112,6 +112,8 @@ export function tempTree() {
     mounts: join(root, 'mounts'),
     // Not WSL, whatever this machine is: no kernel name here until a test writes one.
     wsl: { kernelRelease: join(root, 'osrelease'), wslConf: join(root, 'wsl.conf'), binfmtDir: join(root, 'binfmt_misc') },
+    // No Windows helper until a test writes one.
+    windows: { systemRoot: join(root, 'Windows'), helper: join(root, 'dmp-win.ps1'), helperWindows: 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1' },
   };
   const write = (path: string, text = '') => writeFileSync(join(root, path), text);
   return { root, config, hostPaths, write };

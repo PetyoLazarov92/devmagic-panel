@@ -74,6 +74,8 @@ import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } f
 import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 import { cleanStorage } from './storage-clean.js';
+import { helperInstalled, runHelper, windowsHostsPairs, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
+import { wslVersion } from './wsl.js';
 
 export interface ActionContext {
   config: SystemConfig;
@@ -109,6 +111,19 @@ export interface ActionContext {
   claudeCode?: { home: string; searchPath: string; workDir: string };
   /** What the panel's crontab lines run, and /etc for the system cron; tests pass their own. */
   cron?: CronSetup;
+  /** Windows' folder and the helper as WSL sees them, and the kernel's name, for the windows.* actions; tests pass their own. */
+  windows?: WindowsPaths & { kernelRelease?: string };
+}
+
+/**
+ * One command of the Windows helper, only under WSL 2 and once get.ps1 put the
+ * helper in place. Exit 3 is UAC declined, which the helper says on stderr.
+ */
+async function windowsStep(ctx: ActionContext, command: WindowsHelperCommand, args: readonly string[] = []): Promise<ExecResult> {
+  const paths = ctx.windows ?? {};
+  if (wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2) throw new ActionInputError('this is not WSL 2 on Windows: the Windows steps have nothing to do here');
+  if (!helperInstalled(paths)) throw new ActionInputError('the Windows helper is not installed: run get.ps1 in Windows (docs/installation.md, Windows)');
+  return runHelper(ctx.exec, paths, command, args, 600_000);
 }
 
 export interface CronSetup {
@@ -604,6 +619,9 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     const file = writeAutostart(ctx.home, process.execPath, panelCli(ctx.update));
     return [{ code: 0, stdout: `wrote ${file}: the panel and Mailpit start after you log in`, stderr: '' }];
   },
+  'windows.hostsSync': async (ctx) => [await windowsStep(ctx, 'hosts-sync', windowsHostsPairs(ctx.config))],
+  'windows.trustCa': async (ctx) => [await windowsStep(ctx, 'ca-trust')],
+  'windows.autostart': async (ctx) => [await windowsStep(ctx, 'autostart-install')],
   'site.skippedDone': async (ctx, input) => {
     const site = `${input.domain}${input.path ?? ''}`;
     if (!ctx.store.skippedDone(input.domain, input.path, input.label)) throw new ActionInputError(`${site} has no skipped step called ${input.label}`);
