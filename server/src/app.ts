@@ -6,7 +6,7 @@ import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, Ta
 import { browserCounter, FILE_TEXT_MAX, gitUrl, MODE_PATHS, modeForWord, nextPuzzle, puzzleQuestion, sealedModeId, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, followWindowsHosts, HOSTS_CHANGES, runAction } from './actions.js';
+import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, followWindowsHosts, followWindowsPortproxy, HOSTS_CHANGES, NGINX_CHANGES, runAction } from './actions.js';
 import { cronReport } from './cron.js';
 import { GlobalLock, LoginLimiter, SESSION_COOKIE, Sessions } from './auth.js';
 import { checkSystemPassword, newPasswordProblem, resetWays, type ResetWays, setPanelPassword } from './panel-password.js';
@@ -148,12 +148,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   // Under WSL 2: Windows' hosts block follows a job that changed this one, done or undone.
   jobs.onEnd((view) => {
-    if (!deps.windows || !view.kind || !HOSTS_CHANGES.has(view.kind) || (view.status !== 'done' && view.status !== 'undone')) return;
-    void followWindowsHosts({
+    if (!deps.windows || !view.kind || (view.status !== 'done' && view.status !== 'undone')) return;
+    const follow = HOSTS_CHANGES.has(view.kind) ? followWindowsHosts : NGINX_CHANGES.has(view.kind) ? followWindowsPortproxy : null;
+    if (!follow) return;
+    void follow({
       config: deps.config, exec: deps.exec, store: deps.store, dmpRoot: deps.dmpRoot,
       wpcoreBin: deps.wpcoreBin ?? WPCORE_BIN, wpcoreConf: deps.hostPaths.wpcoreConf, home: deps.hostPaths.home,
       jobs, uploadsDir: deps.uploadsDir, secrets: deps.secrets(), windows: deps.windows,
-    }).catch((error: Error) => app.log.warn(`windows hosts: ${error.message}`));
+    }).catch((error: Error) => app.log.warn(`windows ${view.kind}: ${error.message}`));
   });
   // The modes' paths: a site the New site wizard finished, a job undone. Counted in the panel's database, sent nowhere.
   // The modes go by GitHub's time from the update check, carried by the boot clock (panel-clock.ts).

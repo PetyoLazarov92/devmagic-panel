@@ -1658,6 +1658,67 @@ nginx_default_site() {
   [[ "$output" == *"must differ"* ]]
 }
 
+@test "config refuses nginx's WSL ports that are no port, below 1024, the panel's or the same" {
+  for bad in 80 abc 70000 "$(sed -n 's/^PANEL_PORT=//p' "$DMP_CONFIG")"; do
+    sed -i '/^NGINX_WSL_HTTP_PORT=/d' "$DMP_CONFIG"
+    echo "NGINX_WSL_HTTP_PORT=$bad" >> "$DMP_CONFIG"
+    run dmp nginx-configtest
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"NGINX_WSL_HTTP_PORT must"* ]]
+  done
+  sed -i '/^NGINX_WSL_HTTP_PORT=/d' "$DMP_CONFIG"
+  echo "NGINX_WSL_HTTP_PORT=8443" >> "$DMP_CONFIG"
+  run dmp nginx-configtest
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must differ"* ]]
+}
+
+@test "under WSL (apache-local), nginx also answers for Windows on 127.0.0.1 on its own ports" {
+  dmp apache-local
+  dmp nginx-setup
+  conf="$T/nginx/conf.d/devmagic-panel.conf"
+  grep -q 'listen 127.0.0.2:443 ssl default_server;' "$conf"
+  grep -q 'listen 127.0.0.1:8080 default_server;' "$conf"
+  grep -q 'listen 127.0.0.1:8443 ssl default_server;' "$conf"
+  nginx_site_tree
+  run dmp nginx-site-write local.wandworks.example
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.wandworks.example.conf"
+  grep -q 'listen 127.0.0.2:80;' "$site"
+  grep -q 'listen 127.0.0.1:8080;' "$site"
+  grep -q 'listen 127.0.0.2:443 ssl http2;' "$site"
+  grep -q 'listen 127.0.0.1:8443 ssl http2;' "$site"
+  [ "$(grep -c 'listen 127.0.0.1:' "$site")" -eq 2 ]
+  STUB_NGINX_VERSION=1.26.0 run dmp nginx-site-write local.wandworks.example
+  grep -q 'listen 127.0.0.1:8443 ssl;' "$site"
+  [ "$(grep -c 'http2 on;' "$site")" -eq 1 ]
+  # Another pair from config.env.
+  printf 'NGINX_WSL_HTTP_PORT=18080\nNGINX_WSL_HTTPS_PORT=18443\n' >> "$DMP_CONFIG"
+  run dmp nginx-site-write local.wandworks.example
+  [ "$status" -eq 0 ]
+  grep -q 'listen 127.0.0.1:18080;' "$site"
+  grep -q 'listen 127.0.0.1:18443 ssl' "$site"
+}
+
+@test "without apache-local, nginx listens on its own address only" {
+  dmp nginx-setup
+  run grep -q 'listen 127.0.0.1' "$T/nginx/conf.d/devmagic-panel.conf"
+  [ "$status" -ne 0 ]
+  nginx_site_tree
+  dmp nginx-site-write local.wandworks.example
+  run grep -q 'listen 127.0.0.1' "$T/nginx/sites-available/local.wandworks.example.conf"
+  [ "$status" -ne 0 ]
+}
+
+@test "under WSL, nginx-setup refuses when another program holds one of nginx's ports for Windows" {
+  dmp apache-local
+  STUB_SS='LISTEN 0 511 127.0.0.1:8443 0.0.0.0:* users:(("node",pid=42,fd=7))' run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"node on 127.0.0.1:8443"* ]]
+  STUB_SS='LISTEN 0 511 127.0.0.1:8443 0.0.0.0:* users:(("nginx",pid=42,fd=7))' run dmp nginx-setup
+  [ "$status" -eq 0 ]
+}
+
 @test "backup takes nginx's sites along" {
   echo 'server {}' > "$T/nginx/sites-available/manual"
   dmp backup

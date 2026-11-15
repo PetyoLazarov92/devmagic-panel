@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { checkEnvironment, enabledSiteNames, hostsNames } from '../src/environment.js';
 import type { Secrets } from '../src/secrets.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
@@ -335,6 +336,31 @@ describe('WSL on Windows', () => {
     expect(byId(report, 'windows.logonTask')).toMatchObject({ status: 'warn', fixes: [{ action: 'windows.autostart', input: {} }] });
     // A setting you chose: shown, never a warning.
     expect(byId(report, 'windows.uac')).toMatchObject({ status: 'ok', optional: true, detail: expect.stringContaining('never notify') });
+  });
+
+  it("checks Windows' relays to nginx only while nginx is set up, or while relays are left over", async () => {
+    const relays = ['127.0.0.2:443=127.0.0.1:8443', '127.0.0.2:80=127.0.0.1:8080'];
+    const plain = wslTree();
+    expect(byId(await check(plain, 'yes\n', undefined, windowsStatus({ portproxy: { rules: [], ipHelper: 'Running' } })), 'windows.portproxy')).toBeUndefined();
+    expect(byId(await check(plain, 'yes\n', undefined, windowsStatus({ portproxy: { rules: relays, ipHelper: 'Running' } })), 'windows.portproxy')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('nginx is not set up, but Windows still relays 127.0.0.2:443 and 127.0.0.2:80'),
+      fixes: [{ action: 'windows.portproxy', input: {}, label: 'Remove the relays' }],
+    });
+    const nginx = wslTree();
+    nginx.write('nginx/conf.d/devmagic-panel.conf', `${VHOST_MARKER}\n`);
+    expect(byId(await check(nginx, 'yes\n', undefined, windowsStatus({ portproxy: { rules: ['0.0.0.0:2222=172.20.1.5:22'], ipHelper: 'Running' } })), 'windows.portproxy')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('does not relay 127.0.0.2:80 and :443 to nginx on 127.0.0.1:8080 and :8443'),
+      fixes: [{ action: 'windows.portproxy', input: {}, confirm: expect.stringContaining('UAC') }],
+    });
+    expect(byId(await check(nginx, 'yes\n', undefined, windowsStatus({ portproxy: { rules: relays, ipHelper: 'Running' } })), 'windows.portproxy')).toMatchObject({ status: 'ok' });
+    expect(byId(await check(nginx, 'yes\n', undefined, windowsStatus({ portproxy: { rules: relays, ipHelper: 'Stopped' } })), 'windows.portproxy')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('IP Helper service is Stopped'),
+    });
+    // A helper older than portproxy: nothing to say.
+    expect(byId(await check(nginx), 'windows.portproxy')).toBeUndefined();
   });
 
   it('says to run get.ps1 when the helper is not there, and asks Windows nothing then, or without interop', async () => {

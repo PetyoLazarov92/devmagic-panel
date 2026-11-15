@@ -19,7 +19,7 @@ import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
 import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
 import { hostsKept, interopDisabled, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
-import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsStatus, type WindowsPaths } from './windows.js';
+import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsPortproxyHeld, windowsPortproxyRules, windowsStatus, type WindowsPaths } from './windows.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
 export interface HostPaths {
@@ -612,7 +612,7 @@ async function windowsSideChecks(ctx: CheckContext): Promise<Check[]> {
   }
   const status = await windowsStatus(ctx.exec, paths);
   if (!status) return [warn('windows.helper', 'Windows helper', 'did not answer: run get.ps1 in Windows again to repair it')];
-  const fix = (action: 'windows.hostsSync' | 'windows.trustCa' | 'windows.autostart', label: string): CheckFix[] => [{ action, input: {}, label }];
+  const fix = (action: 'windows.hostsSync' | 'windows.trustCa' | 'windows.autostart' | 'windows.portproxy', label: string): CheckFix[] => [{ action, input: {}, label }];
   const checks: Check[] = [];
 
   const want = windowsHostsPairs(ctx.config);
@@ -642,6 +642,30 @@ async function windowsSideChecks(ctx: CheckContext): Promise<Check[]> {
           fixes: fix('windows.autostart', 'Add the logon task'),
         }),
   );
+
+  // nginx's sites reach Windows through two relays of 127.0.0.2; none are needed without nginx.
+  if (status.portproxy) {
+    const wanted = nginxSetUp(ctx.config);
+    const want = windowsPortproxyRules(ctx.config);
+    const held = windowsPortproxyHeld(status);
+    const relays = `127.0.0.2:80 and :443 to nginx on 127.0.0.1:${ctx.config.NGINX_WSL_HTTP_PORT} and :${ctx.config.NGINX_WSL_HTTPS_PORT}`;
+    const confirm = 'Windows asks to run the helper as admin (UAC).';
+    if (wanted && want.every((r) => held.includes(r)) && held.length === want.length) {
+      checks.push(
+        status.portproxy.ipHelper === 'Running'
+          ? ok('windows.portproxy', 'nginx reaches Windows', `Windows relays ${relays}`)
+          : warn('windows.portproxy', 'nginx reaches Windows', `the relays are there, but Windows' IP Helper service is ${status.portproxy.ipHelper}: start it in Windows (services.msc, IP Helper), else sites on nginx do not open in Windows`),
+      );
+    } else if (wanted) {
+      checks.push(warn('windows.portproxy', 'nginx reaches Windows', `Windows does not relay ${relays}: sites on nginx do not open in Windows' browsers`, {
+        fixes: [{ ...fix('windows.portproxy', 'Relay them in Windows')[0]!, confirm }],
+      }));
+    } else if (held.length > 0) {
+      checks.push(warn('windows.portproxy', 'nginx reaches Windows', `nginx is not set up, but Windows still relays ${held.map((r) => r.split('=')[0]).join(' and ')}`, {
+        fixes: [{ ...fix('windows.portproxy', 'Remove the relays')[0]!, confirm }],
+      }));
+    }
+  }
 
   // A setting you chose, not a fault: shown for what it means, never as a warning.
   if (status.uac.enabled && !status.uac.promptsAdmins) {

@@ -221,6 +221,13 @@ describe('nginx in config.env and its error log', () => {
     expect(() => parseConfig(`${valid}\nNGINX_ADDRESS=127.0.0.1`, 'test')).toThrow(/must differ/);
   });
 
+  it("defaults nginx's ports for Windows under WSL, and refuses ones that are no port, below 1024, the panel's or the same", () => {
+    expect(parseConfig(valid, 'test')).toMatchObject({ NGINX_WSL_HTTP_PORT: 8080, NGINX_WSL_HTTPS_PORT: 8443 });
+    expect(parseConfig(`${valid}\nNGINX_WSL_HTTP_PORT=18080\nNGINX_WSL_HTTPS_PORT=18443`, 'test')).toMatchObject({ NGINX_WSL_HTTP_PORT: 18080, NGINX_WSL_HTTPS_PORT: 18443 });
+    for (const bad of ['80', 'abc', '70000', '4710']) expect(() => parseConfig(`${valid}\nNGINX_WSL_HTTP_PORT=${bad}`, 'test')).toThrow(/NGINX_WSL_HTTP_PORT must/);
+    expect(() => parseConfig(`${valid}\nNGINX_WSL_HTTPS_PORT=8080`, 'test')).toThrow(/must differ/);
+  });
+
   it('parses nginx error lines newest first, with PHP level from FastCGI lines', () => {
     const lines = parseNginxErrorLog([
       '2026/11/06 10:00:00 [notice] 1234#1234: signal process started',

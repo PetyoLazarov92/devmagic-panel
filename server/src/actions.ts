@@ -58,7 +58,7 @@ import { planMatchFpm, planSitePhp } from './php/site-php.js';
 import { forgetCompat, planCheckCompat, planCheckCompatAll, wordpressSites } from './php/compat.js';
 import { planInstallVersion, planPhpPackage, planRemoveVersion, planUpgradeVersion, setCliVersion } from './php/apt.js';
 import { planSwitchToFpm, planSwitchToModPhp } from './php/switch.js';
-import { planNginxSetup, planNginxTeardown } from './nginx.js';
+import { nginxSetUp, planNginxSetup, planNginxTeardown } from './nginx.js';
 import { planApplyHtaccess, planSetServer, planSetServerAll } from './sites/server-switch.js';
 import { dismissHtaccessChange } from './sites/htaccess-watch.js';
 import { analyzeDatabases, deleteMysqlBackup, type MysqlContext, mysqlBackupsDir, MysqlRefused, planDropDatabase, planDropUsers, planOptimize, resetSiteUser } from './mysql-server.js';
@@ -74,7 +74,7 @@ import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } f
 import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 import { cleanStorage } from './storage-clean.js';
-import { helperInstalled, runHelper, windowsHostsDiffer, windowsHostsPairs, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
+import { helperInstalled, runHelper, windowsHostsDiffer, windowsHostsPairs, windowsPortproxyDiffers, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
 import { interopOn, wslVersion } from './wsl.js';
 
 export interface ActionContext {
@@ -146,13 +146,35 @@ export const HOSTS_CHANGES: ReadonlySet<string> = new Set<ActionId>([
  * tests that set it). Never fails the change it follows.
  */
 export async function followWindowsHosts(ctx: ActionContext): Promise<void> {
-  const paths = ctx.windows;
-  if (!paths) return;
-  if (wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2 || !helperInstalled(paths)) return;
-  if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {}) && (await root(ctx, 'wsl-interop')).code !== 0) return;
-  if ((await windowsHostsDiffer(ctx.exec, ctx.config, paths)) !== true) return;
+  const paths = await windowsReady(ctx);
+  if (!paths || (await windowsHostsDiffer(ctx.exec, ctx.config, paths)) !== true) return;
   const { runId: _runId, actionId: _actionId, ...base } = ctx;
   await runAction(base, 'windows.hostsSync', {});
+}
+
+/** The paths of the Windows side when a follow-up can run there: WSL 2, the helper in place, interop registered (again if need be). */
+async function windowsReady(ctx: ActionContext): Promise<ActionContext['windows'] | null> {
+  const paths = ctx.windows;
+  if (!paths) return null;
+  if (wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2 || !helperInstalled(paths)) return null;
+  if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {}) && (await root(ctx, 'wsl-interop')).code !== 0) return null;
+  return paths;
+}
+
+/** The jobs that set nginx up or turn it off: Windows' relays to nginx follow each under WSL. */
+export const NGINX_CHANGES: ReadonlySet<string> = new Set<ActionId>(['nginx.setup', 'nginx.teardown']);
+
+/**
+ * After nginx was set up or turned off (or that was undone), under WSL 2 with
+ * the helper in place: Windows' relays of 127.0.0.2 to nginx are made to match
+ * (both while nginx is set up, none after), as the windows.portproxy action,
+ * only when they differ. Never fails the job it follows.
+ */
+export async function followWindowsPortproxy(ctx: ActionContext): Promise<void> {
+  const paths = await windowsReady(ctx);
+  if (!paths || (await windowsPortproxyDiffers(ctx.exec, ctx.config, paths, nginxSetUp(ctx.config))) !== true) return;
+  const { runId: _runId, actionId: _actionId, ...base } = ctx;
+  await runAction(base, 'windows.portproxy', {});
 }
 
 export interface CronSetup {
@@ -651,6 +673,11 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'windows.hostsSync': async (ctx) => [await windowsStep(ctx, 'hosts-sync', windowsHostsPairs(ctx.config))],
   'windows.trustCa': async (ctx) => [await windowsStep(ctx, 'ca-trust')],
   'windows.autostart': async (ctx) => [await windowsStep(ctx, 'autostart-install')],
+  'windows.portproxy': async (ctx) => [
+    nginxSetUp(ctx.config)
+      ? await windowsStep(ctx, 'portproxy-on', [String(ctx.config.NGINX_WSL_HTTP_PORT), String(ctx.config.NGINX_WSL_HTTPS_PORT)])
+      : await windowsStep(ctx, 'portproxy-off'),
+  ],
   'wsl.repairInterop': (ctx) => steps(() => root(ctx, 'wsl-interop')),
   'site.skippedDone': async (ctx, input) => {
     const site = `${input.domain}${input.path ?? ''}`;

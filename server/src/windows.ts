@@ -59,7 +59,7 @@ export function windowsDrive(paths: WindowsPaths): WindowsDrive | null {
   return drivesOf(paths).find((d) => existsSync(`${d.mount}/Windows/${POWERSHELL}`)) ?? null;
 }
 
-export const WINDOWS_HELPER_COMMANDS = ['status', 'hosts-sync', 'ca-trust', 'autostart-install'] as const;
+export const WINDOWS_HELPER_COMMANDS = ['status', 'hosts-sync', 'ca-trust', 'autostart-install', 'portproxy-on', 'portproxy-off'] as const;
 export type WindowsHelperCommand = (typeof WINDOWS_HELPER_COMMANDS)[number];
 
 /** What the helper accepts as an argument, and nothing else: same as Assert-DmpArgument. */
@@ -107,6 +107,8 @@ export interface WindowsStatus {
   logonTask: { installed: boolean };
   ports: string[];
   uac: { enabled: boolean; promptsAdmins: boolean };
+  /** Windows' portproxy rules as "listen:port=connect:port", and its IP Helper service; a helper older than portproxy-on leaves it out. */
+  portproxy?: { rules: string[]; ipHelper: string };
 }
 
 export async function windowsStatus(exec: Executor, paths: WindowsPaths): Promise<WindowsStatus | null> {
@@ -157,4 +159,35 @@ export async function keepInterop(exec: Executor, dmpRoot: string, wsl: WslPaths
   const r = await runRoot(exec, dmpRoot, ['wsl-interop']);
   if (r.code !== 0) throw new Error(`could not register interop again: ${(r.stderr || r.stdout).trim()}`);
   return 'registered interop with Windows programs again';
+}
+
+/** Where Windows' browsers find a site on nginx: the address its Windows hosts line points at. */
+export const WINDOWS_NGINX_ADDRESS = '127.0.0.2';
+
+/**
+ * The relays Windows needs while nginx is set up under WSL: its own
+ * 127.0.0.2:80 and :443 to the ports nginx answers on for Windows on
+ * 127.0.0.1 (WSL forwards 127.0.0.1 only), as the helper's status lists them.
+ */
+export function windowsPortproxyRules(config: SystemConfig): string[] {
+  return [`${WINDOWS_NGINX_ADDRESS}:80=127.0.0.1:${config.NGINX_WSL_HTTP_PORT}`, `${WINDOWS_NGINX_ADDRESS}:443=127.0.0.1:${config.NGINX_WSL_HTTPS_PORT}`];
+}
+
+/** The rules on 127.0.0.2:80 and :443 that Windows has, the panel's or not. */
+export function windowsPortproxyHeld(status: WindowsStatus): string[] {
+  return (status.portproxy?.rules ?? []).filter((r) => r.startsWith(`${WINDOWS_NGINX_ADDRESS}:80=`) || r.startsWith(`${WINDOWS_NGINX_ADDRESS}:443=`));
+}
+
+/**
+ * Whether Windows' relays differ from what nginx needs: both while it is set
+ * up (wanted), none after. Null when the helper did not answer or is older
+ * than portproxy-on, so nothing asks UAC then.
+ */
+export async function windowsPortproxyDiffers(exec: Executor, config: SystemConfig, paths: WindowsPaths, wanted: boolean): Promise<boolean | null> {
+  const status = await windowsStatus(exec, paths);
+  if (!status?.portproxy) return null;
+  const held = windowsPortproxyHeld(status);
+  if (!wanted) return held.length > 0;
+  const want = windowsPortproxyRules(config);
+  return held.length !== want.length || want.some((r) => !held.includes(r));
 }

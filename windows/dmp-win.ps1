@@ -21,6 +21,10 @@ calls and programs started with an argument array only.
   self-install                 copy this script into C:\Program Files\devmagic-panel, where the
                                panel calls it and only admins may change it. Admin.
   self-remove                  remove that folder again (an uninstall). Admin.
+  portproxy-on <http> <https>  Windows' 127.0.0.2:80 and :443 relayed to 127.0.0.1 on these ports,
+                               where nginx in WSL answers for Windows (WSL forwards 127.0.0.1
+                               only). A TCP relay: TLS goes through untouched. Admin.
+  portproxy-off                those two relays removed; others are left alone. Admin.
 
 Exit codes: 0 done, 1 failed, 2 bad input, 3 UAC declined, 4 WSL not answering.
 An admin command run without admin starts this script again elevated for that
@@ -35,8 +39,11 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove')
-$script:DmpAdminCommands = @('hosts-sync', 'self-install', 'self-remove')
+$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off')
+$script:DmpAdminCommands = @('hosts-sync', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off')
+# Where Windows' browsers find a site on nginx (NGINX_ADDRESS), and where WSL forwards nginx's own ports.
+$script:DmpProxyListen = '127.0.0.2'
+$script:DmpProxyConnect = '127.0.0.1'
 $script:DmpBegin = '# BEGIN devmagic-panel'
 $script:DmpEnd = '# END devmagic-panel'
 $script:DmpAddresses = @('127.0.0.1', '127.0.0.2')
@@ -335,6 +342,63 @@ function Remove-DmpSelf([string]$Folder) {
   return 'removed'
 }
 
+# --- portproxy ---
+
+function Get-DmpNetshPath() { Join-Path $env:SystemRoot 'System32\netsh.exe' }
+
+# portproxy-on's two ports, http then https: numbers above 1023 that differ.
+function ConvertFrom-DmpProxyPortPair([string[]]$Ports) {
+  if (@($Ports).Count -ne 2) { throw [DmpInputError]::new('portproxy-on takes two ports: the http one and the https one nginx answers on for Windows') }
+  foreach ($port in $Ports) {
+    if ($port -notmatch '^[0-9]{4,5}$' -or [int]$port -lt 1024 -or [int]$port -gt 65535) { throw [DmpInputError]::new("not a port from 1024 to 65535: '$port'") }
+  }
+  if ([int]$Ports[0] -eq [int]$Ports[1]) { throw [DmpInputError]::new('the http and https ports must differ') }
+  [pscustomobject]@{ Http = [int]$Ports[0]; Https = [int]$Ports[1] }
+}
+
+# The rules in netsh's table as "listen:port=connect:port". Only the data lines
+# match, so the headers (which Windows translates) do not matter.
+function ConvertFrom-DmpPortproxyTable([string]$Text) {
+  foreach ($line in ($Text -split "`r?`n")) {
+    if ($line -match '^\s*(\S+)\s+([0-9]{1,5})\s+(\S+)\s+([0-9]{1,5})\s*$') { '{0}:{1}={2}:{3}' -f $Matches[1], $Matches[2], $Matches[3], $Matches[4] }
+  }
+}
+
+function Get-DmpPortproxy() {
+  $result = Invoke-DmpProgram (Get-DmpNetshPath) @('interface', 'portproxy', 'show', 'v4tov4') 15
+  if ($result.TimedOut -or $result.ExitCode -ne 0) { return @() }
+  @(ConvertFrom-DmpPortproxyTable $result.Output)
+}
+
+# Adds or changes the two relays (netsh's add replaces a rule on the same listen address and port).
+function Set-DmpPortproxy([int]$Http, [int]$Https) {
+  foreach ($pair in @(@(80, $Http), @(443, $Https))) {
+    $result = Invoke-DmpProgram (Get-DmpNetshPath) @('interface', 'portproxy', 'add', 'v4tov4', "listenaddress=$($script:DmpProxyListen)", "listenport=$($pair[0])",
+      "connectaddress=$($script:DmpProxyConnect)", "connectport=$($pair[1])") 15
+    if ($result.TimedOut -or $result.ExitCode -ne 0) { throw "netsh could not relay $($script:DmpProxyListen):$($pair[0]): $(($result.Output + $result.Error).Trim())" }
+  }
+}
+
+# Removes the relays on 127.0.0.2:80 and :443 that are there; how many went.
+function Remove-DmpPortproxy() {
+  $rules = @(Get-DmpPortproxy)
+  $gone = 0
+  foreach ($port in 80, 443) {
+    if (-not ($rules | Where-Object { $_ -like "$($script:DmpProxyListen):$port=*" })) { continue }
+    $result = Invoke-DmpProgram (Get-DmpNetshPath) @('interface', 'portproxy', 'delete', 'v4tov4', "listenaddress=$($script:DmpProxyListen)", "listenport=$port") 15
+    if ($result.TimedOut -or $result.ExitCode -ne 0) { throw "netsh could not remove the relay on $($script:DmpProxyListen):${port}: $(($result.Output + $result.Error).Trim())" }
+    $gone++
+  }
+  return $gone
+}
+
+# portproxy needs Windows' IP Helper service; its state, or 'missing'.
+function Get-DmpIpHelperState() {
+  $service = Get-Service -Name iphlpsvc -ErrorAction SilentlyContinue
+  if (-not $service) { return 'missing' }
+  return [string]$service.Status
+}
+
 function Test-DmpAdmin() {
   ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
@@ -387,6 +451,7 @@ function Get-DmpStatus([string]$Distro) {
     logonTask = [ordered]@{ installed = (-not $task.TimedOut -and $task.ExitCode -eq 0) }
     ports = $listening
     uac = [ordered]@{ enabled = ($uac -and $uac.EnableLUA -eq 1); promptsAdmins = ($uac -and $uac.ConsentPromptBehaviorAdmin -ne 0) }
+    portproxy = [ordered]@{ rules = @(Get-DmpPortproxy); ipHelper = (Get-DmpIpHelperState) }
   }
 }
 
@@ -395,11 +460,12 @@ function Get-DmpStatus([string]$Distro) {
 function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
   if ($script:DmpCommands -notcontains $Name) { throw [DmpInputError]::new("unknown command: '$Name' (one of: $($script:DmpCommands -join ', '))") }
   foreach ($value in $ArgumentList) { Assert-DmpArgument $value }
-  if ($Name -ne 'hosts-sync' -and $ArgumentList.Count -gt 0) { throw [DmpInputError]::new("$Name takes no arguments") }
+  if ($Name -notin @('hosts-sync', 'portproxy-on') -and $ArgumentList.Count -gt 0) { throw [DmpInputError]::new("$Name takes no arguments") }
 
   if ($script:DmpAdminCommands -contains $Name -and -not (Test-DmpAdmin)) {
     # Checked before UAC asks: bad input never reaches the elevated copy.
     if ($Name -eq 'hosts-sync') { ConvertFrom-DmpPair $ArgumentList | Out-Null }
+    if ($Name -eq 'portproxy-on') { ConvertFrom-DmpProxyPortPair $ArgumentList | Out-Null }
     return (Invoke-DmpElevated $Name $ArgumentList)
   }
 
@@ -447,6 +513,17 @@ function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
     'self-remove' {
       $folder = Get-DmpInstallDir
       Write-DmpOk "the helper's folder $folder ($(Remove-DmpSelf $folder))"
+    }
+    'portproxy-on' {
+      $ports = ConvertFrom-DmpProxyPortPair $ArgumentList
+      Set-DmpPortproxy -Http $ports.Http -Https $ports.Https
+      $note = ''
+      $ipHelper = Get-DmpIpHelperState
+      if ($ipHelper -ne 'Running') { $note = "; Windows' IP Helper service is $ipHelper, and the relays work only while it runs" }
+      Write-DmpOk "Windows relays $($script:DmpProxyListen):80 and :443 to nginx in WSL on $($script:DmpProxyConnect):$($ports.Http) and :$($ports.Https)$note"
+    }
+    'portproxy-off' {
+      Write-DmpOk "$(Remove-DmpPortproxy) relay(s) on $($script:DmpProxyListen) removed"
     }
   }
   return 0

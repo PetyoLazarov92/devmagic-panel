@@ -450,12 +450,15 @@ detect_settings() {
   NGINX_LOG_DIR="/var/log/nginx"
   NGINX_ADDRESS="127.0.0.2"
   APACHE_ADDRESS="127.0.0.1"
+  # Under WSL, nginx also answers for Windows on 127.0.0.1 on these ports (scripts/lib/nginx.sh).
+  NGINX_WSL_HTTP_PORT=""
+  NGINX_WSL_HTTPS_PORT=""
 
   if [[ -r "$CONFIG_DIR/config.env" ]]; then
     local line
     # An if, not &&: a last line that does not match must not fail the step under set -e.
     while IFS= read -r line; do
-      if [[ "$line" =~ ^(PANEL_PORT|PANEL_DOMAIN|WEB_DIR|WEB_GROUP|CERTS_DIR|CA_DIR|BACKUP_DIR|STATE_DIR|UPDATE_REPO|UPDATE_GIT_URL|NGINX_SITES_AVAILABLE|NGINX_SITES_ENABLED|NGINX_LOG_DIR|NGINX_ADDRESS|APACHE_ADDRESS)=([A-Za-z0-9._/@:-]*)$ ]]; then
+      if [[ "$line" =~ ^(PANEL_PORT|PANEL_DOMAIN|WEB_DIR|WEB_GROUP|CERTS_DIR|CA_DIR|BACKUP_DIR|STATE_DIR|UPDATE_REPO|UPDATE_GIT_URL|NGINX_SITES_AVAILABLE|NGINX_SITES_ENABLED|NGINX_LOG_DIR|NGINX_ADDRESS|APACHE_ADDRESS|NGINX_WSL_HTTP_PORT|NGINX_WSL_HTTPS_PORT)=([A-Za-z0-9._/@:-]*)$ ]]; then
         printf -v "${BASH_REMATCH[1]}" '%s' "${BASH_REMATCH[2]}"
       fi
     done < "$CONFIG_DIR/config.env"
@@ -472,6 +475,10 @@ detect_settings() {
   if [[ -n "$UPDATE_GIT_URL" && ! "$UPDATE_GIT_URL" =~ $remote ]]; then
     dmp_warn "UPDATE_GIT_URL in $CONFIG_DIR/config.env is not a git remote; the panel reads git from UPDATE_REPO"
     UPDATE_GIT_URL=""
+  fi
+  if (( ON_WSL )); then
+    NGINX_WSL_HTTP_PORT="${NGINX_WSL_HTTP_PORT:-8080}"
+    NGINX_WSL_HTTPS_PORT="${NGINX_WSL_HTTPS_PORT:-8443}"
   fi
   # Windows' drives under /mnt are 20 to 350 times slower from WSL than its own disk.
   if (( ON_WSL )) && [[ "$WEB_DIR" == /mnt/* ]]; then
@@ -512,6 +519,9 @@ EOF
     # Only when set: without them the panel updates from its own repository.
     if [[ -n "$UPDATE_REPO" ]]; then printf 'UPDATE_REPO=%s\n' "$UPDATE_REPO"; fi
     if [[ -n "$UPDATE_GIT_URL" ]]; then printf 'UPDATE_GIT_URL=%s\n' "$UPDATE_GIT_URL"; fi
+    # Under WSL (or kept from before): nginx's ports for Windows.
+    if [[ -n "$NGINX_WSL_HTTP_PORT" ]]; then printf 'NGINX_WSL_HTTP_PORT=%s\n' "$NGINX_WSL_HTTP_PORT"; fi
+    if [[ -n "$NGINX_WSL_HTTPS_PORT" ]]; then printf 'NGINX_WSL_HTTPS_PORT=%s\n' "$NGINX_WSL_HTTPS_PORT"; fi
   } | write_root_file "$CONFIG_DIR/config.env" 0644
   record dir "$CONFIG_DIR" remove "settings folder"
   record file "$CONFIG_DIR/config.env" remove "settings read by dmp-root and the panel"

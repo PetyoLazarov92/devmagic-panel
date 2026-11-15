@@ -1,11 +1,12 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { followWindowsHosts, runAction, type ActionContext } from '../src/actions.js';
+import { followWindowsHosts, followWindowsPortproxy, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs } from '../src/jobs.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
+import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
-import { helperInstalled, helperPath, keepInterop, runHelper, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath } from '../src/windows.js';
+import { helperInstalled, helperPath, keepInterop, runHelper, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules } from '../src/windows.js';
 import { DMP, fakeExec, tempTree } from './helpers.js';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
@@ -236,5 +237,56 @@ describe("Windows' hosts block follows a change", () => {
     const result = await runAction(s.ctx, 'hosts.add', { domain: 'local.shop.com', aliases: [] });
     expect(result.ok).toBe(true);
     await vi.waitFor(() => expect(helperCommands(s.calls)).toEqual(['status', 'hosts-sync']));
+  });
+});
+
+describe("Windows' relays to nginx", () => {
+  const RELAYS = ['127.0.0.2:80=127.0.0.1:8080', '127.0.0.2:443=127.0.0.1:8443'];
+  const relaySetup = (rules: string[] | null, nginx: boolean) => {
+    const s = setup();
+    if (nginx) s.write('nginx/conf.d/devmagic-panel.conf', `${VHOST_MARKER}\n`);
+    const helper = `${s.powershell} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${HELPER}`;
+    const status = JSON.stringify({ hosts: { path: 'C:\\Windows\\System32\\drivers\\etc\\hosts', block: [] }, ...(rules ? { portproxy: { rules, ipHelper: 'Running' } } : {}) });
+    const fake = fakeExec({ [`${helper} status`]: { stdout: status }, [`${helper} portproxy-on`]: { stdout: 'ok\n' }, [`${helper} portproxy-off`]: { stdout: 'ok\n' } });
+    s.ctx.exec = fake.exec;
+    return { ...s, calls: fake.calls };
+  };
+  const helperArgs = (calls: Array<{ file: string; args: string[] }>) => calls.filter((c) => c.file.endsWith('powershell.exe')).map((c) => c.args.slice(6).join(' '));
+
+  it("are nginx's ports for Windows, from config.env", () => {
+    const s = setup();
+    expect(windowsPortproxyRules(s.config)).toEqual(RELAYS);
+    expect(windowsPortproxyRules({ ...s.config, NGINX_WSL_HTTP_PORT: 18080, NGINX_WSL_HTTPS_PORT: 18443 })).toEqual(['127.0.0.2:80=127.0.0.1:18080', '127.0.0.2:443=127.0.0.1:18443']);
+  });
+
+  it('windows.portproxy relays both ports while nginx is set up, and removes them once it is off', async () => {
+    const on = relaySetup([], true);
+    expect(await runAction(on.ctx, 'windows.portproxy', {})).toMatchObject({ ok: true });
+    expect(helperArgs(on.calls)).toEqual(['portproxy-on 8080 8443']);
+    const off = relaySetup([], false);
+    await runAction(off.ctx, 'windows.portproxy', {});
+    expect(helperArgs(off.calls)).toEqual(['portproxy-off']);
+  });
+
+  it('follow nginx being set up, and being turned off, only when Windows differs', async () => {
+    const missing = relaySetup([], true);
+    await followWindowsPortproxy(missing.ctx);
+    expect(helperArgs(missing.calls)).toEqual(['status', 'portproxy-on 8080 8443']);
+    expect(missing.ctx.store.recent(10).map((r) => r.action)).toContain('windows.portproxy');
+    const there = relaySetup([...RELAYS].reverse(), true);
+    await followWindowsPortproxy(there.ctx);
+    expect(helperArgs(there.calls)).toEqual(['status']);
+    const leftOver = relaySetup(RELAYS, false);
+    await followWindowsPortproxy(leftOver.ctx);
+    expect(helperArgs(leftOver.calls)).toEqual(['status', 'portproxy-off']);
+    const none = relaySetup([], false);
+    await followWindowsPortproxy(none.ctx);
+    expect(helperArgs(none.calls)).toEqual(['status']);
+  });
+
+  it('ask nothing more of a helper older than portproxy', async () => {
+    const s = relaySetup(null, true);
+    await followWindowsPortproxy(s.ctx);
+    expect(helperArgs(s.calls)).toEqual(['status']);
   });
 });

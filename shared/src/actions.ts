@@ -1245,6 +1245,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({}),
   },
+  'windows.portproxy': {
+    title: 'Relay nginx\'s address in Windows',
+    description:
+      "Under WSL, while nginx is set up: makes Windows relay its own 127.0.0.2, ports 80 and 443, to the ports nginx answers on for Windows in this distro (127.0.0.1:8080 and 8443 by default), since WSL forwards 127.0.0.1 only. So a site on nginx opens in Windows' browsers like on Ubuntu; a TCP relay, TLS untouched. Once nginx is turned off, removes the two relays again. Through the Windows helper, which Windows asks to run as admin (UAC); needs Windows' IP Helper service, on by default.",
+    changesSystem: true,
+    input: z.object({}),
+  },
   'wsl.repairInterop': {
     title: 'Let WSL start Windows programs again',
     description:

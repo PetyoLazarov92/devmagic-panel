@@ -373,6 +373,7 @@ installed_machine() {
   [[ "$output" != *"apache-local"* ]]
   [[ "$output" != *"wsl.conf"* ]]
   [[ "$output" != *"In Windows"* ]]
+  [[ "$output" != *"NGINX_WSL_HTTP_PORT"* ]]
 }
 
 @test "under WSL 2 it keeps /etc/hosts, keeps Apache on its address after the panel's site, lingers and installs Mailpit" {
@@ -390,6 +391,7 @@ installed_machine() {
   [[ "$output" == *"[dry-run] sudo loginctl enable-linger"* ]]
   [[ "$output" == *"server/dist/cli.js install-mailpit"* ]]
   [[ "$output" == *'add "127.0.0.1 local.devmagic" to C:\Windows\System32\drivers\etc\hosts'* ]]
+  [[ "$output" == *"      | NGINX_WSL_HTTP_PORT=8080"$'\n'"      | NGINX_WSL_HTTPS_PORT=8443"* ]]
 }
 
 @test "under WSL 2 without a browser of its own it adds the CA to no Linux browser store" {

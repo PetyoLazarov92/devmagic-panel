@@ -101,6 +101,8 @@ export function tempTree() {
     MYSQL_CONF_DIR: join(root, 'mysql'),
     NGINX_ADDRESS: '127.0.0.2',
     APACHE_ADDRESS: '127.0.0.1',
+    NGINX_WSL_HTTP_PORT: 8080,
+    NGINX_WSL_HTTPS_PORT: 8443,
   };
   const hostPaths: HostPaths = {
     home: join(root, 'home'),

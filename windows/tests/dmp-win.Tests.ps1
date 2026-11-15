@@ -253,6 +253,69 @@ Describe 'self-install and self-remove' {
   }
 }
 
+Describe 'portproxy' {
+  BeforeAll {
+    # netsh's table as an English Windows prints it, with a rule of your own on another address.
+    $script:Table = @(
+      '', 'Listen on ipv4:             Connect to ipv4:', '',
+      'Address         Port        Address         Port',
+      '--------------- ----------  --------------- ----------',
+      '127.0.0.2       443         127.0.0.1       8443',
+      '127.0.0.2       80          127.0.0.1       8080',
+      '0.0.0.0         2222        172.20.1.5      22', ''
+    ) -join "`r`n"
+  }
+
+  It 'reads the rules from the data lines only' {
+    ConvertFrom-DmpPortproxyTable $script:Table | Should -Be @('127.0.0.2:443=127.0.0.1:8443', '127.0.0.2:80=127.0.0.1:8080', '0.0.0.0:2222=172.20.1.5:22')
+    @(ConvertFrom-DmpPortproxyTable '') | Should -HaveCount 0
+  }
+
+  It 'takes two different ports from 1024 up, and refuses <Ports>' -TestCases @(
+    @{ Ports = @('8080') }, @{ Ports = @('8080', '8443', '9000') }, @{ Ports = @('80', '8443') },
+    @{ Ports = @('8080', '70000') }, @{ Ports = @('8443', '8443') }, @{ Ports = @('8080', '8443x') }
+  ) {
+    { ConvertFrom-DmpProxyPortPair $Ports } | Should -Throw -ExceptionType ([DmpInputError])
+  }
+
+  It 'reads a good pair as http then https' {
+    $ports = ConvertFrom-DmpProxyPortPair @('8080', '8443')
+    $ports.Http | Should -Be 8080
+    $ports.Https | Should -Be 8443
+  }
+
+  It 'adds both relays from 127.0.0.2 to 127.0.0.1 with netsh' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = 'Ok.'; Error = '' } }
+    Set-DmpPortproxy -Http 8080 -Https 8443
+    Should -Invoke Invoke-DmpProgram -Times 1 -Exactly -ParameterFilter { ($ArgumentList -join ' ') -eq 'interface portproxy add v4tov4 listenaddress=127.0.0.2 listenport=80 connectaddress=127.0.0.1 connectport=8080' }
+    Should -Invoke Invoke-DmpProgram -Times 1 -Exactly -ParameterFilter { ($ArgumentList -join ' ') -eq 'interface portproxy add v4tov4 listenaddress=127.0.0.2 listenport=443 connectaddress=127.0.0.1 connectport=8443' }
+  }
+
+  It 'says what netsh said when it fails' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = 'The requested operation requires elevation.'; Error = '' } }
+    { Set-DmpPortproxy -Http 8080 -Https 8443 } | Should -Throw '*requires elevation*'
+  }
+
+  It 'removes only its own two relays, and only those that are there' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = $script:Table; Error = '' } } -ParameterFilter { $ArgumentList -contains 'show' }
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = 'Ok.'; Error = '' } } -ParameterFilter { $ArgumentList -contains 'delete' }
+    Remove-DmpPortproxy | Should -Be 2
+    Should -Invoke Invoke-DmpProgram -Times 2 -Exactly -ParameterFilter { $ArgumentList -contains 'delete' -and $ArgumentList -contains 'listenaddress=127.0.0.2' }
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } } -ParameterFilter { $ArgumentList -contains 'show' }
+    Remove-DmpPortproxy | Should -Be 0
+  }
+
+  It 'checks the ports before UAC asks, and portproxy-off takes none' {
+    Mock Test-DmpAdmin { $false }
+    Mock Invoke-DmpElevated { 0 }
+    { Invoke-DmpCommand 'portproxy-on' @('80', '443') } | Should -Throw -ExceptionType ([DmpInputError])
+    { Invoke-DmpCommand 'portproxy-off' @('8080') } | Should -Throw -ExceptionType ([DmpInputError])
+    Should -Invoke Invoke-DmpElevated -Times 0 -Exactly
+    Invoke-DmpCommand 'portproxy-on' @('8080', '8443') | Should -Be 0
+    Should -Invoke Invoke-DmpElevated -Times 1 -Exactly -ParameterFilter { $Name -eq 'portproxy-on' -and ($ArgumentList -join ' ') -eq '8080 8443' }
+  }
+}
+
 Describe 'Get-DmpCaPath' {
   It 'takes the first share where the CA is, \wsl.localhost before \wsl$' {
     $root = Join-Path ([IO.Path]::GetTempPath()) ("dmp-shares-{0}" -f ([guid]::NewGuid().ToString('N')))

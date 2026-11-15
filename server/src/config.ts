@@ -38,6 +38,9 @@ export interface SystemConfig {
   /** Where nginx and Apache each answer once nginx is set up next to Apache; optional, 127.0.0.2 and 127.0.0.1. */
   NGINX_ADDRESS: string;
   APACHE_ADDRESS: string;
+  /** Under WSL, nginx also answers for Windows on 127.0.0.1 on these ports (Windows relays its 127.0.0.2:80 and :443 there); optional, 8080 and 8443. */
+  NGINX_WSL_HTTP_PORT: number;
+  NGINX_WSL_HTTPS_PORT: number;
   /** owner/name of the repository the panel updates from; optional, the panel's own by default. */
   UPDATE_REPO?: string;
   /** The git remote of its package tags; optional, git@github.com:<UPDATE_REPO>.git by default. */
@@ -66,6 +69,8 @@ const OPTIONAL = {
   MYSQL_CONF_DIR: '/etc/mysql',
   NGINX_ADDRESS: DEFAULT_NGINX_ADDRESS,
   APACHE_ADDRESS: DEFAULT_APACHE_ADDRESS,
+  NGINX_WSL_HTTP_PORT: '8080',
+  NGINX_WSL_HTTPS_PORT: '8443',
   UPDATE_REPO: '',
   UPDATE_GIT_URL: '',
 };
@@ -96,9 +101,18 @@ export function parseConfig(text: string, source: string): SystemConfig {
     if (!isLoopbackAddress(value)) throw new Error(`${key} must be an address in 127.0.0.0/8 other than 127.0.1.1 in ${source}`);
   }
   if (nginxAddress === apacheAddress) throw new Error(`NGINX_ADDRESS and APACHE_ADDRESS must differ in ${source}`);
+  // The same rules as dmp_load_config: from 1024 up, not the panel's, not the same.
+  const wslPorts = (['NGINX_WSL_HTTP_PORT', 'NGINX_WSL_HTTPS_PORT'] as const).map((key) => {
+    const text = values[key] || OPTIONAL[key];
+    const value = Number(text);
+    if (!/^[0-9]{4,5}$/.test(text) || value < 1024 || value > 65535) throw new Error(`${key} must be a port from 1024 to 65535 in ${source}`);
+    if (value === port) throw new Error(`${key} must differ from PANEL_PORT in ${source}`);
+    return value;
+  }) as [number, number];
+  if (wslPorts[0] === wslPorts[1]) throw new Error(`NGINX_WSL_HTTP_PORT and NGINX_WSL_HTTPS_PORT must differ in ${source}`);
   const { UPDATE_REPO, UPDATE_GIT_URL, ...rest } = values;
   return {
-    ...(rest as unknown as Omit<SystemConfig, 'PANEL_PORT' | 'PHP_CONF_DIR' | 'PHP_LIB_DIR' | 'STATE_DIR' | 'NGINX_SITES_AVAILABLE' | 'NGINX_SITES_ENABLED' | 'NGINX_LOG_DIR' | 'MYSQL_CONF_DIR' | 'NGINX_ADDRESS' | 'APACHE_ADDRESS'>),
+    ...(rest as unknown as Omit<SystemConfig, 'PANEL_PORT' | 'PHP_CONF_DIR' | 'PHP_LIB_DIR' | 'STATE_DIR' | 'NGINX_SITES_AVAILABLE' | 'NGINX_SITES_ENABLED' | 'NGINX_LOG_DIR' | 'MYSQL_CONF_DIR' | 'NGINX_ADDRESS' | 'APACHE_ADDRESS' | 'NGINX_WSL_HTTP_PORT' | 'NGINX_WSL_HTTPS_PORT'>),
     PANEL_PORT: port,
     PHP_CONF_DIR: values.PHP_CONF_DIR || OPTIONAL.PHP_CONF_DIR,
     PHP_LIB_DIR: values.PHP_LIB_DIR || OPTIONAL.PHP_LIB_DIR,
@@ -109,6 +123,8 @@ export function parseConfig(text: string, source: string): SystemConfig {
     MYSQL_CONF_DIR: values.MYSQL_CONF_DIR || OPTIONAL.MYSQL_CONF_DIR,
     NGINX_ADDRESS: nginxAddress,
     APACHE_ADDRESS: apacheAddress,
+    NGINX_WSL_HTTP_PORT: wslPorts[0],
+    NGINX_WSL_HTTPS_PORT: wslPorts[1],
     ...(UPDATE_REPO ? { UPDATE_REPO } : {}),
     ...(UPDATE_GIT_URL ? { UPDATE_GIT_URL } : {}),
   };

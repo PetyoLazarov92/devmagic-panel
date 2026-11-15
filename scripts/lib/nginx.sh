@@ -22,6 +22,24 @@ dmp_nginx_state() { printf '%s/nginx' "$STATE_DIR"; }
 # Apache kept on APACHE_ADDRESS without nginx (apache-local, for WSL): the original ports.conf.
 dmp_apache_local_state() { printf '%s/apache-local' "$STATE_DIR"; }
 dmp_apache_is_local() { [[ -f "$(dmp_apache_local_state)/ports.conf" ]]; }
+
+# Under WSL (apache-local is set up there, and only there), nginx answers for
+# Windows too: WSL forwards a socket on 127.0.0.1 to Windows' 127.0.0.1, but
+# nothing on NGINX_ADDRESS. So each server nginx gets from the panel also
+# listens on 127.0.0.1:NGINX_WSL_HTTP_PORT and :NGINX_WSL_HTTPS_PORT, and
+# Windows relays its own 127.0.0.2:80 and :443 there (dmp-win.ps1 portproxy-on):
+# a Windows hosts line on 127.0.0.2 reaches the site on nginx as in the distro.
+DMP_NGINX_WSL_ADDRESS="127.0.0.1"
+dmp_nginx_for_windows() { dmp_apache_is_local; }
+
+# Usage: dmp_nginx_wsl_listen <80|443> [the rest of the listen, like "ssl default_server"]
+# The extra listen line, with a newline before it, under WSL only; nothing elsewhere.
+dmp_nginx_wsl_listen() {
+  dmp_nginx_for_windows || return 0
+  local port="$NGINX_WSL_HTTP_PORT" rest="${2:-}"
+  [[ "$1" == 443 ]] && port="$NGINX_WSL_HTTPS_PORT"
+  printf '\n    listen %s:%s%s;' "$DMP_NGINX_WSL_ADDRESS" "$port" "${rest:+ $rest}"
+}
 dmp_apache_ports_file() { printf '%s/ports.conf' "$(dmp_apache_dir)"; }
 
 dmp_nginx_installed() { command -v nginx >/dev/null && [[ -f "$(dmp_nginx_dir)/nginx.conf" ]]; }
@@ -92,18 +110,23 @@ dmp_nginx_conflicts() {
 }
 
 # Programs other than Apache and nginx on port 80 or 443 where nginx or
-# Apache will listen, from ss (which names them when run as root).
+# Apache will listen, from ss (which names them when run as root). Under WSL
+# also on nginx's ports for Windows, on 127.0.0.1.
 dmp_nginx_port_users() {
-  local port local_addr process addr
-  for port in 80 443; do
+  local port local_addr process addr ours
+  local -a ports=(80 443)
+  dmp_nginx_for_windows && ports+=("$NGINX_WSL_HTTP_PORT" "$NGINX_WSL_HTTPS_PORT")
+  for port in "${ports[@]}"; do
+    ours=" $NGINX_ADDRESS $APACHE_ADDRESS "
+    [[ "$port" == 80 || "$port" == 443 ]] || ours=" $DMP_NGINX_WSL_ADDRESS "
     while read -r local_addr process; do
       [[ -n "$local_addr" ]] || continue
       addr="${local_addr%:*}"
       process="$(sed -nE 's/^users:\(\("([^"]+)".*/\1/p' <<< "$process")"
       [[ "$process" == apache2 || "$process" == nginx ]] && continue
-      case "$addr" in
-        "$NGINX_ADDRESS" | "$APACHE_ADDRESS" | 0.0.0.0 | "*" | "[::]") printf '%s on %s\n' "${process:-a program}" "$local_addr" ;;
-      esac
+      if [[ "$ours" == *" $addr "* || "$addr" == 0.0.0.0 || "$addr" == "*" || "$addr" == "[::]" ]]; then
+        printf '%s on %s\n' "${process:-a program}" "$local_addr"
+      fi
     done < <(ss -ltnpH "sport = :$port" 2>/dev/null | awk '{ print $4, $6 }')
   done
   return 0
@@ -250,7 +273,7 @@ EOF
 # Names nginx has no site for.
 server {
     listen $NGINX_ADDRESS:80 default_server;
-    listen $NGINX_ADDRESS:443 ssl default_server;
+    listen $NGINX_ADDRESS:443 ssl default_server;$(dmp_nginx_wsl_listen 80 default_server)$(dmp_nginx_wsl_listen 443 "ssl default_server")
     server_name _;
 $tls
     default_type text/plain;
@@ -692,10 +715,10 @@ dmp_nginx_site_render() {
   names="$domain${*:+ $*}"
   version="$(dmp_nginx_version)"
   if [[ -n "$version" ]] && dmp_version_at_least "$version" "$DMP_NGINX_HTTP2_DIRECTIVE"; then
-    listen443="listen $NGINX_ADDRESS:443 ssl;"
+    listen443="listen $NGINX_ADDRESS:443 ssl;$(dmp_nginx_wsl_listen 443 ssl)"
     http2=$'\n'"    http2 on;"
   else
-    listen443="listen $NGINX_ADDRESS:443 ssl http2;"
+    listen443="listen $NGINX_ADDRESS:443 ssl http2;$(dmp_nginx_wsl_listen 443 "ssl http2")"
   fi
   if [[ "$kind" == subdirectory ]]; then
     # WordPress's rules for a network whose sites live under paths, any
@@ -723,7 +746,7 @@ dmp_nginx_site_render() {
 $DMP_VHOST_MARKER
 # kind: $kind$headers
 server {
-    listen $NGINX_ADDRESS:80;
+    listen $NGINX_ADDRESS:80;$(dmp_nginx_wsl_listen 80)
     server_name $names;
     return 301 https://\$host\$request_uri;
 }
@@ -931,10 +954,10 @@ dmp_nginx_front_render() {
   names="$domain${*:+ $*}"
   version="$(dmp_nginx_version)"
   if [[ -n "$version" ]] && dmp_version_at_least "$version" "$DMP_NGINX_HTTP2_DIRECTIVE"; then
-    listen443="listen $NGINX_ADDRESS:443 ssl;"
+    listen443="listen $NGINX_ADDRESS:443 ssl;$(dmp_nginx_wsl_listen 443 ssl)"
     http2=$'\n'"    http2 on;"
   else
-    listen443="listen $NGINX_ADDRESS:443 ssl http2;"
+    listen443="listen $NGINX_ADDRESS:443 ssl http2;$(dmp_nginx_wsl_listen 443 "ssl http2")"
   fi
   if [[ "$static" == on ]]; then
     for at in "${DMP_NGINX_APACHE_PATHS[@]}"; do
@@ -961,7 +984,7 @@ $DMP_VHOST_MARKER
 # mode: apache
 # static: $static$headers
 server {
-    listen $NGINX_ADDRESS:80;
+    listen $NGINX_ADDRESS:80;$(dmp_nginx_wsl_listen 80)
     server_name $names;
     return 301 https://\$host\$request_uri;
 }
