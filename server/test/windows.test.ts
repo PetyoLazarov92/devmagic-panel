@@ -1,10 +1,11 @@
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runAction, type ActionContext } from '../src/actions.js';
 import { Jobs } from '../src/jobs.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { RunStore } from '../src/store.js';
-import { runHelper, windowsHostsPairs, windowsPath } from '../src/windows.js';
+import { helperInstalled, helperPath, runHelper, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath } from '../src/windows.js';
 import { DMP, fakeExec, tempTree } from './helpers.js';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
@@ -29,14 +30,56 @@ function setup({ wsl = true, helper = true } = {}) {
   return { ...t, ctx, calls: fake.calls, powershell };
 }
 
-describe('windowsPath', () => {
-  it('turns a WSL path on a Windows drive into a Windows path', () => {
-    expect(windowsPath('/mnt/c/Program Files/devmagic-panel/dmp-win.ps1')).toBe('C:\\Program Files\\devmagic-panel\\dmp-win.ps1');
-    expect(windowsPath('/mnt/d')).toBe('D:\\');
+// /proc/mounts as WSL 2.6 writes it, with C:, D: and a drive on a custom automount root with a space.
+const MOUNTS = [
+  'drivers /usr/lib/wsl/drivers 9p ro,nosuid,nodev,noatime,aname=drivers;fmask=222;dmask=222 0 0',
+  'C:\\134 /mnt/c 9p rw,noatime,aname=drvfs;path=C:\\;uid=1000;gid=1000;symlinkroot=/mnt/ 0 0',
+  'D:\\134 /mnt/d 9p rw,noatime,aname=drvfs;path=D:\\;uid=1000;gid=1000;symlinkroot=/mnt/ 0 0',
+  'E:\\134 /win\\040drives/e drvfs rw,noatime,path=E:\\ 0 0',
+  'tmpfs /run tmpfs rw,nosuid,nodev 0 0',
+].join('\n');
+
+describe('windowsDrives', () => {
+  it("reads WSL's drives from /proc/mounts, wherever they are mounted", () => {
+    expect(windowsDrives(MOUNTS)).toEqual([
+      { letter: 'C', mount: '/mnt/c' },
+      { letter: 'D', mount: '/mnt/d' },
+      { letter: 'E', mount: '/win drives/e' },
+    ]);
+  });
+});
+
+describe('windowsDrive', () => {
+  it('finds the drive Windows runs from, also when it is not C:', () => {
+    const t = tempTree();
+    mkdirSync(join(t.root, 'c'), { recursive: true });
+    mkdirSync(join(t.root, 'd/Windows/System32/WindowsPowerShell/v1.0'), { recursive: true });
+    t.write('d/Windows/System32/WindowsPowerShell/v1.0/powershell.exe');
+    t.write('mounts', `C:\\134 ${join(t.root, 'c')} 9p rw,aname=drvfs;path=C:\\ 0 0\nD:\\134 ${join(t.root, 'd')} 9p rw,aname=drvfs;path=D:\\ 0 0\n`);
+    const paths = { mounts: join(t.root, 'mounts') };
+    expect(windowsDrive(paths)).toEqual({ letter: 'D', mount: join(t.root, 'd') });
+    expect(helperPath(paths)).toBe(`${join(t.root, 'd')}/Program Files/devmagic-panel/dmp-win.ps1`);
   });
 
-  it('refuses a path on no Windows drive', () => {
+  it('finds none when no drive has Windows, and the helper is then not installed', () => {
+    const t = tempTree();
+    t.write('mounts', 'tmpfs /run tmpfs rw 0 0\n');
+    expect(windowsDrive({ mounts: join(t.root, 'mounts') })).toBeNull();
+    expect(helperInstalled({ mounts: join(t.root, 'mounts') })).toBe(false);
+  });
+});
+
+describe('windowsPath', () => {
+  it('turns a WSL path on a Windows drive into a Windows path, by the drives WSL mounts', () => {
+    const drives = windowsDrives(MOUNTS);
+    expect(windowsPath('/mnt/c/Program Files/devmagic-panel/dmp-win.ps1', drives)).toBe('C:\\Program Files\\devmagic-panel\\dmp-win.ps1');
+    expect(windowsPath('/mnt/d', drives)).toBe('D:\\');
+    expect(windowsPath('/win drives/e/Program Files/x.ps1', drives)).toBe('E:\\Program Files\\x.ps1');
+  });
+
+  it('refuses a path on no Windows drive, and one only starting like a drive', () => {
     expect(() => windowsPath('/home/alex/dmp-win.ps1')).toThrow('not on a Windows drive');
+    expect(() => windowsPath('/mnt/cdrom/x.ps1')).toThrow('not on a Windows drive');
   });
 });
 
