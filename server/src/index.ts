@@ -11,6 +11,8 @@ import { putBackBeforeExit, putBackLeftRaised } from './mysql-limits.js';
 import { readSecrets, removeGithubToken } from './secrets.js';
 import { RunStore } from './store.js';
 import { readVersion } from './version.js';
+import { wslDistro } from './windows.js';
+import { wslVersion } from './wsl.js';
 
 const config = loadConfig();
 const paths = userPaths();
@@ -26,6 +28,8 @@ if (removeGithubToken(paths.secretsFile, join(paths.dataDir, 'github-token-remov
 let logNotable: (line: string) => void = (line) => console.warn(line);
 const programs = new RunningPrograms((p) => logNotable(notableLine(p)));
 const exec = programs.track(runCommand);
+// Under WSL 2: the distro's name, for VS Code links in the browser (vscode-remote/wsl+<distro>).
+const distro = wslVersion() === 2 ? await wslDistro(runCommand).catch(() => null) : null;
 const app = await buildApp({
   config,
   exec,
@@ -45,6 +49,7 @@ const app = await buildApp({
   housekeeping: production,
   // The Windows side under WSL 2 (found on the drives WSL mounts); nothing happens elsewhere.
   ...(production ? { windows: {} } : {}),
+  ...(distro ? { wslDistro: distro } : {}),
   logger: true,
 });
 

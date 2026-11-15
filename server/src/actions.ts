@@ -74,7 +74,7 @@ import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } f
 import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 import { cleanStorage } from './storage-clean.js';
-import { helperInstalled, runHelper, windowsHostsDiffer, windowsHostsPairs, windowsPortproxyDiffers, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
+import { helperInstalled, openWindowsTerminal, runHelper, windowsHostsDiffer, windowsHostsPairs, windowsPortproxyDiffers, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
 import { interopOn, wslVersion } from './wsl.js';
 
 export interface ActionContext {
@@ -158,6 +158,21 @@ async function windowsReady(ctx: ActionContext): Promise<ActionContext['windows'
   if (!paths) return null;
   if (wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2 || !helperInstalled(paths)) return null;
   if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {}) && (await root(ctx, 'wsl-interop')).code !== 0) return null;
+  return paths;
+}
+
+/**
+ * Under WSL 2, where the panel's desktop is Windows: the paths to start
+ * Windows programs with, interop registered again first when another distro
+ * took it away; null elsewhere (and where the app gives no Windows side).
+ */
+async function windowsDesktop(ctx: ActionContext): Promise<ActionContext['windows'] | null> {
+  const paths = ctx.windows;
+  if (!paths || wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2) return null;
+  if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {})) {
+    const repaired = await root(ctx, 'wsl-interop');
+    if (repaired.code !== 0) throw new ActionInputError(`WSL cannot start Windows programs now and registering that again failed: ${(repaired.stderr || repaired.stdout).trim()}`);
+  }
   return paths;
 }
 
@@ -850,7 +865,11 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'site.removeLegacySalts': removeLegacySalts,
   'site.clearDebugLog': clearDebugLog,
   'site.login': login,
-  'site.openTerminal': async (ctx, { domain, path }) => [await openTerminal(ctx.exec, siteFor(ctx.config, domain, path).docroot)],
+  'site.openTerminal': async (ctx, { domain, path }) => {
+    const dir = siteFor(ctx.config, domain, path).docroot;
+    const windows = await windowsDesktop(ctx);
+    return [windows ? await openWindowsTerminal(ctx.exec, windows, dir) : await openTerminal(ctx.exec, dir)];
+  },
   'network.addAdmin': async (ctx, { domain, path, user }) =>
     startJob(ctx, planAddNetworkAdmin(ctx.exec, siteFor(ctx.config, domain, path), user), `Make ${user} administrator on every site of ${domain}${path ?? ''}`, `${domain}${path ?? ''}`),
   'core.switch': switchCore,

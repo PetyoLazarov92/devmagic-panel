@@ -119,6 +119,8 @@ export interface AppDeps {
    * registered. Left out, the panel does neither on its own (tests).
    */
   windows?: WindowsPaths & { kernelRelease?: string; binfmtDir?: string };
+  /** Under WSL: the distro the panel runs in, which the session gives a signed-in browser for its VS Code links. */
+  wslDistro?: string;
 }
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -366,12 +368,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   app.get('/healthz', async () => ({ status: 'ok', version: deps.version }));
 
-  app.get('/api/session', async (request): Promise<SessionInfo & { setupRequired: boolean }> => ({
-    authenticated: authenticated(request),
-    user: deps.config.PANEL_USER,
-    version: deps.version,
-    setupRequired: !deps.secrets()?.panelPasswordHash,
-  }));
+  app.get('/api/session', async (request): Promise<SessionInfo & { setupRequired: boolean }> => {
+    const signedIn = authenticated(request);
+    return {
+      authenticated: signedIn,
+      user: deps.config.PANEL_USER,
+      version: deps.version,
+      ...(signedIn && deps.wslDistro ? { wslDistro: deps.wslDistro } : {}),
+      setupRequired: !deps.secrets()?.panelPasswordHash,
+    };
+  });
 
   app.post<{ Body: { password?: unknown } }>('/api/login', async (request, reply) => {
     const client = request.ip;

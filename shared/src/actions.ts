@@ -1521,7 +1521,7 @@ export const actions = {
   'site.openTerminal': {
     title: 'Open in terminal',
     palette: [{ scope: 'site', label: 'Open a terminal' }],
-    description: "Opens a terminal window at the site's folder on this computer's desktop: the default terminal when the panel knows how to give it a folder, else the first known one installed. Changes nothing.",
+    description: "Opens a terminal window at the site's folder on this computer's desktop: the default terminal when the panel knows how to give it a folder, else the first known one installed. Under WSL, Windows Terminal in Windows at the folder in this distro (a WSL window where Windows has no Windows Terminal). Changes nothing.",
     changesSystem: false,
     input: z.object({ domain: localName, path: sitePath }),
   },

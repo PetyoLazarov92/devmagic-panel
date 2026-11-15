@@ -9,6 +9,7 @@ import { runWithToast } from '@/lib/site-actions';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { reportModeEvent } from '@/lib/modes';
+import { setVscodeDistro, vscodeUrl } from '@/lib/vscode';
 
 const dotTone: Record<CheckStatus, string> = {
   ok: 'bg-success',
@@ -130,15 +131,7 @@ export function siteUrl(domain: string, path?: string): string {
   return `https://${domain}${path ? `${path}/` : ''}`;
 }
 
-/**
- * Opens a folder in VS Code through its URL handler. VS Code registers
- * vscode:// when installed, so the browser hands the folder to the editor on
- * the machine you browse from; the panel server runs nothing. windowId=_blank
- * opens a new window instead of reusing the last one.
- */
-export function vscodeUrl(folder: string): string {
-  return `vscode://file${encodeURI(folder)}?windowId=_blank`;
-}
+export { setVscodeDistro, vscodeUrl };
 
 export function openInVSCode(folder: string): void {
   window.location.href = vscodeUrl(folder);

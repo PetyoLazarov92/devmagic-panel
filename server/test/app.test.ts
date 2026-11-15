@@ -151,6 +151,21 @@ describe('login', () => {
     expect(Math.abs(Date.parse(res.json().retryAt) - (Date.now() + wait * 1000))).toBeLessThan(2000);
   });
 
+  it("gives a signed-in browser the WSL distro for its VS Code links, and nobody else", async () => {
+    const tree = tempTree();
+    const wsl = await buildApp({ config: tree.config, exec: fakeExec().exec, store, secrets: () => secrets, hostPaths: tree.hostPaths, dmpRoot: DMP, version: '9.9.9', uploadsDir: join(tree.root, 'uploads'), production: true, wslDistro: 'devmagic-panel' });
+    try {
+      expect((await wsl.inject({ method: 'GET', url: '/api/session', headers: { host: HOST } })).json().wslDistro).toBeUndefined();
+      const res = await wsl.inject({ method: 'POST', url: '/api/login', headers: { host: HOST, origin: ORIGIN }, payload: { password: 'correct horse' } });
+      const cookie = `dmp_session=${res.cookies.find((c) => c.name === 'dmp_session')?.value}`;
+      expect((await wsl.inject({ method: 'GET', url: '/api/session', headers: { host: HOST, cookie } })).json()).toMatchObject({ authenticated: true, wslDistro: 'devmagic-panel' });
+    } finally {
+      await wsl.close();
+    }
+    const session = await app.inject({ method: 'GET', url: '/api/session', headers: { host: HOST, cookie: await login() } });
+    expect(session.json().wslDistro).toBeUndefined();
+  });
+
   it('logs in, keeps the session, and logs out', async () => {
     const cookie = await login();
     const session = await app.inject({ method: 'GET', url: '/api/session', headers: { host: HOST, cookie } });

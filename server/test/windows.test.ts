@@ -6,8 +6,8 @@ import { Jobs } from '../src/jobs.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
-import { helperInstalled, helperPath, keepInterop, runHelper, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules } from '../src/windows.js';
-import { DMP, fakeExec, tempTree } from './helpers.js';
+import { helperInstalled, helperPath, keepInterop, openWindowsTerminal, runHelper, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules, wslDistro } from '../src/windows.js';
+import { DMP, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
 
@@ -288,5 +288,72 @@ describe("Windows' relays to nginx", () => {
     const s = relaySetup(null, true);
     await followWindowsPortproxy(s.ctx);
     expect(helperArgs(s.calls)).toEqual(['status']);
+  });
+});
+
+describe('a terminal in Windows', () => {
+  const DIR = '/var/www/local.shop.com';
+  const WSLPATH = { stdout: '\\\\wsl.localhost\\devmagic-panel\\\n' };
+  /** Windows' cmd.exe in the test tree, with where answering for the programs Windows has. */
+  const desktop = (has: string[], extra: Record<string, { code?: number; stdout?: string; stderr?: string }> = {}) => {
+    const s = setup();
+    const cmd = `${join(s.root, 'Windows')}/System32/cmd.exe`;
+    const fake = fakeExec({
+      '/usr/bin/wslpath -w /': WSLPATH,
+      ...Object.fromEntries(['wt.exe', 'code'].map((p) => [`${cmd} /d /c where ${p}`, has.includes(p) ? { stdout: `C:\\Users\\me\\${p}\r\n` } : { code: 1, stderr: 'INFO: Could not find files' }])),
+      [cmd]: { stdout: '' },
+      ...extra,
+    });
+    return { ...s, cmd, fake, paths: s.ctx.windows! };
+  };
+  const cmdLines = (calls: Array<{ file: string; args: string[] }>) => calls.filter((c) => c.file.endsWith('cmd.exe')).map((c) => c.args.join(' '));
+
+  it('reads the distro from wslpath, on current and older WSL', async () => {
+    expect(await wslDistro(fakeExec({ '/usr/bin/wslpath -w /': WSLPATH }).exec)).toBe('devmagic-panel');
+    expect(await wslDistro(fakeExec({ '/usr/bin/wslpath -w /': { stdout: '\\\\wsl$\\Ubuntu-24.04\\\n' } }).exec)).toBe('Ubuntu-24.04');
+    expect(await wslDistro(fakeExec({ '/usr/bin/wslpath -w /': { stdout: 'C:\\\n' } }).exec)).toBeNull();
+    expect(await wslDistro(fakeExec({ '/usr/bin/wslpath -w /': { code: 1, stderr: 'no' } }).exec)).toBeNull();
+  });
+
+  it('opens Windows Terminal in a new window at the folder in this distro, from Windows\' own folder', async () => {
+    const d = desktop(['wt.exe']);
+    expect(await openWindowsTerminal(d.fake.exec, d.paths, DIR)).toMatchObject({ code: 0, stdout: `Opened Windows Terminal in ${DIR} (devmagic-panel)` });
+    expect(cmdLines(d.fake.calls)).toEqual(['/d /c where wt.exe', `/d /c wt.exe -w new wsl.exe -d devmagic-panel --cd ${DIR}`]);
+  });
+
+  it("opens WSL's own window where Windows has no Windows Terminal", async () => {
+    const d = desktop([]);
+    expect(await openWindowsTerminal(d.fake.exec, d.paths, DIR)).toMatchObject({ code: 0, stdout: expect.stringContaining('a WSL window') });
+    expect(cmdLines(d.fake.calls).at(-1)).toBe(`/d /c start wsl.exe -d devmagic-panel --cd ${DIR}`);
+  });
+
+  it('puts nothing on a cmd line that cmd could read as more than words', async () => {
+    const d = desktop(['wt.exe', 'code']);
+    for (const dir of ['/var/www/a&calc', '/var/www/a b', '/var/www/%PATH%', 'relative', '/var/www/a"b']) {
+      expect((await openWindowsTerminal(d.fake.exec, d.paths, dir)).code).toBe(1);
+    }
+    expect(d.fake.calls).toEqual([]);
+  });
+
+  it('says so when it cannot tell the distro, and starts nothing', async () => {
+    const d = desktop(['wt.exe'], { '/usr/bin/wslpath -w /': { code: 1, stderr: 'wslpath: not WSL' } });
+    expect(await openWindowsTerminal(d.fake.exec, d.paths, DIR)).toMatchObject({ code: 1, stderr: expect.stringContaining('which WSL distro') });
+    expect(cmdLines(d.fake.calls)).toEqual([]);
+  });
+
+  it('site.openTerminal takes Windows under WSL 2, registering interop first when it is gone, and the desktop elsewhere', async () => {
+    const t = wpSiteTree();
+    const wsl = setup({ interop: false });
+    const cmd = `${join(wsl.root, 'Windows')}/System32/cmd.exe`;
+    const fake = fakeExec({ '/usr/bin/wslpath -w /': WSLPATH, [`${cmd} /d /c where`]: { stdout: 'C:\\x\r\n' }, [cmd]: { stdout: '' }, [`sudo -n ${DMP} wsl-interop`]: { stdout: 'ok\n' } });
+    const ctx = { ...wsl.ctx, config: t.config, exec: fake.exec };
+    expect(await runAction(ctx, 'site.openTerminal', { domain: 'local.shop.com' })).toMatchObject({ ok: true });
+    expect(fake.calls[0]).toMatchObject({ file: 'sudo', args: ['-n', DMP, 'wsl-interop'] });
+    expect(cmdLines(fake.calls).at(-1)).toMatch(/^\/d \/c wt\.exe -w new wsl\.exe -d devmagic-panel --cd \/.*\/local\.shop\.com$/);
+    const linux = fakeExec();
+    const { windows: _windows, ...desktopCtx } = { ...wsl.ctx, config: t.config, exec: linux.exec };
+    const result = await runAction(desktopCtx, 'site.openTerminal', { domain: 'local.shop.com' });
+    expect(linux.calls.some((c) => c.file.endsWith('cmd.exe'))).toBe(false);
+    expect(result.ok === false ? result.output : '').toMatch(/desktop session|No terminal found|Opened/);
   });
 });

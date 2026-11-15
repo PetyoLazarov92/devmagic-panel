@@ -191,3 +191,48 @@ export async function windowsPortproxyDiffers(exec: Executor, config: SystemConf
   const want = windowsPortproxyRules(config);
   return held.length !== want.length || want.some((r) => !held.includes(r));
 }
+
+// ── A terminal on Windows ────────────────────────────────────
+//
+// Under WSL the panel's desktop is Windows: it starts Windows Terminal there
+// itself, as the Windows user, through interop and Windows' own cmd.exe (by
+// full path, from Windows' folder: finding K), never through the helper,
+// which is for what needs admin or changes Windows. VS Code needs no start
+// from here: the browser hands it a vscode-remote link with the distro.
+
+/** The distro this panel runs in, from wslpath -w / (\\wsl.localhost\<distro>\, or \\wsl$\ on older WSL); null when it does not say. */
+export async function wslDistro(exec: Executor, wslpath = '/usr/bin/wslpath'): Promise<string | null> {
+  const r = await exec(wslpath, ['-w', '/'], { timeoutMs: 10_000 });
+  const name = /^\\\\wsl(?:\.localhost|\$)\\([A-Za-z0-9._-]{1,64})\\?$/.exec(r.stdout.trim())?.[1];
+  return r.code === 0 && name ? name : null;
+}
+
+/** A folder cmd.exe may see on its command line: no character cmd reads as an operator, a variable or a quote. */
+const CMD_SAFE_PATH = /^\/[A-Za-z0-9._/-]{0,500}$/;
+
+/** cmd.exe /d /c with these words, from Windows' own folder; refuses anything cmd could read as more than words. */
+async function windowsCmd(exec: Executor, paths: WindowsPaths, words: readonly string[], timeoutMs = 30_000): Promise<ExecResult> {
+  const root = systemRoot(paths);
+  if (!root) throw new Error('no Windows drive with Windows on it is mounted in this distro');
+  for (const word of words) if (!/^[A-Za-z0-9._/:+=-]{1,500}$/.test(word)) throw new Error(`not a word for cmd.exe: ${word}`);
+  return exec(`${root}/System32/cmd.exe`, ['/d', '/c', ...words], { cwd: root, timeoutMs });
+}
+
+const failed = (stderr: string): ExecResult => ({ code: 1, stdout: '', stderr });
+
+/**
+ * A terminal in Windows at a folder of this distro: Windows Terminal in a new
+ * window (wt.exe, the store app every Windows 11 has), else WSL's own console
+ * window (Windows 10 without Windows Terminal).
+ */
+export async function openWindowsTerminal(exec: Executor, paths: WindowsPaths, dir: string): Promise<ExecResult> {
+  if (!CMD_SAFE_PATH.test(dir)) return failed(`the panel does not open a terminal at ${dir}: open one yourself and cd there`);
+  const distro = await wslDistro(exec);
+  if (!distro) return failed('could not tell which WSL distro this is (wslpath -w /): open a terminal yourself with wsl -d <distro>');
+  const wt = (await windowsCmd(exec, paths, ['where', 'wt.exe'], 15_000)).code === 0;
+  const r = wt
+    ? await windowsCmd(exec, paths, ['wt.exe', '-w', 'new', 'wsl.exe', '-d', distro, '--cd', dir])
+    : await windowsCmd(exec, paths, ['start', 'wsl.exe', '-d', distro, '--cd', dir]);
+  if (r.code !== 0) return failed(`${wt ? 'Windows Terminal' : 'wsl.exe'} did not start: ${(r.stderr || r.stdout).trim()}`);
+  return { code: 0, stdout: `Opened ${wt ? 'Windows Terminal' : 'a WSL window'} in ${dir} (${distro})`, stderr: '' };
+}
