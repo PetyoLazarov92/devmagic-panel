@@ -26,6 +26,21 @@ setup() { setup_tree; }
   [ "$status" -eq 0 ]
 }
 
+@test "dmp_is_local_name agrees with the shared list of local names" {
+  # shellcheck source=/dev/null
+  source "$BATS_TEST_DIRNAME/../lib/validate.sh"
+  local line want name got checked=0
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    want="${line%% *}"
+    name="${line#* }"
+    if dmp_is_local_name "$name"; then got=accept; else got=reject; fi
+    [ "$got" = "$want" ] || { echo "$name: $got, want $want"; return 1; }
+    checked=$((checked + 1))
+  done < "$BATS_TEST_DIRNAME/../../shared/test/local-names.txt"
+  [ "$checked" -gt 10 ]
+}
+
 @test "refuses a config with unknown keys or shell syntax" {
   echo 'EVIL=$(id)' >> "$DMP_CONFIG"
   run dmp hosts-add local.site.com

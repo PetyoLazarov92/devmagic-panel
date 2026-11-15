@@ -1,18 +1,22 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { actions, isActionId, isLocalName, mountFolder, paletteEntries } from '../src/actions.js';
 
-// Same cases as scripts/tests/dmp-root.bats, so the UI and dmp-root agree.
+// The list dmp-root's and the Windows helper's copies check too, so all three agree.
+const cases = readFileSync(new URL('./local-names.txt', import.meta.url), 'utf8')
+  .split('\n')
+  .filter((line) => line && !line.startsWith('#'))
+  .map((line) => ({ want: line.slice(0, line.indexOf(' ')), name: line.slice(line.indexOf(' ') + 1) }));
+
 describe('isLocalName', () => {
-  it.each(['local.site.com', 'www.local.site.com', 'shop.test', 'app.localhost', 'local.spellbook.co.jp'])('accepts %s', (name) => {
-    expect(isLocalName(name)).toBe(true);
+  it('has cases to check', () => {
+    expect(cases.filter((c) => c.want === 'accept').length).toBeGreaterThan(3);
+    expect(cases.filter((c) => c.want === 'reject').length).toBeGreaterThan(3);
   });
 
-  it.each(['example.com', 'google.com', 'LOCAL.Upper.com', 'local.a b.com', '../etc', 'local', 'local.-x.com', 'local.x.com;rm'])(
-    'rejects %s',
-    (name) => {
-      expect(isLocalName(name)).toBe(false);
-    },
-  );
+  it.each(cases)('$want $name', ({ want, name }) => {
+    expect(isLocalName(name)).toBe(want === 'accept');
+  });
 });
 
 describe('actions registry', () => {

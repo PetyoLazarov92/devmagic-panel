@@ -1,0 +1,29 @@
+# Names the panel may and may not manage, one per line: accept or reject, a space, the name.
+# isLocalName (shared/test/actions.test.ts), dmp_is_local_name (scripts/tests/dmp-root.bats)
+# and Test-DmpLocalName (windows/tests/dmp-win.Tests.ps1) all check this list, so the three
+# copies agree. Add a case here, never to one of them alone.
+accept local.site.com
+accept www.local.site.com
+accept shop.test
+accept app.localhost
+accept local.spellbook.co.jp
+accept a.localhost
+accept xn--bcher-kva.test
+accept local.wandworks-store.example
+reject example.com
+reject google.com
+reject www.spellbook.example
+reject LOCAL.Upper.com
+reject local.a b.com
+reject ../etc
+reject local
+reject test
+reject localhost
+reject local.-x.com
+reject local.x-.com
+reject local.x_y.com
+reject local..x.com
+reject local.site.com.
+reject local.x.com;rm
+reject local.x.com rm
+reject -local.x.com
