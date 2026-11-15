@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.67.1 (2026-11-15)
+* **Fix:** on a new install with no WordPress core yet, the cores page lets you add the first one again: Add was off until a core was there, so it never turned on
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.67.0 (2026-11-15)
 * **Modes:** the line for today goes by GitHub's time, read from the answer the update check already gets, so setting the computer's clock no longer changes the day. Until GitHub answers after a restart it goes by the computer's clock, and a day never goes back
 * **Updates:** the GitHub CLI's way to the releases also reads GitHub's time from its answer

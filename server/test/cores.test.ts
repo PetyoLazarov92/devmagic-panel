@@ -6,7 +6,7 @@ import type { CoreStatusMap } from '../src/core-status.js';
 import { Jobs, type JobView } from '../src/jobs.js';
 import { addableReleases, coresReport } from '../src/sites/cores.js';
 import { RunStore } from '../src/store.js';
-import { DMP, fakeExec, wpSiteTree } from './helpers.js';
+import { DMP, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
 const WPCORE = '/usr/local/lib/devmagic-panel/bin/wpcore';
 const STATUS: CoreStatusMap = {
@@ -77,6 +77,19 @@ describe('coresReport', () => {
       { version: '7.1.3', status: 'latest', sites: ['local.shop.com'] },
       { version: '6.8.3', status: 'insecure', sites: ['local.shop.com/learn'] },
     ]);
+  });
+
+  it('is ready for the first core once wpcore has its config and an empty cores folder', () => {
+    const t = tempTree();
+    const conf = join(t.root, 'wpcore.conf');
+    expect(coresReport(t.config, conf, STATUS).ready).toBe(false);
+    writeFileSync(conf, `CORES_DIR="${join(t.root, 'wp-cores')}"\n`);
+    expect(coresReport(t.config, conf, STATUS).ready).toBe(false);
+    mkdirSync(join(t.root, 'wp-cores'));
+    const report = coresReport(t.config, conf, STATUS);
+    expect(report.ready).toBe(true);
+    expect(report.cores).toEqual([]);
+    expect(report.available[0]).toEqual({ version: '7.1.3', status: 'latest' });
   });
 
   it('lists sites with their own copy apart, and works offline', () => {

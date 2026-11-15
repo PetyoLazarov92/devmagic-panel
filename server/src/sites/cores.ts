@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import type { ActionInput, CoresReport } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import { latestOf, type CoreStatusMap } from '../core-status.js';
@@ -49,7 +50,8 @@ export function coresReport(config: SystemConfig, wpcoreConf: string, status: Co
   const statusOf = (v: string) => (status?.[v] ? { status: status[v] } : {});
   return {
     coresDir,
-    ready: conf !== null && installed.length > 0,
+    // Ready once wpcore has its config and cores folder: the first core is added from here.
+    ready: conf !== null && existsSync(conf.coresDir),
     ...(latest ? { latest } : {}),
     ...(statusAt ? { statusAt } : {}),
     cores: installed.map((version) => ({
