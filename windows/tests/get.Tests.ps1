@@ -117,3 +117,51 @@ Describe 'Install-DmpDistro' {
     Should -Invoke Invoke-DmpWsl -Times 1 -Exactly -ParameterFilter { $ArgumentList[0] -eq '--set-default' -and $ArgumentList[1] -eq 'devmagic-panel' }
   }
 }
+
+Describe 'Invoke-DmpHelper' {
+  It 'returns only the exit code, however much the helper prints' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = "ok: one`r`nok: two`r`n"; Error = '' } }
+    $result = @(Invoke-DmpHelper @('ca-trust') 6>$null)
+    $result.Count | Should -Be 1
+    $result[0] | Should -BeOfType [int]
+    $result[0] | Should -Be 0
+  }
+
+  It 'passes on an exit code, and counts running out of time as a failure' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 3; Output = ''; Error = 'error: declined' } }
+    Invoke-DmpHelper @('hosts-sync') | Should -Be 3
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Output = ''; Error = '' } }
+    Invoke-DmpHelper @('hosts-sync') | Should -Be 1
+  }
+}
+
+Describe 'Install-DmpWindowsSide' {
+  BeforeEach {
+    Mock New-Item { }
+    Mock Set-ItemProperty { }
+    Mock Write-DmpStep { }
+    Mock Write-DmpWarn { }
+    Mock Invoke-DmpHelper { 0 }
+    $block = "# BEGIN devmagic-panel (managed by the panel, edit sites there)`n127.0.0.1 local.devmagic`n127.0.0.2 local.wandworks-store.example`n# END devmagic-panel`n"
+    Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = $block; Error = '' } }
+  }
+
+  It 'warns about nothing when every helper step succeeds, and mirrors the distro hosts block' {
+    Install-DmpWindowsSide 'devmagic-panel'
+    Should -Invoke Write-DmpWarn -Times 0 -Exactly
+    Should -Invoke Invoke-DmpHelper -Times 1 -Exactly -ParameterFilter { $ArgumentList[0] -eq 'autostart-install' }
+    Should -Invoke Invoke-DmpHelper -Times 1 -Exactly -ParameterFilter { $ArgumentList[0] -eq 'ca-trust' }
+    Should -Invoke Invoke-DmpHelper -Times 1 -Exactly -ParameterFilter {
+      ($ArgumentList -join ' ') -eq 'hosts-sync local.devmagic=127.0.0.1 local.wandworks-store.example=127.0.0.2'
+    }
+  }
+
+  It 'warns for the step that failed, and says UAC was declined' {
+    Mock Invoke-DmpHelper { 1 } -ParameterFilter { $ArgumentList[0] -eq 'ca-trust' }
+    Mock Invoke-DmpHelper { 3 } -ParameterFilter { $ArgumentList[0] -eq 'hosts-sync' }
+    Install-DmpWindowsSide 'devmagic-panel'
+    Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like 'the CA is not trusted*' }
+    Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like 'UAC was declined*' }
+    Should -Invoke Write-DmpWarn -Times 2 -Exactly
+  }
+}

@@ -150,9 +150,8 @@ function Assert-DmpWindows() {
   $problem = Test-DmpWindows $windows
   if ($problem) { throw $problem }
   Write-DmpOk "$($windows.Name), build $($windows.Build), x64"
-  if (-not (Test-DmpAdmin)) {
-    $groups = [Security.Principal.WindowsIdentity]::GetCurrent().Groups | ForEach-Object { $_.Value }
-    if ($groups -notcontains 'S-1-5-32-544') { Write-DmpWarn 'you are not an administrator: Windows asks for an admin password at the steps that need one' }
+  if (-not (Test-DmpAdminAccount)) {
+    Write-DmpWarn 'you are not an administrator: Windows asks for an admin password at the steps that need one'
   }
   $uac = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -ErrorAction SilentlyContinue
   if ($uac -and $uac.ConsentPromptBehaviorAdmin -eq 0) {
@@ -277,11 +276,30 @@ function Install-DmpPanel([string]$Name, [string]$ReleasePath) {
 }
 
 # The Windows side, through the helper: hosts line (UAC), the CA, the logon task.
+# True when this account is an administrator, also while UAC runs it without
+# admin rights: the Administrators group is then in the session as deny-only,
+# which WindowsIdentity.Groups leaves out but its claims keep.
+function Test-DmpAdminAccount() {
+  $sids = [Security.Principal.WindowsIdentity]::GetCurrent().Claims | ForEach-Object { $_.Value }
+  return @($sids) -contains 'S-1-5-32-544'
+}
+
+# One helper command, its output shown indented, its exit code returned (and
+# nothing else, so the caller compares a number).
+function Invoke-DmpHelper([string[]]$ArgumentList) {
+  $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $all = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $script:Helper) + $ArgumentList
+  # Long enough for you to answer UAC or Windows' CA question.
+  $result = Invoke-DmpProgram $powershell $all 600
+  foreach ($line in (($result.Output + $result.Error) -split "`r?`n")) { if ($line.Trim()) { [Console]::Out.WriteLine("   $line") } }
+  if ($result.TimedOut) { return 1 }
+  return [int]$result.ExitCode
+}
+
 function Install-DmpWindowsSide([string]$Name) {
   New-Item -Path $script:SettingsKey -Force | Out-Null
   Set-ItemProperty -Path $script:SettingsKey -Name Distro -Value $Name
-  $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  $run = { param([string[]]$a) & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script:Helper @a; return $LASTEXITCODE }
+  $run = { param([string[]]$a) Invoke-DmpHelper $a }
 
   Write-DmpStep 'Keeping the distro running while you are logged in (a logon task, no window)'
   if ((& $run @('autostart-install')) -ne 0) { Write-DmpWarn 'the logon task is not in place: the distro stops a few minutes after its last window; run this script again' }
@@ -296,7 +314,7 @@ function Install-DmpWindowsSide([string]$Name) {
     })
   $code = & $run (@('hosts-sync') + $pairs)
   switch ($code) {
-    0 { }
+    0 { Write-DmpOk "Windows' hosts file has the distro's $($pairs.Count) name(s), one per line" }
     3 { Write-DmpWarn "UAC was declined: add the names by hand, or run this script again ($($pairs -join ', '))" }
     default { Write-DmpWarn "Windows' hosts file was not changed (exit $code)" }
   }
@@ -323,11 +341,11 @@ function Invoke-DmpElevatedProgram([string]$File, [string[]]$ArgumentList) {
 }
 
 function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro) {
-  $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   Write-DmpStep "Removing the Windows side: hosts block (UAC), the logon task, the panel's CA"
-  & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script:Helper hosts-sync
-  & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script:Helper autostart-remove
-  & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script:Helper ca-untrust
+  foreach ($command in @('hosts-sync', 'autostart-remove', 'ca-untrust')) {
+    $code = Invoke-DmpHelper @($command)
+    if ($code -ne 0) { Write-DmpWarn "$command did not finish (exit $code)" }
+  }
   $distros = @(ConvertFrom-DmpWslList (Invoke-DmpWsl @('--list', '--verbose')).Output)
   if (-not ($distros | Where-Object { $_.Name -eq $Name })) { Write-DmpOk "no distro $Name"; Remove-Item -Path $script:SettingsKey -Recurse -Force -ErrorAction SilentlyContinue; return }
   if ($Name -ne 'devmagic-panel') {
