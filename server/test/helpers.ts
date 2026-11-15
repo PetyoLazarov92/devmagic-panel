@@ -110,6 +110,8 @@ export function tempTree() {
     modsEnabled: join(root, 'mods-enabled'),
     searchPath: '',
     mounts: join(root, 'mounts'),
+    // Not WSL, whatever this machine is: no kernel name here until a test writes one.
+    wsl: { kernelRelease: join(root, 'osrelease'), wslConf: join(root, 'wsl.conf'), binfmtDir: join(root, 'binfmt_misc') },
   };
   const write = (path: string, text = '') => writeFileSync(join(root, path), text);
   return { root, config, hostPaths, write };

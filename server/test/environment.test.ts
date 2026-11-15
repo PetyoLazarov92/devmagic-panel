@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { checkEnvironment, enabledSiteNames, hostsNames } from '../src/environment.js';
@@ -257,5 +257,62 @@ describe("MySQL's memory for site data", () => {
     const { exec } = fakeExec(healthyResponses());
     const report = await checkEnvironment({ config: tree.config, exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
     expect(byId(report, 'mysql.bufferPool')).toMatchObject({ status: 'ok', detail: '1.0 GB for 512 MB of InnoDB data' });
+  });
+});
+
+describe('WSL on Windows', () => {
+  /** WSL 2 as install.sh leaves it: hosts kept, Apache on 127.0.0.1, interop on. */
+  function wslTree(wslConf = '[boot]\nsystemd=true\n\n[network]\ngenerateHosts = false\n') {
+    const tree = healthyTree();
+    tree.write('osrelease', '6.6.87.2-microsoft-standard-WSL2\n');
+    tree.write('wsl.conf', wslConf);
+    tree.write('ports.conf', 'Listen 127.0.0.1:80\n<IfModule ssl_module>\n\tListen 127.0.0.1:443\n</IfModule>\n');
+    mkdirSync(join(tree.root, 'binfmt_misc'), { recursive: true });
+    tree.write('binfmt_misc/WSLInterop');
+    return tree;
+  }
+  const check = (tree: ReturnType<typeof healthyTree>, linger = 'yes\n', config = tree.config) =>
+    checkEnvironment({ config, exec: fakeExec({ ...healthyResponses(), 'loginctl show-user': { stdout: linger } }).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+  const wsl = (report: Awaited<ReturnType<typeof checkEnvironment>>) => report.checks.filter((c) => c.group === 'wsl');
+
+  it('shows nothing on a machine that is not WSL, or under WSL 1', async () => {
+    const tree = healthyTree();
+    expect(wsl(await check(tree))).toEqual([]);
+    tree.write('osrelease', '4.4.0-19041-Microsoft\n');
+    expect(wsl(await check(tree))).toEqual([]);
+  });
+
+  it('is all ok as install.sh leaves WSL 2', async () => {
+    const report = await check(wslTree());
+    expect(wsl(report).map((c) => [c.id, c.status])).toEqual([
+      ['wsl.hosts', 'ok'],
+      ['wsl.apacheAddress', 'ok'],
+      ['wsl.linger', 'ok'],
+      ['wsl.webDir', 'ok'],
+      ['wsl.interop', 'ok'],
+    ]);
+  });
+
+  it('fails when WSL writes /etc/hosts anew, and warns about Apache on every address and lingering off', async () => {
+    const tree = wslTree('[boot]\nsystemd=true\n');
+    tree.write('ports.conf', 'Listen 80\n<IfModule ssl_module>\n\tListen 443\n</IfModule>\n');
+    const report = await check(tree, 'no\n');
+    expect(byId(report, 'wsl.hosts')).toMatchObject({ status: 'fail', detail: expect.stringContaining('local.devmagic and every site drop out') });
+    expect(byId(report, 'wsl.apacheAddress')).toMatchObject({ status: 'warn', detail: expect.stringContaining('ports.conf has Listen 80') });
+    expect(byId(report, 'wsl.linger')).toMatchObject({ status: 'warn', detail: expect.stringContaining('lingering is off for dev') });
+  });
+
+  it('reads generateHosts from [network] only, in any case', async () => {
+    expect(byId(await check(wslTree('[boot]\ngenerateHosts = false\n')), 'wsl.hosts')?.status).toBe('fail');
+    expect(byId(await check(wslTree('[Network]\nGenerateHosts=False\n')), 'wsl.hosts')?.status).toBe('ok');
+    expect(byId(await check(wslTree('[network]\n# generateHosts = false\ngenerateHosts = true\n')), 'wsl.hosts')?.status).toBe('fail');
+  });
+
+  it('fails for sites on a Windows drive, and warns when Windows programs cannot be started', async () => {
+    const tree = wslTree();
+    rmSync(join(tree.root, 'binfmt_misc/WSLInterop'));
+    const report = await check(tree, 'yes\n', { ...tree.config, WEB_DIR: '/mnt/c/sites' });
+    expect(byId(report, 'wsl.webDir')).toMatchObject({ status: 'fail', detail: expect.stringContaining('/mnt/c/sites, on a Windows drive') });
+    expect(byId(report, 'wsl.interop')).toMatchObject({ status: 'warn', optional: true });
   });
 });

@@ -126,6 +126,72 @@ Every run is logged to `~/.local/state/devmagic-panel/logs/install-<date>.log`
 (the newest 20 stay). Passwords never reach the log: sudo asks on the terminal
 itself, and the panel's own questions run outside it.
 
+## Windows (WSL 2)
+
+The panel runs on Windows 10 22H2 and Windows 11 inside Ubuntu under WSL 2,
+exactly as on Ubuntu: Apache, PHP, MySQL, the root scripts and your sites all
+live in the Linux distro, and Windows browsers reach them through WSL's
+localhost forwarding. A Windows installer that does the Windows steps below for
+you is planned; until then they are a few minutes by hand.
+
+1. In PowerShell, install Ubuntu, or a distro of its own for the panel
+   (`--name` needs a recent WSL: `wsl --update` first):
+
+   ```powershell
+   wsl --install Ubuntu-24.04
+   wsl --install Ubuntu-24.04 --name devmagic-panel
+   ```
+
+   Ubuntu's WSL image runs systemd, which the panel needs. Open the distro once
+   to make your Linux user.
+2. In the distro, install the panel as on Ubuntu, with the commands in the
+   [README](../README.md#-installation). Under WSL 2 the installer also:
+   - adds `generateHosts = false` to `[network]` in `/etc/wsl.conf`, keeping
+     every other line: WSL otherwise writes `/etc/hosts` anew at every start,
+     and the panel's hosts lines would be gone;
+   - keeps Apache on `127.0.0.1` (`dmp-root apache-local`, the original
+     `ports.conf` kept in `/var/lib/devmagic-panel/apache-local`): WSL forwards
+     an Apache on every address to Windows on `::1` only, and one on
+     `127.0.0.1` on `127.0.0.1`, where Windows' hosts lines point;
+   - keeps the panel running when the last WSL window closes (lingering, no
+     question), installs Mailpit with `--yes` too, and adds the CA to no Linux
+     browser store unless the distro has a browser of its own;
+   - refuses WSL 1, a distro without systemd, and sites on a Windows drive
+     (`/mnt/c` is 20 to 350 times slower than the distro's own disk).
+3. In Windows, once, as administrator: add the panel's name to
+   `C:\Windows\System32\drivers\etc\hosts`, and later each site's names the
+   same way, one name per line (Windows reads only the first 9 names of a line):
+
+   ```text
+   127.0.0.1 local.devmagic
+   ```
+
+4. In Windows, trust the local CA for your user, so Chrome, Edge and Firefox
+   accept the panel's certificates (Windows asks you to confirm once):
+
+   ```powershell
+   Import-Certificate -FilePath \\wsl.localhost\Ubuntu-24.04\etc\ssl\localcerts\devmagic-panel-ca\ca.pem -CertStoreLocation Cert:\CurrentUser\Root
+   ```
+
+5. Keep the distro running: WSL stops it a few minutes after its last window
+   or command ends, however busy Apache and the panel are. Add a shortcut to
+   your Startup folder (`shell:startup` in the Run dialog) with this target,
+   which starts no window:
+
+   ```text
+   conhost.exe --headless wsl.exe -d Ubuntu-24.04 --exec sleep infinity
+   ```
+
+Aura's Machine checks have a WSL on Windows group under WSL 2: whether WSL keeps
+`/etc/hosts`, Apache is on `127.0.0.1`, lingering is on, the sites are on the
+distro's own disk and Windows programs can be started. Updating the panel, or
+running the installer again, puts the first three right.
+
+Good to know: Windows' `curl.exe` needs `--ssl-no-revoke` for the panel's
+certificates, which name no revocation server (browsers do not mind). Signing
+out of Windows while the distro runs has left WSL not answering until Windows
+restarted; a restart fixes it.
+
 ## Uninstall
 
 ```bash

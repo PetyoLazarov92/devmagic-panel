@@ -18,6 +18,7 @@ import { selfChecks } from './self-check.js';
 import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
 import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
+import { hostsKept, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
 export interface HostPaths {
@@ -30,6 +31,8 @@ export interface HostPaths {
   searchPath?: string;
   /** The mounted filesystems, to see an encrypted home; /proc/mounts by default. */
   mounts?: string;
+  /** The kernel's name, wsl.conf and binfmt_misc, to see WSL; the system's by default. */
+  wsl?: WslPaths;
 }
 
 export const defaultHostPaths = (home: string): HostPaths => ({
@@ -540,6 +543,54 @@ function autostartChecks(ctx: CheckContext): Check[] {
   return [ok('panel.autostart', label, `${file} starts the panel and Mailpit when you log in`)];
 }
 
+// ── WSL on Windows ───────────────────────────────────────────
+
+/**
+ * Under WSL 2 only: what install.sh sets so the panel works from Windows.
+ * Each is put right by updating the panel (install.sh runs again) or running
+ * the installer; the panel itself never writes wsl.conf or ports.conf.
+ */
+async function wslChecks(ctx: CheckContext): Promise<Check[]> {
+  const paths = ctx.paths.wsl ?? {};
+  if (wslVersion(paths) !== 2) return [];
+  const again = 'update the panel, or run its installer again';
+  const checks: Check[] = [];
+
+  checks.push(
+    hostsKept(paths)
+      ? ok('wsl.hosts', 'WSL keeps /etc/hosts', 'generateHosts = false in /etc/wsl.conf')
+      : fail('wsl.hosts', 'WSL keeps /etc/hosts', `WSL writes /etc/hosts anew at every start (no generateHosts = false in /etc/wsl.conf), so ${ctx.config.PANEL_DOMAIN} and every site drop out of it: ${again}`),
+  );
+
+  const address = ctx.config.APACHE_ADDRESS;
+  const off = listensOffAddress(join(dirname(ctx.config.APACHE_SITES_AVAILABLE), 'ports.conf'), address);
+  checks.push(
+    off.length === 0
+      ? ok('wsl.apacheAddress', `Apache on ${address}`, `Windows reaches Apache on ${address}, where the hosts lines point`)
+      : warn('wsl.apacheAddress', `Apache on ${address}`, `ports.conf has ${off[0]}: WSL forwards Apache on every address to Windows on ::1 only, so names on ${address} in Windows' hosts file do not reach it: ${again}`),
+  );
+
+  const linger = await ctx.exec('loginctl', ['show-user', ctx.config.PANEL_USER, '-p', 'Linger', '--value']);
+  checks.push(
+    linger.stdout.trim() === 'yes'
+      ? ok('wsl.linger', 'Keeps running when WSL windows close', `lingering is on for ${ctx.config.PANEL_USER}`)
+      : warn('wsl.linger', 'Keeps running when WSL windows close', `lingering is off for ${ctx.config.PANEL_USER}, so closing the last WSL window stops the panel and its jobs: ${again}`),
+  );
+
+  if (ctx.config.WEB_DIR.startsWith('/mnt/')) {
+    checks.push(fail('wsl.webDir', 'Sites on WSL\'s own disk', `WEB_DIR is ${ctx.config.WEB_DIR}, on a Windows drive, which is 20 to 350 times slower from WSL: keep sites on WSL's own disk, like /var/www`));
+  } else {
+    checks.push(ok('wsl.webDir', 'Sites on WSL\'s own disk', ctx.config.WEB_DIR));
+  }
+
+  checks.push(
+    interopOn(paths)
+      ? ok('wsl.interop', 'Windows programs', 'the panel can start Windows programs, like Windows Terminal', { optional: true })
+      : warn('wsl.interop', 'Windows programs', 'Windows programs cannot be started from this distro ([interop] enabled = false in /etc/wsl.conf): steps on the Windows side show commands to run there instead', { optional: true }),
+  );
+  return checks;
+}
+
 // ── report ───────────────────────────────────────────────────
 
 export async function checkEnvironment(ctx: CheckContext, now: () => number = Date.now): Promise<EnvironmentReport> {
@@ -558,6 +609,7 @@ export async function checkEnvironment(ctx: CheckContext, now: () => number = Da
       ctx.self ? selfChecks({ ...ctx.self, stateDir: ctx.config.STATE_DIR, dmpRoot: ctx.dmpRoot }).map((r) => ({ ...r, group: 'panel' as const })) : [],
     ),
     Promise.resolve(autostartChecks(ctx).map((r) => ({ ...r, group: 'panel' as const }))),
+    wslChecks(ctx).then((c) => c.map((r) => ({ ...r, group: 'wsl' as const }))),
   ]);
   return {
     checkedAt: new Date(started).toISOString(),
