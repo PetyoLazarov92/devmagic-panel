@@ -227,12 +227,36 @@ function New-DmpLogonTaskXml([string]$User, [string]$Distro) {
 "@
 }
 
+# One command line from an argument array, so the program gets back exactly
+# these arguments: Windows hands a program one string, which it splits by the
+# usual rules (CommandLineToArgvW): spaces split, "..." groups, \" is a quote,
+# and backslashes are literal unless they come before a quote.
+function Join-DmpArgumentList([string[]]$ArgumentList) {
+  $quoted = foreach ($arg in $ArgumentList) {
+    if ($arg -and $arg -notmatch '[\s"]') { $arg; continue }
+    $out = New-Object Text.StringBuilder
+    [void]$out.Append('"')
+    $slashes = 0
+    foreach ($c in $arg.ToCharArray()) {
+      if ($c -eq '\') { $slashes++; continue }
+      if ($c -eq '"') { [void]$out.Append('\', 2 * $slashes + 1); [void]$out.Append('"') }
+      else { [void]$out.Append('\', $slashes); [void]$out.Append($c) }
+      $slashes = 0
+    }
+    # Backslashes before the closing quote are doubled, so they stay backslashes.
+    [void]$out.Append('\', 2 * $slashes)
+    [void]$out.Append('"')
+    $out.ToString()
+  }
+  return ($quoted -join ' ')
+}
+
 # A program with an argument array and a time limit; its output and exit code,
 # or TimedOut when it did not end in time (WSL can hang, finding H).
 function Invoke-DmpProgram([string]$File, [string[]]$ArgumentList, [int]$TimeoutSeconds = 30) {
   $info = New-Object Diagnostics.ProcessStartInfo
   $info.FileName = $File
-  $info.Arguments = ($ArgumentList | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' '
+  $info.Arguments = Join-DmpArgumentList $ArgumentList
   $info.UseShellExecute = $false
   $info.RedirectStandardOutput = $true
   $info.RedirectStandardError = $true

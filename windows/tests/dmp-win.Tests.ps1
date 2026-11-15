@@ -266,3 +266,39 @@ Describe 'Get-DmpCaPath' {
     Get-DmpCaPath 'devmagic-panel' @('C:\no-such-share', 'C:\no-other') | Should -Be 'C:\no-such-share\devmagic-panel\etc\ssl\localcerts\devmagic-panel-ca\ca.pem'
   }
 }
+
+Describe 'Join-DmpArgumentList' {
+  BeforeAll {
+    # Windows' own parser, which programs use to split their command line.
+    if (-not ('DmpTest.Argv' -as [type])) {
+      Add-Type -Namespace DmpTest -Name Argv -MemberDefinition @'
+[DllImport("shell32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+static extern IntPtr CommandLineToArgvW(string cmdLine, out int count);
+[DllImport("kernel32.dll")]
+static extern IntPtr LocalFree(IntPtr mem);
+public static string[] Split(string cmdLine) {
+  int count;
+  IntPtr argv = CommandLineToArgvW("program.exe " + cmdLine, out count);
+  try {
+    var args = new string[count - 1];
+    for (int i = 1; i < count; i++) args[i - 1] = Marshal.PtrToStringUni(Marshal.ReadIntPtr(argv, i * IntPtr.Size));
+    return args;
+  } finally { LocalFree(argv); }
+}
+'@
+    }
+  }
+
+  It 'gives a program back exactly the arguments it was given' -TestCases @(
+    @{ Case = 'plain words'; List = @('-d', 'devmagic-panel', '--exec', 'bash') }
+    @{ Case = 'spaces'; List = @('C:\Program Files\devmagic-panel\dmp-win.ps1', 'a b') }
+    @{ Case = 'quotes inside'; List = @('say "hi"', '"', 'a"b') }
+    @{ Case = 'backslashes'; List = @('C:\dir\', 'a\b', 'c:\x\"y', '\server\share\') }
+    @{ Case = 'an empty argument'; List = @('', 'x', '') }
+    @{ Case = "get.ps1's install script"; List = @('-d', 'devmagic-panel', '--exec', 'bash', '-lc', 'set -e; d=$(mktemp -d); tar -xzf "$1" -C "$d"; "$d"/devmagic-panel-*/install.sh --yes', 'install', '/mnt/c/Users/Alex Morgan/setup/devmagic-panel-v1.0.0.tar.gz') }
+  ) {
+    $back = [DmpTest.Argv]::Split((Join-DmpArgumentList $List))
+    $back.Count | Should -Be $List.Count
+    for ($i = 0; $i -lt $List.Count; $i++) { $back[$i] | Should -BeExactly $List[$i] }
+  }
+}

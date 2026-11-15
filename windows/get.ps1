@@ -137,8 +137,10 @@ function Invoke-DmpInDistro([string]$Name, [string[]]$Command, [switch]$Root, [i
 }
 
 # A command in its own console window, for the steps where you type (passwords).
+# One quoted command line: Start-Process joins an array with plain spaces, which
+# would hand bash -lc only the first word of a script.
 function Start-DmpConsole([string[]]$ArgumentList) {
-  $process = Start-Process -FilePath (Get-DmpWslExe) -ArgumentList $ArgumentList -Wait -PassThru
+  $process = Start-Process -FilePath (Get-DmpWslExe) -ArgumentList (Join-DmpArgumentList $ArgumentList) -Wait -PassThru
   return $process.ExitCode
 }
 
@@ -266,10 +268,12 @@ function Install-DmpPanel([string]$Name, [string]$ReleasePath) {
     if ($full -notmatch '\.tar\.gz$') { throw "-Release takes a release package, devmagic-panel-<version>.tar.gz: $full" }
     $linux = (Invoke-DmpInDistro $Name @('wslpath', '-a', $full)).Output.Trim()
     $script = 'set -e; d=$(mktemp -d); tar -xzf "$1" -C "$d"; "$d"/devmagic-panel-*/install.sh --yes; ~/.local/share/devmagic-panel/node/current/bin/node ~/.local/share/devmagic-panel/current/server/dist/cli.js setup'
-    $code = Start-DmpConsole @('-d', $Name, '--exec', 'bash', '-lc', $script, 'install', $linux)
+    # bash -c, not a login shell: Ubuntu's ~/.bash_logout runs clear_console,
+    # which fails in this window, and under set -e its 1 would replace the result.
+    $code = Start-DmpConsole @('-d', $Name, '--exec', 'bash', '-c', $script, 'install', $linux)
   } else {
     $script = 'set -e; d=$(mktemp -d); curl -fsSL -o "$d/get.sh" "$1"; bash "$d/get.sh" --yes; ~/.local/share/devmagic-panel/node/current/bin/node ~/.local/share/devmagic-panel/current/server/dist/cli.js setup'
-    $code = Start-DmpConsole @('-d', $Name, '--exec', 'bash', '-lc', $script, 'install', $script:Manifest.GetShUrl)
+    $code = Start-DmpConsole @('-d', $Name, '--exec', 'bash', '-c', $script, 'install', $script:Manifest.GetShUrl)
   }
   if ($code -ne 0) { throw "the panel's installer did not finish (exit $code): its log is in ~/.local/state/devmagic-panel/logs in the distro; run this script again" }
   Write-DmpOk 'the panel is installed in the distro'
