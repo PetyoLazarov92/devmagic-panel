@@ -1,0 +1,70 @@
+name: windows
+
+# A test build of the Windows setup: the release package as GitHub builds it,
+# and the unsigned setup exe around it, both kept as workflow artifacts (no tag,
+# no GitHub release, so the Updates page and get.sh never see them). Runs on
+# pushes to feat/windows and by hand. Download devmagic-panel-setup from the
+# run's artifacts on any Windows 10 22H2 or 11 and run it; SmartScreen warns
+# about an unsigned exe (More info, Run anyway).
+on:
+  push:
+    branches: [feat/windows]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.name.outputs.name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: A dev release name, like v1.67.1-dev.1a2b3c4
+        id: name
+        run: echo "name=v$(node -p "require('./package.json').version")-dev.$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - run: npm run package -- --out "$RUNNER_TEMP/out" --name "${{ steps.name.outputs.name }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+
+  setup:
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/package
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+      - name: Build the setup
+        shell: pwsh
+        run: |
+          $name = '${{ needs.package.outputs.name }}'
+          $package = Join-Path $env:RUNNER_TEMP "package\devmagic-panel-$name.tar.gz"
+          if (-not (Test-Path $package)) { throw "no package at $package" }
+          $version = $name.TrimStart('v')
+          $file = ($version -replace '-.*$', '') + '.0'
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DFileVersion=$file" "/DReleaseFile=$package" "/O$env:RUNNER_TEMP\setup" windows\installer\devmagic-panel.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+          Get-ChildItem "$env:RUNNER_TEMP\setup" | Format-Table Name, Length -AutoSize
+      - uses: actions/upload-artifact@v4
+        with:
+          name: devmagic-panel-setup
+          path: ${{ runner.temp }}/setup/*.exe
+          if-no-files-found: error
