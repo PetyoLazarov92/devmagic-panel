@@ -155,7 +155,7 @@ function Assert-DmpWindows() {
   }
   $uac = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -ErrorAction SilentlyContinue
   if ($uac -and $uac.ConsentPromptBehaviorAdmin -eq 0) {
-    Write-DmpWarn "UAC is set to never notify: every program you run gets admin rights without asking, WSL's included. The panel works either way; the default UAC level keeps that boundary"
+    Write-DmpOk 'UAC is set to never notify: the admin steps below run without asking'
   }
   $drive = New-Object IO.DriveInfo ([IO.Path]::GetPathRoot($env:LOCALAPPDATA))
   if ($drive.AvailableFreeSpace -lt 10GB) { throw "the distro needs about 10 GB on $($drive.Name), which has $([math]::Round($drive.AvailableFreeSpace / 1GB, 1)) GB free" }

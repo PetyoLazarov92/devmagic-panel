@@ -643,8 +643,9 @@ async function windowsSideChecks(ctx: CheckContext): Promise<Check[]> {
         }),
   );
 
+  // A setting you chose, not a fault: shown for what it means, never as a warning.
   if (status.uac.enabled && !status.uac.promptsAdmins) {
-    checks.push(warn('windows.uac', 'UAC', "set to never notify: any program you run, this distro included, gets admin rights in Windows without asking. The panel works either way; Windows' default UAC level keeps that boundary", { optional: true }));
+    checks.push(ok('windows.uac', 'UAC', "set to never notify: Windows gives admin rights without asking, to any program you run, this distro included. The panel works the same either way", { optional: true }));
   }
   return checks;
 }

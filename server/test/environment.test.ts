@@ -333,7 +333,8 @@ describe('WSL on Windows', () => {
     });
     expect(byId(report, 'windows.ca')).toMatchObject({ status: 'warn', fixes: [{ action: 'windows.trustCa', input: {} }] });
     expect(byId(report, 'windows.logonTask')).toMatchObject({ status: 'warn', fixes: [{ action: 'windows.autostart', input: {} }] });
-    expect(byId(report, 'windows.uac')).toMatchObject({ status: 'warn', optional: true });
+    // A setting you chose: shown, never a warning.
+    expect(byId(report, 'windows.uac')).toMatchObject({ status: 'ok', optional: true, detail: expect.stringContaining('never notify') });
   });
 
   it('says to run get.ps1 when the helper is not there, and asks Windows nothing then, or without interop', async () => {
