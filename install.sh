@@ -29,6 +29,12 @@ SYSTEM_CA_FILE="/usr/local/share/ca-certificates/devmagic-panel-ca.crt"
 OS_RELEASE="${DMP_INSTALL_OS_RELEASE:-/etc/os-release}"
 # Overridable so the tests can stand in for an encrypted home folder.
 MOUNTS_FILE="${DMP_INSTALL_MOUNTS:-/proc/mounts}"
+# WSL 2 on Windows: read from the kernel's name, PID 1's name and /etc/wsl.conf.
+# Overridable so the tests can stand in for WSL, or for a machine that is not.
+KERNEL_RELEASE="${DMP_INSTALL_KERNEL_RELEASE:-/proc/sys/kernel/osrelease}"
+INIT_COMM="${DMP_INSTALL_INIT_COMM:-/proc/1/comm}"
+WSL_CONF="${DMP_INSTALL_WSL_CONF:-/etc/wsl.conf}"
+ON_WSL=0
 # Where apt keeps its sources and keys, read to explain a failed apt-get update.
 # Overridable for the tests.
 APT_DIR="${DMP_INSTALL_APT_DIR:-/etc/apt}"
@@ -373,11 +379,29 @@ preflight() {
   command -v sudo >/dev/null || dmp_die "sudo is required"
   command -v apt-get >/dev/null || dmp_die "apt-get is required"
   dmp_ok "$(os_field PRETTY_NAME)"
+  case "$(wsl_version)" in
+    2)
+      ON_WSL=1
+      [[ "$(cat "$INIT_COMM" 2>/dev/null)" == systemd ]] \
+        || dmp_die "systemd is not running in this WSL distro: add [boot] systemd=true to /etc/wsl.conf, run wsl --terminate <distro> in Windows, then run the installer again"
+      dmp_ok "WSL 2 on Windows: Apache is kept on its own address, where Windows reaches it, and WSL keeps /etc/hosts as the panel writes it"
+      ;;
+    1) dmp_die "WSL 1 has no systemd and is not supported: in Windows, run wsl --set-version <distro> 2, then run the installer again" ;;
+  esac
 }
 
 # A field of os-release, like ID or PRETTY_NAME.
 # shellcheck source=/dev/null
 os_field() { (. "$OS_RELEASE" && printf '%s' "${!1:-}"); }
+
+# 2 under WSL 2 (its kernel is named like 6.6.87.2-microsoft-standard-WSL2),
+# 1 under WSL 1 (4.4.0-19041-Microsoft), nothing elsewhere.
+wsl_version() {
+  case "$(cat "$KERNEL_RELEASE" 2>/dev/null)" in
+    *[Mm]icrosoft*WSL2* | *microsoft-standard*) printf '2' ;;
+    *[Mm]icrosoft*) printf '1' ;;
+  esac
+}
 
 # True when the given node is 22.13+ (node:sqlite without a flag).
 node_ok() {
@@ -448,6 +472,10 @@ detect_settings() {
   if [[ -n "$UPDATE_GIT_URL" && ! "$UPDATE_GIT_URL" =~ $remote ]]; then
     dmp_warn "UPDATE_GIT_URL in $CONFIG_DIR/config.env is not a git remote; the panel reads git from UPDATE_REPO"
     UPDATE_GIT_URL=""
+  fi
+  # Windows' drives under /mnt are 20 to 350 times slower from WSL than its own disk.
+  if (( ON_WSL )) && [[ "$WEB_DIR" == /mnt/* ]]; then
+    dmp_die "WEB_DIR in $CONFIG_DIR/config.env is $WEB_DIR, on a Windows drive: sites belong on WSL's own disk, like /var/www"
   fi
 }
 
@@ -713,6 +741,10 @@ check_dependencies() {
       || dmp_die "Node.js $NODE_MAJOR.13 or newer is required: install it yourself, for example with nvm install $NODE_MAJOR, and run the installer again"
   fi
 
+  # Under WSL, Windows' installer runs this with --yes: Local mode still sends mail to Mailpit.
+  if (( ON_WSL && ASSUME_YES && ! FROM_PANEL )) && [[ ! -f "$MAILPIT_UNIT_FILE" ]]; then
+    WANT_MAILPIT=1
+  fi
   (( SKIP_OPTIONAL )) && return 0
   for pkg in "${recommended[@]}"; do
     case "$pkg" in
@@ -1182,8 +1214,23 @@ setup_ca() {
   record file "$SYSTEM_CA_FILE" ask "the local CA in the system trust store; goes with the CA"
 }
 
+# A browser that runs in this Linux: under WSL, only through WSLg, and rare.
+linux_browser_found() {
+  local cmd
+  for cmd in firefox google-chrome google-chrome-stable chromium chromium-browser microsoft-edge microsoft-edge-stable; do
+    command -v "$cmd" >/dev/null && return 0
+  done
+  return 1
+}
+
 # Adds the CA to Chrome/Chromium (~/.pki/nssdb) and every Firefox profile.
+# Under WSL without a Linux browser there is no store to add it to: Windows'
+# browsers trust it once it is in Windows.
 trust_ca_in_browsers() {
+  if (( ON_WSL )) && ! linux_browser_found; then
+    dmp_ok "no browser in this WSL distro: Windows' browsers trust the CA once it is added in Windows (docs/installation.md, Windows)"
+    return 0
+  fi
   dmp_step "Adding the CA to Chrome, Edge and Firefox"
   local ca_cert="$CA_DIR/ca.pem" db
   if (( ! DRY_RUN )) && [[ ! -r "$ca_cert" ]]; then
@@ -1261,6 +1308,70 @@ setup_nginx() {
   record setting "nginx:$NGINX_ADDRESS" remove "nginx next to Apache: Apache goes back on every address, Debian's default nginx site back on, and nginx stops; nginx stays installed"
 }
 
+# ── WSL ──────────────────────────────────────────────────────
+#
+# WSL writes /etc/hosts anew at every start of the distro unless wsl.conf says
+# generateHosts = false, which would drop the panel's block. And it forwards
+# an Apache on every address to Windows on ::1 only, one on 127.0.0.1 on
+# 127.0.0.1, where Windows' hosts lines point like Linux's.
+
+# True when wsl.conf's [network] section has generateHosts = false.
+wsl_hosts_kept() {
+  [[ -r "$WSL_CONF" ]] || return 1
+  awk '
+    /^[[:space:]]*\[/ { s = $0; gsub(/[][[:space:]]/, "", s); net = (tolower(s) == "network"); next }
+    net && tolower($0) ~ /^[[:space:]]*generatehosts[[:space:]]*=[[:space:]]*false[[:space:]]*$/ { found = 1 }
+    END { exit !found }
+  ' "$WSL_CONF"
+}
+
+# wsl.conf with generateHosts = false in [network]: every other line kept,
+# an existing generateHosts line replaced, [network] added when missing.
+wsl_conf_hosts_kept() {
+  if [[ ! -f "$WSL_CONF" ]]; then
+    printf '[network]\ngenerateHosts = false\n'
+    return 0
+  fi
+  awk '
+    function put() { if (net && !done) { print "generateHosts = false"; done = 1 } }
+    /^[[:space:]]*\[/ { put(); s = $0; gsub(/[][[:space:]]/, "", s); net = (tolower(s) == "network"); print; next }
+    net && tolower($0) ~ /^[[:space:]]*generatehosts[[:space:]]*=/ { put(); next }
+    { print }
+    END { put(); if (!done) { print ""; print "[network]"; print "generateHosts = false" } }
+  ' "$WSL_CONF"
+}
+
+wsl_keep_hosts() {
+  (( ON_WSL )) || return 0
+  if wsl_hosts_kept; then
+    dmp_ok "WSL keeps /etc/hosts as it is ($WSL_CONF)"
+  else
+    dmp_step "Telling WSL to keep /etc/hosts as the panel writes it (generateHosts = false in $WSL_CONF)"
+    wsl_conf_hosts_kept | write_root_file "$WSL_CONF" 0644
+  fi
+  record setting "wsl-hosts:$WSL_CONF" keep "generateHosts = false in [network], so WSL keeps /etc/hosts; without it the panel's hosts block is gone after a restart"
+}
+
+wsl_apache_local() {
+  (( ON_WSL )) || return 0
+  dmp_step "Keeping Apache on $APACHE_ADDRESS, where WSL forwards it to Windows"
+  if ! as_root "$DMP" apache-local; then
+    (( FROM_PANEL )) && fail "dmp-root apache-local failed"
+    dmp_warn "Apache still answers on every address, which Windows reaches on ::1 only; run the installer again once the cause above is fixed"
+    return 0
+  fi
+  record setting "apache-local:$APACHE_ADDRESS" remove "Apache on $APACHE_ADDRESS only, for WSL; goes back on every address"
+}
+
+# What is left to do in Windows, until the Windows installer does it.
+wsl_windows_hints() {
+  (( ON_WSL )) || return 0
+  printf '   In Windows (docs/installation.md, Windows), once:\n'
+  printf '     add "%s %s" to C:\\Windows\\System32\\drivers\\etc\\hosts (as administrator)\n' "$APACHE_ADDRESS" "$PANEL_DOMAIN"
+  printf '     trust the local CA: copy %s to Windows and import it into Current User, Trusted Root Certification Authorities\n' "$CA_DIR/ca.pem"
+  printf '     keep the distro running: WSL stops it a few minutes after its last window closes\n'
+}
+
 # ── 6. secrets, service ──────────────────────────────────────
 
 # The panel password and the MySQL admin account, asked by the panel's own
@@ -1330,10 +1441,14 @@ EOF
   local at_boot=" (it then also starts at boot)"
   home_encrypted && at_boot=""
   if command -v loginctl >/dev/null && [[ "$(loginctl show-user "$PANEL_USER" -p Linger --value 2>/dev/null)" != yes ]]; then
-    if confirm "Keep the panel and its jobs running after you log out$at_boot?" n; then
-      as_root loginctl enable-linger "$PANEL_USER"
-      record setting "linger:$PANEL_USER" ask "your user services keep running after you log out"
+    # Under WSL a shell window is a login: closing it must not stop the panel.
+    if (( ON_WSL )); then
+      dmp_step "Keeping the panel running when the last WSL window closes (lingering)"
+    elif ! confirm "Keep the panel and its jobs running after you log out$at_boot?" n; then
+      return 0
     fi
+    as_root loginctl enable-linger "$PANEL_USER"
+    record setting "linger:$PANEL_USER" ask "your user services keep running after you log out"
   fi
 }
 
@@ -1661,6 +1776,10 @@ uninstall_main() {
     dmp_step "Turning nginx off; Apache answers on every address again"
     as_root "$DMP" nginx-teardown || dmp_warn "could not turn nginx off: put /etc/apache2/ports.conf back from $STATE_DIR/nginx/ports.conf by hand"
   fi
+  if printf '%s\n' "${entries[@]}" | grep -q $'^setting\tapache-local:'; then
+    dmp_step "Apache back on every address"
+    as_root "$DMP" apache-local-off || dmp_warn "could not move Apache back: put /etc/apache2/ports.conf back from $STATE_DIR/apache-local/ports.conf by hand"
+  fi
   dmp_step "Removing https://$PANEL_DOMAIN"
   as_root "$DMP" vhost-remove "$PANEL_DOMAIN" || dmp_warn "could not remove the vhost of $PANEL_DOMAIN"
   as_root "$DMP" hosts-remove "$PANEL_DOMAIN" || dmp_warn "could not remove $PANEL_DOMAIN from /etc/hosts"
@@ -1675,8 +1794,8 @@ uninstall_main() {
       line:* | modules:* | packages:*) continue ;;
       # The folders dmp-root, sudo and config.env live in go last.
       *:"$DMP_PREFIX" | *:"$DMP_PREFIX"/* | *:"$SUDOERS_FILE" | *:"$CONFIG_DIR" | *:"$CONFIG_DIR"/*) continue ;;
-      # Turned off above, with nginx-teardown.
-      setting:nginx:*) continue ;;
+      # Turned off above, with nginx-teardown and apache-local-off.
+      setting:nginx:* | setting:apache-local:*) continue ;;
       setting:linger:*)
         (( remove_linger )) && as_root loginctl disable-linger "${path#linger:}"
         continue
@@ -1776,8 +1895,10 @@ main() {
   setup_ca
   trust_ca_in_browsers
   reissue_existing_certs
+  wsl_keep_hosts
   setup_panel_site
   as_root "$DMP" apache-reload
+  wsl_apache_local
   setup_nginx
   setup_secrets
   step_at restart
@@ -1793,6 +1914,7 @@ main() {
   printf '   To undo the changes to certs, vhosts and hosts (asks for your password):\n'
   printf '     sudo %s/bin/dmp-restore --list\n' "$DMP_PREFIX"
   printf '     sudo %s/bin/dmp-restore            (restores the newest backup)\n' "$DMP_PREFIX"
+  wsl_windows_hints
   org_sign_in_hints
 }
 
