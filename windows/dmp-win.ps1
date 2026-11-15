@@ -282,7 +282,13 @@ function Get-DmpDistro() {
   return $distro
 }
 
-function Get-DmpCaPath([string]$Distro) { "\\wsl.localhost\$Distro\etc\ssl\localcerts\devmagic-panel-ca\ca.pem" }
+# The CA in the distro, through Windows' share for WSL: \\wsl.localhost on
+# current Windows, \\wsl$ on older builds (both still work where both exist).
+function Get-DmpCaPath([string]$Distro, [string[]]$Shares = @('\\wsl.localhost', '\\wsl$')) {
+  $paths = foreach ($share in $Shares) { "$share\$Distro\etc\ssl\localcerts\devmagic-panel-ca\ca.pem" }
+  foreach ($path in $paths) { if (Test-Path -LiteralPath $path) { return $path } }
+  return $paths[0]
+}
 function Get-DmpHostsPath() { Join-Path $env:SystemRoot 'System32\drivers\etc\hosts' }
 function Get-DmpBackupDir() { Join-Path $env:ProgramData 'devmagic-panel\backups' }
 function Get-DmpInstallDir() { Join-Path $env:ProgramFiles 'devmagic-panel' }

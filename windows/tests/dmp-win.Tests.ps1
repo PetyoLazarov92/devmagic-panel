@@ -252,3 +252,17 @@ Describe 'self-install and self-remove' {
     Should -Invoke Invoke-DmpElevated -Times 1 -Exactly -ParameterFilter { $Name -eq 'self-remove' }
   }
 }
+
+Describe 'Get-DmpCaPath' {
+  It 'takes the first share where the CA is, \wsl.localhost before \wsl$' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ("dmp-shares-{0}" -f ([guid]::NewGuid().ToString('N')))
+    $old = Join-Path $root 'old'
+    New-Item -ItemType Directory -Force -Path (Join-Path $old 'devmagic-panel\etc\ssl\localcerts\devmagic-panel-ca') | Out-Null
+    New-Item -ItemType File -Path (Join-Path $old 'devmagic-panel\etc\ssl\localcerts\devmagic-panel-ca\ca.pem') | Out-Null
+    Get-DmpCaPath 'devmagic-panel' @((Join-Path $root 'new'), $old) | Should -Be (Join-Path $old 'devmagic-panel\etc\ssl\localcerts\devmagic-panel-ca\ca.pem')
+  }
+
+  It 'names the first share when none has it, for the message' {
+    Get-DmpCaPath 'devmagic-panel' @('C:\no-such-share', 'C:\no-other') | Should -Be 'C:\no-such-share\devmagic-panel\etc\ssl\localcerts\devmagic-panel-ca\ca.pem'
+  }
+}
