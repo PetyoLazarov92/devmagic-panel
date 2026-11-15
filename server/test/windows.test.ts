@@ -10,22 +10,27 @@ import { DMP, fakeExec, tempTree } from './helpers.js';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
 
-/** WSL 2 with the helper in place, unless told otherwise. */
-function setup({ wsl = true, helper = true } = {}) {
+/** WSL 2 with the helper in place and interop registered, unless told otherwise. */
+function setup({ wsl = true, helper = true, interop = true, repair = 0 } = {}) {
   const t = tempTree();
   if (wsl) t.write('osrelease', '6.6.87.2-microsoft-standard-WSL2\n');
   if (helper) t.write('dmp-win.ps1', '# the helper');
+  mkdirSync(join(t.root, 'binfmt_misc'), { recursive: true });
+  if (interop) t.write('binfmt_misc/WSLInterop');
   t.write(
     'hosts',
     `127.0.0.1 localhost\n10.0.0.5 nas.wandworks.test\n${HOSTS_BEGIN}\n127.0.0.1 local.spellbook.example www.local.spellbook.example\n127.0.0.2 local.wandworks-store.example\n10.0.0.9 local.odd.test\n${HOSTS_END}\n`,
   );
   const powershell = `${join(t.root, 'Windows')}/System32/WindowsPowerShell/v1.0/powershell.exe`;
-  const fake = fakeExec({ [powershell]: { stdout: 'ok: done\n' } });
+  const fake = fakeExec({
+    [powershell]: { stdout: 'ok: done\n' },
+    [`sudo -n ${DMP} wsl-interop`]: repair === 0 ? { stdout: 'ok: interop with Windows programs is registered again\n' } : { code: repair, stderr: 'error: this is not WSL\n' },
+  });
   const store = new RunStore(':memory:');
   const ctx: ActionContext = {
     config: t.config, exec: fake.exec, store, dmpRoot: DMP, wpcoreBin: '', wpcoreConf: '', home: t.hostPaths.home,
     jobs: new Jobs(store), uploadsDir: join(t.root, 'uploads'), secrets: null,
-    windows: { ...t.hostPaths.windows, kernelRelease: join(t.root, 'osrelease') },
+    windows: { ...t.hostPaths.windows, kernelRelease: join(t.root, 'osrelease'), binfmtDir: join(t.root, 'binfmt_misc') },
   };
   return { ...t, ctx, calls: fake.calls, powershell };
 }
@@ -137,5 +142,23 @@ describe('the windows actions', () => {
     const s = setup();
     await runAction(s.ctx, 'wsl.repairInterop', {});
     expect(s.calls[0]).toMatchObject({ file: 'sudo', args: ['-n', DMP, 'wsl-interop'] });
+  });
+
+  it('registers interop again first when another distro took it away, then runs the step', async () => {
+    const s = setup({ interop: false });
+    expect(await runAction(s.ctx, 'windows.trustCa', {})).toMatchObject({ ok: true });
+    expect(s.calls.map((c) => (c.file === 'sudo' ? c.args[2] : c.args[6]))).toEqual(['wsl-interop', 'ca-trust']);
+  });
+
+  it('runs no Windows step when interop cannot be registered again', async () => {
+    const s = setup({ interop: false, repair: 1 });
+    expect(await runAction(s.ctx, 'windows.trustCa', {})).toMatchObject({ ok: false });
+    expect(s.calls.some((c) => c.file === s.powershell)).toBe(false);
+  });
+
+  it('leaves interop alone when it is registered', async () => {
+    const s = setup();
+    await runAction(s.ctx, 'windows.autostart', {});
+    expect(s.calls.some((c) => c.file === 'sudo')).toBe(false);
   });
 });

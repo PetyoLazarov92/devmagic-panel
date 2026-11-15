@@ -75,7 +75,7 @@ import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 import { cleanStorage } from './storage-clean.js';
 import { helperInstalled, runHelper, windowsHostsPairs, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
-import { wslVersion } from './wsl.js';
+import { interopOn, wslVersion } from './wsl.js';
 
 export interface ActionContext {
   config: SystemConfig;
@@ -111,18 +111,24 @@ export interface ActionContext {
   claudeCode?: { home: string; searchPath: string; workDir: string };
   /** What the panel's crontab lines run, and /etc for the system cron; tests pass their own. */
   cron?: CronSetup;
-  /** Windows' folder and the helper as WSL sees them, and the kernel's name, for the windows.* actions; tests pass their own. */
-  windows?: WindowsPaths & { kernelRelease?: string };
+  /** Windows' folder and the helper as WSL sees them, the kernel's name and binfmt_misc, for the windows.* actions; tests pass their own. */
+  windows?: WindowsPaths & { kernelRelease?: string; binfmtDir?: string };
 }
 
 /**
  * One command of the Windows helper, only under WSL 2 and once get.ps1 put the
  * helper in place. Exit 3 is UAC declined, which the helper says on stderr.
+ * When another distro starting took interop away (finding N), it is registered
+ * again first, through dmp-root, so the step does not fail on Exec format error.
  */
 async function windowsStep(ctx: ActionContext, command: WindowsHelperCommand, args: readonly string[] = []): Promise<ExecResult> {
   const paths = ctx.windows ?? {};
   if (wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2) throw new ActionInputError('this is not WSL 2 on Windows: the Windows steps have nothing to do here');
   if (!helperInstalled(paths)) throw new ActionInputError('the Windows helper is not installed: run get.ps1 in Windows (docs/installation.md, Windows)');
+  if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {})) {
+    const repaired = await root(ctx, 'wsl-interop');
+    if (repaired.code !== 0) return repaired;
+  }
   return runHelper(ctx.exec, paths, command, args, 600_000);
 }
 
