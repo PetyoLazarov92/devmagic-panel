@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.67.0 (2026-11-15)
+* **Modes:** the line for today goes by GitHub's time, read from the answer the update check already gets, so setting the computer's clock no longer changes the day. Until GitHub answers after a restart it goes by the computer's clock, and a day never goes back
+* **Updates:** the GitHub CLI's way to the releases also reads GitHub's time from its answer
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.66.0 (2026-11-15)
 * **Modes:** the line for today has a few new touches
 * **Command palette:** a click on its Esc badge closes it

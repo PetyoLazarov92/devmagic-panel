@@ -102,8 +102,11 @@ async function save(response: Response, dest: string, maxBytes: number, onBytes?
 
 export const MAX_PACKAGE_BYTES = 300 * 1024 * 1024;
 
+/** The Date of an answer from GitHub, for the panel's clock (`panel-clock.ts`). */
+export type OnGitHubDate = (date: string | null | undefined) => void;
+
 /** Way 1: the public GitHub releases, with no login. 60 API calls an hour per address; a check uses one. */
-export function httpsSource(repo: string, get: typeof fetch = fetch): ReleaseSource {
+export function httpsSource(repo: string, get: typeof fetch = fetch, onDate?: OnGitHubDate): ReleaseSource {
   const urls = new Map<string, string>();
   const headers = { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'devmagic-panel' };
   const fileUrl = (tag: string, name: string) => {
@@ -124,6 +127,8 @@ export function httpsSource(repo: string, get: typeof fetch = fetch): ReleaseSou
       } catch (error) {
         throw new SourceRefused(`could not reach GitHub: ${(error as Error).message}`);
       }
+      // Any answer carries GitHub's time, a refusal too.
+      onDate?.(r.headers.get('date'));
       if (r.status === 404 || r.status === 401) throw new SourceRefused(`${repo} is not public`);
       if (r.status === 403 || r.status === 429) throw new SourceRefused('GitHub refused: too many requests from this address, try again within the hour');
       if (!r.ok) throw new SourceRefused(`GitHub answered HTTP ${r.status}`);
@@ -152,17 +157,28 @@ function ghProblem(stderr: string, repo: string): string {
 
 const GH_ENV = { GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' };
 
+/** gh api's answer with `--include`: its headers, a blank line, then the body. */
+export function splitGhAnswer(stdout: string): { date: string | null; body: string } {
+  if (!stdout.startsWith('HTTP/')) return { date: null, body: stdout };
+  const m = /\r?\n\r?\n/.exec(stdout);
+  const head = m ? stdout.slice(0, m.index) : stdout;
+  const date = /^date:[ \t]*(.+?)\s*$/im.exec(head)?.[1] ?? null;
+  return { date, body: m ? stdout.slice(m.index + m[0].length) : '' };
+}
+
 /** Way 2: the GitHub CLI, with its own sign-in; the panel never reads its token. */
-export function ghSource(exec: Executor, repo: string): ReleaseSource {
+export function ghSource(exec: Executor, repo: string, onDate?: OnGitHubDate): ReleaseSource {
   return {
     way: 'gh',
     async releases() {
-      const r = await exec('gh', ['api', '-H', 'Accept: application/vnd.github+json', `repos/${repo}/releases?per_page=30`], { timeoutMs: 30_000, env: GH_ENV });
+      const r = await exec('gh', ['api', '--include', '-H', 'Accept: application/vnd.github+json', `repos/${repo}/releases?per_page=30`], { timeoutMs: 30_000, env: GH_ENV });
       if (r.code === 127) throw new SourceRefused('the GitHub CLI (gh) is not installed');
-      if (r.code !== 0) throw new SourceRefused(ghProblem(r.stderr || r.stdout, repo));
+      const { date, body } = splitGhAnswer(r.stdout);
+      onDate?.(date);
+      if (r.code !== 0) throw new SourceRefused(ghProblem(r.stderr || body, repo));
       let list: unknown;
       try {
-        list = JSON.parse(r.stdout);
+        list = JSON.parse(body);
       } catch {
         throw new SourceRefused('the GitHub CLI answered with something that is not JSON');
       }
@@ -276,8 +292,8 @@ export function gitSource(exec: Executor, url: string, cacheDir: string): Releas
 }
 
 /** The ways in the order they are tried. */
-export function defaultSources(exec: Executor, repo: string, gitUrl: string, dataDir: string, get: typeof fetch = fetch): ReleaseSource[] {
-  return [httpsSource(repo, get), ghSource(exec, repo), gitSource(exec, gitUrl, join(dataDir, 'updates.git'))];
+export function defaultSources(exec: Executor, repo: string, gitUrl: string, dataDir: string, get: typeof fetch = fetch, onDate?: OnGitHubDate): ReleaseSource[] {
+  return [httpsSource(repo, get, onDate), ghSource(exec, repo, onDate), gitSource(exec, gitUrl, join(dataDir, 'updates.git'))];
 }
 
 export const gitUrlFor = (repo: string) => `git@github.com:${repo}.git`;

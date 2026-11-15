@@ -372,7 +372,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
     Modes page shows riddles only, and Developer options the rules only once
     its puzzle is solved (`server/src/app.ts` keeps them back until then).
     Its progress is counters in the panel's database (`server/src/modes.ts`),
-    never sent anywhere, and a word typed in Ctrl+K is compared on the server
+    never sent anywhere, and its days go by GitHub's time from the update
+    check's answer (`server/src/panel-clock.ts`), never a request of its
+    own, and a word typed in Ctrl+K is compared on the server
     (`/api/modes/word/check`) and dropped: the panel's web app never holds the
     words, and no line of its text contains one (`web/test/modes.test.ts`).
     The public demo is a showcase with every mode open (`web/src/mock/modes-demo.ts`,

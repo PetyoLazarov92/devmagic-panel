@@ -4,6 +4,8 @@ import { type BrowserCounter, checkPaths, countMode, type DailyLine, dailyLine, 
 export const MODES_KEY = 'modes';
 /** The day the daily line was last shown, so it opens by itself once a day across browsers. */
 export const LINE_SEEN_KEY = 'modes-line-seen';
+/** The latest day the modes went by: a day never goes back, so a clock set back or forth earns nothing twice. */
+export const DAY_KEY = 'modes-day';
 /** The panel version the modes last saw running, to notice an update. */
 export const VERSION_KEY = 'modes-version';
 
@@ -20,7 +22,7 @@ interface MetaStore {
   setMeta(key: string, value: string): void;
 }
 
-/** A late night runs from midnight to this hour, by this machine's clock. */
+/** A late night runs from midnight to this hour, by the panel's clock in this machine's time zone. */
 const LATE_NIGHT_ENDS = 4;
 
 /** How often the browser may report the same thing: a burst of clicks counts once a second. */
@@ -63,12 +65,24 @@ export class ModeProgress {
   }
 
   /**
-   * Something done in the panel: that day counts once, by this machine's
-   * date, and between midnight and 4 in the morning that night counts too.
+   * Today, YYYY-MM-DD, by the panel's clock (`panel-clock.ts`) in this
+   * machine's time zone, and never before the latest day already seen.
+   */
+  day(now = this.now()): string {
+    const day = localDate(now);
+    const last = this.store.getMeta(DAY_KEY);
+    if (last && last >= day) return last;
+    this.store.setMeta(DAY_KEY, day);
+    return day;
+  }
+
+  /**
+   * Something done in the panel: that day counts once, and between midnight
+   * and 4 in the morning that night counts too.
    */
   noteUse(): SealedModeId[] {
     const now = this.now();
-    const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const day = this.day(now);
     const opened: SealedModeId[] = [];
     if (day !== this.lastDay) {
       this.lastDay = day;
@@ -105,14 +119,14 @@ export class ModeProgress {
     return modesView(this.state());
   }
 
-  /** Today's line, by this machine's date, and whether it was shown today in any browser. */
+  /** Today's line and whether it was shown today in any browser. */
   line(): DailyLine & { seen: boolean } {
-    const date = localDate(this.now());
+    const date = this.day();
     return { ...dailyLine(this.state(), date), seen: this.store.getMeta(LINE_SEEN_KEY) === date };
   }
 
   lineSeen(): void {
-    this.store.setMeta(LINE_SEEN_KEY, localDate(this.now()));
+    this.store.setMeta(LINE_SEEN_KEY, this.day());
   }
 
   isUnlocked(mode: string): boolean {

@@ -13,7 +13,7 @@ export interface DailyLineText {
 }
 
 export interface DailyLine extends DailyLineText {
-  /** The day it is for, this machine's date, YYYY-MM-DD. */
+  /** The day it is for, YYYY-MM-DD, by the panel's clock (server/src/panel-clock.ts). */
   date: string;
 }
 
@@ -108,7 +108,7 @@ function dayNumber(date: string): number {
   return Math.floor(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1) / 86_400_000);
 }
 
-/** This machine's date, YYYY-MM-DD. */
+/** A time's date in this machine's time zone, YYYY-MM-DD. */
 export function localDate(now = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }

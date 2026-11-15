@@ -51,7 +51,7 @@ describe('ghSource', () => {
     await gh.download('v0.7.0', 'devmagic-panel-v0.7.0.tar.gz', dest);
     expect(readFileSync(dest, 'utf8')).toBe('package');
     expect(calls).toEqual([
-      ['gh', 'api', '-H', 'Accept: application/vnd.github+json', 'repos/me/panel/releases?per_page=30'],
+      ['gh', 'api', '--include', '-H', 'Accept: application/vnd.github+json', 'repos/me/panel/releases?per_page=30'],
       ['gh', 'release', 'download', 'v0.7.0', '-R', 'me/panel', '-p', 'devmagic-panel-v0.7.0.tar.gz.sha256', '-O', '-'],
       ['gh', 'release', 'download', 'v0.7.0', '-R', 'me/panel', '-p', 'devmagic-panel-v0.7.0.tar.gz', '-O', dest, '--clobber'],
     ]);

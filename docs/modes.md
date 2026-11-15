@@ -44,6 +44,13 @@ comes from. One word in it is in bold. The quote icon in the top bar opens it
 again for the rest of the day; the panel remembers it showed it, so another
 browser does not show it again that day.
 
+The day goes by GitHub's time, read from the answer the update check already
+gets (no request of its own), and carried on by how long the computer has
+been up, so setting the computer's clock does not change it. After a restart
+of the computer, until GitHub answers, it goes by the computer's clock, never
+earlier than the last time the panel knew. A day never goes back. The day
+turns at midnight in the computer's time zone.
+
 ## When a mode opens
 
 The panel shows it once, in a dialog: **You unlocked Wizard mode**, what

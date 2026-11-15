@@ -14,6 +14,10 @@ it is signed in, or git over SSH when your key can read it. It needs no token,
 keeps the way that worked for next time, and the Updates page shows which one
 it used and why the others did not work.
 
+GitHub's answer also carries its time, which the line for today on the Modes
+side goes by (see [Modes](modes.md#a-line-for-today)). Nothing more is asked
+for it and nothing is sent; git over SSH carries no time.
+
 The header shows "v0.7.0 available" (only its icon on a phone), or "No access
 to updates" when no way works. The Updates page lists what is new from the
 release notes of every version since yours, right under the update: the newest

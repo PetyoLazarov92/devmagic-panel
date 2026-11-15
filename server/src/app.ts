@@ -19,6 +19,7 @@ import { installStillNews, settleInstall } from './update-install.js';
 import { DraftRefused, draftId, draftInput, Drafts } from './drafts.js';
 import { checkEnvironment, type HostPaths } from './environment.js';
 import type { Executor } from './exec.js';
+import { PanelClock } from './panel-clock.js';
 import { DEFAULT_UPDATE_REPO, defaultSources, gitUrlFor, type ReleaseSource } from './release-source.js';
 import { githubTokenNotice, verifyPassword, type Secrets } from './secrets.js';
 import { servicesReport } from './services.js';
@@ -97,6 +98,8 @@ export interface AppDeps {
   repo?: string;
   /** fetch, for the public way to the releases; tests pass a fake. */
   fetch?: typeof fetch;
+  /** The modes' clock; the real one reads /proc and learns GitHub's time from the update check. */
+  clock?: PanelClock;
   /** The ways to the releases; tests pass their own. */
   updateSources?: ReleaseSource[];
   /** Look for a newer release at start and every six hours; off in tests. */
@@ -136,7 +139,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (view.target) forgetReport(deps.store, view.target);
   });
   // The modes' paths: a site the New site wizard finished, a job undone. Counted in the panel's database, sent nowhere.
-  const modes = new ModeProgress(deps.store);
+  // The modes go by GitHub's time from the update check, carried by the boot clock (panel-clock.ts).
+  const clock = deps.clock ?? new PanelClock(deps.store);
+  const modes = new ModeProgress(deps.store, () => clock.now());
   // A start on a newer version than the last one counts as a panel update.
   modes.noteVersion(deps.version);
   jobs.onEnd((view) => {
@@ -171,7 +176,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     version: deps.version,
     logsDir,
     dmpRoot: deps.dmpRoot,
-    sources: deps.updateSources ?? defaultSources(deps.exec, deps.config.UPDATE_REPO ?? DEFAULT_UPDATE_REPO, deps.config.UPDATE_GIT_URL ?? gitUrlFor(deps.config.UPDATE_REPO ?? DEFAULT_UPDATE_REPO), dirname(deps.uploadsDir), deps.fetch),
+    sources: deps.updateSources ?? defaultSources(deps.exec, deps.config.UPDATE_REPO ?? DEFAULT_UPDATE_REPO, deps.config.UPDATE_GIT_URL ?? gitUrlFor(deps.config.UPDATE_REPO ?? DEFAULT_UPDATE_REPO), dirname(deps.uploadsDir), deps.fetch, (date) => clock.learn(date)),
     memory: {},
     notice: () => githubTokenNotice(join(dirname(deps.uploadsDir), 'github-token-removed')),
   };
@@ -932,7 +937,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       try {
         const page = await listMail(mailpit, site?.data, start);
         // A day Mail was opened counts once for that day.
-        if (start === 0) modes.count('mailDay', new Date().toISOString().slice(0, 10));
+        if (start === 0) modes.count('mailDay', modes.day());
         return page;
       } catch (error) {
         return reply.code(503).send({ error: `Mailpit is not reachable: ${(error as Error).message}` });
@@ -975,7 +980,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // A day with 3 sites or more, all Healthy, counts once for that day.
       onFind: () => modes.count('fileFind'),
       onSites: (list) => {
-        if (list.length >= 3 && list.every((x) => x.health === 'ok')) modes.count('healthyDay', new Date().toISOString().slice(0, 10));
+        if (list.length >= 3 && list.every((x) => x.health === 'ok')) modes.count('healthyDay', modes.day());
       },
       cron,
       config: deps.config,
