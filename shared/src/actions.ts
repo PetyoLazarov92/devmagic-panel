@@ -648,7 +648,7 @@ export const actions = {
   'nginx.teardown': {
     title: 'Turn nginx off',
     description:
-      "Puts Apache back on every address and Debian's default nginx site back on, stops nginx and keeps it from starting at boot, then checks every site still answers. Refused while a site runs on nginx. nginx stays installed. Starts a job; Undo sets nginx up again.",
+      "Puts Apache back on every address (under WSL it stays on 127.0.0.1, where Windows reaches it) and Debian's default nginx site back on, stops nginx and keeps it from starting at boot, then checks every site still answers. Refused while a site runs on nginx. nginx stays installed. Starts a job; Undo sets nginx up again.",
     changesSystem: true,
     input: z.object({}),
   },
