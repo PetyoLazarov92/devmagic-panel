@@ -43,6 +43,8 @@ const app = await buildApp({
   settingsFile: join(paths.configDir, 'settings.json'),
   checkUpdates: production,
   housekeeping: production,
+  // The Windows side under WSL 2 (found on the drives WSL mounts); nothing happens elsewhere.
+  ...(production ? { windows: {} } : {}),
   logger: true,
 });
 

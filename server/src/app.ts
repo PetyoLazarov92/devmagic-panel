@@ -6,7 +6,7 @@ import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, Ta
 import { browserCounter, FILE_TEXT_MAX, gitUrl, MODE_PATHS, modeForWord, nextPuzzle, puzzleQuestion, sealedModeId, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, runAction } from './actions.js';
+import { ActionBusyError, ActionInputError, cronCtx, type CronSetup, followWindowsHosts, HOSTS_CHANGES, runAction } from './actions.js';
 import { cronReport } from './cron.js';
 import { GlobalLock, LoginLimiter, SESSION_COOKIE, Sessions } from './auth.js';
 import { checkSystemPassword, newPasswordProblem, resetWays, type ResetWays, setPanelPassword } from './panel-password.js';
@@ -66,6 +66,8 @@ import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPath
 import { cachedReport, forgetReport, keepReport, SharedReads } from './wordpress-report-cache.js';
 import { tableGrowth } from './table-growth.js';
 import { countAction, ModeProgress } from './modes.js';
+import { keepInterop, type WindowsPaths } from './windows.js';
+import { wslVersion } from './wsl.js';
 
 export interface AppDeps {
   config: SystemConfig;
@@ -111,6 +113,12 @@ export interface AppDeps {
   logger?: boolean;
   /** What the panel's crontab lines run, and /etc for the system cron; tests pass their own. */
   cron?: CronSetup;
+  /**
+   * The Windows side under WSL 2 (windows.ts): given in production, where
+   * Windows' hosts block follows every hosts change and a chore keeps interop
+   * registered. Left out, the panel does neither on its own (tests).
+   */
+  windows?: WindowsPaths & { kernelRelease?: string; binfmtDir?: string };
 }
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -137,6 +145,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // A job on a site may have changed its database: the WordPress view reads it anew next time.
   jobs.onEnd((view) => {
     if (view.target) forgetReport(deps.store, view.target);
+  });
+  // Under WSL 2: Windows' hosts block follows a job that changed this one, done or undone.
+  jobs.onEnd((view) => {
+    if (!deps.windows || !view.kind || !HOSTS_CHANGES.has(view.kind) || (view.status !== 'done' && view.status !== 'undone')) return;
+    void followWindowsHosts({
+      config: deps.config, exec: deps.exec, store: deps.store, dmpRoot: deps.dmpRoot,
+      wpcoreBin: deps.wpcoreBin ?? WPCORE_BIN, wpcoreConf: deps.hostPaths.wpcoreConf, home: deps.hostPaths.home,
+      jobs, uploadsDir: deps.uploadsDir, secrets: deps.secrets(), windows: deps.windows,
+    }).catch((error: Error) => app.log.warn(`windows hosts: ${error.message}`));
   });
   // The modes' paths: a site the New site wizard finished, a job undone. Counted in the panel's database, sent nowhere.
   // The modes go by GitHub's time from the update check, carried by the boot clock (panel-clock.ts).
@@ -250,6 +267,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const saved = pruneMysqlBackups(mysqlBackupsDir(deps.uploadsDir));
       return said(saved.length ? `removed ${saved.length} MySQL backups` : '');
     });
+    // Under WSL 2 only: another distro starting can take interop with Windows programs away (finding N).
+    const windows = deps.windows;
+    if (windows && wslVersion(windows.kernelRelease ? { kernelRelease: windows.kernelRelease } : {}) === 2) {
+      const wsl = { ...(windows.kernelRelease ? { kernelRelease: windows.kernelRelease } : {}), ...(windows.binfmtDir ? { binfmtDir: windows.binfmtDir } : {}) };
+      chores.every('wsl-interop', 'Keep WSL able to start Windows programs', 'Under WSL: registers interop with Windows programs again when another distro starting took it away, so the Windows steps and buttons keep working.', 2 * 60_000, async () => {
+        const note = await keepInterop(deps.exec, deps.dmpRoot, wsl);
+        if (note) app.log.info(`wsl: ${note}`);
+        return note || 'interop with Windows programs is registered';
+      }, 15_000);
+    }
     chores.every('snapshots', 'Remove old automatic snapshots', `Removes the snapshots the panel took before a change once they are past their time: it keeps the newest ${AUTO_SNAPSHOTS_KEPT} per site and every one from the last ${AUTO_SNAPSHOT_DAYS} days. Yours stay.`, 24 * 60 * 60_000, () => {
       const gone = pruneAutoSnapshots(deps.config.BACKUP_DIR);
       return said(gone.length ? `removed ${gone.length} automatic snapshots` : '');
@@ -464,6 +491,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             ...(deps.mailpit ? { mailpit: deps.mailpit } : {}), ...(deps.download ? { download: deps.download } : {}), update, drafts,
             claudeCode: { home: deps.hostPaths.home, searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '', workDir: join(deps.uploadsDir, '..', 'tmp') },
             ...(deps.cron ? { cron: deps.cron } : {}),
+            ...(deps.windows ? { windows: deps.windows } : {}),
             repoTrusted: (url: string) => trustOf(url).trusted,
           },
           id,

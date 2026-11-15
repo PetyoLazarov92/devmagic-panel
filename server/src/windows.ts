@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isLocalName } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
-import type { ExecResult, Executor } from './exec.js';
+import { runRoot, type ExecResult, type Executor } from './exec.js';
 import { hostsBlockNames, readHosts } from './sites/hosts-block.js';
+import { interopDisabled, interopOn, wslVersion, type WslPaths } from './wsl.js';
 
 /**
  * The Windows side under WSL: the panel runs Windows' own PowerShell through
@@ -131,4 +132,29 @@ export function windowsBlockPairs(status: WindowsStatus): string[] {
     const [address, ...names] = line.trim().split(/\s+/);
     return names.map((name) => `${name.toLowerCase()}=${address}`);
   });
+}
+
+/**
+ * Whether Windows' block holds other names than this distro's: true or false
+ * from the helper's status, null when the helper did not answer (then nothing
+ * is synced, so a broken helper never makes Windows ask UAC again and again).
+ */
+export async function windowsHostsDiffer(exec: Executor, config: SystemConfig, paths: WindowsPaths): Promise<boolean | null> {
+  const status = await windowsStatus(exec, paths);
+  if (!status) return null;
+  const want = windowsHostsPairs(config);
+  const have = windowsBlockPairs(status);
+  return want.length !== have.length || want.some((p) => !have.includes(p));
+}
+
+/**
+ * Under WSL 2: interop with Windows programs registered again when another
+ * distro starting took it away (finding N), through dmp-root. A note of what it
+ * did, empty when there was nothing to do; throws when dmp-root failed.
+ */
+export async function keepInterop(exec: Executor, dmpRoot: string, wsl: WslPaths = {}): Promise<string> {
+  if (wslVersion(wsl) !== 2 || interopOn(wsl) || interopDisabled(wsl)) return '';
+  const r = await runRoot(exec, dmpRoot, ['wsl-interop']);
+  if (r.code !== 0) throw new Error(`could not register interop again: ${(r.stderr || r.stdout).trim()}`);
+  return 'registered interop with Windows programs again';
 }

@@ -1,11 +1,11 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { runAction, type ActionContext } from '../src/actions.js';
+import { describe, expect, it, vi } from 'vitest';
+import { followWindowsHosts, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs } from '../src/jobs.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { RunStore } from '../src/store.js';
-import { helperInstalled, helperPath, runHelper, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath } from '../src/windows.js';
+import { helperInstalled, helperPath, keepInterop, runHelper, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath } from '../src/windows.js';
 import { DMP, fakeExec, tempTree } from './helpers.js';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
@@ -160,5 +160,81 @@ describe('the windows actions', () => {
     const s = setup();
     await runAction(s.ctx, 'windows.autostart', {});
     expect(s.calls.some((c) => c.file === 'sudo')).toBe(false);
+  });
+});
+
+describe('keepInterop', () => {
+  const paths = (t: ReturnType<typeof tempTree>) => ({ kernelRelease: join(t.root, 'osrelease'), binfmtDir: join(t.root, 'binfmt_misc'), wslConf: join(t.root, 'wsl.conf') });
+
+  it('registers interop again under WSL 2 when it is gone, and says so', async () => {
+    const t = tempTree();
+    t.write('osrelease', '6.6.87.2-microsoft-standard-WSL2\n');
+    mkdirSync(join(t.root, 'binfmt_misc'), { recursive: true });
+    const fake = fakeExec({ [`sudo -n ${DMP} wsl-interop`]: { stdout: 'ok\n' } });
+    expect(await keepInterop(fake.exec, DMP, paths(t))).toBe('registered interop with Windows programs again');
+    expect(fake.calls[0]).toMatchObject({ file: 'sudo', args: ['-n', DMP, 'wsl-interop'] });
+  });
+
+  it('does nothing when it is there, when wsl.conf turns it off, or outside WSL 2', async () => {
+    const t = tempTree();
+    t.write('osrelease', '6.6.87.2-microsoft-standard-WSL2\n');
+    mkdirSync(join(t.root, 'binfmt_misc'), { recursive: true });
+    t.write('binfmt_misc/WSLInterop');
+    const fake = fakeExec();
+    expect(await keepInterop(fake.exec, DMP, paths(t))).toBe('');
+    const off = tempTree();
+    off.write('osrelease', '6.6.87.2-microsoft-standard-WSL2\n');
+    off.write('wsl.conf', '[interop]\nenabled = false\n');
+    expect(await keepInterop(fake.exec, DMP, paths(off))).toBe('');
+    const ubuntu = tempTree();
+    ubuntu.write('osrelease', '6.8.0-48-generic\n');
+    expect(await keepInterop(fake.exec, DMP, paths(ubuntu))).toBe('');
+    expect(fake.calls).toEqual([]);
+  });
+
+  it('throws when dmp-root cannot register it', async () => {
+    const t = tempTree();
+    t.write('osrelease', '6.6.87.2-microsoft-standard-WSL2\n');
+    const fake = fakeExec({ [`sudo -n ${DMP} wsl-interop`]: { code: 1, stderr: 'error: this is not WSL\n' } });
+    await expect(keepInterop(fake.exec, DMP, paths(t))).rejects.toThrow('could not register interop again');
+  });
+});
+
+describe("Windows' hosts block follows a change", () => {
+  const status = (block: string[]) => JSON.stringify({ hosts: { path: 'C:\Windows\System32\drivers\etc\hosts', block } });
+  const followSetup = (block: string[]) => {
+    const s = setup();
+    const helper = `${s.powershell} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${HELPER}`;
+    const fake = fakeExec({ [`${helper} status`]: { stdout: status(block) }, [`${helper} hosts-sync`]: { stdout: 'ok\n' }, [`sudo -n ${DMP} hosts-add`]: { stdout: 'ok\n' } });
+    s.ctx.exec = fake.exec;
+    return { ...s, calls: fake.calls };
+  };
+  const helperCommands = (calls: Array<{ file: string; args: string[] }>) => calls.filter((c) => c.file.endsWith('powershell.exe')).map((c) => c.args[6]);
+
+  it("syncs Windows when its block differs, as the windows.hostsSync action in run history", async () => {
+    const s = followSetup(['127.0.0.1 local.spellbook.example']);
+    await followWindowsHosts(s.ctx);
+    expect(helperCommands(s.calls)).toEqual(['status', 'hosts-sync']);
+    expect(s.ctx.store.recent(10).map((r) => r.action)).toContain('windows.hostsSync');
+  });
+
+  it('asks Windows nothing more when its block is the same already', async () => {
+    const s = followSetup(['127.0.0.1 local.spellbook.example', '127.0.0.1 www.local.spellbook.example', '127.0.0.2 local.wandworks-store.example']);
+    await followWindowsHosts(s.ctx);
+    expect(helperCommands(s.calls)).toEqual(['status']);
+  });
+
+  it('does nothing where the app gives no Windows side', async () => {
+    const s = followSetup([]);
+    const { windows: _windows, ...ctx } = s.ctx;
+    await followWindowsHosts(ctx);
+    expect(s.calls).toEqual([]);
+  });
+
+  it('follows hosts.add by itself once the action is done', async () => {
+    const s = followSetup([]);
+    const result = await runAction(s.ctx, 'hosts.add', { domain: 'local.shop.com', aliases: [] });
+    expect(result.ok).toBe(true);
+    await vi.waitFor(() => expect(helperCommands(s.calls)).toEqual(['status', 'hosts-sync']));
   });
 });

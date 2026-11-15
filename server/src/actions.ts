@@ -74,7 +74,7 @@ import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } f
 import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 import { cleanStorage } from './storage-clean.js';
-import { helperInstalled, runHelper, windowsHostsPairs, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
+import { helperInstalled, runHelper, windowsHostsDiffer, windowsHostsPairs, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
 import { interopOn, wslVersion } from './wsl.js';
 
 export interface ActionContext {
@@ -130,6 +130,29 @@ async function windowsStep(ctx: ActionContext, command: WindowsHelperCommand, ar
     if (repaired.code !== 0) return repaired;
   }
   return runHelper(ctx.exec, paths, command, args, 600_000);
+}
+
+/** The actions and jobs that change the panel's hosts block: Windows' block follows each under WSL. */
+export const HOSTS_CHANGES: ReadonlySet<string> = new Set<ActionId>([
+  'hosts.add', 'hosts.remove', 'site.addAliases', 'site.giveBack',
+  'site.create', 'site.remove', 'trash.restore', 'site.takeOver', 'site.setServer', 'sites.setServerAll',
+]);
+
+/**
+ * After a change to the hosts block, under WSL 2 with the helper in place:
+ * Windows' block is made the same, as the windows.hostsSync action (in run
+ * history, Windows asks UAC), only when it differs, so nothing asks when
+ * nothing changed. Only where the app gives ctx.windows (production, and
+ * tests that set it). Never fails the change it follows.
+ */
+export async function followWindowsHosts(ctx: ActionContext): Promise<void> {
+  const paths = ctx.windows;
+  if (!paths) return;
+  if (wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2 || !helperInstalled(paths)) return;
+  if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {}) && (await root(ctx, 'wsl-interop')).code !== 0) return;
+  if ((await windowsHostsDiffer(ctx.exec, ctx.config, paths)) !== true) return;
+  const { runId: _runId, actionId: _actionId, ...base } = ctx;
+  await runAction(base, 'windows.hostsSync', {});
 }
 
 export interface CronSetup {
@@ -1080,5 +1103,7 @@ export async function runAction(ctx: ActionContext, id: ActionId, rawInput: unkn
   // A detached action (a job) finishes its own run history row.
   // The login URL is a secret for 60 seconds; it goes to the browser, never into the run history.
   if (!outcome.detached) ctx.store.finish(runId, exitCode, output);
+  // Windows' hosts block follows a change to this one; a job does it when it ends (app.ts).
+  if (!outcome.detached && exitCode === 0 && HOSTS_CHANGES.has(id)) void followWindowsHosts(ctx).catch(() => undefined);
   return { runId, ok: exitCode === 0, exitCode, output, ...(exitCode === 0 && outcome.data ? { data: outcome.data } : {}) };
 }
