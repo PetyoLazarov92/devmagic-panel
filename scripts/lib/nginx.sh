@@ -19,6 +19,9 @@ DMP_NGINX_REJECT_HANDSHAKE="1.19.4"
 dmp_nginx_dir() { dirname "$NGINX_SITES_AVAILABLE"; }
 dmp_nginx_conf() { printf '%s/conf.d/%s' "$(dmp_nginx_dir)" "$DMP_NGINX_CONF_NAME"; }
 dmp_nginx_state() { printf '%s/nginx' "$STATE_DIR"; }
+# Apache kept on APACHE_ADDRESS without nginx (apache-local, for WSL): the original ports.conf.
+dmp_apache_local_state() { printf '%s/apache-local' "$STATE_DIR"; }
+dmp_apache_is_local() { [[ -f "$(dmp_apache_local_state)/ports.conf" ]]; }
 dmp_apache_ports_file() { printf '%s/ports.conf' "$(dmp_apache_dir)"; }
 
 dmp_nginx_installed() { command -v nginx >/dev/null && [[ -f "$(dmp_nginx_dir)/nginx.conf" ]]; }
@@ -107,11 +110,17 @@ dmp_nginx_port_users() {
 }
 
 # Apache's ports.conf with Listen 80 and Listen 443 on APACHE_ADDRESS only, from the original.
+# The second argument says why: nginx (nginx-setup) or local (apache-local).
 dmp_apache_ports_render() {
-  local original="$1" line seen=" "
+  local original="$1" why="${2:-nginx}" line seen=" "
   printf '%s\n' "$DMP_VHOST_MARKER"
-  printf '# Apache answers on %s only, so nginx can answer on %s (devmagic-panel nginx-setup).\n' "$APACHE_ADDRESS" "$NGINX_ADDRESS"
-  printf '# The original is in %s/ports.conf; nginx-teardown puts it back.\n' "$(dmp_nginx_state)"
+  if [[ "$why" == local ]]; then
+    printf '# Apache answers on %s only, so WSL forwards it to Windows there (devmagic-panel apache-local).\n' "$APACHE_ADDRESS"
+    printf '# The original is in %s/ports.conf; apache-local-off puts it back.\n' "$(dmp_apache_local_state)"
+  else
+    printf '# Apache answers on %s only, so nginx can answer on %s (devmagic-panel nginx-setup).\n' "$APACHE_ADDRESS" "$NGINX_ADDRESS"
+    printf '# The original is in %s/ports.conf; nginx-teardown puts it back.\n' "$(dmp_nginx_state)"
+  fi
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ ^([[:space:]]*)Listen[[:space:]]+(\*:|0\.0\.0\.0:|\[::\]:)?(80|443)([[:space:]]+[a-z]+)?[[:space:]]*$ ]]; then
       # Listen 80 and Listen [::]:80 both become one Listen on the address.
@@ -134,6 +143,73 @@ dmp_apache_ports_check() {
       80 | 443 | *:80 | *:443) dmp_die "Apache's ports.conf has '${line#"${line%%[![:space:]]*}"}', which the panel does not know how to move to $APACHE_ADDRESS: change it by hand" ;;
     esac
   done < "$1"
+}
+
+# apache-local: Apache on APACHE_ADDRESS only, with or without nginx. Under
+# WSL, Windows reaches an Apache on every address on ::1 only, and one on
+# 127.0.0.1 on 127.0.0.1, so the Windows hosts lines match the Linux ones.
+# The original ports.conf goes to STATE_DIR/apache-local, once; nginx-setup
+# starts from it and nginx-teardown keeps Apache on APACHE_ADDRESS while it is
+# there. Run again, it changes nothing. A failed configtest or restart puts
+# ports.conf back.
+dmp_apache_local() {
+  local ports local_state work
+  ports="$(dmp_apache_ports_file)"
+  local_state="$(dmp_apache_local_state)"
+  [[ -f "$ports" ]] || dmp_die "no $ports: is Apache installed?"
+  if dmp_apache_is_local; then
+    dmp_ok "Apache answers on $APACHE_ADDRESS only already"
+    return 0
+  fi
+  install -d -m 0755 "$local_state"
+  if dmp_vhost_is_managed "$ports"; then
+    # nginx-setup narrowed it already: its saved original is the one to keep.
+    [[ -f "$(dmp_nginx_state)/ports.conf" ]] || dmp_die "$ports is the panel's, but the original is gone from $(dmp_nginx_state): put Apache's ports.conf back by hand"
+    cp -p "$(dmp_nginx_state)/ports.conf" "$local_state/ports.conf"
+    dmp_ok "Apache answers on $APACHE_ADDRESS only already (nginx-setup); it stays there without nginx"
+    return 0
+  fi
+  dmp_step "Moving Apache from every address to $APACHE_ADDRESS"
+  work="$(mktemp -d "$local_state/.local.XXXXXX")"
+  cp -p "$ports" "$work/ports.now"
+  dmp_apache_ports_render "$ports" local > "$work/ports.new"
+  (dmp_apache_ports_check "$work/ports.new") || { rm -rf "${work:?}"; exit 1; }
+  cp -p "$ports" "$local_state/ports.conf"
+  dmp_nginx_put "$ports" < "$work/ports.new"
+  if ! dmp_apache_configtest || ! systemctl restart apache2; then
+    cat "$work/ports.now" > "$ports"
+    rm -f "${local_state:?}/ports.conf"
+    rm -rf "${work:?}"
+    systemctl restart apache2 || true
+    dmp_die "Apache would not take $APACHE_ADDRESS, ports.conf is as it was"
+  fi
+  rm -rf "${work:?}"
+  dmp_ok "Apache answers on $APACHE_ADDRESS only, on ports 80 and 443"
+}
+
+# apache-local-off: Apache back on every address. Refused while nginx is set
+# up, which needs Apache on APACHE_ADDRESS; nginx-teardown first.
+dmp_apache_local_off() {
+  local ports local_state work
+  ports="$(dmp_apache_ports_file)"
+  local_state="$(dmp_apache_local_state)"
+  if ! dmp_apache_is_local; then
+    dmp_ok "Apache is not kept on $APACHE_ADDRESS by apache-local"
+    return 0
+  fi
+  dmp_nginx_is_setup && dmp_die "nginx is set up and needs Apache on $APACHE_ADDRESS: nginx-teardown first"
+  dmp_step "Apache back on every address"
+  work="$(mktemp -d "$local_state/.off.XXXXXX")"
+  cp -p "$ports" "$work/ports.now"
+  dmp_nginx_put "$ports" < "$local_state/ports.conf"
+  if ! dmp_apache_configtest || ! systemctl restart apache2; then
+    cat "$work/ports.now" > "$ports"
+    rm -rf "${work:?}"
+    systemctl restart apache2 || true
+    dmp_die "Apache would not restart with its original ports.conf, it stays on $APACHE_ADDRESS"
+  fi
+  rm -rf "${work:?}" "${local_state:?}"
+  dmp_ok "Apache answers on every address again"
 }
 
 # One http-level setting, unless nginx.conf sets it already (twice is an error).
@@ -229,9 +305,13 @@ dmp_nginx_setup() {
 
   dmp_step "Setting nginx up on $NGINX_ADDRESS, next to Apache on $APACHE_ADDRESS"
   install -d -m 0755 "$state" "$(dirname "$conf")"
-  # The original ports.conf, once: a later run starts from it again.
+  # The original ports.conf, once: a later run starts from it again. When
+  # apache-local narrowed Apache already, its saved original is that one.
   if ! dmp_vhost_is_managed "$ports"; then
     cp -p "$ports" "$state/ports.conf"
+    first=1
+  elif [[ ! -f "$state/ports.conf" ]] && dmp_apache_is_local; then
+    cp -p "$(dmp_apache_local_state)/ports.conf" "$state/ports.conf"
     first=1
   fi
   [[ -f "$state/ports.conf" ]] || dmp_die "$ports is the panel's, but the original is gone from $state: put Apache's ports.conf back by hand"
@@ -316,12 +396,17 @@ dmp_nginx_teardown() {
     dmp_die "the original ports.conf is gone from $state: put Apache's ports.conf back by hand"
   fi
 
-  dmp_step "Turning nginx off; Apache answers on every address again"
+  # With apache-local, Apache stays on APACHE_ADDRESS: only the header of its ports.conf changes.
+  local where="every address"
+  dmp_apache_is_local && where="$APACHE_ADDRESS only"
+  dmp_step "Turning nginx off; Apache answers on $where"
   dmp_nginx_remoteip_remove
   work="$(mktemp -d "$state/.teardown.XXXXXX")"
   cp -p "$ports" "$work/ports.now"
   cp -p "$conf" "$work/conf.now"
-  if dmp_vhost_is_managed "$ports"; then
+  if dmp_apache_is_local; then
+    dmp_apache_ports_render "$(dmp_apache_local_state)/ports.conf" local | dmp_nginx_put "$ports"
+  elif dmp_vhost_is_managed "$ports"; then
     dmp_nginx_put "$ports" < "$state/ports.conf"
   fi
   rm -f "${conf:?}"
@@ -339,13 +424,13 @@ dmp_nginx_teardown() {
     rm -rf "${work:?}"
     systemctl restart apache2 || true
     systemctl enable --now nginx >/dev/null 2>&1 || true
-    dmp_die "Apache would not restart on every address, nginx is set up as it was"
+    dmp_die "Apache would not restart on $where, nginx is set up as it was"
   fi
   if target="$(dmp_nginx_default_target "$state/default-site")" && [[ ! -e "$link" && ! -L "$link" ]]; then
     ln -s "$target" "$link"
   fi
   rm -rf "${work:?}" "${state:?}"
-  dmp_ok "nginx is stopped and Apache answers on every address again; sudo apt remove nginx removes nginx itself"
+  dmp_ok "nginx is stopped and Apache answers on $where again; sudo apt remove nginx removes nginx itself"
 }
 
 # ── Sites on nginx ───────────────────────────────────────────

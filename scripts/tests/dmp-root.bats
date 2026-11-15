@@ -1521,6 +1521,102 @@ nginx_default_site() {
   [ "$status" -ne 0 ]
 }
 
+@test "apache-local moves Apache to its address, keeps the original and restarts Apache once" {
+  original="$(cat "$T/ports.conf")"
+  run dmp apache-local
+  [ "$status" -eq 0 ]
+  head -n 1 "$T/ports.conf" | grep -qx '# Managed by devmagic-panel. Edits here are overwritten.'
+  grep -q 'apache-local-off puts it back' "$T/ports.conf"
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  run grep -qE '^\s*Listen (80|443)$' "$T/ports.conf"
+  [ "$status" -ne 0 ]
+  [ "$(cat "$T/state/apache-local/ports.conf")" = "$original" ]
+  [ "$(grep -c '^systemctl restart apache2$' "$STUB_LOG")" -eq 1 ]
+  [ ! -e "$T/state/nginx" ]
+  : > "$STUB_LOG"
+  run dmp apache-local
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already"* ]]
+  run grep -q 'restart apache2' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "apache-local takes no arguments" {
+  run dmp apache-local 127.0.0.1
+  [ "$status" -eq 2 ]
+  run dmp apache-local-off now
+  [ "$status" -eq 2 ]
+  grep -qx 'Listen 80' "$T/ports.conf"
+}
+
+@test "apache-local puts ports.conf back when Apache's configtest fails" {
+  original="$(cat "$T/ports.conf")"
+  STUB_CONFIGTEST_FAIL=1 run dmp apache-local
+  [ "$status" -eq 1 ]
+  [ "$(cat "$T/ports.conf")" = "$original" ]
+  [ ! -e "$T/state/apache-local/ports.conf" ]
+  [ -z "$(ls -A "$T/state/apache-local")" ]
+}
+
+@test "apache-local refuses a ports.conf it cannot move, and changes nothing" {
+  printf 'Listen 192.168.1.5:443\n' > "$T/ports.conf"
+  run dmp apache-local
+  [ "$status" -eq 1 ]
+  [ "$(cat "$T/ports.conf")" = 'Listen 192.168.1.5:443' ]
+  [ ! -e "$T/state/apache-local/ports.conf" ]
+  run grep -q 'restart apache2' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "apache-local-off puts the original back, and is refused while nginx is set up" {
+  original="$(cat "$T/ports.conf")"
+  dmp apache-local
+  dmp nginx-setup
+  run dmp apache-local-off
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nginx-teardown first"* ]]
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  dmp nginx-teardown
+  run dmp apache-local-off
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/ports.conf")" = "$original" ]
+  [ ! -e "$T/state/apache-local" ]
+  run dmp apache-local-off
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not kept"* ]]
+}
+
+@test "nginx-setup after apache-local starts from the original, and nginx-teardown keeps Apache on its address" {
+  original="$(cat "$T/ports.conf")"
+  dmp apache-local
+  run dmp nginx-setup
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/state/nginx/ports.conf")" = "$original" ]
+  grep -q 'nginx-teardown puts it back' "$T/ports.conf"
+  run dmp nginx-teardown
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Apache answers on 127.0.0.1 only"* ]]
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  grep -q 'apache-local-off puts it back' "$T/ports.conf"
+  [ "$(cat "$T/state/apache-local/ports.conf")" = "$original" ]
+  [ ! -e "$T/state/nginx" ]
+}
+
+@test "apache-local after nginx-setup keeps nginx's original, so Apache stays on its address after teardown" {
+  original="$(cat "$T/ports.conf")"
+  dmp nginx-setup
+  : > "$STUB_LOG"
+  run dmp apache-local
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/state/apache-local/ports.conf")" = "$original" ]
+  run grep -q 'restart apache2' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+  dmp nginx-teardown
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  dmp apache-local-off
+  [ "$(cat "$T/ports.conf")" = "$original" ]
+}
+
 @test "nginx-reload and service-restart nginx run a configtest first" {
   run dmp nginx-reload
   [ "$status" -eq 0 ]
