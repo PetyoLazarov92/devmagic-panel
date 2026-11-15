@@ -296,9 +296,31 @@ function Invoke-DmpHelper([string[]]$ArgumentList) {
   return [int]$result.ExitCode
 }
 
+# The helper where the panel calls it: Program Files, which only admins may
+# change, so nothing running as you can alter it before it asks for UAC.
+function Get-DmpHelperTarget() { Join-Path $env:ProgramFiles 'devmagic-panel' }
+
+function Install-DmpHelperFile() {
+  $target = Get-DmpHelperTarget
+  $installed = Join-Path $target 'dmp-win.ps1'
+  if ((Test-Path -LiteralPath $installed) -and (Get-DmpFileSha256 $installed) -eq (Get-DmpFileSha256 $script:Helper)) {
+    Write-DmpOk "the helper is in $target"
+    return $true
+  }
+  Write-DmpStep "Putting the helper in $target, where the panel calls it (Windows asks with UAC)"
+  # robocopy elevated: one file, the folder made with Program Files' own permissions. 0 to 7 mean done.
+  $robocopy = Join-Path $env:SystemRoot 'System32\Robocopy.exe'
+  $code = Invoke-DmpElevatedProgram $robocopy @(('"' + $script:Here + '"'), ('"' + $target + '"'), 'dmp-win.ps1', '/NJH', '/NJS', '/NP')
+  if ($code -eq 3) { Write-DmpWarn 'UAC was declined: the panel cannot do the Windows steps until you run this script again'; return $false }
+  if ($code -gt 7 -or -not (Test-Path -LiteralPath $installed)) { Write-DmpWarn "the helper was not copied (robocopy exit $code)"; return $false }
+  Write-DmpOk "the helper is in $target"
+  return $true
+}
+
 function Install-DmpWindowsSide([string]$Name) {
   New-Item -Path $script:SettingsKey -Force | Out-Null
   Set-ItemProperty -Path $script:SettingsKey -Name Distro -Value $Name
+  [void](Install-DmpHelperFile)
   $run = { param([string[]]$a) Invoke-DmpHelper $a }
 
   Write-DmpStep 'Keeping the distro running while you are logged in (a logon task, no window)'

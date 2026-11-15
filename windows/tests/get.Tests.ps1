@@ -135,12 +135,41 @@ Describe 'Invoke-DmpHelper' {
   }
 }
 
+Describe 'Install-DmpHelperFile' {
+  BeforeEach {
+    Mock Write-DmpStep { }
+    Mock Write-DmpOk { }
+    Mock Write-DmpWarn { }
+    $script:Target = Join-Path ([IO.Path]::GetTempPath()) ("dmp-pf-{0}" -f ([guid]::NewGuid().ToString('N')))
+    Mock Get-DmpHelperTarget { $script:Target }
+  }
+
+  It 'copies nothing when the same helper is there already' {
+    New-Item -ItemType Directory -Path $script:Target | Out-Null
+    Copy-Item -LiteralPath $script:Helper -Destination $script:Target
+    Mock Invoke-DmpElevatedProgram { 0 }
+    Install-DmpHelperFile | Should -BeTrue
+    Should -Invoke Invoke-DmpElevatedProgram -Times 0 -Exactly
+  }
+
+  It 'copies the helper elevated, one file with robocopy, and says when UAC was declined' {
+    Mock Invoke-DmpElevatedProgram { New-Item -ItemType Directory -Force -Path $script:Target | Out-Null; Copy-Item -LiteralPath $script:Helper -Destination $script:Target; 1 }
+    Install-DmpHelperFile | Should -BeTrue
+    Should -Invoke Invoke-DmpElevatedProgram -Times 1 -Exactly -ParameterFilter { $File -like '*Robocopy.exe' -and $ArgumentList -contains 'dmp-win.ps1' }
+    Remove-Item -LiteralPath $script:Target -Recurse -Force
+    Mock Invoke-DmpElevatedProgram { 3 }
+    Install-DmpHelperFile | Should -BeFalse
+    Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like 'UAC was declined*' }
+  }
+}
+
 Describe 'Install-DmpWindowsSide' {
   BeforeEach {
     Mock New-Item { }
     Mock Set-ItemProperty { }
     Mock Write-DmpStep { }
     Mock Write-DmpWarn { }
+    Mock Install-DmpHelperFile { $true }
     Mock Invoke-DmpHelper { 0 }
     $block = "# BEGIN devmagic-panel (managed by the panel, edit sites there)`n127.0.0.1 local.devmagic`n127.0.0.2 local.wandworks-store.example`n# END devmagic-panel`n"
     Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = $block; Error = '' } }
