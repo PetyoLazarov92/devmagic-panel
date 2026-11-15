@@ -2276,3 +2276,29 @@ CONF
   grep -qx '127.0.0.1 local.hand.com' "$T/hosts"
   ! grep -q 'devmagic-panel' "$T/hosts"
 }
+
+@test "wsl-interop registers the line WSL writes when interop is gone, and changes nothing when it is there" {
+  mkdir -p "$T/binfmt"
+  : > "$T/binfmt/register"
+  printf "#!/bin/sh\n" > "$T/init"
+  chmod +x "$T/init"
+  run dmp wsl-interop
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/binfmt/register")" = ":WSLInterop:M::MZ::$T/init:P" ]
+  # A plain file lists nothing after the write, unlike the kernel: the script says to restart.
+  [[ "$output" == *"restart the distro"* ]]
+  : > "$T/binfmt/register"
+  : > "$T/binfmt/WSLInterop"
+  run dmp wsl-interop
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"registered already"* ]]
+  [ ! -s "$T/binfmt/register" ]
+}
+
+@test "wsl-interop refuses outside WSL, and takes no arguments" {
+  run dmp wsl-interop
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"this is not WSL"* ]]
+  run dmp wsl-interop now
+  [ "$status" -eq 2 ]
+}

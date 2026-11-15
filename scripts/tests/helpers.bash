@@ -36,6 +36,8 @@ NGINX_LOG_DIR=$T/nginx/log
 MYSQL_CONF_DIR=$T/mysql
 NGINX_ADDRESS=127.0.0.2
 APACHE_ADDRESS=127.0.0.1
+BINFMT_DIR=$T/binfmt
+WSL_INIT=$T/init
 EOF
 
   export STUB_LOG="$T/stub.log"

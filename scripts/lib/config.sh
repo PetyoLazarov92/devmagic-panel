@@ -19,7 +19,13 @@ DMP_CONFIG_KEYS=(
 # Keys added after the first release; older config files leave them out and get these defaults.
 # UPDATE_REPO and UPDATE_GIT_URL are the panel's (where it updates from); dmp-root only accepts them.
 DMP_CONFIG_OPTIONAL_KEYS=(PHP_CONF_DIR PHP_LIB_DIR STATE_DIR UPDATE_REPO UPDATE_GIT_URL
-  NGINX_SITES_AVAILABLE NGINX_SITES_ENABLED NGINX_LOG_DIR NGINX_ADDRESS APACHE_ADDRESS MYSQL_CONF_DIR)
+  NGINX_SITES_AVAILABLE NGINX_SITES_ENABLED NGINX_LOG_DIR NGINX_ADDRESS APACHE_ADDRESS MYSQL_CONF_DIR
+  BINFMT_DIR WSL_INIT)
+# Under WSL: the kernel's binfmt_misc, where WSL registers its interop with
+# Windows programs, and WSL's init, which runs them. Keys only so the tests can
+# point wsl-interop at a temp tree; install.sh never writes them.
+DMP_DEFAULT_BINFMT_DIR="/proc/sys/fs/binfmt_misc"
+DMP_DEFAULT_WSL_INIT="/init"
 DMP_DEFAULT_PHP_CONF_DIR="/etc/php"
 # Where Debian keeps each version's packaged php.ini (php.ini-production), to compare and restore.
 DMP_DEFAULT_PHP_LIB_DIR="/usr/lib/php"
@@ -84,9 +90,11 @@ dmp_load_config() {
   MYSQL_CONF_DIR="${MYSQL_CONF_DIR:-$DMP_DEFAULT_MYSQL_CONF_DIR}"
   NGINX_ADDRESS="${NGINX_ADDRESS:-$DMP_DEFAULT_NGINX_ADDRESS}"
   APACHE_ADDRESS="${APACHE_ADDRESS:-$DMP_DEFAULT_APACHE_ADDRESS}"
+  BINFMT_DIR="${BINFMT_DIR:-$DMP_DEFAULT_BINFMT_DIR}"
+  WSL_INIT="${WSL_INIT:-$DMP_DEFAULT_WSL_INIT}"
   for key in WEB_DIR CERTS_DIR CA_DIR APACHE_SITES_AVAILABLE APACHE_SITES_ENABLED \
     APACHE_LOG_DIR HOSTS_FILE SYSTEM_CA_DIR BACKUP_DIR PHP_CONF_DIR PHP_LIB_DIR STATE_DIR \
-    NGINX_SITES_AVAILABLE NGINX_SITES_ENABLED NGINX_LOG_DIR MYSQL_CONF_DIR; do
+    NGINX_SITES_AVAILABLE NGINX_SITES_ENABLED NGINX_LOG_DIR MYSQL_CONF_DIR BINFMT_DIR WSL_INIT; do
     [[ "${!key}" == /* && "${!key}" != *..* ]] || dmp_die "$key must be an absolute path: ${!key}"
   done
   for key in NGINX_ADDRESS APACHE_ADDRESS; do
