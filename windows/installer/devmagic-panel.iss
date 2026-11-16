@@ -733,19 +733,24 @@ begin
     (RegQueryDWordValue(HKCU, 'Software\devmagic-panel', 'Created', Created) and (Created = 1));
   // A silent uninstall keeps the distro, and a distro of your own always stays.
   if UninstallSilent() or not UninstallOwnDistro then Exit;
-  // One question, three buttons that say what they do; Enter, Esc and closing it keep the distro.
+  // Buttons that say what they do, the safe one first (it is the default, Enter takes it).
+  // TaskDialogMsgBox takes plain button sets only (no default-button flag), and a
+  // Cancel button would make Esc one of the choices, so two questions with two buttons each.
   // (No line of [Code] may start with "[": Inno reads that as a new section.)
-  SetArrayLength(Buttons, 3);
-  Buttons[0] := 'Remove it, keep a copy first';
-  Buttons[1] := 'Remove it, no copy';
-  Buttons[2] := 'Keep the distro';
-  case TaskDialogMsgBox('What should happen to the ' + UninstallDistro + ' distro?',
+  SetArrayLength(Buttons, 2);
+  Buttons[0] := 'Keep the distro';
+  Buttons[1] := 'Remove it';
+  RemoveDistroAnswer := TaskDialogMsgBox('What should happen to the ' + UninstallDistro + ' distro?',
     'It holds every site, database and file you made in the panel.' + #13#10#13#10 +
-    'Keep it: running the setup again later finds it as it was.' + #13#10 +
-    'A copy goes to ' + ExpandConstant('{localappdata}') + '\devmagic-panel and takes as much space as the distro uses, often a few GB; wsl --import brings it back.',
-    mbConfirmation, MB_YESNOCANCEL or MB_DEFBUTTON3, Buttons, 0) of
-    IDYES: RemoveDistroAnswer := True;
-    IDNO: begin RemoveDistroAnswer := True; NoBackupAnswer := True; end;
+    'Keep it: running the setup again later finds it as it was.',
+    mbConfirmation, MB_YESNO, Buttons, 0) = IDNO;
+  if RemoveDistroAnswer then begin
+    Buttons[0] := 'Keep a copy first';
+    Buttons[1] := 'Remove it with no copy';
+    NoBackupAnswer := TaskDialogMsgBox('Keep a copy of ' + UninstallDistro + ' before it goes?',
+      'The copy goes to ' + ExpandConstant('{localappdata}') + '\devmagic-panel and takes as much space as the distro uses, often a few GB; wsl --import brings it back.' + #13#10#13#10 +
+      'With no copy, its sites, databases and files are gone for good.',
+      mbConfirmation, MB_YESNO, Buttons, 0) = IDNO;
   end;
   Log(Format('uninstall choice: remove distro %d, no copy %d', [Ord(RemoveDistroAnswer), Ord(NoBackupAnswer)]));
 end;
