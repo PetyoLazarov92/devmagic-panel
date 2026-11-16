@@ -194,3 +194,28 @@ Describe 'Install-DmpWindowsSide' {
     Should -Invoke Write-DmpWarn -Times 2 -Exactly
   }
 }
+
+Describe "Uninstall-DmpPanel" {
+  BeforeEach {
+    Mock Write-DmpStep { }
+    Mock Write-DmpWarn { }
+    Mock Write-DmpOk { }
+    Mock Remove-Item { }
+    $script:Order = [Collections.Generic.List[string]]::new()
+    Mock Invoke-DmpHelper { $script:Order.Add($ArgumentList[0]); 0 }
+    Mock Invoke-DmpWsl { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = "  NAME STATE VERSION`n* Ubuntu Running 2`n"; Error = "" } }
+  }
+
+  It "takes every Windows step back, nginx relays included, the helper itself last" {
+    Uninstall-DmpPanel "devmagic-panel" -KeepDistro
+    $script:Order | Should -Be @("hosts-sync", "portproxy-off", "autostart-remove", "ca-untrust", "self-remove")
+    Should -Invoke Write-DmpWarn -Times 0 -Exactly
+  }
+
+  It "warns for a step that failed and goes on with the rest" {
+    Mock Invoke-DmpHelper { $script:Order.Add($ArgumentList[0]); 1 } -ParameterFilter { $ArgumentList[0] -eq "portproxy-off" }
+    Uninstall-DmpPanel "devmagic-panel" -KeepDistro
+    Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like "portproxy-off did not finish*" }
+    $script:Order[-1] | Should -Be "self-remove"
+  }
+}

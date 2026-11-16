@@ -366,8 +366,8 @@ function Invoke-DmpElevatedProgram([string]$File, [string[]]$ArgumentList) {
 }
 
 function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro) {
-  Write-DmpStep "Removing the Windows side: hosts block (UAC), the logon task, the panel's CA"
-  foreach ($command in @('hosts-sync', 'autostart-remove', 'ca-untrust', 'self-remove')) {
+  Write-DmpStep "Removing the Windows side: hosts block and nginx's relays (UAC), the logon task, the panel's CA"
+  foreach ($command in @('hosts-sync', 'portproxy-off', 'autostart-remove', 'ca-untrust', 'self-remove')) {
     $code = Invoke-DmpHelper @($command)
     if ($code -ne 0) { Write-DmpWarn "$command did not finish (exit $code)" }
   }
