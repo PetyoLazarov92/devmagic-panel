@@ -6,7 +6,7 @@ import { Jobs } from '../src/jobs.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
-import { helperInstalled, helperPath, keepInterop, openWindowsTerminal, runHelper, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules, wslDistro } from '../src/windows.js';
+import { helperInstalled, helperPath, keepInterop, openWindowsTerminal, runHelper, windowsReleaseTag, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules, wslDistro } from '../src/windows.js';
 import { DMP, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
@@ -355,5 +355,27 @@ describe('a terminal in Windows', () => {
     const result = await runAction(desktopCtx, 'site.openTerminal', { domain: 'local.shop.com' });
     expect(linux.calls.some((c) => c.file.endsWith('cmd.exe'))).toBe(false);
     expect(result.ok === false ? result.output : '').toMatch(/desktop session|No terminal found|Opened/);
+  });
+});
+
+describe('the Windows part of a release', () => {
+  it('is published under the release tag, and a development build has none', () => {
+    expect(windowsReleaseTag('1.68.0')).toBe('v1.68.0');
+    expect(windowsReleaseTag('1.68.0-rc.1')).toBe('v1.68.0-rc.1');
+    expect(windowsReleaseTag('1.67.1-dev.684f1a4')).toBeNull();
+    expect(windowsReleaseTag('1.68')).toBeNull();
+    expect(windowsReleaseTag('v1.68.0')).toBeNull();
+  });
+
+  it('windows.update asks the helper for the setup of this release, or says a dev build has none', async () => {
+    const s = setup();
+    const result = await runAction(s.ctx, 'windows.update', {});
+    const call = s.calls.find((c) => c.file.endsWith('powershell.exe'));
+    if (windowsReleaseTag(JSON.parse((await import('node:fs')).readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version)) {
+      expect(call?.args.slice(6)).toEqual(['update-windows', expect.stringMatching(/^v[0-9]+\.[0-9]+\.[0-9]+/)]);
+    } else {
+      expect(result).toMatchObject({ ok: false, output: expect.stringContaining('development build') });
+      expect(call).toBeUndefined();
+    }
   });
 });

@@ -71,6 +71,8 @@ export interface ReleaseInfo {
   installer: string;
   /** sha256 of each root script, by its path under scripts/: bin/dmp-root, lib/cert.sh. */
   scripts: Record<string, string>;
+  /** sha256 of the Windows helper (windows/dmp-win.ps1, line ends as LF) this release goes with. */
+  windowsHelper?: string;
 }
 
 export function parseRelease(text: string): ReleaseInfo | null {

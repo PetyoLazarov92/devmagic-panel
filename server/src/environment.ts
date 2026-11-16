@@ -19,6 +19,7 @@ import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
 import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
 import { hostsKept, interopDisabled, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
+import { readRelease } from './update.js';
 import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsPortproxyHeld, windowsPortproxyRules, windowsStatus, type WindowsPaths } from './windows.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
@@ -615,7 +616,7 @@ async function windowsSideChecks(ctx: CheckContext): Promise<Check[]> {
   }
   const status = await windowsStatus(ctx.exec, paths);
   if (!status) return [warn('windows.helper', 'Windows helper', 'did not answer: run get.ps1 in Windows again to repair it')];
-  const fix = (action: 'windows.hostsSync' | 'windows.trustCa' | 'windows.autostart' | 'windows.portproxy', label: string): CheckFix[] => [{ action, input: {}, label }];
+  const fix = (action: 'windows.hostsSync' | 'windows.trustCa' | 'windows.autostart' | 'windows.portproxy' | 'windows.update', label: string): CheckFix[] => [{ action, input: {}, label }];
   const checks: Check[] = [];
 
   const want = windowsHostsPairs(ctx.config);
@@ -645,6 +646,19 @@ async function windowsSideChecks(ctx: CheckContext): Promise<Check[]> {
           fixes: fix('windows.autostart', 'Add the logon task'),
         }),
   );
+
+  // The Windows helper this release goes with (release.json), against the one Windows has.
+  const release = ctx.self ? readRelease(ctx.self.repo) : null;
+  if (release?.windowsHelper) {
+    const have = status.helper?.sha256;
+    checks.push(
+      have === release.windowsHelper
+        ? ok('windows.part', 'Windows part', `the helper of ${release.name}`)
+        : warn('windows.part', 'Windows part', have ? `the helper in Windows is from another release than this panel (${release.name}): update it, so the panel's Windows steps work as this release expects` : `the helper in Windows is older than this panel (${release.name}): update it, so the panel's Windows steps work as this release expects`, {
+            fixes: [{ action: 'windows.update', input: {}, label: 'Update the Windows part', confirm: `The helper downloads the Windows setup of ${release.name} from GitHub, checks it and runs it without a window; it installs ${release.name} again in the distro, which restarts the panel for a minute.` }],
+          }),
+    );
+  }
 
   // nginx's sites reach Windows through two relays of 127.0.0.2; none are needed without nginx.
   if (status.portproxy) {

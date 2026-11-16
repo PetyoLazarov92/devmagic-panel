@@ -68,7 +68,12 @@ Name: startmenuicon; Description: "Add it to the Start menu, so typing devmagic 
 [Icons]
 ; Internet shortcuts (.url): they open the panel in your default browser; the uninstall removes them.
 Name: "{userdesktop}\devmagic-panel"; Filename: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Tasks: desktopicon
-Name: "{userprograms}\devmagic-panel"; Filename: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Tasks: startmenuicon
+; Its own name in Start: WSL adds a devmagic-panel entry of its own there for the distro (a terminal, Ubuntu's icon).
+Name: "{userprograms}\Open devmagic-panel"; Filename: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Tasks: startmenuicon
+
+[InstallDelete]
+; The Start shortcut of 1.67.1-dev.9f9939b, named like WSL's entry for the distro.
+Type: files; Name: "{userprograms}\devmagic-panel.url"
 
 [Run]
 Filename: "https://local.devmagic"; Description: "Open the panel"; \

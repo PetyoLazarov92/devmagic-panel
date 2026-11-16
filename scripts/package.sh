@@ -93,6 +93,11 @@ sha() { sha256sum "$1" | cut -d' ' -f1; }
   printf '  "name": "%s",\n  "version": "%s",\n  "commit": "%s",\n' "$NAME" "$version" "$commit"
   printf '  "built": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '  "installer": "%s",\n' "$(sha "$PKG/install.sh")"
+  # The Windows helper of this release, its line ends as LF (dmp-win.ps1 hashes itself
+  # the same way): the panel under WSL compares it with the helper Windows has.
+  if [[ -f "$REPO/windows/dmp-win.ps1" ]]; then
+    printf '  "windowsHelper": "%s",\n' "$(tr -d '\r' < "$REPO/windows/dmp-win.ps1" | sha256sum | cut -d' ' -f1)"
+  fi
   printf '  "scripts": {'
   sep=''
   while IFS= read -r file; do

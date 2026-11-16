@@ -180,7 +180,16 @@ setup hands them over in a file only you can read, deleted as soon as it is
 read, and never on a command line.
 
 Updates come from the panel's Updates page, as on Ubuntu; the setup is only
-for the first install and repairs.
+for the first install and repairs. When a release also changes the Windows
+part, Aura's Machine checks show "Windows part" with Update the Windows part:
+the helper downloads that release's setup from GitHub, checks it against the
+`.sha256` published with it, and runs it without a window (the panel restarts
+for a minute). Each release carries its setup for that, built by the release
+workflow.
+
+The setup can also put a shortcut to the panel on the desktop and in Start
+("Open devmagic-panel"; WSL adds its own Start entry for the distro, which
+opens a terminal there).
 
 ### Uninstall
 

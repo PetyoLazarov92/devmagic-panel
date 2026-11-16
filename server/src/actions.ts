@@ -37,6 +37,7 @@ import { fetchOrigin, pull, restoreBranches, switchBranch, tidy } from './sites/
 import { setPlugin } from './sites/plugins.js';
 import { planAddNetworkAdmin } from './sites/network-admin.js';
 import { openTerminal } from './terminal.js';
+import { readVersion } from './version.js';
 import type { Drafts } from './drafts.js';
 import { findClaude } from './org/claude-code.js';
 import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded } from './org/dumps.js';
@@ -74,7 +75,7 @@ import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } f
 import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 import { cleanStorage } from './storage-clean.js';
-import { helperInstalled, openWindowsTerminal, runHelper, windowsHostsDiffer, windowsHostsPairs, windowsPortproxyDiffers, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
+import { helperInstalled, openWindowsTerminal, runHelper, windowsReleaseTag, windowsHostsDiffer, windowsHostsPairs, windowsPortproxyDiffers, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
 import { interopOn, wslVersion } from './wsl.js';
 
 export interface ActionContext {
@@ -688,6 +689,12 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'windows.hostsSync': async (ctx) => [await windowsStep(ctx, 'hosts-sync', windowsHostsPairs(ctx.config))],
   'windows.trustCa': async (ctx) => [await windowsStep(ctx, 'ca-trust')],
   'windows.autostart': async (ctx) => [await windowsStep(ctx, 'autostart-install')],
+  'windows.update': async (ctx) => {
+    // Only a published release has its Windows setup on GitHub.
+    const tag = windowsReleaseTag(readVersion());
+    if (!tag) throw new ActionInputError(`${readVersion()} is a development build, with no Windows setup on GitHub: run the setup of a release by hand`);
+    return [await windowsStep(ctx, 'update-windows', [tag])];
+  },
   'windows.portproxy': async (ctx) => [
     nginxSetUp(ctx.config)
       ? await windowsStep(ctx, 'portproxy-on', [String(ctx.config.NGINX_WSL_HTTP_PORT), String(ctx.config.NGINX_WSL_HTTPS_PORT)])

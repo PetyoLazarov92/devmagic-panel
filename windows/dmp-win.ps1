@@ -25,6 +25,10 @@ calls and programs started with an argument array only.
                                where nginx in WSL answers for Windows (WSL forwards 127.0.0.1
                                only). A TCP relay: TLS goes through untouched. Admin.
   portproxy-off                those two relays removed; others are left alone. Admin.
+  update-windows <tag>         the Windows part of that release: downloads its setup
+                               (devmagic-panel-setup-<version>.exe) and the .sha256 next to it
+                               from this script's own repository on GitHub, checks it, and
+                               starts it silently. Never from anywhere else.
 
 Exit codes: 0 done, 1 failed, 2 bad input, 3 UAC declined, 4 WSL not answering.
 An admin command run without admin starts this script again elevated for that
@@ -39,7 +43,10 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off')
+$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off', 'update-windows')
+# Where update-windows downloads from: written here, in the admin-owned copy, never taken
+# from WSL, so nothing in the distro can make it run another program. A fork changes it.
+$script:DmpRepo = 'PetyoLazarov92/devmagic-panel'
 $script:DmpAdminCommands = @('hosts-sync', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off')
 # Where Windows' browsers find a site on nginx (NGINX_ADDRESS), and where WSL forwards nginx's own ports.
 $script:DmpProxyListen = '127.0.0.2'
@@ -399,6 +406,43 @@ function Get-DmpIpHelperState() {
   return [string]$service.Status
 }
 
+# --- update-windows ---
+
+# This script's SHA-256 with its line ends as LF: the panel compares it with the
+# helper of its release (release.json, packed on Linux), whatever line ends Git gave this copy.
+function Get-DmpHelperHash([string]$Path) {
+  $text = [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8).Replace("`r`n", "`n")
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try { return ([BitConverter]::ToString($sha.ComputeHash((New-Object Text.UTF8Encoding($false)).GetBytes($text))) -replace '-', '').ToLowerInvariant() }
+  finally { $sha.Dispose() }
+}
+
+function Assert-DmpReleaseTag([string]$Tag) {
+  if ($Tag -cnotmatch '^v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}(-[0-9a-z]+(\.[0-9a-z]+)*)?$') { throw [DmpInputError]::new("not a release tag: '$Tag' (like v1.68.0)") }
+}
+
+# The setup of that release from GitHub, checked against the .sha256 published with it,
+# then started silently: it repairs the Windows part and keeps the distro, user and password.
+function Update-DmpWindowsPart([string]$Tag, [string]$Folder) {
+  Assert-DmpReleaseTag $Tag
+  $exe = 'devmagic-panel-setup-{0}.exe' -f $Tag.Substring(1)
+  $base = 'https://github.com/{0}/releases/download/{1}/' -f $script:DmpRepo, $Tag
+  New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+  $file = Join-Path $Folder $exe
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  Invoke-WebRequest -Uri ($base + $exe + '.sha256') -OutFile "$file.sha256" -UseBasicParsing
+  $want = ((Get-Content -LiteralPath "$file.sha256" -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+  if ($want -notmatch '^[0-9a-f]{64}$') { throw "the .sha256 of $exe holds no checksum" }
+  Invoke-WebRequest -Uri ($base + $exe) -OutFile $file -UseBasicParsing
+  $have = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($have -ne $want) {
+    Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+    throw "$exe from GitHub has SHA-256 $have, not the published ${want}: nothing was started"
+  }
+  Start-Process -FilePath $file -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' | Out-Null
+  return $exe
+}
+
 function Test-DmpAdmin() {
   ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
@@ -452,6 +496,7 @@ function Get-DmpStatus([string]$Distro) {
     ports = $listening
     uac = [ordered]@{ enabled = ($uac -and $uac.EnableLUA -eq 1); promptsAdmins = ($uac -and $uac.ConsentPromptBehaviorAdmin -ne 0) }
     portproxy = [ordered]@{ rules = @(Get-DmpPortproxy); ipHelper = (Get-DmpIpHelperState) }
+    helper = [ordered]@{ sha256 = (Get-DmpHelperHash $PSCommandPath); repo = $script:DmpRepo }
   }
 }
 
@@ -460,7 +505,11 @@ function Get-DmpStatus([string]$Distro) {
 function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
   if ($script:DmpCommands -notcontains $Name) { throw [DmpInputError]::new("unknown command: '$Name' (one of: $($script:DmpCommands -join ', '))") }
   foreach ($value in $ArgumentList) { Assert-DmpArgument $value }
-  if ($Name -notin @('hosts-sync', 'portproxy-on') -and $ArgumentList.Count -gt 0) { throw [DmpInputError]::new("$Name takes no arguments") }
+  if ($Name -notin @('hosts-sync', 'portproxy-on', 'update-windows') -and $ArgumentList.Count -gt 0) { throw [DmpInputError]::new("$Name takes no arguments") }
+  if ($Name -eq 'update-windows') {
+    if ($ArgumentList.Count -ne 1) { throw [DmpInputError]::new('update-windows takes one release tag, like v1.68.0') }
+    Assert-DmpReleaseTag $ArgumentList[0]
+  }
 
   if ($script:DmpAdminCommands -contains $Name -and -not (Test-DmpAdmin)) {
     # Checked before UAC asks: bad input never reaches the elevated copy.
@@ -524,6 +573,10 @@ function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
     }
     'portproxy-off' {
       Write-DmpOk "$(Remove-DmpPortproxy) relay(s) on $($script:DmpProxyListen) removed"
+    }
+    'update-windows' {
+      $exe = Update-DmpWindowsPart $ArgumentList[0] (Join-Path ([IO.Path]::GetTempPath()) 'devmagic-panel-update')
+      Write-DmpOk "$exe from $($script:DmpRepo), checked, runs now without a window: it updates the Windows part and installs the panel of $($ArgumentList[0]) again in the distro, which restarts the panel"
     }
   }
   return 0

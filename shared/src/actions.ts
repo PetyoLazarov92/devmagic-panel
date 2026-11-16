@@ -1252,6 +1252,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({}),
   },
+  'windows.update': {
+    title: 'Update the Windows part',
+    description:
+      "Under WSL, when the panel's release goes with another Windows helper than the one installed: the helper downloads this release's Windows setup (devmagic-panel-setup-<version>.exe) and its .sha256 from the repository written into it, checks it, and runs it without a window. It updates the helper and the setup in Windows and installs this release again in the distro, which restarts the panel; the distro, its user and the panel password stay. Only for a published release, not a development build.",
+    changesSystem: true,
+    input: z.object({}),
+  },
   'wsl.repairInterop': {
     title: 'Let WSL start Windows programs again',
     description:

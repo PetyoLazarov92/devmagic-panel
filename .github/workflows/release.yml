@@ -78,6 +78,49 @@ jobs:
             git push origin --delete "refs/tags/$old"
           done
 
+  # The Windows setup of the release, built from its own package and attached to it
+  # with its .sha256: the first install on Windows, and what the panel's helper
+  # downloads and checks for "Update the Windows part".
+  windows-setup:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: The helper updates from this repository
+        shell: pwsh
+        run: |
+          $repo = (Select-String -Path windows\dmp-win.ps1 -Pattern "^\`$script:DmpRepo = '([^']+)'").Matches.Groups[1].Value
+          if ($repo -ne $env:GITHUB_REPOSITORY) { "::warning::windows/dmp-win.ps1 updates from $repo, not $($env:GITHUB_REPOSITORY): change `$script:DmpRepo there in a fork" }
+      - name: The release package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --pattern "devmagic-panel-$($env:GITHUB_REF_NAME).tar.gz" --dir "$env:RUNNER_TEMP\package"
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+      - name: Build the setup and attach it to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $name = $env:GITHUB_REF_NAME
+          $version = $name.TrimStart('v')
+          $file = ($version -replace '-.*$', '') + '.0'
+          $package = Join-Path $env:RUNNER_TEMP "package\devmagic-panel-$name.tar.gz"
+          $output = & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DFileVersion=$file" "/DReleaseFile=$package" "/O$env:RUNNER_TEMP\setup" windows\installer\devmagic-panel.iss 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { "$_" }
+          if ($code -ne 0) {
+            $output | ForEach-Object { "$_" } | Where-Object { $_ -match 'Error|error|Line \d+' } | Select-Object -First 5 | ForEach-Object { "::error file=windows/installer/devmagic-panel.iss::$_" }
+            throw "ISCC failed with $code"
+          }
+          $exe = Join-Path $env:RUNNER_TEMP "setup\devmagic-panel-setup-$version.exe"
+          $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("$exe.sha256", "$hash  devmagic-panel-setup-$version.exe`n")
+          gh release upload $name $exe "$exe.sha256" --repo $env:GITHUB_REPOSITORY
+
   # Once the release is out, the site rebuilds with it.
   site:
     needs: release

@@ -59,7 +59,7 @@ export function windowsDrive(paths: WindowsPaths): WindowsDrive | null {
   return drivesOf(paths).find((d) => existsSync(`${d.mount}/Windows/${POWERSHELL}`)) ?? null;
 }
 
-export const WINDOWS_HELPER_COMMANDS = ['status', 'hosts-sync', 'ca-trust', 'autostart-install', 'portproxy-on', 'portproxy-off'] as const;
+export const WINDOWS_HELPER_COMMANDS = ['status', 'hosts-sync', 'ca-trust', 'autostart-install', 'portproxy-on', 'portproxy-off', 'update-windows'] as const;
 export type WindowsHelperCommand = (typeof WINDOWS_HELPER_COMMANDS)[number];
 
 /** What the helper accepts as an argument, and nothing else: same as Assert-DmpArgument. */
@@ -109,6 +109,8 @@ export interface WindowsStatus {
   uac: { enabled: boolean; promptsAdmins: boolean };
   /** Windows' portproxy rules as "listen:port=connect:port", and its IP Helper service; a helper older than portproxy-on leaves it out. */
   portproxy?: { rules: string[]; ipHelper: string };
+  /** The helper itself: its sha256 (line ends as LF) and the repository its updates come from; an older helper leaves it out. */
+  helper?: { sha256: string; repo: string };
 }
 
 export async function windowsStatus(exec: Executor, paths: WindowsPaths): Promise<WindowsStatus | null> {
@@ -235,4 +237,10 @@ export async function openWindowsTerminal(exec: Executor, paths: WindowsPaths, d
     : await windowsCmd(exec, paths, ['start', 'wsl.exe', '-d', distro, '--cd', dir]);
   if (r.code !== 0) return failed(`${wt ? 'Windows Terminal' : 'wsl.exe'} did not start: ${(r.stderr || r.stdout).trim()}`);
   return { code: 0, stdout: `Opened ${wt ? 'Windows Terminal' : 'a WSL window'} in ${dir} (${distro})`, stderr: '' };
+}
+
+/** The GitHub release tag a panel version's Windows setup is published under; null for a development build, which has none. */
+export function windowsReleaseTag(version: string): string | null {
+  if (!/^[0-9]+\.[0-9]+\.[0-9]+(-[0-9a-z]+(\.[0-9a-z]+)*)?$/.test(version) || /-dev\./.test(version)) return null;
+  return `v${version}`;
 }

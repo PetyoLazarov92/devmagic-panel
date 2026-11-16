@@ -22,6 +22,8 @@ setup() {
   printf '22\n' > "$SRC/.nvmrc"
   printf '#!/bin/sh\necho installer\n' > "$SRC/install.sh"
   printf '#!/bin/sh\necho get\n' > "$SRC/get.sh"
+  mkdir -p "$SRC/windows"
+  printf 'param()\r\nWrite-Output helper\r\n' > "$SRC/windows/dmp-win.ps1"
   printf '# readme\n' > "$SRC/README.md"
   printf '# Changelog\n' > "$SRC/CHANGELOG.md"
   printf 'MIT License\n' > "$SRC/LICENSE"
@@ -92,6 +94,8 @@ setup() {
   [[ "$json" == *"\"bin/dmp-root\": \"$(sha256sum "$SRC/scripts/bin/dmp-root" | cut -d' ' -f1)\""* ]]
   [[ "$json" == *"\"lib/log.sh\": \"$(sha256sum "$SRC/scripts/lib/log.sh" | cut -d' ' -f1)\""* ]]
   [[ "$json" == *"\"php/info.php\": \"$(sha256sum "$SRC/scripts/php/info.php" | cut -d' ' -f1)\""* ]]
+  # The Windows helper, hashed with LF line ends whatever the checkout has.
+  [[ "$json" == *"\"windowsHelper\": \"$(printf 'param()\nWrite-Output helper\n' | sha256sum | cut -d' ' -f1)\""* ]]
   node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$pkg/release.json"
   # The staging folder is gone.
   [ -z "$(find "$OUT" -name '.stage.*')" ]

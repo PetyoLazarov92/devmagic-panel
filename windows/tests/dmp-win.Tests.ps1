@@ -365,3 +365,52 @@ public static string[] Split(string cmdLine) {
     for ($i = 0; $i -lt $List.Count; $i++) { $back[$i] | Should -BeExactly $List[$i] }
   }
 }
+
+Describe 'update-windows' {
+  BeforeEach {
+    $script:Folder = Join-Path ([IO.Path]::GetTempPath()) ("dmp-upd-{0}" -f ([guid]::NewGuid().ToString('N')))
+    $script:Body = [Text.Encoding]::ASCII.GetBytes('the setup')
+    $script:Sum = ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($script:Body)) -replace '-', '').ToLowerInvariant()
+    Mock Invoke-WebRequest {
+      if ($Uri -like '*.sha256') { [IO.File]::WriteAllText($OutFile, "$($script:Sum)  devmagic-panel-setup-1.68.0.exe`n") }
+      else { [IO.File]::WriteAllBytes($OutFile, $script:Body) }
+    }
+    Mock Start-Process { }
+  }
+
+  It "downloads the release's setup from this script's own repository, checks it and starts it silently" {
+    Update-DmpWindowsPart 'v1.68.0' $script:Folder | Should -Be 'devmagic-panel-setup-1.68.0.exe'
+    Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter { $Uri -eq 'https://github.com/PetyoLazarov92/devmagic-panel/releases/download/v1.68.0/devmagic-panel-setup-1.68.0.exe' }
+    Should -Invoke Invoke-WebRequest -Times 1 -Exactly -ParameterFilter { $Uri -eq 'https://github.com/PetyoLazarov92/devmagic-panel/releases/download/v1.68.0/devmagic-panel-setup-1.68.0.exe.sha256' }
+    Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $FilePath -like '*devmagic-panel-setup-1.68.0.exe' -and ($ArgumentList -join ' ') -eq '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' }
+  }
+
+  It 'starts nothing when the download is not what the release published' {
+    $script:Body = [Text.Encoding]::ASCII.GetBytes('something else')
+    { Update-DmpWindowsPart 'v1.68.0' $script:Folder } | Should -Throw '*not the published*nothing was started*'
+    Should -Invoke Start-Process -Times 0 -Exactly
+    Test-Path (Join-Path $script:Folder 'devmagic-panel-setup-1.68.0.exe') | Should -BeFalse
+  }
+
+  It 'takes only a release tag, checked before anything is downloaded' -TestCases @(
+    @{ Tag = '1.68.0' }, @{ Tag = 'v1.68' }, @{ Tag = 'v1.68.0/../../evil' }, @{ Tag = 'v1.68.0 x' }, @{ Tag = 'latest' }
+  ) {
+    { Update-DmpWindowsPart $Tag $script:Folder } | Should -Throw -ExceptionType ([DmpInputError])
+    Should -Invoke Invoke-WebRequest -Times 0 -Exactly
+  }
+
+  It 'takes exactly one tag as a command, and needs no admin' {
+    { Invoke-DmpCommand 'update-windows' @() } | Should -Throw -ExceptionType ([DmpInputError])
+    { Invoke-DmpCommand 'update-windows' @('v1.68.0', 'v1.69.0') } | Should -Throw -ExceptionType ([DmpInputError])
+    $script:DmpAdminCommands | Should -Not -Contain 'update-windows'
+  }
+
+  It 'hashes itself with LF line ends, so a CRLF copy matches the packed one' {
+    $lf = Join-Path ([IO.Path]::GetTempPath()) ("dmp-lf-{0}.ps1" -f ([guid]::NewGuid().ToString('N')))
+    $crlf = "$lf.crlf"
+    [IO.File]::WriteAllText($lf, "a`nb`n")
+    [IO.File]::WriteAllText($crlf, "a`r`nb`r`n")
+    Get-DmpHelperHash $crlf | Should -Be (Get-DmpHelperHash $lf)
+    Get-DmpHelperHash $lf | Should -Be (([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::ASCII.GetBytes("a`nb`n"))) -replace '-', '').ToLowerInvariant())
+  }
+}

@@ -372,6 +372,26 @@ describe('WSL on Windows', () => {
     expect(byId(await check(ubuntu), 'ca.browsers')).toMatchObject({ status: 'warn', detail: 'no Chrome, Edge or Firefox certificate store found' });
   });
 
+  it("compares the helper in Windows with the one this release goes with, and offers the update", async () => {
+    const tree = wslTree();
+    mkdirSync(join(tree.root, 'release'), { recursive: true });
+    tree.write('release/release.json', JSON.stringify({ name: 'v1.68.0', version: '1.68.0', commit: 'abc', installer: 'x', scripts: {}, windowsHelper: 'a'.repeat(64) }));
+    const run = (helper: unknown) => {
+      const powershell = `${join(tree.root, 'Windows')}/System32/WindowsPowerShell/v1.0/powershell.exe`;
+      const fake = fakeExec({ ...healthyResponses(), 'loginctl show-user': { stdout: 'yes\n' }, [powershell]: { stdout: windowsStatus(helper ? { helper } : {}) } });
+      return checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, self: { repo: join(tree.root, 'release'), version: '1.68.0' } });
+    };
+    expect(byId(await run({ sha256: 'a'.repeat(64), repo: 'PetyoLazarov92/devmagic-panel' }), 'windows.part')).toMatchObject({ status: 'ok', detail: 'the helper of v1.68.0' });
+    expect(byId(await run({ sha256: 'b'.repeat(64), repo: 'PetyoLazarov92/devmagic-panel' }), 'windows.part')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('another release'),
+      fixes: [{ action: 'windows.update', input: {}, confirm: expect.stringContaining('restarts the panel') }],
+    });
+    expect(byId(await run(null), 'windows.part')).toMatchObject({ status: 'warn', detail: expect.stringContaining('older than this panel') });
+    // A checkout, with no release.json, has nothing to compare.
+    expect(byId(await check(tree), 'windows.part')).toBeUndefined();
+  });
+
   it('says to run get.ps1 when the helper is not there, and asks Windows nothing then, or without interop', async () => {
     const tree = wslTree();
     rmSync(join(tree.root, 'dmp-win.ps1'));
