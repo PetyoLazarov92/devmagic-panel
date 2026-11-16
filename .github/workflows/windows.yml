@@ -3,12 +3,14 @@ name: windows
 # A test build of the Windows setup: the release package as GitHub builds it,
 # and the unsigned setup exe around it, both kept as workflow artifacts (no tag,
 # no GitHub release, so the Updates page and get.sh never see them). Runs on
-# pushes to feat/windows and by hand. Download devmagic-panel-setup from the
+# pushes to master, on pull requests and by hand; a release's own setup is built
+# and attached by the release workflow. Download devmagic-panel-setup from the
 # run's artifacts on any Windows 10 22H2 or 11 and run it; SmartScreen warns
 # about an unsigned exe (More info, Run anyway).
 on:
   push:
-    branches: [feat/windows]
+    branches: [master]
+  pull_request:
   workflow_dispatch:
 
 permissions:

@@ -1,5 +1,14 @@
 # Changelog
 
+### v1.68.0 (2026-11-16)
+* **Windows:** the panel runs on Windows 10 22H2 and 11 inside WSL 2. A Windows setup, `devmagic-panel-setup-<version>.exe` attached to each release, checks virtualization and WSL (turning WSL on, then restarting and going on by itself), asks where the panel should run (a distro of its own, a new one you name, or one of your Ubuntu or Debian distros), your Linux account and the panel password on its own pages, and shows every step in its window. It trusts the local CA for your Windows user, adds the hosts lines to Windows, keeps the distro running with a logon task, and can add desktop and Start shortcuts. Apps and features repairs it or uninstalls it, asking whether to keep the distro and a copy of it
+* **Under WSL:** Windows' hosts lines follow every site change; nginx answers for Windows too (Windows relays its 127.0.0.2 to nginx in WSL); Open in terminal opens Windows Terminal at the site's folder; Open in VS Code opens it through VS Code's WSL remote; the panel registers WSL's interop with Windows again when another distro took it away
+* **Machine checks:** a WSL on Windows group (the hosts file, Apache's address, lingering, the web folder, interop, and the Windows side: hosts lines, the CA, the logon task, nginx's relays, the Windows part), each with its fix; Trusted by browsers no longer warns under WSL, where the browsers are Windows'
+* **Updates:** when a release brings another Windows helper, Machine checks offer Update the Windows part: the helper downloads that release's setup from GitHub, checks it against its `.sha256` and runs it without a window
+* **Scripts:** `dmp-root apache-local`, `apache-local-off` and `wsl-interop`; under WSL nginx also listens on 127.0.0.1 for Windows (`NGINX_WSL_HTTP_PORT` and `NGINX_WSL_HTTPS_PORT` in config.env); `cli.js setup --yes` sets the panel password from stdin and makes the MySQL account without questions
+* **Docs:** Installation has Windows (WSL 2): before you start, the setup, updates and uninstall
+* The root scripts change, so the update finishes with its installer, which asks for your password
+
 ### v1.67.1 (2026-11-15)
 * **Fix:** on a new install with no WordPress core yet, the cores page lets you add the first one again: Add was off until a core was there, so it never turned on
 * Nothing changes in the root scripts. An update installs this release from the panel as usual
