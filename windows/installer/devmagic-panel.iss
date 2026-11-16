@@ -46,17 +46,29 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName=devmagic-panel
-UninstallDisplayIcon={sys}\wsl.exe
+; The panel's mark (web/public/favicon.svg), drawn by make-icon.py: the setup, Apps and features and the shortcuts.
+SetupIconFile=devmagic-panel.ico
+UninstallDisplayIcon={app}\devmagic-panel.ico
 SetupLogging=yes
 
 [Messages]
 ConfirmUninstall=Remove %1 from Windows now? Its hosts lines, logon task, certificate and helper go, and the distro is kept or removed as you just chose.
-WelcomeLabel2=This installs devmagic-panel {#AppVersion} inside WSL 2: a Linux distro of its own with Apache, PHP and MySQL, and the panel at https://local.devmagic.%n%nThe next pages ask for your Linux account and the panel password; then everything happens in this window, with each step under Details. Windows asks with UAC for the few steps that need admin (turning WSL on, the hosts file, the helper in Program Files). Nothing else on this computer changes.
+WelcomeLabel2=This installs devmagic-panel {#AppVersion} inside WSL 2: a Linux distro with Apache, PHP and MySQL, and the panel at https://local.devmagic.%n%nThe next pages ask where it should run, for your Linux account and for the panel password; then everything happens in this window, with each step under Details. Windows asks with UAC for the few steps that need admin (turning WSL on, the hosts file, the helper in Program Files). Nothing else on this computer changes.
 
 [Files]
 Source: "..\get.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\dmp-win.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ReleaseFile}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "devmagic-panel.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+[Tasks]
+Name: desktopicon; Description: "Put a shortcut to the panel on the desktop"; GroupDescription: "Shortcuts that open https://local.devmagic in your browser:"
+Name: startmenuicon; Description: "Add it to the Start menu, so typing devmagic finds it"; GroupDescription: "Shortcuts that open https://local.devmagic in your browser:"
+
+[Icons]
+; Internet shortcuts (.url): they open the panel in your default browser; the uninstall removes them.
+Name: "{userdesktop}\devmagic-panel"; Filename: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Tasks: desktopicon
+Name: "{userprograms}\devmagic-panel"; Filename: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Tasks: startmenuicon
 
 [Run]
 Filename: "https://local.devmagic"; Description: "Open the panel"; \
