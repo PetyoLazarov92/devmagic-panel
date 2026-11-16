@@ -32,7 +32,19 @@ setup() {
   # A home folder that is not encrypted, whatever this machine has.
   export DMP_INSTALL_MOUNTS="$BATS_TEST_TMPDIR/mounts"
   printf '/dev/sda1 / ext4 rw 0 0\n' > "$DMP_INSTALL_MOUNTS"
+  # A machine that is not WSL, whatever this one is; the WSL tests say otherwise.
+  export DMP_INSTALL_KERNEL_RELEASE="$BATS_TEST_TMPDIR/osrelease"
+  printf '6.8.0-48-generic\n' > "$DMP_INSTALL_KERNEL_RELEASE"
+  export DMP_INSTALL_INIT_COMM="$BATS_TEST_TMPDIR/init-comm"
+  printf 'systemd\n' > "$DMP_INSTALL_INIT_COMM"
+  export DMP_INSTALL_WSL_CONF="$BATS_TEST_TMPDIR/wsl.conf"
   INSTALL="$BATS_TEST_DIRNAME/../../install.sh"
+}
+
+# WSL 2 with systemd, and a wsl.conf like Ubuntu's image ships, plus $1.
+on_wsl() {
+  printf '6.6.87.2-microsoft-standard-WSL2\n' > "$DMP_INSTALL_KERNEL_RELEASE"
+  printf '[boot]\nsystemd=true\n\n[user]\ndefault=alex\n%s' "${1:-}" > "$DMP_INSTALL_WSL_CONF"
 }
 
 # A release as get.sh unpacks it: install.sh, its libraries and release.json.
@@ -353,6 +365,95 @@ installed_machine() {
 @test "unknown options exit 2" {
   run "$INSTALL" --nope
   [ "$status" -eq 2 ]
+}
+
+@test "on a machine that is not WSL it leaves wsl.conf and Apache's addresses alone" {
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"apache-local"* ]]
+  [[ "$output" != *"wsl.conf"* ]]
+  [[ "$output" != *"In Windows"* ]]
+  [[ "$output" != *"NGINX_WSL_HTTP_PORT"* ]]
+}
+
+@test "under WSL 2 it keeps /etc/hosts, keeps Apache on its address after the panel's site, lingers and installs Mailpit" {
+  on_wsl
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"CALLED "* ]]
+  [[ "$output" == *"WSL 2 on Windows"* ]]
+  [[ "$output" == *"[dry-run] write $DMP_INSTALL_WSL_CONF (mode 0644):"* ]]
+  [[ "$output" == *"      | systemd=true"*"      | default=alex"*"      | [network]"$'\n'"      | generateHosts = false"* ]]
+  panel_line="$(grep -n 'dmp-root cert-issue local.devmagic' <<< "$output" | head -1 | cut -d: -f1)"
+  local_line="$(grep -n 'dmp-root apache-local$' <<< "$output" | head -1 | cut -d: -f1)"
+  [ -n "$local_line" ]
+  [ "$panel_line" -lt "$local_line" ]
+  [[ "$output" == *"[dry-run] sudo loginctl enable-linger"* ]]
+  [[ "$output" == *"server/dist/cli.js install-mailpit"* ]]
+  [[ "$output" == *'add "127.0.0.1 local.devmagic" to C:\Windows\System32\drivers\etc\hosts'* ]]
+  [[ "$output" == *"      | NGINX_WSL_HTTP_PORT=8080"$'\n'"      | NGINX_WSL_HTTPS_PORT=8443"* ]]
+}
+
+@test "under WSL 2 without a browser of its own it adds the CA to no Linux browser store" {
+  on_wsl
+  DMP_INSTALL_BROWSER_COMMANDS=dmp-no-such-browser run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no browser in this WSL distro"* ]]
+  [[ "$output" != *"certutil -A"* ]]
+}
+
+@test "under WSL 2 an existing generateHosts line is replaced and the rest of wsl.conf kept" {
+  on_wsl $'\n[network]\nhostname = spellbook\ngenerateHosts = true\n\n[interop]\nenabled = true\n'
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"      | hostname = spellbook"$'\n'"      | generateHosts = false"* ]]
+  [[ "$output" != *"generateHosts = true"* ]]
+  [[ "$output" == *"      | [interop]"$'\n'"      | enabled = true"* ]]
+  [ "$(grep -c '| \[network\]' <<< "$output")" -eq 1 ]
+}
+
+@test "under WSL 2 a wsl.conf that keeps /etc/hosts already is not written" {
+  on_wsl $'\n[network]\ngenerateHosts = false\n'
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WSL keeps /etc/hosts as it is"* ]]
+  [[ "$output" != *"write $DMP_INSTALL_WSL_CONF"* ]]
+}
+
+@test "WSL 1, and WSL 2 without systemd, are refused before anything changes" {
+  printf '4.4.0-19041-Microsoft\n' > "$DMP_INSTALL_KERNEL_RELEASE"
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"WSL 1 has no systemd"*"wsl --set-version"* ]]
+  [[ "$output" != *"dmp-root"* ]]
+
+  on_wsl
+  printf 'init\n' > "$DMP_INSTALL_INIT_COMM"
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"systemd is not running in this WSL distro"* ]]
+  [[ "$output" != *"dmp-root"* ]]
+}
+
+@test "under WSL 2 a WEB_DIR on a Windows drive is refused" {
+  on_wsl
+  mkdir -p "$DMP_INSTALL_CONFIG_DIR"
+  printf 'WEB_DIR=/mnt/c/sites\n' > "$DMP_INSTALL_CONFIG_DIR/config.env"
+  run "$INSTALL" --dry-run --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"/mnt/c/sites, on a Windows drive"* ]]
+}
+
+@test "uninstall puts Apache back on every address when apache-local kept it on its own" {
+  installed_machine
+  printf 'setting\tapache-local:127.0.0.1\tremove\tApache on 127.0.0.1 only, for WSL\n' >> "$STATE/installed-files"
+  printf 'setting\twsl-hosts:/etc/wsl.conf\tkeep\tgenerateHosts = false\n' >> "$STATE/installed-files"
+  run "$INSTALL" --uninstall --dry-run --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[dry-run] sudo /usr/local/lib/devmagic-panel/bin/dmp-root apache-local-off"* ]]
+  off_line="$(grep -n 'dmp-root apache-local-off' <<< "$output" | head -1 | cut -d: -f1)"
+  rm_line="$(grep -n 'sudo rm -rf -- /usr/local/lib/devmagic-panel$' <<< "$output" | head -1 | cut -d: -f1)"
+  [ "$off_line" -lt "$rm_line" ]
 }
 
 # A machine with nothing the panel needs yet: dpkg-query knows only the

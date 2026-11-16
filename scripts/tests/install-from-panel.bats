@@ -52,6 +52,9 @@ EOF
   export DMP_INSTALL_OS_RELEASE="$BATS_TEST_TMPDIR/os-release" DMP_INSTALL_MOUNTS="$BATS_TEST_TMPDIR/mounts"
   printf 'ID=ubuntu\nID_LIKE=debian\nPRETTY_NAME="Ubuntu 24.04 LTS"\n' > "$DMP_INSTALL_OS_RELEASE"
   printf '/dev/sda1 / ext4 rw 0 0\n' > "$DMP_INSTALL_MOUNTS"
+  # A machine that is not WSL, whatever this one is.
+  export DMP_INSTALL_KERNEL_RELEASE="$BATS_TEST_TMPDIR/osrelease"
+  printf '6.8.0-48-generic\n' > "$DMP_INSTALL_KERNEL_RELEASE"
   BACKUPS="$BATS_TEST_TMPDIR/backups"
   export BACKUP_ARCHIVE="$BACKUPS/devmagic-panel-backup-20261031-120000.tar.gz"
   mkdir -p "$DMP_INSTALL_CONFIG_DIR" "$BACKUPS" "$BATS_TEST_TMPDIR/www" "$BATS_TEST_TMPDIR/certs"

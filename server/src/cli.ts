@@ -15,6 +15,7 @@ import { planInstallMailpit } from './mailpit.js';
 import { runMcpStdio } from './mcp.js';
 import { createPanelAccount, createReadOnlyAccount, PANEL_MYSQL_USER, READ_ONLY_MYSQL_USER } from './mysql-admin.js';
 import { hashPassword, readSecrets, writeSecrets, type Secrets } from './secrets.js';
+import { quietMysql, quietPanelPassword } from './setup-quiet.js';
 import { RunStore } from './store.js';
 import { panelCli } from './update.js';
 import { readVersion } from './version.js';
@@ -22,6 +23,11 @@ import { readVersion } from './version.js';
 /**
  * devmagic-panel CLI, run by install.sh:
  *   setup         set the panel password and the MySQL admin account
+ *   setup --yes [--keep-password]
+ *                 the same without questions, for the Windows setup: the new panel
+ *                 password is the first line on stdin (or the current one is kept),
+ *                 and the MySQL account is the saved one when it signs in, else the
+ *                 panel's own, made with sudo mysql
  *   set-password  change the panel password only
  *   install-mailpit  install Mailpit as on the Services page
  *   autostart     start the panel and Mailpit after login, for an encrypted home
@@ -85,6 +91,17 @@ async function askNewPassword(): Promise<string> {
     if ((await askHidden('Repeat it: ')) === first) return first;
     console.log('They do not match, try again.');
   }
+}
+
+/** The first line on stdin, for setup --yes: the Windows setup writes the panel password there, never on a command line. */
+async function readStdinLine(): Promise<string> {
+  const rl = createInterface({ input: process.stdin, terminal: false });
+  const line = await new Promise<string>((resolve) => {
+    rl.once('line', resolve);
+    rl.once('close', () => resolve(''));
+  });
+  rl.close();
+  return line.replace(/\r$/, '');
 }
 
 async function askMysql(current: Secrets['mysql']): Promise<Secrets['mysql']> {
@@ -184,12 +201,29 @@ async function main(): Promise<void> {
   const current = readSecrets(secretsFile);
 
   if (command === 'setup') {
-    const keep = current?.panelPasswordHash
-      ? (await ask('A panel password is already set. Keep it?', 'y')).toLowerCase() === 'y'
-      : false;
-    const panelPasswordHash = keep && current ? current.panelPasswordHash : await hashPassword(await askNewPassword());
+    const flags = process.argv.slice(3);
+    const unknown = flags.filter((f) => f !== '--yes' && f !== '--keep-password');
+    if (unknown.length) throw new Error(`setup takes --yes and --keep-password, not ${unknown.join(' ')}`);
+    const quiet = flags.includes('--yes');
+    let keep: boolean;
+    let newPassword = '';
+    if (quiet) {
+      const keepFlag = flags.includes('--keep-password');
+      const answer = quietPanelPassword(keepFlag, Boolean(current?.panelPasswordHash), keepFlag ? '' : await readStdinLine(), userInfo().username);
+      if ('refused' in answer) {
+        // 3: get.ps1 tells the Windows setup the password was refused, so you pick another.
+        process.exitCode = 3;
+        console.error(`The panel password was refused: ${answer.refused}.`);
+        return;
+      }
+      keep = answer.keep;
+      if (!answer.keep) newPassword = answer.password;
+    } else {
+      keep = current?.panelPasswordHash ? (await ask('A panel password is already set. Keep it?', 'y')).toLowerCase() === 'y' : false;
+    }
+    const panelPasswordHash = keep && current ? current.panelPasswordHash : await hashPassword(quiet ? newPassword : await askNewPassword());
     const changedAt = keep && current ? current.panelPasswordChangedAt : new Date().toISOString();
-    const mysql = await askMysql(current?.mysql);
+    const mysql = quiet ? await quietMysql(runCommand, current?.mysql, (line) => console.log(line)) : await askMysql(current?.mysql);
     // Keep what setup does not ask about, like a saved Anthropic key; a GitHub token an older panel saved goes.
     const { mysql: _old, github: _token, ...rest } = (current ?? {}) as Partial<Secrets> & { github?: unknown };
     // The SQL runner's read-only account, made with the admin account; kept when it still signs in.

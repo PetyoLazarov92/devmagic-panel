@@ -37,6 +37,7 @@ import { fetchOrigin, pull, restoreBranches, switchBranch, tidy } from './sites/
 import { setPlugin } from './sites/plugins.js';
 import { planAddNetworkAdmin } from './sites/network-admin.js';
 import { openTerminal } from './terminal.js';
+import { readVersion } from './version.js';
 import type { Drafts } from './drafts.js';
 import { findClaude } from './org/claude-code.js';
 import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded } from './org/dumps.js';
@@ -58,7 +59,7 @@ import { planMatchFpm, planSitePhp } from './php/site-php.js';
 import { forgetCompat, planCheckCompat, planCheckCompatAll, wordpressSites } from './php/compat.js';
 import { planInstallVersion, planPhpPackage, planRemoveVersion, planUpgradeVersion, setCliVersion } from './php/apt.js';
 import { planSwitchToFpm, planSwitchToModPhp } from './php/switch.js';
-import { planNginxSetup, planNginxTeardown } from './nginx.js';
+import { nginxSetUp, planNginxSetup, planNginxTeardown } from './nginx.js';
 import { planApplyHtaccess, planSetServer, planSetServerAll } from './sites/server-switch.js';
 import { dismissHtaccessChange } from './sites/htaccess-watch.js';
 import { analyzeDatabases, deleteMysqlBackup, type MysqlContext, mysqlBackupsDir, MysqlRefused, planDropDatabase, planDropUsers, planOptimize, resetSiteUser } from './mysql-server.js';
@@ -74,6 +75,8 @@ import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } f
 import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 import { cleanStorage } from './storage-clean.js';
+import { helperInstalled, openWindowsTerminal, runHelper, windowsReleaseTag, windowsHostsDiffer, windowsHostsPairs, windowsPortproxyDiffers, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
+import { interopOn, wslVersion } from './wsl.js';
 
 export interface ActionContext {
   config: SystemConfig;
@@ -109,6 +112,85 @@ export interface ActionContext {
   claudeCode?: { home: string; searchPath: string; workDir: string };
   /** What the panel's crontab lines run, and /etc for the system cron; tests pass their own. */
   cron?: CronSetup;
+  /** Windows' folder and the helper as WSL sees them, the kernel's name and binfmt_misc, for the windows.* actions; tests pass their own. */
+  windows?: WindowsPaths & { kernelRelease?: string; binfmtDir?: string };
+}
+
+/**
+ * One command of the Windows helper, only under WSL 2 and once get.ps1 put the
+ * helper in place. Exit 3 is UAC declined, which the helper says on stderr.
+ * When another distro starting took interop away (finding N), it is registered
+ * again first, through dmp-root, so the step does not fail on Exec format error.
+ */
+async function windowsStep(ctx: ActionContext, command: WindowsHelperCommand, args: readonly string[] = []): Promise<ExecResult> {
+  const paths = ctx.windows ?? {};
+  if (wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2) throw new ActionInputError('this is not WSL 2 on Windows: the Windows steps have nothing to do here');
+  if (!helperInstalled(paths)) throw new ActionInputError('the Windows helper is not installed: run get.ps1 in Windows (docs/installation.md, Windows)');
+  if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {})) {
+    const repaired = await root(ctx, 'wsl-interop');
+    if (repaired.code !== 0) return repaired;
+  }
+  return runHelper(ctx.exec, paths, command, args, 600_000);
+}
+
+/** The actions and jobs that change the panel's hosts block: Windows' block follows each under WSL. */
+export const HOSTS_CHANGES: ReadonlySet<string> = new Set<ActionId>([
+  'hosts.add', 'hosts.remove', 'site.addAliases', 'site.giveBack',
+  'site.create', 'site.remove', 'trash.restore', 'site.takeOver', 'site.setServer', 'sites.setServerAll',
+]);
+
+/**
+ * After a change to the hosts block, under WSL 2 with the helper in place:
+ * Windows' block is made the same, as the windows.hostsSync action (in run
+ * history, Windows asks UAC), only when it differs, so nothing asks when
+ * nothing changed. Only where the app gives ctx.windows (production, and
+ * tests that set it). Never fails the change it follows.
+ */
+export async function followWindowsHosts(ctx: ActionContext): Promise<void> {
+  const paths = await windowsReady(ctx);
+  if (!paths || (await windowsHostsDiffer(ctx.exec, ctx.config, paths)) !== true) return;
+  const { runId: _runId, actionId: _actionId, ...base } = ctx;
+  await runAction(base, 'windows.hostsSync', {});
+}
+
+/** The paths of the Windows side when a follow-up can run there: WSL 2, the helper in place, interop registered (again if need be). */
+async function windowsReady(ctx: ActionContext): Promise<ActionContext['windows'] | null> {
+  const paths = ctx.windows;
+  if (!paths) return null;
+  if (wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2 || !helperInstalled(paths)) return null;
+  if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {}) && (await root(ctx, 'wsl-interop')).code !== 0) return null;
+  return paths;
+}
+
+/**
+ * Under WSL 2, where the panel's desktop is Windows: the paths to start
+ * Windows programs with, interop registered again first when another distro
+ * took it away; null elsewhere (and where the app gives no Windows side).
+ */
+async function windowsDesktop(ctx: ActionContext): Promise<ActionContext['windows'] | null> {
+  const paths = ctx.windows;
+  if (!paths || wslVersion(paths.kernelRelease ? { kernelRelease: paths.kernelRelease } : {}) !== 2) return null;
+  if (!interopOn(paths.binfmtDir ? { binfmtDir: paths.binfmtDir } : {})) {
+    const repaired = await root(ctx, 'wsl-interop');
+    if (repaired.code !== 0) throw new ActionInputError(`WSL cannot start Windows programs now and registering that again failed: ${(repaired.stderr || repaired.stdout).trim()}`);
+  }
+  return paths;
+}
+
+/** The jobs that set nginx up or turn it off: Windows' relays to nginx follow each under WSL. */
+export const NGINX_CHANGES: ReadonlySet<string> = new Set<ActionId>(['nginx.setup', 'nginx.teardown']);
+
+/**
+ * After nginx was set up or turned off (or that was undone), under WSL 2 with
+ * the helper in place: Windows' relays of 127.0.0.2 to nginx are made to match
+ * (both while nginx is set up, none after), as the windows.portproxy action,
+ * only when they differ. Never fails the job it follows.
+ */
+export async function followWindowsPortproxy(ctx: ActionContext): Promise<void> {
+  const paths = await windowsReady(ctx);
+  if (!paths || (await windowsPortproxyDiffers(ctx.exec, ctx.config, paths, nginxSetUp(ctx.config))) !== true) return;
+  const { runId: _runId, actionId: _actionId, ...base } = ctx;
+  await runAction(base, 'windows.portproxy', {});
 }
 
 export interface CronSetup {
@@ -604,6 +686,21 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
     const file = writeAutostart(ctx.home, process.execPath, panelCli(ctx.update));
     return [{ code: 0, stdout: `wrote ${file}: the panel and Mailpit start after you log in`, stderr: '' }];
   },
+  'windows.hostsSync': async (ctx) => [await windowsStep(ctx, 'hosts-sync', windowsHostsPairs(ctx.config))],
+  'windows.trustCa': async (ctx) => [await windowsStep(ctx, 'ca-trust')],
+  'windows.autostart': async (ctx) => [await windowsStep(ctx, 'autostart-install')],
+  'windows.update': async (ctx) => {
+    // Only a published release has its Windows setup on GitHub.
+    const tag = windowsReleaseTag(readVersion());
+    if (!tag) throw new ActionInputError(`${readVersion()} is a development build, with no Windows setup on GitHub: run the setup of a release by hand`);
+    return [await windowsStep(ctx, 'update-windows', [tag])];
+  },
+  'windows.portproxy': async (ctx) => [
+    nginxSetUp(ctx.config)
+      ? await windowsStep(ctx, 'portproxy-on', [String(ctx.config.NGINX_WSL_HTTP_PORT), String(ctx.config.NGINX_WSL_HTTPS_PORT)])
+      : await windowsStep(ctx, 'portproxy-off'),
+  ],
+  'wsl.repairInterop': (ctx) => steps(() => root(ctx, 'wsl-interop')),
   'site.skippedDone': async (ctx, input) => {
     const site = `${input.domain}${input.path ?? ''}`;
     if (!ctx.store.skippedDone(input.domain, input.path, input.label)) throw new ActionInputError(`${site} has no skipped step called ${input.label}`);
@@ -775,7 +872,11 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'site.removeLegacySalts': removeLegacySalts,
   'site.clearDebugLog': clearDebugLog,
   'site.login': login,
-  'site.openTerminal': async (ctx, { domain, path }) => [await openTerminal(ctx.exec, siteFor(ctx.config, domain, path).docroot)],
+  'site.openTerminal': async (ctx, { domain, path }) => {
+    const dir = siteFor(ctx.config, domain, path).docroot;
+    const windows = await windowsDesktop(ctx);
+    return [windows ? await openWindowsTerminal(ctx.exec, windows, dir) : await openTerminal(ctx.exec, dir)];
+  },
   'network.addAdmin': async (ctx, { domain, path, user }) =>
     startJob(ctx, planAddNetworkAdmin(ctx.exec, siteFor(ctx.config, domain, path), user), `Make ${user} administrator on every site of ${domain}${path ?? ''}`, `${domain}${path ?? ''}`),
   'core.switch': switchCore,
@@ -1055,5 +1156,7 @@ export async function runAction(ctx: ActionContext, id: ActionId, rawInput: unkn
   // A detached action (a job) finishes its own run history row.
   // The login URL is a secret for 60 seconds; it goes to the browser, never into the run history.
   if (!outcome.detached) ctx.store.finish(runId, exitCode, output);
+  // Windows' hosts block follows a change to this one; a job does it when it ends (app.ts).
+  if (!outcome.detached && exitCode === 0 && HOSTS_CHANGES.has(id)) void followWindowsHosts(ctx).catch(() => undefined);
   return { runId, ok: exitCode === 0, exitCode, output, ...(exitCode === 0 && outcome.data ? { data: outcome.data } : {}) };
 }

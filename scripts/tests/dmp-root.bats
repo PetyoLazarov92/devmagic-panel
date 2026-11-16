@@ -26,6 +26,21 @@ setup() { setup_tree; }
   [ "$status" -eq 0 ]
 }
 
+@test "dmp_is_local_name agrees with the shared list of local names" {
+  # shellcheck source=/dev/null
+  source "$BATS_TEST_DIRNAME/../lib/validate.sh"
+  local line want name got checked=0
+  while IFS= read -r line; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    want="${line%% *}"
+    name="${line#* }"
+    if dmp_is_local_name "$name"; then got=accept; else got=reject; fi
+    [ "$got" = "$want" ] || { echo "$name: $got, want $want"; return 1; }
+    checked=$((checked + 1))
+  done < "$BATS_TEST_DIRNAME/../../shared/test/local-names.txt"
+  [ "$checked" -gt 10 ]
+}
+
 @test "refuses a config with unknown keys or shell syntax" {
   echo 'EVIL=$(id)' >> "$DMP_CONFIG"
   run dmp hosts-add local.site.com
@@ -1521,6 +1536,102 @@ nginx_default_site() {
   [ "$status" -ne 0 ]
 }
 
+@test "apache-local moves Apache to its address, keeps the original and restarts Apache once" {
+  original="$(cat "$T/ports.conf")"
+  run dmp apache-local
+  [ "$status" -eq 0 ]
+  head -n 1 "$T/ports.conf" | grep -qx '# Managed by devmagic-panel. Edits here are overwritten.'
+  grep -q 'apache-local-off puts it back' "$T/ports.conf"
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  run grep -qE '^\s*Listen (80|443)$' "$T/ports.conf"
+  [ "$status" -ne 0 ]
+  [ "$(cat "$T/state/apache-local/ports.conf")" = "$original" ]
+  [ "$(grep -c '^systemctl restart apache2$' "$STUB_LOG")" -eq 1 ]
+  [ ! -e "$T/state/nginx" ]
+  : > "$STUB_LOG"
+  run dmp apache-local
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already"* ]]
+  run grep -q 'restart apache2' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "apache-local takes no arguments" {
+  run dmp apache-local 127.0.0.1
+  [ "$status" -eq 2 ]
+  run dmp apache-local-off now
+  [ "$status" -eq 2 ]
+  grep -qx 'Listen 80' "$T/ports.conf"
+}
+
+@test "apache-local puts ports.conf back when Apache's configtest fails" {
+  original="$(cat "$T/ports.conf")"
+  STUB_CONFIGTEST_FAIL=1 run dmp apache-local
+  [ "$status" -eq 1 ]
+  [ "$(cat "$T/ports.conf")" = "$original" ]
+  [ ! -e "$T/state/apache-local/ports.conf" ]
+  [ -z "$(ls -A "$T/state/apache-local")" ]
+}
+
+@test "apache-local refuses a ports.conf it cannot move, and changes nothing" {
+  printf 'Listen 192.168.1.5:443\n' > "$T/ports.conf"
+  run dmp apache-local
+  [ "$status" -eq 1 ]
+  [ "$(cat "$T/ports.conf")" = 'Listen 192.168.1.5:443' ]
+  [ ! -e "$T/state/apache-local/ports.conf" ]
+  run grep -q 'restart apache2' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "apache-local-off puts the original back, and is refused while nginx is set up" {
+  original="$(cat "$T/ports.conf")"
+  dmp apache-local
+  dmp nginx-setup
+  run dmp apache-local-off
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nginx-teardown first"* ]]
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  dmp nginx-teardown
+  run dmp apache-local-off
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/ports.conf")" = "$original" ]
+  [ ! -e "$T/state/apache-local" ]
+  run dmp apache-local-off
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not kept"* ]]
+}
+
+@test "nginx-setup after apache-local starts from the original, and nginx-teardown keeps Apache on its address" {
+  original="$(cat "$T/ports.conf")"
+  dmp apache-local
+  run dmp nginx-setup
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/state/nginx/ports.conf")" = "$original" ]
+  grep -q 'nginx-teardown puts it back' "$T/ports.conf"
+  run dmp nginx-teardown
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Apache answers on 127.0.0.1 only"* ]]
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  grep -q 'apache-local-off puts it back' "$T/ports.conf"
+  [ "$(cat "$T/state/apache-local/ports.conf")" = "$original" ]
+  [ ! -e "$T/state/nginx" ]
+}
+
+@test "apache-local after nginx-setup keeps nginx's original, so Apache stays on its address after teardown" {
+  original="$(cat "$T/ports.conf")"
+  dmp nginx-setup
+  : > "$STUB_LOG"
+  run dmp apache-local
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/state/apache-local/ports.conf")" = "$original" ]
+  run grep -q 'restart apache2' "$STUB_LOG"
+  [ "$status" -ne 0 ]
+  dmp nginx-teardown
+  grep -qx 'Listen 127.0.0.1:80' "$T/ports.conf"
+  dmp apache-local-off
+  [ "$(cat "$T/ports.conf")" = "$original" ]
+}
+
 @test "nginx-reload and service-restart nginx run a configtest first" {
   run dmp nginx-reload
   [ "$status" -eq 0 ]
@@ -1545,6 +1656,67 @@ nginx_default_site() {
   run dmp nginx-configtest
   [ "$status" -eq 1 ]
   [[ "$output" == *"must differ"* ]]
+}
+
+@test "config refuses nginx's WSL ports that are no port, below 1024, the panel's or the same" {
+  for bad in 80 abc 70000 "$(sed -n 's/^PANEL_PORT=//p' "$DMP_CONFIG")"; do
+    sed -i '/^NGINX_WSL_HTTP_PORT=/d' "$DMP_CONFIG"
+    echo "NGINX_WSL_HTTP_PORT=$bad" >> "$DMP_CONFIG"
+    run dmp nginx-configtest
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"NGINX_WSL_HTTP_PORT must"* ]]
+  done
+  sed -i '/^NGINX_WSL_HTTP_PORT=/d' "$DMP_CONFIG"
+  echo "NGINX_WSL_HTTP_PORT=8443" >> "$DMP_CONFIG"
+  run dmp nginx-configtest
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must differ"* ]]
+}
+
+@test "under WSL (apache-local), nginx also answers for Windows on 127.0.0.1 on its own ports" {
+  dmp apache-local
+  dmp nginx-setup
+  conf="$T/nginx/conf.d/devmagic-panel.conf"
+  grep -q 'listen 127.0.0.2:443 ssl default_server;' "$conf"
+  grep -q 'listen 127.0.0.1:8080 default_server;' "$conf"
+  grep -q 'listen 127.0.0.1:8443 ssl default_server;' "$conf"
+  nginx_site_tree
+  run dmp nginx-site-write local.wandworks.example
+  [ "$status" -eq 0 ]
+  site="$T/nginx/sites-available/local.wandworks.example.conf"
+  grep -q 'listen 127.0.0.2:80;' "$site"
+  grep -q 'listen 127.0.0.1:8080;' "$site"
+  grep -q 'listen 127.0.0.2:443 ssl http2;' "$site"
+  grep -q 'listen 127.0.0.1:8443 ssl http2;' "$site"
+  [ "$(grep -c 'listen 127.0.0.1:' "$site")" -eq 2 ]
+  STUB_NGINX_VERSION=1.26.0 run dmp nginx-site-write local.wandworks.example
+  grep -q 'listen 127.0.0.1:8443 ssl;' "$site"
+  [ "$(grep -c 'http2 on;' "$site")" -eq 1 ]
+  # Another pair from config.env.
+  printf 'NGINX_WSL_HTTP_PORT=18080\nNGINX_WSL_HTTPS_PORT=18443\n' >> "$DMP_CONFIG"
+  run dmp nginx-site-write local.wandworks.example
+  [ "$status" -eq 0 ]
+  grep -q 'listen 127.0.0.1:18080;' "$site"
+  grep -q 'listen 127.0.0.1:18443 ssl' "$site"
+}
+
+@test "without apache-local, nginx listens on its own address only" {
+  dmp nginx-setup
+  run grep -q 'listen 127.0.0.1' "$T/nginx/conf.d/devmagic-panel.conf"
+  [ "$status" -ne 0 ]
+  nginx_site_tree
+  dmp nginx-site-write local.wandworks.example
+  run grep -q 'listen 127.0.0.1' "$T/nginx/sites-available/local.wandworks.example.conf"
+  [ "$status" -ne 0 ]
+}
+
+@test "under WSL, nginx-setup refuses when another program holds one of nginx's ports for Windows" {
+  dmp apache-local
+  STUB_SS='LISTEN 0 511 127.0.0.1:8443 0.0.0.0:* users:(("node",pid=42,fd=7))' run dmp nginx-setup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"node on 127.0.0.1:8443"* ]]
+  STUB_SS='LISTEN 0 511 127.0.0.1:8443 0.0.0.0:* users:(("nginx",pid=42,fd=7))' run dmp nginx-setup
+  [ "$status" -eq 0 ]
 }
 
 @test "backup takes nginx's sites along" {
@@ -2164,4 +2336,30 @@ CONF
   [ "$status" -eq 0 ]
   grep -qx '127.0.0.1 local.hand.com' "$T/hosts"
   ! grep -q 'devmagic-panel' "$T/hosts"
+}
+
+@test "wsl-interop registers the line WSL writes when interop is gone, and changes nothing when it is there" {
+  mkdir -p "$T/binfmt"
+  : > "$T/binfmt/register"
+  printf "#!/bin/sh\n" > "$T/init"
+  chmod +x "$T/init"
+  run dmp wsl-interop
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/binfmt/register")" = ":WSLInterop:M::MZ::$T/init:P" ]
+  # A plain file lists nothing after the write, unlike the kernel: the script says to restart.
+  [[ "$output" == *"restart the distro"* ]]
+  : > "$T/binfmt/register"
+  : > "$T/binfmt/WSLInterop"
+  run dmp wsl-interop
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"registered already"* ]]
+  [ ! -s "$T/binfmt/register" ]
+}
+
+@test "wsl-interop refuses outside WSL, and takes no arguments" {
+  run dmp wsl-interop
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"this is not WSL"* ]]
+  run dmp wsl-interop now
+  [ "$status" -eq 2 ]
 }

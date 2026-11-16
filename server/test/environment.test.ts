@@ -1,8 +1,10 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { checkEnvironment, enabledSiteNames, hostsNames } from '../src/environment.js';
 import type { Secrets } from '../src/secrets.js';
+import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { DMP, fakeExec, healthyResponses, tempTree } from './helpers.js';
 
 const secrets: Secrets = { panelPasswordHash: 'x', mysql: { user: 'root', host: 'localhost', password: 'pw' } };
@@ -257,5 +259,183 @@ describe("MySQL's memory for site data", () => {
     const { exec } = fakeExec(healthyResponses());
     const report = await checkEnvironment({ config: tree.config, exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
     expect(byId(report, 'mysql.bufferPool')).toMatchObject({ status: 'ok', detail: '1.0 GB for 512 MB of InnoDB data' });
+  });
+});
+
+describe('WSL on Windows', () => {
+  /** WSL 2 as install.sh and get.ps1 leave it: hosts kept, Apache on 127.0.0.1, interop on, the helper in place. */
+  function wslTree(wslConf = '[boot]\nsystemd=true\n\n[network]\ngenerateHosts = false\n') {
+    const tree = healthyTree();
+    tree.write('osrelease', '6.6.87.2-microsoft-standard-WSL2\n');
+    tree.write('wsl.conf', wslConf);
+    tree.write('ports.conf', 'Listen 127.0.0.1:80\n<IfModule ssl_module>\n\tListen 127.0.0.1:443\n</IfModule>\n');
+    mkdirSync(join(tree.root, 'binfmt_misc'), { recursive: true });
+    tree.write('binfmt_misc/WSLInterop');
+    tree.write('dmp-win.ps1', '# the helper');
+    tree.write('hosts', `127.0.0.1 localhost\n${HOSTS_BEGIN}\n127.0.0.1 local.devmagic\n127.0.0.2 local.wandworks-store.example\n${HOSTS_END}\n`);
+    return tree;
+  }
+  /** The helper's status as it reads a machine get.ps1 set up, with changes. */
+  const windowsStatus = (changes: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      distro: 'devmagic-panel',
+      wsl: { answering: true, distroState: 'Running' },
+      hosts: { path: 'C:\\Windows\\System32\\drivers\\etc\\hosts', block: ['127.0.0.1 local.devmagic', '127.0.0.2 local.wandworks-store.example'] },
+      ca: { readable: true, thumbprint: 'ABC123', trusted: true },
+      logonTask: { installed: true },
+      ports: ['127.0.0.1:443'],
+      uac: { enabled: true, promptsAdmins: true },
+      ...changes,
+    });
+  const check = (tree: ReturnType<typeof healthyTree>, linger = 'yes\n', config = tree.config, status = windowsStatus()) => {
+    const powershell = `${join(tree.root, 'Windows')}/System32/WindowsPowerShell/v1.0/powershell.exe`;
+    const fake = fakeExec({ ...healthyResponses(), 'loginctl show-user': { stdout: linger }, [powershell]: { stdout: status } });
+    lastCalls = fake.calls;
+    return checkEnvironment({ config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+  };
+  let lastCalls: Array<{ file: string; args: string[] }> = [];
+  const wsl = (report: Awaited<ReturnType<typeof checkEnvironment>>) => report.checks.filter((c) => c.group === 'wsl');
+
+  it('shows nothing on a machine that is not WSL, or under WSL 1', async () => {
+    const tree = healthyTree();
+    expect(wsl(await check(tree))).toEqual([]);
+    tree.write('osrelease', '4.4.0-19041-Microsoft\n');
+    expect(wsl(await check(tree))).toEqual([]);
+  });
+
+  it('is all ok as install.sh and get.ps1 leave WSL 2, and asks the helper by its full Windows path', async () => {
+    const report = await check(wslTree());
+    expect(wsl(report).map((c) => [c.id, c.status])).toEqual([
+      ['wsl.hosts', 'ok'],
+      ['wsl.apacheAddress', 'ok'],
+      ['wsl.linger', 'ok'],
+      ['wsl.webDir', 'ok'],
+      ['wsl.interop', 'ok'],
+      ['windows.hosts', 'ok'],
+      ['windows.ca', 'ok'],
+      ['windows.logonTask', 'ok'],
+    ]);
+    const call = lastCalls.find((c) => c.file.endsWith('powershell.exe'));
+    expect(call?.args).toEqual(['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1', 'status']);
+  });
+
+  it('offers each Windows step as a fix when it is not in place', async () => {
+    const status = windowsStatus({
+      hosts: { path: 'C:\\Windows\\System32\\drivers\\etc\\hosts', block: ['127.0.0.1 local.devmagic', '127.0.0.1 local.old-site.test'] },
+      ca: { readable: true, thumbprint: 'ABC123', trusted: false },
+      logonTask: { installed: false },
+      uac: { enabled: true, promptsAdmins: false },
+    });
+    const report = await check(wslTree(), 'yes\n', undefined, status);
+    expect(byId(report, 'windows.hosts')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringMatching(/^missing local\.wandworks-store\.example; left over local\.old-site\.test/),
+      fixes: [{ action: 'windows.hostsSync', input: {}, confirm: expect.stringContaining('UAC') }],
+    });
+    expect(byId(report, 'windows.ca')).toMatchObject({ status: 'warn', fixes: [{ action: 'windows.trustCa', input: {} }] });
+    expect(byId(report, 'windows.logonTask')).toMatchObject({ status: 'warn', fixes: [{ action: 'windows.autostart', input: {} }] });
+    // A setting you chose: shown, never a warning.
+    expect(byId(report, 'windows.uac')).toMatchObject({ status: 'ok', optional: true, detail: expect.stringContaining('never notify') });
+  });
+
+  it("checks Windows' relays to nginx only while nginx is set up, or while relays are left over", async () => {
+    const relays = ['127.0.0.2:443=127.0.0.1:8443', '127.0.0.2:80=127.0.0.1:8080'];
+    const plain = wslTree();
+    expect(byId(await check(plain, 'yes\n', undefined, windowsStatus({ portproxy: { rules: [], ipHelper: 'Running' } })), 'windows.portproxy')).toBeUndefined();
+    expect(byId(await check(plain, 'yes\n', undefined, windowsStatus({ portproxy: { rules: relays, ipHelper: 'Running' } })), 'windows.portproxy')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('nginx is not set up, but Windows still relays 127.0.0.2:443 and 127.0.0.2:80'),
+      fixes: [{ action: 'windows.portproxy', input: {}, label: 'Remove the relays' }],
+    });
+    const nginx = wslTree();
+    nginx.write('nginx/conf.d/devmagic-panel.conf', `${VHOST_MARKER}\n`);
+    expect(byId(await check(nginx, 'yes\n', undefined, windowsStatus({ portproxy: { rules: ['0.0.0.0:2222=172.20.1.5:22'], ipHelper: 'Running' } })), 'windows.portproxy')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('does not relay 127.0.0.2:80 and :443 to nginx on 127.0.0.1:8080 and :8443'),
+      fixes: [{ action: 'windows.portproxy', input: {}, confirm: expect.stringContaining('UAC') }],
+    });
+    expect(byId(await check(nginx, 'yes\n', undefined, windowsStatus({ portproxy: { rules: relays, ipHelper: 'Running' } })), 'windows.portproxy')).toMatchObject({ status: 'ok' });
+    expect(byId(await check(nginx, 'yes\n', undefined, windowsStatus({ portproxy: { rules: relays, ipHelper: 'Stopped' } })), 'windows.portproxy')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('IP Helper service is Stopped'),
+    });
+    // A helper older than portproxy: nothing to say.
+    expect(byId(await check(nginx), 'windows.portproxy')).toBeUndefined();
+  });
+
+  it("under WSL, leaves browser trust to Windows when this distro has no browser of its own", async () => {
+    const tree = wslTree();
+    rmSync(join(tree.root, 'home/.pki'), { recursive: true });
+    expect(byId(await check(tree), 'ca.browsers')).toMatchObject({ status: 'ok', detail: expect.stringContaining('run in Windows') });
+    const ubuntu = healthyTree();
+    rmSync(join(ubuntu.root, 'home/.pki'), { recursive: true });
+    expect(byId(await check(ubuntu), 'ca.browsers')).toMatchObject({ status: 'warn', detail: 'no Chrome, Edge or Firefox certificate store found' });
+  });
+
+  it("compares the helper in Windows with the one this release goes with, and offers the update", async () => {
+    const tree = wslTree();
+    mkdirSync(join(tree.root, 'release'), { recursive: true });
+    tree.write('release/release.json', JSON.stringify({ name: 'v1.68.0', version: '1.68.0', commit: 'abc', installer: 'x', scripts: {}, windowsHelper: 'a'.repeat(64) }));
+    const run = (helper: unknown) => {
+      const powershell = `${join(tree.root, 'Windows')}/System32/WindowsPowerShell/v1.0/powershell.exe`;
+      const fake = fakeExec({ ...healthyResponses(), 'loginctl show-user': { stdout: 'yes\n' }, [powershell]: { stdout: windowsStatus(helper ? { helper } : {}) } });
+      return checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, self: { repo: join(tree.root, 'release'), version: '1.68.0' } });
+    };
+    expect(byId(await run({ sha256: 'a'.repeat(64), repo: 'PetyoLazarov92/devmagic-panel' }), 'windows.part')).toMatchObject({ status: 'ok', detail: 'the helper of v1.68.0' });
+    expect(byId(await run({ sha256: 'b'.repeat(64), repo: 'PetyoLazarov92/devmagic-panel' }), 'windows.part')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('another release'),
+      fixes: [{ action: 'windows.update', input: {}, confirm: expect.stringContaining('restarts the panel') }],
+    });
+    expect(byId(await run(null), 'windows.part')).toMatchObject({ status: 'warn', detail: expect.stringContaining('older than this panel') });
+    // A checkout, with no release.json, has nothing to compare.
+    expect(byId(await check(tree), 'windows.part')).toBeUndefined();
+  });
+
+  it('says to run get.ps1 when the helper is not there, and asks Windows nothing then, or without interop', async () => {
+    const tree = wslTree();
+    rmSync(join(tree.root, 'dmp-win.ps1'));
+    const report = await check(tree);
+    expect(byId(report, 'windows.helper')).toMatchObject({ status: 'warn', detail: expect.stringContaining('run get.ps1') });
+    expect(lastCalls.some((c) => c.file.endsWith('powershell.exe'))).toBe(false);
+    const noInterop = wslTree();
+    rmSync(join(noInterop.root, 'binfmt_misc/WSLInterop'));
+    const quiet = await check(noInterop);
+    expect(wsl(quiet).some((c) => c.id.startsWith('windows.'))).toBe(false);
+    expect(lastCalls.some((c) => c.file.endsWith('powershell.exe'))).toBe(false);
+  });
+
+  it('fails when WSL writes /etc/hosts anew, and warns about Apache on every address and lingering off', async () => {
+    const tree = wslTree('[boot]\nsystemd=true\n');
+    tree.write('ports.conf', 'Listen 80\n<IfModule ssl_module>\n\tListen 443\n</IfModule>\n');
+    const report = await check(tree, 'no\n');
+    expect(byId(report, 'wsl.hosts')).toMatchObject({ status: 'fail', detail: expect.stringContaining('local.devmagic and every site drop out') });
+    expect(byId(report, 'wsl.apacheAddress')).toMatchObject({ status: 'warn', detail: expect.stringContaining('ports.conf has Listen 80') });
+    expect(byId(report, 'wsl.linger')).toMatchObject({ status: 'warn', detail: expect.stringContaining('lingering is off for dev') });
+  });
+
+  it('reads generateHosts from [network] only, in any case', async () => {
+    expect(byId(await check(wslTree('[boot]\ngenerateHosts = false\n')), 'wsl.hosts')?.status).toBe('fail');
+    expect(byId(await check(wslTree('[Network]\nGenerateHosts=False\n')), 'wsl.hosts')?.status).toBe('ok');
+    expect(byId(await check(wslTree('[network]\n# generateHosts = false\ngenerateHosts = true\n')), 'wsl.hosts')?.status).toBe('fail');
+  });
+
+  it('fails for sites on a Windows drive, and warns when Windows programs cannot be started', async () => {
+    const tree = wslTree();
+    rmSync(join(tree.root, 'binfmt_misc/WSLInterop'));
+    const report = await check(tree, 'yes\n', { ...tree.config, WEB_DIR: '/mnt/c/sites' });
+    expect(byId(report, 'wsl.webDir')).toMatchObject({ status: 'fail', detail: expect.stringContaining('/mnt/c/sites, on a Windows drive') });
+    expect(byId(report, 'wsl.interop')).toMatchObject({ status: 'warn', optional: true });
+  });
+
+  it('offers to register interop again when another distro took it away, but not when wsl.conf turns it off', async () => {
+    const taken = wslTree();
+    rmSync(join(taken.root, 'binfmt_misc/WSLInterop'));
+    expect(byId(await check(taken), 'wsl.interop')).toMatchObject({ status: 'warn', fixes: [{ action: 'wsl.repairInterop', input: {} }] });
+    const off = wslTree('[boot]\nsystemd=true\n\n[network]\ngenerateHosts = false\n\n[interop]\nenabled = false\n');
+    rmSync(join(off.root, 'binfmt_misc/WSLInterop'));
+    const check2 = byId(await check(off), 'wsl.interop');
+    expect(check2).toMatchObject({ status: 'warn', detail: expect.stringContaining('turned off in /etc/wsl.conf') });
+    expect(check2?.fixes).toBeUndefined();
   });
 });

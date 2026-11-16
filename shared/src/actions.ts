@@ -648,7 +648,7 @@ export const actions = {
   'nginx.teardown': {
     title: 'Turn nginx off',
     description:
-      "Puts Apache back on every address and Debian's default nginx site back on, stops nginx and keeps it from starting at boot, then checks every site still answers. Refused while a site runs on nginx. nginx stays installed. Starts a job; Undo sets nginx up again.",
+      "Puts Apache back on every address (under WSL it stays on 127.0.0.1, where Windows reaches it) and Debian's default nginx site back on, stops nginx and keeps it from starting at boot, then checks every site still answers. Refused while a site runs on nginx. nginx stays installed. Starts a job; Undo sets nginx up again.",
     changesSystem: true,
     input: z.object({}),
   },
@@ -1224,6 +1224,48 @@ export const actions = {
     changesSystem: true,
     input: z.object({}),
   },
+  'windows.hostsSync': {
+    title: 'Copy the hosts lines to Windows',
+    description:
+      "Under WSL: makes the devmagic-panel block of Windows' hosts file hold the same names as this distro's, one name per line, so Windows' browsers reach the sites. Through the Windows helper, which Windows asks to run as admin (UAC) and which keeps a copy of the file first. Lines outside the block stay as they are.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'windows.trustCa': {
+    title: "Trust the panel's CA in Windows",
+    description:
+      "Under WSL: adds the panel's local CA to your Windows user's trusted roots, so Chrome, Edge and Firefox accept the panel's certificates. Windows asks you to confirm. Through the Windows helper, which checks it is the panel's CA first.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'windows.autostart': {
+    title: 'Keep WSL running in Windows',
+    description:
+      'Under WSL: adds a task at your Windows logon that keeps this distro running without a window, since WSL stops a distro a few minutes after its last window closes, the panel and sites included. Through the Windows helper; no admin needed.',
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'windows.portproxy': {
+    title: 'Relay nginx\'s address in Windows',
+    description:
+      "Under WSL, while nginx is set up: makes Windows relay its own 127.0.0.2, ports 80 and 443, to the ports nginx answers on for Windows in this distro (127.0.0.1:8080 and 8443 by default), since WSL forwards 127.0.0.1 only. So a site on nginx opens in Windows' browsers like on Ubuntu; a TCP relay, TLS untouched. Once nginx is turned off, removes the two relays again. Through the Windows helper, which Windows asks to run as admin (UAC); needs Windows' IP Helper service, on by default.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'windows.update': {
+    title: 'Update the Windows part',
+    description:
+      "Under WSL, when the panel's release goes with another Windows helper than the one installed: the helper downloads this release's Windows setup (devmagic-panel-setup-<version>.exe) and its .sha256 from the repository written into it, checks it, and runs it without a window. It updates the helper and the setup in Windows and installs this release again in the distro, which restarts the panel; the distro, its user and the panel password stay. Only for a published release, not a development build.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'wsl.repairInterop': {
+    title: 'Let WSL start Windows programs again',
+    description:
+      "Under WSL: registers WSL's interop with Windows programs again (dmp-root wsl-interop, the line WSL itself writes), when another distro starting took it away and Windows programs fail with Exec format error. Needs no restart of the distro; changes nothing when it is registered.",
+    changesSystem: true,
+    input: z.object({}),
+  },
   'org.readRepo': {
     title: 'Read a repo with Claude Code',
     description:
@@ -1486,7 +1528,7 @@ export const actions = {
   'site.openTerminal': {
     title: 'Open in terminal',
     palette: [{ scope: 'site', label: 'Open a terminal' }],
-    description: "Opens a terminal window at the site's folder on this computer's desktop: the default terminal when the panel knows how to give it a folder, else the first known one installed. Changes nothing.",
+    description: "Opens a terminal window at the site's folder on this computer's desktop: the default terminal when the panel knows how to give it a folder, else the first known one installed. Under WSL, Windows Terminal in Windows at the folder in this distro (a WSL window where Windows has no Windows Terminal). Changes nothing.",
     changesSystem: false,
     input: z.object({ domain: localName, path: sitePath }),
   },

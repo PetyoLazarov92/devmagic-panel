@@ -2,7 +2,7 @@ import type { ActionId } from './actions.js';
 
 export type CheckStatus = 'ok' | 'warn' | 'fail';
 
-export type CheckGroup = 'panel' | 'apache' | 'nginx' | 'database' | 'php' | 'tools' | 'certificates' | 'hosts' | 'access';
+export type CheckGroup = 'panel' | 'wsl' | 'apache' | 'nginx' | 'database' | 'php' | 'tools' | 'certificates' | 'hosts' | 'access';
 
 export interface CheckFix {
   action: ActionId;
@@ -33,6 +33,7 @@ export interface EnvironmentReport {
 
 export const CHECK_GROUP_LABELS: Record<CheckGroup, string> = {
   panel: 'Panel installation',
+  wsl: 'WSL on Windows',
   apache: 'Apache',
   nginx: 'nginx',
   database: 'Database',

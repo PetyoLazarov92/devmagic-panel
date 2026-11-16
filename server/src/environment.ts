@@ -18,6 +18,9 @@ import { selfChecks } from './self-check.js';
 import { nginxConfigs, nginxInstalled, nginxSetUp } from './nginx.js';
 import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
+import { hostsKept, interopDisabled, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
+import { readRelease } from './update.js';
+import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsPortproxyHeld, windowsPortproxyRules, windowsStatus, type WindowsPaths } from './windows.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
 export interface HostPaths {
@@ -30,6 +33,10 @@ export interface HostPaths {
   searchPath?: string;
   /** The mounted filesystems, to see an encrypted home; /proc/mounts by default. */
   mounts?: string;
+  /** The kernel's name, wsl.conf and binfmt_misc, to see WSL; the system's by default. */
+  wsl?: WslPaths;
+  /** Windows' folder and the helper as WSL sees them; /mnt/c by default. */
+  windows?: WindowsPaths;
 }
 
 export const defaultHostPaths = (home: string): HostPaths => ({
@@ -358,7 +365,10 @@ async function certificateChecks(ctx: CheckContext): Promise<Check[]> {
     const listed = await exec('certutil', ['-L', '-d', `sql:${store}`, '-n', NSS_NICKNAME]);
     if (listed.code !== 0) untrusted.push(store.replace(paths.home, '~'));
   }
-  if (stores.length === 0) {
+  if (stores.length === 0 && wslVersion(ctx.paths.wsl ?? {}) === 2) {
+    // Under WSL the browsers run in Windows and trust what Windows trusts; Local CA in Windows (WSL) checks that.
+    results.push(ok('ca.browsers', 'Trusted by browsers', "your browsers run in Windows and use its trusted roots: see Local CA in Windows, under WSL"));
+  } else if (stores.length === 0) {
     results.push(warn('ca.browsers', 'Trusted by browsers', 'no Chrome, Edge or Firefox certificate store found'));
   } else {
     results.push(
@@ -540,6 +550,147 @@ function autostartChecks(ctx: CheckContext): Check[] {
   return [ok('panel.autostart', label, `${file} starts the panel and Mailpit when you log in`)];
 }
 
+// ── WSL on Windows ───────────────────────────────────────────
+
+/**
+ * Under WSL 2 only: what install.sh sets so the panel works from Windows.
+ * Each is put right by updating the panel (install.sh runs again) or running
+ * the installer; the panel itself never writes wsl.conf or ports.conf.
+ */
+async function wslChecks(ctx: CheckContext): Promise<Check[]> {
+  const paths = ctx.paths.wsl ?? {};
+  if (wslVersion(paths) !== 2) return [];
+  const again = 'update the panel, or run its installer again';
+  const checks: Check[] = [];
+
+  checks.push(
+    hostsKept(paths)
+      ? ok('wsl.hosts', 'WSL keeps /etc/hosts', 'generateHosts = false in /etc/wsl.conf')
+      : fail('wsl.hosts', 'WSL keeps /etc/hosts', `WSL writes /etc/hosts anew at every start (no generateHosts = false in /etc/wsl.conf), so ${ctx.config.PANEL_DOMAIN} and every site drop out of it: ${again}`),
+  );
+
+  const address = ctx.config.APACHE_ADDRESS;
+  const off = listensOffAddress(join(dirname(ctx.config.APACHE_SITES_AVAILABLE), 'ports.conf'), address);
+  checks.push(
+    off.length === 0
+      ? ok('wsl.apacheAddress', `Apache on ${address}`, `Windows reaches Apache on ${address}, where the hosts lines point`)
+      : warn('wsl.apacheAddress', `Apache on ${address}`, `ports.conf has ${off[0]}: WSL forwards Apache on every address to Windows on ::1 only, so names on ${address} in Windows' hosts file do not reach it: ${again}`),
+  );
+
+  const linger = await ctx.exec('loginctl', ['show-user', ctx.config.PANEL_USER, '-p', 'Linger', '--value']);
+  checks.push(
+    linger.stdout.trim() === 'yes'
+      ? ok('wsl.linger', 'Keeps running when WSL windows close', `lingering is on for ${ctx.config.PANEL_USER}`)
+      : warn('wsl.linger', 'Keeps running when WSL windows close', `lingering is off for ${ctx.config.PANEL_USER}, so closing the last WSL window stops the panel and its jobs: ${again}`),
+  );
+
+  if (ctx.config.WEB_DIR.startsWith('/mnt/')) {
+    checks.push(fail('wsl.webDir', 'Sites on WSL\'s own disk', `WEB_DIR is ${ctx.config.WEB_DIR}, on a Windows drive, which is 20 to 350 times slower from WSL: keep sites on WSL's own disk, like /var/www`));
+  } else {
+    checks.push(ok('wsl.webDir', 'Sites on WSL\'s own disk', ctx.config.WEB_DIR));
+  }
+
+  const interop = interopOn(paths);
+  if (interop) {
+    checks.push(ok('wsl.interop', 'Windows programs', 'the panel can start Windows programs, like Windows Terminal', { optional: true }));
+  } else if (interopDisabled(paths)) {
+    checks.push(warn('wsl.interop', 'Windows programs', 'turned off in /etc/wsl.conf ([interop] enabled = false): the panel cannot do the Windows steps; take that line out and restart the distro', { optional: true }));
+  } else {
+    // Another distro starting can take WSL's registration away from this one (finding N); dmp-root puts it back.
+    checks.push(
+      warn('wsl.interop', 'Windows programs', 'cannot be started from this distro: another WSL distro starting took the registration away, which WSL leaves that way until this distro restarts', {
+        optional: true,
+        fixes: [{ action: 'wsl.repairInterop', input: {}, label: 'Register it again' }],
+      }),
+    );
+  }
+  if (interop) checks.push(...(await windowsSideChecks(ctx)));
+  return checks;
+}
+
+/** The Windows side, from the helper's read-only status: what get.ps1 sets up, each with its fix. */
+async function windowsSideChecks(ctx: CheckContext): Promise<Check[]> {
+  const paths = ctx.paths.windows ?? {};
+  if (!helperInstalled(paths)) {
+    return [warn('windows.helper', 'Windows helper', 'not installed in C:\\Program Files\\devmagic-panel: run get.ps1 in Windows (docs/installation.md, Windows), which sets up the hosts lines, the CA and the logon task')];
+  }
+  const status = await windowsStatus(ctx.exec, paths);
+  if (!status) return [warn('windows.helper', 'Windows helper', 'did not answer: run get.ps1 in Windows again to repair it')];
+  const fix = (action: 'windows.hostsSync' | 'windows.trustCa' | 'windows.autostart' | 'windows.portproxy' | 'windows.update', label: string): CheckFix[] => [{ action, input: {}, label }];
+  const checks: Check[] = [];
+
+  const want = windowsHostsPairs(ctx.config);
+  const have = new Set(windowsBlockPairs(status));
+  const missing = want.filter((p) => !have.has(p));
+  const extra = [...have].filter((p) => !want.includes(p));
+  checks.push(
+    missing.length === 0 && extra.length === 0
+      ? ok('windows.hosts', "Windows' hosts file", `${want.length} name(s), the same as this distro's`)
+      : warn('windows.hosts', "Windows' hosts file", `${missing.length ? `missing ${missing.map((p) => p.split('=')[0]).join(', ')}` : ''}${missing.length && extra.length ? '; ' : ''}${extra.length ? `left over ${extra.map((p) => p.split('=')[0]).join(', ')}` : ''}: Windows' browsers do not reach those sites as they should`, {
+          fixes: [{ ...fix('windows.hostsSync', 'Copy them to Windows')[0]!, confirm: 'Windows asks to run the helper as admin (UAC) and keeps a copy of its hosts file first.' }],
+        }),
+  );
+
+  checks.push(
+    status.ca.trusted
+      ? ok('windows.ca', 'Local CA in Windows', `trusted for your Windows user (${status.ca.thumbprint})`)
+      : warn('windows.ca', 'Local CA in Windows', status.ca.readable ? "not trusted for your Windows user: Windows' browsers warn about every site" : `Windows cannot read it (${status.ca.error ?? 'no CA'})`, {
+          ...(status.ca.readable ? { fixes: fix('windows.trustCa', 'Trust it in Windows') } : {}),
+        }),
+  );
+
+  checks.push(
+    status.logonTask.installed
+      ? ok('windows.logonTask', 'Runs after Windows logon', 'a logon task keeps this distro running without a window')
+      : warn('windows.logonTask', 'Runs after Windows logon', 'no logon task: WSL stops this distro a few minutes after its last window closes, the panel and every site with it', {
+          fixes: fix('windows.autostart', 'Add the logon task'),
+        }),
+  );
+
+  // The Windows helper this release goes with (release.json), against the one Windows has.
+  const release = ctx.self ? readRelease(ctx.self.repo) : null;
+  if (release?.windowsHelper) {
+    const have = status.helper?.sha256;
+    checks.push(
+      have === release.windowsHelper
+        ? ok('windows.part', 'Windows part', `the helper of ${release.name}`)
+        : warn('windows.part', 'Windows part', have ? `the helper in Windows is from another release than this panel (${release.name}): update it, so the panel's Windows steps work as this release expects` : `the helper in Windows is older than this panel (${release.name}): update it, so the panel's Windows steps work as this release expects`, {
+            fixes: [{ action: 'windows.update', input: {}, label: 'Update the Windows part', confirm: `The helper downloads the Windows setup of ${release.name} from GitHub, checks it and runs it without a window; it installs ${release.name} again in the distro, which restarts the panel for a minute.` }],
+          }),
+    );
+  }
+
+  // nginx's sites reach Windows through two relays of 127.0.0.2; none are needed without nginx.
+  if (status.portproxy) {
+    const wanted = nginxSetUp(ctx.config);
+    const want = windowsPortproxyRules(ctx.config);
+    const held = windowsPortproxyHeld(status);
+    const relays = `127.0.0.2:80 and :443 to nginx on 127.0.0.1:${ctx.config.NGINX_WSL_HTTP_PORT} and :${ctx.config.NGINX_WSL_HTTPS_PORT}`;
+    const confirm = 'Windows asks to run the helper as admin (UAC).';
+    if (wanted && want.every((r) => held.includes(r)) && held.length === want.length) {
+      checks.push(
+        status.portproxy.ipHelper === 'Running'
+          ? ok('windows.portproxy', 'nginx reaches Windows', `Windows relays ${relays}`)
+          : warn('windows.portproxy', 'nginx reaches Windows', `the relays are there, but Windows' IP Helper service is ${status.portproxy.ipHelper}: start it in Windows (services.msc, IP Helper), else sites on nginx do not open in Windows`),
+      );
+    } else if (wanted) {
+      checks.push(warn('windows.portproxy', 'nginx reaches Windows', `Windows does not relay ${relays}: sites on nginx do not open in Windows' browsers`, {
+        fixes: [{ ...fix('windows.portproxy', 'Relay them in Windows')[0]!, confirm }],
+      }));
+    } else if (held.length > 0) {
+      checks.push(warn('windows.portproxy', 'nginx reaches Windows', `nginx is not set up, but Windows still relays ${held.map((r) => r.split('=')[0]).join(' and ')}`, {
+        fixes: [{ ...fix('windows.portproxy', 'Remove the relays')[0]!, confirm }],
+      }));
+    }
+  }
+
+  // A setting you chose, not a fault: shown for what it means, never as a warning.
+  if (status.uac.enabled && !status.uac.promptsAdmins) {
+    checks.push(ok('windows.uac', 'UAC', "set to never notify: Windows gives admin rights without asking, to any program you run, this distro included. The panel works the same either way", { optional: true }));
+  }
+  return checks;
+}
+
 // ── report ───────────────────────────────────────────────────
 
 export async function checkEnvironment(ctx: CheckContext, now: () => number = Date.now): Promise<EnvironmentReport> {
@@ -558,6 +709,7 @@ export async function checkEnvironment(ctx: CheckContext, now: () => number = Da
       ctx.self ? selfChecks({ ...ctx.self, stateDir: ctx.config.STATE_DIR, dmpRoot: ctx.dmpRoot }).map((r) => ({ ...r, group: 'panel' as const })) : [],
     ),
     Promise.resolve(autostartChecks(ctx).map((r) => ({ ...r, group: 'panel' as const }))),
+    wslChecks(ctx).then((c) => c.map((r) => ({ ...r, group: 'wsl' as const }))),
   ]);
   return {
     checkedAt: new Date(started).toISOString(),

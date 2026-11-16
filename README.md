@@ -1,9 +1,10 @@
 # DevMagic Panel - Local WordPress Control Panel
 
-![Version](https://img.shields.io/badge/version-1.67.1-6d5dfc)
+![Version](https://img.shields.io/badge/version-1.68.0-6d5dfc)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22.13%2B-339933)](#-requirements)
 [![Ubuntu and Debian](https://img.shields.io/badge/Ubuntu%20%7C%20Debian-supported-e95420)](#-requirements)
+[![Windows](https://img.shields.io/badge/Windows%2010%20%7C%2011-WSL%202-0078d4)](#on-windows)
 [![WordPress](https://img.shields.io/badge/WordPress-ready-21759b)](https://wordpress.org)
 [![Docs](https://img.shields.io/badge/docs-webtimeless.cloud-6d5dfc)](https://webtimeless.cloud/docs/devmagic-panel/)
 
@@ -185,8 +186,10 @@ flowchart LR
 
 ## 📦 Requirements
 
-Ubuntu or Debian (Mint works), sudo rights and curl. The installer checks the
-rest first and installs what is missing after asking:
+Ubuntu or Debian (Mint works), sudo rights and curl; or Windows 10 22H2 or 11
+with virtualization on, where the panel runs in Ubuntu under WSL 2 ([On
+Windows](#on-windows)). The installer checks the rest first and installs what
+is missing after asking:
 
 | Group | What | How the installer handles it |
 | --- | --- | --- |
@@ -228,6 +231,20 @@ git clone --depth 1 --branch pkg/latest git@github.com:PetyoLazarov92/devmagic-p
 
 `--dry-run` shows every change first; run `bash get.sh` (or
 `bash devmagic-panel-pkg/get.sh`) without it to install.
+
+### On Windows
+
+Download `devmagic-panel-setup-<version>.exe` from the
+[latest release](https://github.com/PetyoLazarov92/devmagic-panel/releases/latest)
+and run it. It checks virtualization and WSL (and turns WSL on, with one
+restart), asks where the panel should run (a distro of its own, or one of your
+Ubuntu or Debian distros), your Linux account and the panel password, then
+installs the panel in WSL and does the Windows side: the hosts lines, the local
+CA, a logon task that keeps it running, and shortcuts if you like, every step
+shown in its window. Apps and features repairs or uninstalls it. Until the setup
+is signed, SmartScreen warns about it: More info, Run anyway.
+
+📖 [Installation: Windows (WSL 2)](docs/installation.md#windows-wsl-2).
 
 ### Method 2: from a checkout
 

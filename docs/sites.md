@@ -307,7 +307,9 @@ Why a page is slow, in one place:
 - One-click wp-admin login (Network Admin too).
 - Clear caches and flush rewrite rules.
 - Open in VS Code in a new window, or open a terminal at the site's folder (the
-  desktop's default terminal, when the panel runs in your desktop session).
+  desktop's default terminal, when the panel runs in your desktop session). Under WSL on
+  Windows, the terminal is Windows Terminal at the folder in the panel's distro, and VS Code
+  opens the folder through its WSL remote (it offers its WSL extension the first time).
 - Switch the shared WordPress core.
 - Local mode with blocked hosts, and where missing uploads load from.
 - Fix health issues in one click.

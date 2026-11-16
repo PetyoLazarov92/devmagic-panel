@@ -14,6 +14,8 @@ export interface SessionInfo {
   authenticated: boolean;
   user?: string;
   version: string;
+  /** Under WSL, signed in: the distro the panel runs in, for VS Code links that open its folders through VS Code's WSL remote. */
+  wslDistro?: string;
 }
 
 export interface ActionRunResult {

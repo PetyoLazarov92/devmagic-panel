@@ -1,4 +1,4 @@
-import { symlinkSync } from 'node:fs';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ActionInputError, runAction, type ActionContext } from '../src/actions.js';
@@ -134,6 +134,14 @@ describe('nginx jobs and actions', () => {
     await steps[0]?.run({ onUndo: (label: string) => undos.push(label) } as unknown as Parameters<(typeof steps)[number]['run']>[0]);
     expect(lines()).toEqual([`sudo -n ${DMP} nginx-teardown`]);
     expect(undos).toEqual(['Set nginx up again on 127.0.0.2']);
+    expect(steps[0]?.label).toBe('Turn nginx off; Apache answers on every address again');
+  });
+
+  it('says Apache stays on its own address when apache-local keeps it there (WSL)', () => {
+    const t = nginxTree({ setUp: true });
+    mkdirSync(join(t.config.STATE_DIR, 'apache-local'), { recursive: true });
+    writeFileSync(join(t.config.STATE_DIR, 'apache-local', 'ports.conf'), 'Listen 80\n');
+    expect(planNginxTeardown(ctx(t).c)[0]?.label).toBe('Turn nginx off; Apache answers on 127.0.0.1 only, as before');
   });
 
   it('reloads and restarts nginx through dmp-root', async () => {
@@ -219,6 +227,13 @@ describe('nginx in config.env and its error log', () => {
   it('refuses addresses off loopback, 127.0.1.1, or the same for both', () => {
     for (const bad of ['10.0.0.2', '127.0.1.1', '127.0.0.300']) expect(() => parseConfig(`${valid}\nNGINX_ADDRESS=${bad}`, 'test')).toThrow(/NGINX_ADDRESS must be/);
     expect(() => parseConfig(`${valid}\nNGINX_ADDRESS=127.0.0.1`, 'test')).toThrow(/must differ/);
+  });
+
+  it("defaults nginx's ports for Windows under WSL, and refuses ones that are no port, below 1024, the panel's or the same", () => {
+    expect(parseConfig(valid, 'test')).toMatchObject({ NGINX_WSL_HTTP_PORT: 8080, NGINX_WSL_HTTPS_PORT: 8443 });
+    expect(parseConfig(`${valid}\nNGINX_WSL_HTTP_PORT=18080\nNGINX_WSL_HTTPS_PORT=18443`, 'test')).toMatchObject({ NGINX_WSL_HTTP_PORT: 18080, NGINX_WSL_HTTPS_PORT: 18443 });
+    for (const bad of ['80', 'abc', '70000', '4710']) expect(() => parseConfig(`${valid}\nNGINX_WSL_HTTP_PORT=${bad}`, 'test')).toThrow(/NGINX_WSL_HTTP_PORT must/);
+    expect(() => parseConfig(`${valid}\nNGINX_WSL_HTTPS_PORT=8080`, 'test')).toThrow(/must differ/);
   });
 
   it('parses nginx error lines newest first, with PHP level from FastCGI lines', () => {

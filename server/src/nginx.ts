@@ -40,6 +40,13 @@ export const nginxInstalled = (config: SystemConfig) => existsSync(join(nginxDir
 /** The panel set nginx up next to Apache: its conf.d file is there with the marker. */
 export const nginxSetUp = (config: SystemConfig) => firstLine(nginxConfFile(config)) === VHOST_MARKER;
 
+/** Apache is kept on APACHE_ADDRESS without nginx too (dmp-root apache-local, under WSL): its saved original ports.conf is there. */
+export const apacheKeptLocal = (config: SystemConfig) => existsSync(join(config.STATE_DIR, 'apache-local', 'ports.conf'));
+
+/** What turning nginx off leaves Apache on: every address, or its own under WSL. */
+const teardownLabel = (config: SystemConfig) =>
+  `Turn nginx off; Apache answers on ${apacheKeptLocal(config) ? `${config.APACHE_ADDRESS} only, as before` : 'every address again'}`;
+
 /** server_name and listen of an nginx config, without comments. */
 export function parseNginxConfig(text: string): { names: string[]; listens: string[] } {
   const names: string[] = [];
@@ -166,7 +173,7 @@ export function planNginxSetup(ctx: SitePhpContext): JobStep[] {
       weight: 2,
       run: async (job) => {
         const r = await root(ctx, ['nginx-setup']);
-        if (r.code === 0 && !before) job.onUndo('Turn nginx off; Apache answers on every address again', () => root(ctx, ['nginx-teardown']));
+        if (r.code === 0 && !before) job.onUndo(teardownLabel(config), () => root(ctx, ['nginx-teardown']));
         return r.code === 0 ? r : { ...r, stderr: `${lastLine(r)}\n` };
       },
     },
@@ -174,7 +181,7 @@ export function planNginxSetup(ctx: SitePhpContext): JobStep[] {
   ];
 }
 
-/** nginx.teardown: Apache back on every address and nginx stopped, then every site must still answer. Undo sets nginx up again. */
+/** nginx.teardown: Apache back on every address (or kept on its own under WSL) and nginx stopped, then every site must still answer. Undo sets nginx up again. */
 export function planNginxTeardown(ctx: SitePhpContext): JobStep[] {
   if (!nginxSetUp(ctx.config)) throw new SiteActionRefused('nginx is not set up next to Apache.');
   const onNginx = readSiteVhosts(ctx.config).filter((v) => v.server === 'nginx' || v.front).map((v) => v.names[0] as string);
@@ -182,7 +189,7 @@ export function planNginxTeardown(ctx: SitePhpContext): JobStep[] {
   return [
     {
       id: 'teardown',
-      label: 'Turn nginx off; Apache answers on every address again',
+      label: teardownLabel(ctx.config),
       weight: 2,
       run: async (job) => {
         const r = await root(ctx, ['nginx-teardown']);

@@ -101,6 +101,8 @@ export function tempTree() {
     MYSQL_CONF_DIR: join(root, 'mysql'),
     NGINX_ADDRESS: '127.0.0.2',
     APACHE_ADDRESS: '127.0.0.1',
+    NGINX_WSL_HTTP_PORT: 8080,
+    NGINX_WSL_HTTPS_PORT: 8443,
   };
   const hostPaths: HostPaths = {
     home: join(root, 'home'),
@@ -110,6 +112,10 @@ export function tempTree() {
     modsEnabled: join(root, 'mods-enabled'),
     searchPath: '',
     mounts: join(root, 'mounts'),
+    // Not WSL, whatever this machine is: no kernel name here until a test writes one.
+    wsl: { kernelRelease: join(root, 'osrelease'), wslConf: join(root, 'wsl.conf'), binfmtDir: join(root, 'binfmt_misc') },
+    // No Windows helper until a test writes one.
+    windows: { systemRoot: join(root, 'Windows'), helper: join(root, 'dmp-win.ps1'), helperWindows: 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1' },
   };
   const write = (path: string, text = '') => writeFileSync(join(root, path), text);
   return { root, config, hostPaths, write };

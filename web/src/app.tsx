@@ -1,5 +1,6 @@
 import type { SessionInfo } from '@devmagic-panel/shared';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { setVscodeDistro } from '@/components/layout/site-bits';
 import { AppShell } from '@/components/layout/app-shell';
 import { CommandPalette } from '@/components/layout/command-palette';
 import { SessionDialog } from '@/components/layout/session-dialog';
@@ -94,6 +95,7 @@ export function App() {
     start.current = startPanel(() => api.session(), {
       ready: (value) => {
         if (value.version) notePanelVersion(value.version);
+        setVscodeDistro(value.wslDistro);
         setSession(value);
         setWaiting(null);
       },
