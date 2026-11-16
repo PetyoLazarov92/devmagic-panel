@@ -11,6 +11,8 @@ one at a time. Run again, it skips what is in place, so it also repairs.
   powershell -ExecutionPolicy Bypass -File get.ps1 -Release <tgz>  install that release package
   powershell -ExecutionPolicy Bypass -File get.ps1 -Uninstall      remove the Windows side and, when
                                                                    you confirm, the distro
+  ... -Uninstall -RemoveDistro [-NoBackup]                         remove the distro too, without a
+                                                                   question; -NoBackup skips its copy
 
 -Distro picks another name than devmagic-panel (an Ubuntu you have, to install
 into it). The helper dmp-win.ps1 must be next to this script.
@@ -33,7 +35,9 @@ param(
   [switch]$Uninstall,
   [switch]$Yes,
   [switch]$Probe,
-  [string]$Answers = ''
+  [string]$Answers = '',
+  [switch]$RemoveDistro,
+  [switch]$NoBackup
 )
 
 Set-StrictMode -Version 2.0
@@ -548,7 +552,9 @@ function Invoke-DmpElevatedProgram([string]$File, [string[]]$ArgumentList) {
   }
 }
 
-function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro) {
+# -RemoveDistro answers the question for the Windows uninstaller, which asks in its own
+# dialog; -NoBackup removes the distro without exporting a copy of it first.
+function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro, [switch]$RemoveDistro, [switch]$NoBackup) {
   Write-DmpStep "Removing the Windows side: hosts block and nginx's relays (UAC), the logon task, the panel's CA"
   foreach ($command in @('hosts-sync', 'portproxy-off', 'autostart-remove', 'ca-untrust', 'self-remove')) {
     $code = Invoke-DmpHelper @($command)
@@ -559,14 +565,23 @@ function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro) {
   if ($Name -ne 'devmagic-panel') {
     Write-DmpOk "$Name is your own distro and stays: run ~/.local/share/devmagic-panel/current/install.sh --uninstall in it to remove the panel there"
   } else {
-    $answer = if ($KeepDistro) { 'no' } else { Read-Host "Remove the distro $Name with its sites and databases? A copy is exported first. Type its name to remove it" }
+    $answer = if ($RemoveDistro) { $Name } elseif ($KeepDistro) { 'no' } else { Read-Host "Remove the distro $Name with its sites and databases? A copy is exported first. Type its name to remove it" }
     if ($answer -ceq $Name) {
-      $export = Join-Path $script:DataDir ("$Name-{0}.tar" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-      Write-DmpStep "Exporting $Name to $export"
-      $result = Invoke-DmpWsl @('--export', $Name, $export) 3600
-      if ($result.ExitCode -ne 0) { throw "the export failed, so $Name stays: $($result.Error.Trim())" }
-      Invoke-DmpWsl @('--unregister', $Name) 300 | Out-Null
-      Write-DmpOk "$Name removed; its copy is $export (wsl --import brings it back)"
+      $export = $null
+      if (-not $NoBackup) {
+        $export = Join-Path $script:DataDir ("$Name-{0}.tar" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        Write-DmpStep "Exporting $Name to $export (a copy, in case you want it back)"
+        $result = Invoke-DmpWsl @('--export', $Name, $export) 3600
+        if ($result.ExitCode -ne 0) { throw "the export failed, so $Name stays: $($result.Error.Trim())" }
+      }
+      Write-DmpStep "Removing the distro $Name"
+      $gone = Invoke-DmpWsl @('--unregister', $Name) 300
+      if ($gone.ExitCode -ne 0) { throw "wsl --unregister $Name failed: $(($gone.Error + $gone.Output).Trim())" }
+      # Its folder, empty once WSL took its disk away.
+      $folder = Join-Path $script:DataDir "wsl\$Name"
+      if ((Test-Path -LiteralPath $folder) -and -not (Get-ChildItem -LiteralPath $folder -Force)) { Remove-Item -LiteralPath $folder -Force }
+      if ($export) { Write-DmpOk "$Name removed; its copy is $export (wsl --import brings it back)" }
+      else { Write-DmpOk "$Name removed, with no copy kept" }
     } else {
       Write-DmpOk "$Name stays"
     }
@@ -583,8 +598,8 @@ try {
   if ($Answers) { $script:Answered = Read-DmpAnswerFile $Answers }
   $script:Quiet = [bool]$Answers -or [bool]$Yes
   Start-DmpLog $(if ($Uninstall) { 'uninstall' } else { 'install' })
-  Write-DmpLog "arguments: -Distro $Distro$(if ($Release) { " -Release $Release" })$(if ($Yes) { ' -Yes' })"
-  if ($Uninstall) { Uninstall-DmpPanel $Distro -KeepDistro:$Yes; Write-DmpLog 'done'; exit 0 }
+  Write-DmpLog "arguments: -Distro $Distro$(if ($Release) { " -Release $Release" })$(if ($Yes) { ' -Yes' })$(if ($RemoveDistro) { ' -RemoveDistro' })$(if ($NoBackup) { ' -NoBackup' })"
+  if ($Uninstall) { Uninstall-DmpPanel $Distro -KeepDistro:$Yes -RemoveDistro:$RemoveDistro -NoBackup:$NoBackup; Write-DmpLog 'done'; exit 0 }
   Assert-DmpWindows
   Assert-DmpWsl
   Assert-DmpPortFree

@@ -378,3 +378,51 @@ Describe 'Get-DmpProbe' {
     (Get-DmpProbe 'Missing' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":false,"user":"","panelPassword":false}'
   }
 }
+
+Describe 'Uninstall-DmpPanel and the distro' {
+  BeforeEach {
+    Mock Write-DmpStep { }
+    Mock Write-DmpWarn { }
+    Mock Write-DmpOk { }
+    Mock Remove-DmpSetting { }
+    Mock Invoke-DmpHelper { 0 }
+    Mock Read-Host { throw 'no question may be asked' }
+    $script:DataDir = Join-Path ([IO.Path]::GetTempPath()) ("dmp-data-{0}" -f ([guid]::NewGuid().ToString('N')))
+    $script:Wsl = [Collections.Generic.List[string]]::new()
+    Mock Invoke-DmpWsl {
+      $script:Wsl.Add($ArgumentList[0])
+      if ($ArgumentList[0] -eq '--list') { return [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = $script:WslList; Error = '' } }
+      [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' }
+    }
+  }
+
+  It 'removes the distro without a question, after exporting a copy' {
+    Uninstall-DmpPanel 'devmagic-panel' -RemoveDistro
+    $script:Wsl | Should -Be @('--list', '--export', '--unregister')
+    Should -Invoke Write-DmpOk -Times 1 -Exactly -ParameterFilter { $Text -like '*its copy is*' }
+  }
+
+  It 'removes it with no copy when asked' {
+    Uninstall-DmpPanel 'devmagic-panel' -RemoveDistro -NoBackup
+    $script:Wsl | Should -Be @('--list', '--unregister')
+    Should -Invoke Write-DmpOk -Times 1 -Exactly -ParameterFilter { $Text -like '*no copy kept*' }
+  }
+
+  It 'keeps it on a silent uninstall, and never removes a distro of your own' {
+    Uninstall-DmpPanel 'devmagic-panel' -KeepDistro
+    Uninstall-DmpPanel 'Ubuntu-24.04' -RemoveDistro
+    $script:Wsl | Should -Not -Contain '--unregister'
+    $script:Wsl | Should -Not -Contain '--export'
+  }
+
+  It 'keeps the distro when its export fails' {
+    Mock Invoke-DmpWsl {
+      $script:Wsl.Add($ArgumentList[0])
+      if ($ArgumentList[0] -eq '--list') { return [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = $script:WslList; Error = '' } }
+      if ($ArgumentList[0] -eq '--export') { return [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = 'not enough space' } }
+      [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' }
+    }
+    { Uninstall-DmpPanel 'devmagic-panel' -RemoveDistro } | Should -Throw '*export failed*not enough space*'
+    $script:Wsl | Should -Not -Contain '--unregister'
+  }
+}

@@ -61,12 +61,6 @@ Source: "{#ReleaseFile}"; DestDir: "{app}"; Flags: ignoreversion
 Filename: "https://local.devmagic"; Description: "Open the panel"; \
   Flags: postinstall shellexec nowait skipifsilent; Check: InstallSucceeded
 
-[UninstallRun]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\get.ps1"" -Uninstall{code:SilentSwitch}"; \
-  RunOnceId: "devmagic-panel-uninstall"; \
-  Flags: waituntilterminated
-
 [Code]
 const
   PanelPasswordMin = 8;
@@ -83,18 +77,10 @@ var
   DetailsMemo: TNewMemo;
   Succeeded: Boolean;
   LastError: String;
-
-// -Yes when Windows runs the setup or its uninstall silently (IT, winget, the panel's update).
-// WizardSilent exists only in setup and UninstallSilent only in the uninstaller.
-function SilentSwitch(Param: String): String;
-begin
-  Result := '';
-  if IsUninstaller() then begin
-    if UninstallSilent() then Result := ' -Yes';
-  end else begin
-    if WizardSilent() then Result := ' -Yes';
-  end;
-end;
+  // The uninstaller's answers, and its Details box.
+  UninstallDistro: String;
+  RemoveDistroAnswer, NoBackupAnswer: Boolean;
+  UninstallDetails: TNewMemo;
 
 function InstallSucceeded(): Boolean;
 begin
@@ -398,4 +384,71 @@ begin
     Result := Result + 'Panel password: the one you typed' + NewLine;
   if not HasWsl then
     Result := Result + NewLine + 'WSL is off: Windows turns it on (UAC) and asks for a restart; run this setup again after it.' + NewLine;
+end;
+
+// --- uninstall: its two questions in dialogs, get.ps1 hidden, its output under Details ---
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+  RemoveDistroAnswer := False;
+  NoBackupAnswer := False;
+  if not RegQueryStringValue(HKCU, 'Software\devmagic-panel', 'Distro', UninstallDistro) then UninstallDistro := 'devmagic-panel';
+  // A silent uninstall keeps the distro, and a distro of your own always stays.
+  if UninstallSilent() or (UninstallDistro <> 'devmagic-panel') then Exit;
+  RemoveDistroAnswer := MsgBox('Remove the devmagic-panel distro as well, with every site, database and file in it?' + #13#10#13#10 +
+    'No keeps it: running the setup again later finds it as it was.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
+  if not RemoveDistroAnswer then Exit;
+  NoBackupAnswer := MsgBox('Keep a copy of the distro before it goes?' + #13#10#13#10 +
+    'Yes exports it to ' + ExpandConstant('{localappdata}') + '\devmagic-panel first (as much space as the distro uses, often a few GB); wsl --import brings it back.' + #13#10 +
+    'No removes it for good, with no copy.', mbConfirmation, MB_YESNO) = IDNO;
+end;
+
+procedure UninstallLine(const S: String; const Error, FirstLine: Boolean);
+begin
+  if Error then begin
+    UninstallDetails.Lines.Add('(' + S + ')');
+    Exit;
+  end;
+  UninstallDetails.Lines.Add(S);
+  if Copy(S, 1, 4) = '==> ' then UninstallProgressForm.StatusLabel.Caption := Copy(S, 5, MaxInt);
+  if Copy(S, 1, 7) = 'error: ' then LastError := Copy(S, 8, MaxInt);
+  SendMessage(UninstallDetails.Handle, WM_VSCROLL, SB_BOTTOM, 0);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Params: String;
+  ResultCode: Integer;
+begin
+  if CurUninstallStep <> usUninstall then Exit;
+  UninstallDetails := TNewMemo.Create(UninstallProgressForm);
+  UninstallDetails.Parent := UninstallProgressForm.InstallingPage;
+  UninstallDetails.Left := UninstallProgressForm.ProgressBar.Left;
+  UninstallDetails.Top := UninstallProgressForm.ProgressBar.Top + UninstallProgressForm.ProgressBar.Height + ScaleY(12);
+  UninstallDetails.Width := UninstallProgressForm.ProgressBar.Width;
+  UninstallDetails.Height := UninstallProgressForm.InstallingPage.ClientHeight - UninstallDetails.Top - ScaleY(4);
+  UninstallDetails.ReadOnly := True;
+  UninstallDetails.ScrollBars := ssVertical;
+  UninstallDetails.WordWrap := True;
+  UninstallDetails.Font.Name := 'Consolas';
+
+  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\get.ps1') + '" -Uninstall -Distro "' + UninstallDistro + '"';
+  if RemoveDistroAnswer then begin
+    Params := Params + ' -RemoveDistro';
+    if NoBackupAnswer then Params := Params + ' -NoBackup';
+  end else
+    Params := Params + ' -Yes';
+  UninstallProgressForm.StatusLabel.Caption := 'Removing devmagic-panel from Windows...';
+  UninstallProgressForm.ProgressBar.Style := npbstMarquee;
+  try
+    if not ExecAndLogOutput(PowerShellExe(), Params, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode, @UninstallLine) then
+      ResultCode := -1;
+  finally
+    UninstallProgressForm.ProgressBar.Style := npbstNormal;
+  end;
+  Log(Format('get.ps1 -Uninstall ended with exit code %d', [ResultCode]));
+  if (ResultCode <> 0) and not UninstallSilent() then
+    MsgBox('Not everything was removed: ' + LastError + #13#10#13#10 +
+      'Every step is in the log in ' + ExpandConstant('{localappdata}') + '\devmagic-panel\logs.', mbError, MB_OK);
 end;
