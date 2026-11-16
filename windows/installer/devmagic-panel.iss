@@ -364,7 +364,9 @@ var
   Top: Integer;
 begin
   if not RegQueryStringValue(HKCU, 'Software\devmagic-panel', 'Distro', InstalledDistro) then InstalledDistro := '';
-  ChosenDistro := OwnDistro;
+  // The distro of the install there, else devmagic-panel: a silent run (the panel's
+  // Update the Windows part) asks nothing, so it repairs the distro the panel is in.
+  if InstalledDistro <> '' then ChosenDistro := InstalledDistro else ChosenDistro := OwnDistro;
 
   DistroPage := CreateCustomPage(wpWelcome, 'Where should the panel run?',
     'The panel, Apache, PHP, MySQL and your sites live in a WSL distro.');
