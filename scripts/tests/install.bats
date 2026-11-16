@@ -396,7 +396,7 @@ installed_machine() {
 
 @test "under WSL 2 without a browser of its own it adds the CA to no Linux browser store" {
   on_wsl
-  run "$INSTALL" --dry-run --yes
+  DMP_INSTALL_BROWSER_COMMANDS=dmp-no-such-browser run "$INSTALL" --dry-run --yes
   [ "$status" -eq 0 ]
   [[ "$output" == *"no browser in this WSL distro"* ]]
   [[ "$output" != *"certutil -A"* ]]

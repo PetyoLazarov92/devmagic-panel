@@ -1225,9 +1225,11 @@ setup_ca() {
 }
 
 # A browser that runs in this Linux: under WSL, only through WSLg, and rare.
+# DMP_INSTALL_BROWSER_COMMANDS: the commands to look for, so the tests do not
+# depend on the browsers of the machine they run on (CI runners have some).
 linux_browser_found() {
   local cmd
-  for cmd in firefox google-chrome google-chrome-stable chromium chromium-browser microsoft-edge microsoft-edge-stable; do
+  for cmd in ${DMP_INSTALL_BROWSER_COMMANDS:-firefox google-chrome google-chrome-stable chromium chromium-browser microsoft-edge microsoft-edge-stable}; do
     command -v "$cmd" >/dev/null && return 0
   done
   return 1
