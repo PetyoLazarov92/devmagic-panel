@@ -165,8 +165,7 @@ Describe 'Install-DmpHelperFile' {
 
 Describe 'Install-DmpWindowsSide' {
   BeforeEach {
-    Mock New-Item { }
-    Mock Set-ItemProperty { }
+    Mock Set-DmpSetting { }
     Mock Write-DmpStep { }
     Mock Write-DmpWarn { }
     Mock Install-DmpHelperFile { $true }
@@ -200,7 +199,7 @@ Describe "Uninstall-DmpPanel" {
     Mock Write-DmpStep { }
     Mock Write-DmpWarn { }
     Mock Write-DmpOk { }
-    Mock Remove-Item { }
+    Mock Remove-DmpSetting { }
     $script:Order = [Collections.Generic.List[string]]::new()
     Mock Invoke-DmpHelper { $script:Order.Add($ArgumentList[0]); 0 }
     Mock Invoke-DmpWsl { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = "  NAME STATE VERSION`n* Ubuntu Running 2`n"; Error = "" } }
@@ -217,5 +216,59 @@ Describe "Uninstall-DmpPanel" {
     Uninstall-DmpPanel "devmagic-panel" -KeepDistro
     Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like "portproxy-off did not finish*" }
     $script:Order[-1] | Should -Be "self-remove"
+  }
+}
+
+Describe 'the settings key' {
+  BeforeEach {
+    $script:SettingsKey = 'HKCU:\Software\devmagic-panel-pester'
+    Remove-Item -Path $script:SettingsKey -Recurse -Force -ErrorAction SilentlyContinue
+    Mock Write-DmpWarn { }
+  }
+  AfterEach { Remove-Item -Path $script:SettingsKey -Recurse -Force -ErrorAction SilentlyContinue }
+
+  It 'writes the distro and reads it back, without a warning' {
+    Set-DmpSetting 'devmagic-panel'
+    (Get-ItemProperty -Path $script:SettingsKey).Distro | Should -Be 'devmagic-panel'
+    Should -Invoke Write-DmpWarn -Times 0 -Exactly
+  }
+
+  It 'warns when the value is not there when read back' {
+    Mock Get-ItemProperty { [pscustomobject]@{ Distro = 'something-else' } }
+    Set-DmpSetting 'devmagic-panel'
+    Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like '*did not stay*' }
+  }
+
+  It 'removes it, and warns when it is still there' {
+    Set-DmpSetting 'devmagic-panel'
+    Remove-DmpSetting
+    Test-Path $script:SettingsKey | Should -BeFalse
+    Should -Invoke Write-DmpWarn -Times 0 -Exactly
+    Mock Test-Path { $true }
+    Remove-DmpSetting
+    Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like '*is still there*' }
+  }
+}
+
+Describe 'the log of a run' {
+  It 'keeps every step, warning and ok with the time, in DataDir\logs' {
+    $script:DataDir = Join-Path ([IO.Path]::GetTempPath()) ("dmp-data-{0}" -f ([guid]::NewGuid().ToString('N')))
+    Start-DmpLog 'install'
+    $script:LogFile | Should -BeLike "$($script:DataDir)\logs\get-install-*.log"
+    Write-DmpStep 'a step' | Out-Null
+    Write-DmpWarn 'a warning' | Out-Null
+    Write-DmpOk 'done' | Out-Null
+    $lines = Get-Content $script:LogFile
+    $lines[0] | Should -Match '^\d\d:\d\d:\d\d get\.ps1 install as '
+    $lines[1..3] | ForEach-Object { $_ | Should -Match '^\d\d:\d\d:\d\d ' }
+    ($lines[1..3] -replace '^\d\d:\d\d:\d\d ', '') | Should -Be @('==> a step', 'warn: a warning', 'ok: done')
+    $script:LogFile = $null
+  }
+
+  It 'goes on without a log when its folder cannot be made' {
+    $script:DataDir = 'Z:\nowhere\at\all'
+    Mock New-Item { throw 'no such drive' }
+    { Start-DmpLog 'install'; Write-DmpStep 'still runs' | Out-Null } | Should -Not -Throw
+    $script:LogFile | Should -BeNullOrEmpty
   }
 }

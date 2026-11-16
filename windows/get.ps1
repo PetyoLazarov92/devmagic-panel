@@ -45,8 +45,42 @@ $script:SettingsKey = 'HKCU:\Software\devmagic-panel'
 if (-not (Test-Path -LiteralPath $script:Helper)) { throw "dmp-win.ps1 is not next to get.ps1 in $($script:Here)" }
 . $script:Helper
 
-function Write-DmpStep([string]$Text) { [Console]::Out.WriteLine("==> $Text") }
-function Write-DmpWarn([string]$Text) { [Console]::Out.WriteLine("warn: $Text") }
+# Every run keeps a log in DataDir\logs (what it did, what Windows and WSL said), so a
+# problem after the window closed can still be read; a log that cannot be written is skipped.
+$script:LogFile = $null
+function Write-DmpLog([string]$Text) {
+  if (-not $script:LogFile) { return }
+  try { [IO.File]::AppendAllText($script:LogFile, ('{0} {1}{2}' -f (Get-Date -Format 'HH:mm:ss'), $Text, [Environment]::NewLine)) } catch { $script:LogFile = $null }
+}
+function Start-DmpLog([string]$Mode) {
+  try {
+    $dir = Join-Path $script:DataDir 'logs'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $script:LogFile = Join-Path $dir ('get-{0}-{1}.log' -f $Mode, (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    Write-DmpLog "get.ps1 $Mode as $([Security.Principal.WindowsIdentity]::GetCurrent().Name), PowerShell $($PSVersionTable.PSVersion), from $PSCommandPath"
+  } catch { $script:LogFile = $null }
+}
+
+function Write-DmpStep([string]$Text) { [Console]::Out.WriteLine("==> $Text"); Write-DmpLog "==> $Text" }
+function Write-DmpWarn([string]$Text) { [Console]::Out.WriteLine("warn: $Text"); Write-DmpLog "warn: $Text" }
+# The helper's own, logged too.
+function Write-DmpOk([string]$Text) { [Console]::Out.WriteLine("ok: $Text"); Write-DmpLog "ok: $Text" }
+
+# The distro the helper works with, for this user; read back, since a key that is not there
+# afterwards sends the helper to the default distro (devmagic-panel).
+function Set-DmpSetting([string]$Name) {
+  New-Item -Path $script:SettingsKey -Force | Out-Null
+  Set-ItemProperty -Path $script:SettingsKey -Name Distro -Value $Name
+  $saved = (Get-ItemProperty -Path $script:SettingsKey -ErrorAction SilentlyContinue).Distro
+  if ($saved -ne $Name) { Write-DmpWarn "the distro name did not stay in $($script:SettingsKey) (reads '$saved'): run this script again" }
+  else { Write-DmpLog "settings: Distro = $Name in $($script:SettingsKey)" }
+}
+
+function Remove-DmpSetting() {
+  Remove-Item -Path $script:SettingsKey -Recurse -Force -ErrorAction SilentlyContinue
+  if (Test-Path -Path $script:SettingsKey) { Write-DmpWarn "$($script:SettingsKey) is still there: remove it in regedit if you do not reinstall" }
+  else { Write-DmpLog "settings: $($script:SettingsKey) removed" }
+}
 
 # --- reading what Windows and WSL say ---
 
@@ -295,7 +329,8 @@ function Invoke-DmpHelper([string[]]$ArgumentList) {
   $all = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $script:Helper) + $ArgumentList
   # Long enough for you to answer UAC or Windows' CA question.
   $result = Invoke-DmpProgram $powershell $all 600
-  foreach ($line in (($result.Output + $result.Error) -split "`r?`n")) { if ($line.Trim()) { [Console]::Out.WriteLine("   $line") } }
+  foreach ($line in (($result.Output + $result.Error) -split "`r?`n")) { if ($line.Trim()) { [Console]::Out.WriteLine("   $line"); Write-DmpLog "   $line" } }
+  Write-DmpLog "helper $($ArgumentList[0]): exit $(if ($result.TimedOut) { 'timed out' } else { $result.ExitCode })"
   if ($result.TimedOut) { return 1 }
   return [int]$result.ExitCode
 }
@@ -321,8 +356,7 @@ function Install-DmpHelperFile() {
 }
 
 function Install-DmpWindowsSide([string]$Name) {
-  New-Item -Path $script:SettingsKey -Force | Out-Null
-  Set-ItemProperty -Path $script:SettingsKey -Name Distro -Value $Name
+  Set-DmpSetting $Name
   [void](Install-DmpHelperFile)
   $run = { param([string[]]$a) Invoke-DmpHelper $a }
 
@@ -372,7 +406,7 @@ function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro) {
     if ($code -ne 0) { Write-DmpWarn "$command did not finish (exit $code)" }
   }
   $distros = @(ConvertFrom-DmpWslList (Invoke-DmpWsl @('--list', '--verbose')).Output)
-  if (-not ($distros | Where-Object { $_.Name -eq $Name })) { Write-DmpOk "no distro $Name"; Remove-Item -Path $script:SettingsKey -Recurse -Force -ErrorAction SilentlyContinue; return }
+  if (-not ($distros | Where-Object { $_.Name -eq $Name })) { Write-DmpOk "no distro $Name"; Remove-DmpSetting; return }
   if ($Name -ne 'devmagic-panel') {
     Write-DmpOk "$Name is your own distro and stays: run ~/.local/share/devmagic-panel/current/install.sh --uninstall in it to remove the panel there"
   } else {
@@ -388,7 +422,7 @@ function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro) {
       Write-DmpOk "$Name stays"
     }
   }
-  Remove-Item -Path $script:SettingsKey -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-DmpSetting
 }
 
 # Dot-sourced (by the tests), it only defines its functions.
@@ -396,7 +430,9 @@ if ($MyInvocation.InvocationName -eq '.') { return }
 
 try {
   if ($Distro -cnotmatch '^[A-Za-z0-9._-]{1,64}$') { throw "not a distro name: '$Distro'" }
-  if ($Uninstall) { Uninstall-DmpPanel $Distro -KeepDistro:$Yes; exit 0 }
+  Start-DmpLog $(if ($Uninstall) { 'uninstall' } else { 'install' })
+  Write-DmpLog "arguments: -Distro $Distro$(if ($Release) { " -Release $Release" })$(if ($Yes) { ' -Yes' })"
+  if ($Uninstall) { Uninstall-DmpPanel $Distro -KeepDistro:$Yes; Write-DmpLog 'done'; exit 0 }
   Assert-DmpWindows
   Assert-DmpWsl
   Assert-DmpPortFree
@@ -406,9 +442,14 @@ try {
   Install-DmpPanel $Distro $Release
   Install-DmpWindowsSide $Distro
   Test-DmpPanel
+  # Once more at the end: the helper finds the distro by this key.
+  $saved = (Get-ItemProperty -Path $script:SettingsKey -ErrorAction SilentlyContinue).Distro
+  if ($saved -ne $Distro) { Write-DmpWarn "the distro name is gone from $($script:SettingsKey) (reads '$saved') since it was written: run this script again" }
   Write-DmpOk "devmagic-panel runs in ${Distro}: https://local.devmagic"
   exit 0
 } catch {
   [Console]::Error.WriteLine("error: $($_.Exception.Message)")
+  Write-DmpLog "error: $($_.Exception.Message)"
+  if ($script:LogFile) { [Console]::Error.WriteLine("the log of this run: $($script:LogFile)") }
   exit 1
 }
