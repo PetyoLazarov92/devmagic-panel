@@ -14,13 +14,26 @@ one at a time. Run again, it skips what is in place, so it also repairs.
 
 -Distro picks another name than devmagic-panel (an Ubuntu you have, to install
 into it). The helper dmp-win.ps1 must be next to this script.
+
+The Windows setup (installer\devmagic-panel.iss) asks its questions in its own
+window and runs this script hidden, showing its output as it comes:
+  -Probe          read only: what is in place, as JSON (WSL, the distro, its user,
+                  whether a panel password is set), so the setup asks only what it needs
+  -Answers <file> its answers, from a file only you can read, deleted once read:
+                  linux-user=, linux-password=, panel-password= or keep-panel-password=yes
+With -Answers or -Yes nothing opens a window or asks: the Linux user is made as
+root, install.sh runs with a sudo rule that is removed again when it ends, and the
+panel's setup takes the password on stdin. -Yes alone (a silent update) keeps the
+Linux user and the panel password; a fresh install needs the setup's questions.
 #>
 [CmdletBinding()]
 param(
   [string]$Distro = 'devmagic-panel',
   [string]$Release = '',
   [switch]$Uninstall,
-  [switch]$Yes
+  [switch]$Yes,
+  [switch]$Probe,
+  [string]$Answers = ''
 )
 
 Set-StrictMode -Version 2.0
@@ -163,9 +176,9 @@ function Invoke-DmpWsl([string[]]$ArgumentList, [int]$TimeoutSeconds = 30) {
 }
 
 # A command in the distro as root, or as its default user; its output.
-function Invoke-DmpInDistro([string]$Name, [string[]]$Command, [switch]$Root, [int]$TimeoutSeconds = 60) {
+function Invoke-DmpInDistro([string]$Name, [string[]]$Command, [switch]$Root, [int]$TimeoutSeconds = 60, [string]$User = '') {
   $list = @('-d', $Name)
-  if ($Root) { $list += @('-u', 'root') }
+  if ($Root) { $list += @('-u', 'root') } elseif ($User) { $list += @('-u', $User) }
   $list += @('--exec') + $Command
   return Invoke-DmpWsl $list $TimeoutSeconds
 }
@@ -278,9 +291,108 @@ function Assert-DmpSystemd([string]$Name) {
 
 # The default user: Ubuntu's own first-run script, in a window where you type
 # the name and password. This script never sees the password.
+# --- without questions (the Windows setup's answers, or -Yes) ---
+
+$script:Quiet = $false
+$script:Answered = @{}
+
+# The setup's answers, from its file, which goes as soon as it is read: a password
+# never stays on disk longer than this, and never comes on a command line.
+function Read-DmpAnswerFile([string]$Path) {
+  $answers = @{}
+  try {
+    foreach ($line in [IO.File]::ReadAllLines($Path, [Text.Encoding]::UTF8)) {
+      $at = $line.IndexOf('=')
+      if ($at -gt 0) { $answers[$line.Substring(0, $at)] = $line.Substring($at + 1) }
+    }
+  } finally { Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue }
+  if ($answers.ContainsKey('linux-user') -and $answers['linux-user'] -cnotmatch '^[a-z_][a-z0-9_-]{0,31}$') {
+    throw [DmpInputError]::new("not a Linux user name: '$($answers['linux-user'])' (lowercase letters, digits, _ and -, starting with a letter or _)")
+  }
+  return $answers
+}
+
+# wsl.exe with text on its stdin (a password), never on its command line. With
+# -Passthrough what it prints goes straight to this script's own output as it
+# comes, so the Windows setup shows the install in its Details box while it runs.
+function Invoke-DmpWslInput([string[]]$ArgumentList, [string]$InputText, [int]$TimeoutSeconds = 60, [switch]$Passthrough) {
+  $info = New-Object Diagnostics.ProcessStartInfo
+  $info.FileName = Get-DmpWslExe
+  $info.Arguments = Join-DmpArgumentList $ArgumentList
+  $info.UseShellExecute = $false
+  $info.CreateNoWindow = $true
+  $info.RedirectStandardInput = $true
+  $info.RedirectStandardOutput = -not $Passthrough
+  $info.RedirectStandardError = -not $Passthrough
+  $info.EnvironmentVariables['WSL_UTF8'] = '1'
+  $process = [Diagnostics.Process]::Start($info)
+  $out = $null
+  $err = $null
+  if (-not $Passthrough) {
+    $out = $process.StandardOutput.ReadToEndAsync()
+    $err = $process.StandardError.ReadToEndAsync()
+  }
+  $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes($InputText)
+  $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+  $process.StandardInput.Close()
+  if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+    try { $process.Kill() } catch { Write-Verbose "the program ended as it was stopped: $($_.Exception.Message)" }
+    return [pscustomobject]@{ TimedOut = $true; ExitCode = -1; Output = ''; Error = '' }
+  }
+  [pscustomobject]@{ TimedOut = $false; ExitCode = $process.ExitCode; Output = $(if ($out) { $out.Result } else { '' }); Error = $(if ($err) { $err.Result } else { '' }) }
+}
+
+# The Linux user as Ubuntu's own first-run script makes it (adduser, the groups
+# adm cdrom sudo dip plugdev, the default user in wsl.conf), as root, without a window.
+# The account comes as the setup wrote it (user, password): plain text from its file, to stdin only.
+function New-DmpLinuxUser([string]$Name, [hashtable]$Account) {
+  $User = $Account.user
+  $secret = $Account.secret
+  Write-DmpStep "Making your Linux user $User"
+  if (-not $secret) { throw [DmpInputError]::new('no password for the Linux user: run the setup again') }
+  $add = Invoke-DmpInDistro $Name @('sh', '-c', '/usr/sbin/adduser --quiet --disabled-password --gecos "" "$1" && /usr/sbin/usermod -aG adm,cdrom,sudo,dip,plugdev "$1"', 'adduser', $User) -Root
+  if ($add.ExitCode -ne 0) { throw "could not make the Linux user ${User}: $(($add.Error + $add.Output).Trim())" }
+  $set = Invoke-DmpWslInput @('-d', $Name, '-u', 'root', '--exec', '/usr/sbin/chpasswd') "${User}:$secret`n"
+  if ($set.TimedOut -or $set.ExitCode -ne 0) { throw "could not set the password of ${User}: $(($set.Error + $set.Output).Trim())" }
+  $default = 'f=/etc/wsl.conf; touch "$f"; if ! grep -q "^\[user\]" "$f"; then printf "\n[user]\ndefault=%s\n" "$1" >> "$f"; elif ! sed -n "/^\[user\]/,/^\[/{/^[[:space:]]*default[[:space:]]*=/p}" "$f" | grep -q .; then sed -i "/^\[user\]/a default=$1" "$f"; fi'
+  $conf = Invoke-DmpInDistro $Name @('sh', '-c', $default, 'default-user', $User) -Root
+  if ($conf.ExitCode -ne 0) { throw "could not make $User the default user in /etc/wsl.conf: $(($conf.Error + $conf.Output).Trim())" }
+  # The default user applies from the next start.
+  Invoke-DmpWsl @('--terminate', $Name) | Out-Null
+}
+
+# Whether the panel has its password already, for -Yes and -Probe.
+function Test-DmpPanelPassword([string]$Name, [string]$User) {
+  if (-not $User) { return $false }
+  $check = Invoke-DmpInDistro $Name @('sh', '-c', 'grep -qs panelPasswordHash "$HOME/.config/devmagic-panel/secrets.json" && echo yes') -User $User
+  return $check.Output.Trim() -eq 'yes'
+}
+
+# -Probe: read only, what is in place, so the setup asks only what it needs.
+function Get-DmpProbe([string]$Name) {
+  $state = [ordered]@{ wsl = $false; distro = $false; user = ''; panelPassword = $false }
+  $status = Invoke-DmpProgram (Get-DmpWslExe) @('--status') 30
+  if ($status.TimedOut -or $status.ExitCode -ne 0) { return $state }
+  $state.wsl = $true
+  $distros = @(ConvertFrom-DmpWslList (Invoke-DmpWsl @('--list', '--verbose')).Output)
+  if (-not ($distros | Where-Object { $_.Name -eq $Name })) { return $state }
+  $state.distro = $true
+  $state.user = (Invoke-DmpInDistro $Name @('sh', '-c', 'getent passwd 1000 | cut -d: -f1')).Output.Trim()
+  $state.panelPassword = Test-DmpPanelPassword $Name $state.user
+  return $state
+}
+
 function Assert-DmpLinuxUser([string]$Name) {
   $user = (Invoke-DmpInDistro $Name @('sh', '-c', 'getent passwd 1000 | cut -d: -f1')).Output.Trim()
   if ($user) { Write-DmpOk "Linux user $user"; return $user }
+  if ($script:Quiet) {
+    if (-not $script:Answered.ContainsKey('linux-user')) { throw [DmpInputError]::new('the distro has no Linux user yet: run the setup without /SILENT, it asks for one') }
+    New-DmpLinuxUser $Name @{ user = $script:Answered['linux-user']; secret = $script:Answered['linux-password'] }
+    $user = (Invoke-DmpInDistro $Name @('sh', '-c', 'getent passwd 1000 | cut -d: -f1')).Output.Trim()
+    if ($user -ne $script:Answered['linux-user']) { throw "the Linux user is not there after making it (found '$user'): run the setup again" }
+    Write-DmpOk "Linux user $user"
+    return $user
+  }
   Write-DmpStep 'Making your Linux user: a window opens where you type a name and a password'
   $code = Start-DmpConsole @('-d', $Name, '-u', 'root', '--exec', '/usr/lib/wsl/wsl-setup')
   if ($code -ne 0) { throw "making the Linux user did not finish (exit $code): run this script again" }
@@ -293,9 +405,46 @@ function Assert-DmpLinuxUser([string]$Name) {
 
 # The panel inside the distro, in a window: install.sh asks for your sudo
 # password there, then the panel's setup asks for the panel password.
-function Install-DmpPanel([string]$Name, [string]$ReleasePath) {
+# The sudo rule for the length of a quiet install: WSL gives root to whoever can
+# run wsl.exe anyway, so it opens nothing new; it goes again however the install ends.
+$script:SudoersFile = '/etc/sudoers.d/zz-devmagic-panel-setup'
+
+function Install-DmpPanelQuietly([string]$Name, [string]$User, [string]$ReleasePath) {
+  $keep = $script:Answered['keep-panel-password'] -eq 'yes' -or (-not $script:Answered.ContainsKey('panel-password') -and (Test-DmpPanelPassword $Name $User))
+  if (-not $keep -and -not $script:Answered['panel-password']) { throw [DmpInputError]::new('no panel password yet: run the setup without /SILENT, it asks for one') }
+  Write-DmpStep 'Installing the panel in the distro'
+  $grant = Invoke-DmpInDistro $Name @('sh', '-c', 'umask 0337; printf "%s ALL=(ALL:ALL) NOPASSWD: ALL\n" "$1" > "$2" && visudo -cqf "$2"', 'grant', $User, $script:SudoersFile) -Root
+  if ($grant.ExitCode -ne 0) { throw "could not let the install use sudo without a password: $(($grant.Error + $grant.Output).Trim())" }
+  try {
+    $setup = if ($keep) { 'setup --yes --keep-password' } else { 'setup --yes' }
+    $cli = '~/.local/share/devmagic-panel/node/current/bin/node --disable-warning=ExperimentalWarning ~/.local/share/devmagic-panel/current/server/dist/cli.js ' + $setup
+    # The password is read first, so install.sh never sees it; the panel's setup gets it on its stdin.
+    if ($ReleasePath) {
+      $full = (Resolve-Path -LiteralPath $ReleasePath).Path
+      if ($full -notmatch '\.tar\.gz$') { throw "-Release takes a release package, devmagic-panel-<version>.tar.gz: $full" }
+      $source = (Invoke-DmpInDistro $Name @('wslpath', '-a', $full)).Output.Trim()
+      $get = 'tar -xzf "$1" -C "$d"; "$d"/devmagic-panel-*/install.sh --yes </dev/null'
+    } else {
+      $source = $script:Manifest.GetShUrl
+      $get = 'curl -fsSL -o "$d/get.sh" "$1"; bash "$d/get.sh" --yes </dev/null'
+    }
+    $script = 'set -e; IFS= read -r pw || true; d=$(mktemp -d); ' + $get + '; printf "%s\n" "$pw" | ' + $cli
+    $panelPassword = if ($keep) { '' } else { $script:Answered['panel-password'] }
+    $run = Invoke-DmpWslInput @('-d', $Name, '-u', $User, '--exec', 'bash', '-c', $script, 'install', $source) "$panelPassword`n" 3600 -Passthrough
+  } finally {
+    $revoke = Invoke-DmpInDistro $Name @('rm', '-f', $script:SudoersFile) -Root
+    if ($revoke.ExitCode -ne 0) { Write-DmpWarn "the install's sudo rule $($script:SudoersFile) is still there: remove it with wsl -d $Name -u root rm $($script:SudoersFile)" }
+  }
+  if ($run.TimedOut) { throw "the panel's installer did not finish within an hour: its log is in ~/.local/state/devmagic-panel/logs in the distro; run the setup again" }
+  if ($run.ExitCode -eq 3) { throw [DmpInputError]::new('the panel password was refused (the reason is above): run the setup again and pick another') }
+  if ($run.ExitCode -ne 0) { throw "the panel's installer did not finish (exit $($run.ExitCode)): its log is in ~/.local/state/devmagic-panel/logs in the distro; run the setup again" }
+  Write-DmpOk 'the panel is installed in the distro'
+}
+
+function Install-DmpPanel([string]$Name, [string]$ReleasePath, [string]$User = '') {
   $installed = (Invoke-DmpInDistro $Name @('sh', '-c', 'test -f /etc/devmagic-panel/config.env && echo yes')).Output.Trim()
   if ($installed -eq 'yes' -and -not $ReleasePath) { Write-DmpOk 'the panel is installed in the distro (updates come from its Updates page)'; return }
+  if ($script:Quiet) { Install-DmpPanelQuietly $Name $User $ReleasePath; return }
   Write-DmpStep 'Installing the panel in the distro: a window opens for your Linux password, then the panel password'
   if ($ReleasePath) {
     $full = (Resolve-Path -LiteralPath $ReleasePath).Path
@@ -430,6 +579,9 @@ if ($MyInvocation.InvocationName -eq '.') { return }
 
 try {
   if ($Distro -cnotmatch '^[A-Za-z0-9._-]{1,64}$') { throw "not a distro name: '$Distro'" }
+  if ($Probe) { [Console]::Out.WriteLine((Get-DmpProbe $Distro | ConvertTo-Json -Compress)); exit 0 }
+  if ($Answers) { $script:Answered = Read-DmpAnswerFile $Answers }
+  $script:Quiet = [bool]$Answers -or [bool]$Yes
   Start-DmpLog $(if ($Uninstall) { 'uninstall' } else { 'install' })
   Write-DmpLog "arguments: -Distro $Distro$(if ($Release) { " -Release $Release" })$(if ($Yes) { ' -Yes' })"
   if ($Uninstall) { Uninstall-DmpPanel $Distro -KeepDistro:$Yes; Write-DmpLog 'done'; exit 0 }
@@ -438,8 +590,8 @@ try {
   Assert-DmpPortFree
   Install-DmpDistro $Distro
   Assert-DmpSystemd $Distro
-  [void](Assert-DmpLinuxUser $Distro)
-  Install-DmpPanel $Distro $Release
+  $linuxUser = Assert-DmpLinuxUser $Distro
+  Install-DmpPanel $Distro $Release $linuxUser
   Install-DmpWindowsSide $Distro
   Test-DmpPanel
   # Once more at the end: the helper finds the distro by this key.

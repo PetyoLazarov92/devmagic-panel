@@ -272,3 +272,109 @@ Describe 'the log of a run' {
     $script:LogFile | Should -BeNullOrEmpty
   }
 }
+
+Describe 'Read-DmpAnswerFile' {
+  BeforeEach {
+    $script:AnswerPath = Join-Path ([IO.Path]::GetTempPath()) ("dmp-answers-{0}.txt" -f ([guid]::NewGuid().ToString('N')))
+  }
+
+  It 'reads every answer, a password with = and : in it included, and deletes the file' {
+    [IO.File]::WriteAllLines($script:AnswerPath, @('linux-user=alex', 'linux-password=p=a:ss w0rd', 'panel-password=blue-owl-at-noon'), (New-Object Text.UTF8Encoding($false)))
+    $answers = Read-DmpAnswerFile $script:AnswerPath
+    $answers['linux-user'] | Should -Be 'alex'
+    $answers['linux-password'] | Should -Be 'p=a:ss w0rd'
+    $answers['panel-password'] | Should -Be 'blue-owl-at-noon'
+    Test-Path -LiteralPath $script:AnswerPath | Should -BeFalse
+  }
+
+  It 'refuses a Linux user name Ubuntu would refuse, and still deletes the file' -TestCases @(@{ Name = 'Alex' }, @{ Name = '1alex' }, @{ Name = 'alex;rm' }, @{ Name = '' }) {
+    [IO.File]::WriteAllLines($script:AnswerPath, @("linux-user=$Name", 'linux-password=x'))
+    { Read-DmpAnswerFile $script:AnswerPath } | Should -Throw -ExceptionType ([DmpInputError])
+    Test-Path -LiteralPath $script:AnswerPath | Should -BeFalse
+  }
+}
+
+Describe 'New-DmpLinuxUser' {
+  BeforeEach {
+    Mock Write-DmpStep { }
+    Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+    Mock Invoke-DmpWslInput { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+    Mock Invoke-DmpWsl { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+  }
+
+  It "makes the user as Ubuntu's first run does, the password on stdin only, the default user in wsl.conf, then restarts the distro" {
+    New-DmpLinuxUser 'devmagic-panel' @{ user = 'alex'; secret = 's3cret:pw' }
+    Should -Invoke Invoke-DmpInDistro -Times 1 -Exactly -ParameterFilter { $Root -and $Command[2] -like '*adduser --quiet --disabled-password*usermod -aG adm,cdrom,sudo,dip,plugdev*' -and $Command[-1] -eq 'alex' }
+    Should -Invoke Invoke-DmpWslInput -Times 1 -Exactly -ParameterFilter { ($ArgumentList -join ' ') -eq '-d devmagic-panel -u root --exec /usr/sbin/chpasswd' -and $InputText -eq "alex:s3cret:pw`n" }
+    Should -Invoke Invoke-DmpInDistro -Times 1 -Exactly -ParameterFilter { $Root -and $Command[2] -like '*wsl.conf*default=*' -and $Command[-1] -eq 'alex' }
+    Should -Invoke Invoke-DmpWsl -Times 1 -Exactly -ParameterFilter { ($ArgumentList -join ' ') -eq '--terminate devmagic-panel' }
+    # The password goes nowhere but stdin.
+    Should -Invoke Invoke-DmpInDistro -Times 0 -Exactly -ParameterFilter { ($Command -join ' ') -like '*s3cret*' }
+  }
+
+  It 'stops when adduser fails, before any password is set' {
+    Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = 'adduser: The user `alex'' already exists.' } }
+    { New-DmpLinuxUser 'devmagic-panel' @{ user = 'alex'; secret = 'pw' } } | Should -Throw '*could not make the Linux user alex*already exists*'
+    Should -Invoke Invoke-DmpWslInput -Times 0 -Exactly
+  }
+}
+
+Describe 'Install-DmpPanelQuietly' {
+  BeforeEach {
+    Mock Write-DmpStep { }
+    Mock Write-DmpWarn { }
+    Mock Write-DmpOk { }
+    Mock Test-DmpPanelPassword { $false }
+    Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+    Mock Invoke-DmpWslInput { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+    $script:Answered = @{ 'panel-password' = 'blue-owl-at-noon' }
+  }
+  AfterEach { $script:Answered = @{} }
+
+  It "runs the install as the Linux user with a sudo rule it removes again, the panel password on the setup's stdin" {
+    Install-DmpPanelQuietly 'devmagic-panel' 'alex' ''
+    Should -Invoke Invoke-DmpInDistro -Times 1 -Exactly -ParameterFilter { $Root -and $Command[2] -like '*NOPASSWD: ALL*visudo -cqf*' -and $Command[-2] -eq 'alex' -and $Command[-1] -eq '/etc/sudoers.d/zz-devmagic-panel-setup' }
+    Should -Invoke Invoke-DmpWslInput -Times 1 -Exactly -ParameterFilter {
+      $Passthrough -and ($ArgumentList[0..3] -join ' ') -eq '-d devmagic-panel -u alex' -and $ArgumentList[7] -like '*get.sh" --yes </dev/null*cli.js setup --yes' -and $InputText -eq "blue-owl-at-noon`n"
+    }
+    Should -Invoke Invoke-DmpInDistro -Times 1 -Exactly -ParameterFilter { $Root -and ($Command -join ' ') -eq 'rm -f /etc/sudoers.d/zz-devmagic-panel-setup' }
+  }
+
+  It 'keeps the panel password when asked, or when -Yes finds one set, and sends none' {
+    $script:Answered = @{ 'keep-panel-password' = 'yes' }
+    Install-DmpPanelQuietly 'devmagic-panel' 'alex' ''
+    $script:Answered = @{}
+    Mock Test-DmpPanelPassword { $true }
+    Install-DmpPanelQuietly 'devmagic-panel' 'alex' ''
+    Should -Invoke Invoke-DmpWslInput -Times 2 -Exactly -ParameterFilter { $ArgumentList[7] -like '*setup --yes --keep-password' -and $InputText -eq "`n" }
+  }
+
+  It 'says the panel password was refused, and removes the sudo rule all the same' {
+    Mock Invoke-DmpWslInput { [pscustomobject]@{ TimedOut = $false; ExitCode = 3; Output = ''; Error = '' } }
+    { Install-DmpPanelQuietly 'devmagic-panel' 'alex' '' } | Should -Throw -ExceptionType ([DmpInputError])
+    Should -Invoke Invoke-DmpInDistro -Times 1 -Exactly -ParameterFilter { ($Command -join ' ') -eq 'rm -f /etc/sudoers.d/zz-devmagic-panel-setup' }
+  }
+
+  It 'stops before anything changes when there is no panel password to give or keep' {
+    $script:Answered = @{}
+    { Install-DmpPanelQuietly 'devmagic-panel' 'alex' '' } | Should -Throw '*no panel password yet*'
+    Should -Invoke Invoke-DmpInDistro -Times 0 -Exactly
+    Should -Invoke Invoke-DmpWslInput -Times 0 -Exactly
+  }
+}
+
+Describe 'Get-DmpProbe' {
+  It 'says only that WSL is off when it does not answer' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = '' } }
+    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":false,"distro":false,"user":"","panelPassword":false}'
+  }
+
+  It 'reads the distro, its user and whether the panel has a password' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+    Mock Invoke-DmpWsl { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = $script:WslList; Error = '' } }
+    Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = "alex`n"; Error = '' } }
+    Mock Test-DmpPanelPassword { $true } -ParameterFilter { $User -eq 'alex' }
+    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":true,"user":"alex","panelPassword":true}'
+    (Get-DmpProbe 'Missing' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":false,"user":"","panelPassword":false}'
+  }
+}
