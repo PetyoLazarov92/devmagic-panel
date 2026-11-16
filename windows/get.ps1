@@ -14,6 +14,9 @@ one at a time. Run again, it skips what is in place, so it also repairs.
   ... -Uninstall -RemoveDistro [-NoBackup]                         remove the distro too, without a
                                                                    question; -NoBackup skips its copy
 
+Exit codes: 0 done, 1 failed, 10 WSL was just turned on and Windows needs a restart
+(then run it again; the Windows setup offers the restart and starts itself again after it).
+
 -Distro picks another name than devmagic-panel (an Ubuntu you have, to install
 into it). The helper dmp-win.ps1 must be next to this script.
 
@@ -214,6 +217,42 @@ function Assert-DmpWindows() {
   if ($drive.AvailableFreeSpace -lt 10GB) { throw "the distro needs about 10 GB on $($drive.Name), which has $([math]::Round($drive.AvailableFreeSpace / 1GB, 1)) GB free" }
 }
 
+# Virtualization: WSL 2 runs a small virtual machine, which needs Intel VT-x or AMD-V
+# turned on in the computer's firmware (BIOS/UEFI). A hypervisor that runs already (WSL 2
+# or Hyper-V on) means it is on; Windows then reports the firmware flag as off, so that
+# flag only counts without one.
+function Test-DmpVirtualization($HypervisorPresent, $FirmwareEnabled) {
+  if ($HypervisorPresent -eq $true) { return 'on' }
+  if ($FirmwareEnabled -eq $true) { return 'on' }
+  if ($FirmwareEnabled -eq $false) { return 'off' }
+  return 'unknown'
+}
+
+# on, off, or unknown when Windows does not say in time (WMI can hang, finding H).
+function Get-DmpVirtualization() {
+  try {
+    $system = Get-CimInstance -ClassName Win32_ComputerSystem -OperationTimeoutSec 15 -ErrorAction Stop
+    if ($system.HypervisorPresent) { return 'on' }
+    $cpu = Get-CimInstance -ClassName Win32_Processor -OperationTimeoutSec 15 -ErrorAction Stop | Select-Object -First 1
+    return Test-DmpVirtualization $system.HypervisorPresent $cpu.VirtualizationFirmwareEnabled
+  } catch {
+    Write-DmpLog "virtualization: Windows did not say ($($_.Exception.Message))"
+    return 'unknown'
+  }
+}
+
+$script:VirtualizationSteps = 'Virtualization is off in this computer''s firmware, and WSL 2 needs it. Turn it on: restart the computer, open its BIOS/UEFI setup ' +
+  '(the key shows at power-on, often F2, F10, Del or Esc), turn on "Intel Virtualization Technology" (VT-x) or "SVM Mode" (AMD), save and start Windows, ' +
+  'then run the setup again. Task Manager, Performance, CPU then shows "Virtualization: Enabled".'
+
+function Assert-DmpVirtualization() {
+  $state = Get-DmpVirtualization
+  if ($state -eq 'off') { throw [DmpInputError]::new($script:VirtualizationSteps) }
+  if ($state -eq 'on') { Write-DmpOk 'virtualization is on' }
+  else { Write-DmpWarn 'Windows did not say whether virtualization is on; going on (if WSL then fails with 0x80370102, it is off in the BIOS/UEFI)' }
+}
+
+# True when WSL was just turned on and Windows needs a restart before it works.
 function Assert-DmpWsl() {
   Write-DmpStep 'Checking WSL'
   $status = Invoke-DmpProgram (Get-DmpWslExe) @('--status') 30
@@ -221,8 +260,10 @@ function Assert-DmpWsl() {
   if ($status.ExitCode -ne 0) {
     Write-DmpStep 'Turning WSL on (Windows asks with UAC; a restart of Windows follows)'
     $code = Invoke-DmpElevatedProgram (Get-DmpWslExe) @('--install', '--no-distribution')
+    if ($code -eq 3) { throw [DmpInputError]::new('UAC was declined, so WSL is still off: run the setup again and allow it') }
     if ($code -ne 0) { throw "wsl --install did not finish (exit $code): run it yourself in an admin PowerShell" }
-    throw 'WSL is on: restart Windows, then run this script again'
+    Write-DmpOk 'WSL is on; Windows needs a restart before it works'
+    return $true
   }
   $version = ConvertFrom-DmpWslVersion (Invoke-DmpWsl @('--version')).Output
   if (-not $version -or $version -lt $script:Manifest.MinWsl) {
@@ -235,6 +276,7 @@ function Assert-DmpWsl() {
   if (Test-DmpForwardingOff (Join-Path $env:USERPROFILE '.wslconfig')) {
     Write-DmpWarn 'localhostForwarding = false in your .wslconfig: Windows cannot reach the panel until you take that line out (this script never changes .wslconfig)'
   }
+  return $false
 }
 
 function Assert-DmpPortFree() {
@@ -374,7 +416,7 @@ function Test-DmpPanelPassword([string]$Name, [string]$User) {
 
 # -Probe: read only, what is in place, so the setup asks only what it needs.
 function Get-DmpProbe([string]$Name) {
-  $state = [ordered]@{ wsl = $false; distro = $false; user = ''; panelPassword = $false }
+  $state = [ordered]@{ wsl = $false; distro = $false; user = ''; panelPassword = $false; virtualization = (Get-DmpVirtualization) }
   $status = Invoke-DmpProgram (Get-DmpWslExe) @('--status') 30
   if ($status.TimedOut -or $status.ExitCode -ne 0) { return $state }
   $state.wsl = $true
@@ -601,7 +643,12 @@ try {
   Write-DmpLog "arguments: -Distro $Distro$(if ($Release) { " -Release $Release" })$(if ($Yes) { ' -Yes' })$(if ($RemoveDistro) { ' -RemoveDistro' })$(if ($NoBackup) { ' -NoBackup' })"
   if ($Uninstall) { Uninstall-DmpPanel $Distro -KeepDistro:$Yes -RemoveDistro:$RemoveDistro -NoBackup:$NoBackup; Write-DmpLog 'done'; exit 0 }
   Assert-DmpWindows
-  Assert-DmpWsl
+  Assert-DmpVirtualization
+  if (Assert-DmpWsl) {
+    Write-DmpStep 'Restart Windows, then run the setup again: it goes on from here'
+    Write-DmpLog 'restart needed'
+    exit 10
+  }
   Assert-DmpPortFree
   Install-DmpDistro $Distro
   Assert-DmpSystemd $Distro

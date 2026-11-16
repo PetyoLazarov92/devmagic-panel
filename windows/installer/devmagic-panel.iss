@@ -71,7 +71,9 @@ const
 var
   // What get.ps1 -Probe found: the setup asks only what is not there yet.
   ProbeDone, HasWsl, HasDistro, HasPanelPassword: Boolean;
-  ProbeUser: String;
+  ProbeUser, ProbeVirtualization: String;
+  // get.ps1 exit 10: WSL was just turned on, Windows needs a restart.
+  RestartNeeded: Boolean;
   AccountPage, PanelPage: TInputQueryWizardPage;
   KeepPanelPassword: TNewCheckBox;
   DetailsMemo: TNewMemo;
@@ -195,6 +197,7 @@ begin
       HasDistro := JsonTrue(Json, 'distro');
       ProbeUser := JsonString(Json, 'user');
       HasPanelPassword := JsonTrue(Json, 'panelPassword');
+      ProbeVirtualization := JsonString(Json, 'virtualization');
       Log('probe: ' + Json);
     end else
       Log(Format('probe did not answer (exit %d): asking everything', [ResultCode]));
@@ -261,7 +264,11 @@ begin
     if not HasPanelPassword then KeepPanelPassword.Checked := False;
     KeepPanelPasswordClick(nil);
   end;
-  if (CurPageID = wpFinished) and not Succeeded then begin
+  if (CurPageID = wpFinished) and RestartNeeded then begin
+    WizardForm.FinishedHeadingLabel.Caption := 'Restart Windows to finish';
+    WizardForm.FinishedLabel.Caption := 'WSL is on now, and Windows needs a restart before it works.' + #13#10#13#10 +
+      'After the restart, when you sign in, this setup starts again by itself and goes on from where it stopped (it asks for your passwords again; they are never kept).';
+  end else if (CurPageID = wpFinished) and not Succeeded then begin
     WizardForm.FinishedHeadingLabel.Caption := 'The install did not finish';
     WizardForm.FinishedLabel.Caption := LastError + #13#10#13#10 +
       'Every step is in the log in ' + ExpandConstant('{localappdata}') + '\devmagic-panel\logs. ' +
@@ -281,6 +288,16 @@ begin
     RunProbe();
     WizardForm.WelcomeLabel2.Caption := Welcome;
     if HasPanelPassword then KeepPanelPassword.Checked := True;
+    // Before anything changes: WSL 2 cannot run without it.
+    if ProbeVirtualization = 'off' then begin
+      MsgBox('Virtualization is off in this computer''s firmware, and WSL 2 needs it.' + #13#10#13#10 +
+        '1. Restart the computer and open its BIOS/UEFI setup: the key shows at power-on, often F2, F10, Del or Esc.' + #13#10 +
+        '2. Turn on "Intel Virtualization Technology" (VT-x), or "SVM Mode" on AMD.' + #13#10 +
+        '3. Save, start Windows, and run this setup again.' + #13#10#13#10 +
+        'Task Manager, Performance, CPU then shows "Virtualization: Enabled". Nothing was changed on this computer.', mbError, MB_OK);
+      ProbeDone := False;
+      Result := False;
+    end;
   end;
   if CurPageID = AccountPage.ID then begin
     if not IsLinuxUserName(AccountPage.Values[0]) then begin
@@ -363,7 +380,16 @@ begin
     DeleteFile(ExpandConstant('{tmp}\answers.txt'));
   end;
   Succeeded := ResultCode = 0;
+  RestartNeeded := ResultCode = 10;
+  // After the restart, when you sign in, this setup starts again by itself (once) and goes on.
+  if RestartNeeded then
+    RegWriteStringValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', 'devmagic-panel-setup', '"' + ExpandConstant('{srcexe}') + '"');
   Log(Format('get.ps1 ended with exit code %d', [ResultCode]));
+end;
+
+function NeedRestart(): Boolean;
+begin
+  Result := RestartNeeded;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -383,7 +409,7 @@ begin
   else
     Result := Result + 'Panel password: the one you typed' + NewLine;
   if not HasWsl then
-    Result := Result + NewLine + 'WSL is off: Windows turns it on (UAC) and asks for a restart; run this setup again after it.' + NewLine;
+    Result := Result + NewLine + 'WSL is off: Windows turns it on (UAC), then asks for a restart; after it the setup starts again by itself and goes on.' + NewLine;
 end;
 
 // --- uninstall: its two questions in dialogs, get.ps1 hidden, its output under Details ---

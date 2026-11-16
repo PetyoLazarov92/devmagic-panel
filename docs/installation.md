@@ -130,9 +130,73 @@ itself, and the panel's own questions run outside it.
 
 The panel runs on Windows 10 22H2 and Windows 11 inside Ubuntu under WSL 2,
 exactly as on Ubuntu: Apache, PHP, MySQL, the root scripts and your sites all
-live in the Linux distro, and Windows browsers reach them through WSL's
-localhost forwarding. A Windows installer that does the Windows steps below for
-you is planned; until then they are a few minutes by hand.
+live in a Linux distro of their own, and Windows browsers reach them through
+WSL's localhost forwarding. The Windows setup does all of it from one window.
+
+### Before you start
+
+- **Virtualization.** WSL 2 runs a small virtual machine, which needs the
+  processor's virtualization turned on in the computer's firmware. Most new
+  computers have it on; check in Task Manager, Performance, CPU:
+  "Virtualization: Enabled". When it says Disabled, restart the computer, open
+  its BIOS/UEFI setup (the key shows at power-on, often F2, F10, Del or Esc),
+  turn on "Intel Virtualization Technology" (VT-x) or "SVM Mode" on AMD, save
+  and start Windows. The setup checks this first and stops with these steps,
+  before it changes anything.
+- **WSL.** Nothing to do: when WSL is off, the setup turns it on (Windows asks
+  with UAC) and Windows needs one restart. The setup offers it, and after you
+  sign in again it starts by itself and goes on from where it stopped.
+- About 10 GB free on the drive of your user folder, and a Windows user that
+  is an administrator, or the password of one for the UAC questions.
+
+### The setup
+
+Run `devmagic-panel-setup-<version>.exe` (until it is signed, Windows
+SmartScreen warns: More info, Run anyway). It runs as you, not as admin, and:
+
+1. checks Windows, virtualization and WSL, and what is in place already;
+2. asks for your Linux account (a user name and its password) when the distro
+   is new, and for the panel password, or keeps the current one on a repair;
+3. imports Ubuntu 24.04 as the distro `devmagic-panel` (its download is
+   checked against Canonical's SHA-256), makes your Linux user as Ubuntu's own
+   first start would, and installs the panel in it as on Ubuntu, with a sudo
+   rule for the length of the install that it removes again;
+4. on Windows: puts its helper in `C:\Program Files\devmagic-panel`, adds a
+   logon task that keeps the distro running with no window, trusts the
+   panel's local CA for your user (Windows asks you to confirm), and adds
+   the panel's names to Windows' hosts file (UAC);
+5. checks `https://local.devmagic` answers.
+
+Every step shows under Details in the setup's window, and every run is logged
+in `%LOCALAPPDATA%\devmagic-panel\logs`. Run the setup again any time: it
+skips what is in place, so it also repairs. Passwords never stay on disk: the
+setup hands them over in a file only you can read, deleted as soon as it is
+read, and never on a command line.
+
+Updates come from the panel's Updates page, as on Ubuntu; the setup is only
+for the first install and repairs.
+
+### Uninstall
+
+Apps and features, devmagic-panel, Uninstall. It takes the Windows side back
+(hosts lines, nginx's relays, the logon task, the CA, the helper) and asks
+whether to remove the distro too, with every site and database in it, and
+whether to keep a copy of it first (exported to
+`%LOCALAPPDATA%\devmagic-panel`; `wsl --import` brings it back). A distro of
+your own always stays.
+
+Aura's Machine checks have a WSL on Windows group under WSL 2: whether WSL keeps
+`/etc/hosts`, Apache is on `127.0.0.1`, lingering is on, the sites are on the
+distro's own disk and Windows programs can be started. Updating the panel, or
+running the installer again, puts the first three right.
+
+Good to know: Windows' `curl.exe` needs `--ssl-no-revoke` for the panel's
+certificates, which name no revocation server (browsers do not mind). A
+Windows without a page file can run out of memory with WSL running, and then
+WSL itself stops: keep "Automatically manage paging file size" on (System
+Properties, Advanced, Performance, Virtual memory).
+
+### By hand, without the setup
 
 1. In PowerShell, install Ubuntu, or a distro of its own for the panel
    (`--name` needs a recent WSL: `wsl --update` first):
@@ -181,16 +245,6 @@ you is planned; until then they are a few minutes by hand.
    ```text
    conhost.exe --headless wsl.exe -d Ubuntu-24.04 --exec sleep infinity
    ```
-
-Aura's Machine checks have a WSL on Windows group under WSL 2: whether WSL keeps
-`/etc/hosts`, Apache is on `127.0.0.1`, lingering is on, the sites are on the
-distro's own disk and Windows programs can be started. Updating the panel, or
-running the installer again, puts the first three right.
-
-Good to know: Windows' `curl.exe` needs `--ssl-no-revoke` for the panel's
-certificates, which name no revocation server (browsers do not mind). Signing
-out of Windows while the distro runs has left WSL not answering until Windows
-restarted; a restart fixes it.
 
 ## Uninstall
 

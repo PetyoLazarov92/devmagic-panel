@@ -366,7 +366,8 @@ Describe 'Install-DmpPanelQuietly' {
 Describe 'Get-DmpProbe' {
   It 'says only that WSL is off when it does not answer' {
     Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = '' } }
-    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":false,"distro":false,"user":"","panelPassword":false}'
+    Mock Get-DmpVirtualization { 'off' }
+    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":false,"distro":false,"user":"","panelPassword":false,"virtualization":"off"}'
   }
 
   It 'reads the distro, its user and whether the panel has a password' {
@@ -374,8 +375,9 @@ Describe 'Get-DmpProbe' {
     Mock Invoke-DmpWsl { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = $script:WslList; Error = '' } }
     Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = "alex`n"; Error = '' } }
     Mock Test-DmpPanelPassword { $true } -ParameterFilter { $User -eq 'alex' }
-    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":true,"user":"alex","panelPassword":true}'
-    (Get-DmpProbe 'Missing' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":false,"user":"","panelPassword":false}'
+    Mock Get-DmpVirtualization { 'on' }
+    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":true,"user":"alex","panelPassword":true,"virtualization":"on"}'
+    (Get-DmpProbe 'Missing' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":false,"user":"","panelPassword":false,"virtualization":"on"}'
   }
 }
 
@@ -424,5 +426,46 @@ Describe 'Uninstall-DmpPanel and the distro' {
     }
     { Uninstall-DmpPanel 'devmagic-panel' -RemoveDistro } | Should -Throw '*export failed*not enough space*'
     $script:Wsl | Should -Not -Contain '--unregister'
+  }
+}
+
+Describe 'virtualization' {
+  It 'is on with a hypervisor running, whatever the firmware flag says (Windows reports it off then)' {
+    Test-DmpVirtualization $true $false | Should -Be 'on'
+    Test-DmpVirtualization $false $true | Should -Be 'on'
+    Test-DmpVirtualization $false $false | Should -Be 'off'
+    Test-DmpVirtualization $false $null | Should -Be 'unknown'
+  }
+
+  It 'stops before anything changes when it is off, with the steps to turn it on' {
+    Mock Get-DmpVirtualization { 'off' }
+    { Assert-DmpVirtualization } | Should -Throw -ExceptionType ([DmpInputError])
+    { Assert-DmpVirtualization } | Should -Throw '*BIOS/UEFI*VT-x*SVM*Virtualization: Enabled*'
+  }
+
+  It 'goes on with a warning when Windows does not say' {
+    Mock Get-DmpVirtualization { 'unknown' }
+    Mock Write-DmpWarn { }
+    { Assert-DmpVirtualization } | Should -Not -Throw
+    Should -Invoke Write-DmpWarn -Times 1 -Exactly -ParameterFilter { $Text -like '*0x80370102*' }
+  }
+}
+
+Describe 'Assert-DmpWsl turning WSL on' {
+  BeforeEach {
+    Mock Write-DmpStep { }
+    Mock Write-DmpOk { }
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = '' } }
+  }
+
+  It 'turns it on with UAC and says a restart is needed, instead of failing' {
+    Mock Invoke-DmpElevatedProgram { 0 }
+    Assert-DmpWsl | Should -BeTrue
+    Should -Invoke Invoke-DmpElevatedProgram -Times 1 -Exactly -ParameterFilter { ($ArgumentList -join ' ') -eq '--install --no-distribution' }
+  }
+
+  It 'says so when UAC was declined' {
+    Mock Invoke-DmpElevatedProgram { 3 }
+    { Assert-DmpWsl } | Should -Throw '*UAC was declined*'
   }
 }
