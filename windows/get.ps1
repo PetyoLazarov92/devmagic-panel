@@ -88,9 +88,13 @@ function Write-DmpOk([string]$Text) { [Console]::Out.WriteLine("ok: $Text"); Wri
 
 # The distro the helper works with, for this user; read back, since a key that is not there
 # afterwards sends the helper to the default distro (devmagic-panel).
-function Set-DmpSetting([string]$Name) {
+function Set-DmpSetting([string]$Name, [switch]$Created) {
+  # Created: the setup made this distro, so its uninstall may offer to remove it (kept across repairs).
+  $before = Get-ItemProperty -Path $script:SettingsKey -ErrorAction SilentlyContinue
+  $wasCreated = $before -and ($before.PSObject.Properties.Name -contains 'Created') -and $before.Created -eq 1 -and $before.Distro -eq $Name
   New-Item -Path $script:SettingsKey -Force | Out-Null
   Set-ItemProperty -Path $script:SettingsKey -Name Distro -Value $Name
+  if ($Created -or $wasCreated) { Set-ItemProperty -Path $script:SettingsKey -Name Created -Value 1 -Type DWord }
   $saved = (Get-ItemProperty -Path $script:SettingsKey -ErrorAction SilentlyContinue).Distro
   if ($saved -ne $Name) { Write-DmpWarn "the distro name did not stay in $($script:SettingsKey) (reads '$saved'): run this script again" }
   else { Write-DmpLog "settings: Distro = $Name in $($script:SettingsKey)" }
@@ -299,7 +303,7 @@ function Install-DmpDistro([string]$Name) {
   if ($found) {
     if ($found.Version -ne 2) { throw "$Name is a WSL 1 distro: run wsl --set-version $Name 2 (it can take a while), then this script again" }
     Write-DmpOk "$Name is there (WSL 2, $($found.State))"
-    return
+    return $false
   }
   $default = $distros | Where-Object { $_.Default } | Select-Object -First 1
   $images = Join-Path $script:DataDir 'images'
@@ -321,6 +325,7 @@ function Install-DmpDistro([string]$Name) {
   if ($import.ExitCode -ne 0) { throw "wsl --import failed: $($import.Output.Trim()) $($import.Error.Trim())" }
   if ($default -and $default.Name -ne $Name) { Invoke-DmpWsl @('--set-default', $default.Name) | Out-Null }
   Write-DmpOk "$Name imported into $location"
+  return $true
 }
 
 function Assert-DmpSystemd([string]$Name) {
@@ -340,6 +345,7 @@ function Assert-DmpSystemd([string]$Name) {
 # --- without questions (the Windows setup's answers, or -Yes) ---
 
 $script:Quiet = $false
+$script:CreatedDistro = $false
 $script:Answered = @{}
 
 # The setup's answers, from its file, which goes as soon as it is read: a password
@@ -407,6 +413,31 @@ function New-DmpLinuxUser([string]$Name, [hashtable]$Account) {
   Invoke-DmpWsl @('--terminate', $Name) | Out-Null
 }
 
+# The setup's own distro: devmagic-panel, or one it made under another name
+# (Created in its settings). Only those may an uninstall remove.
+function Test-DmpOwnDistro([string]$Name) {
+  if ($Name -eq 'devmagic-panel') { return $true }
+  $settings = Get-ItemProperty -Path $script:SettingsKey -ErrorAction SilentlyContinue
+  return [bool]($settings -and $settings.Distro -eq $Name -and ($settings.PSObject.Properties.Name -contains 'Created') -and $settings.Created -eq 1)
+}
+
+# The Ubuntu and Debian family, as install.sh takes it (os-release ID or ID_LIKE).
+function Test-DmpOsFamily([string]$Id, [string]$Like) {
+  return ($Id -eq 'ubuntu' -or $Id -eq 'debian' -or $Like -match '\b(ubuntu|debian)\b')
+}
+
+# A distro's os-release: ID, ID_LIKE and PRETTY_NAME.
+function Get-DmpDistroRelease([string]$Name) {
+  $fields = (Invoke-DmpInDistro $Name @('sh', '-c', '. /etc/os-release 2>/dev/null; printf "%s|%s|%s" "$ID" "$ID_LIKE" "$PRETTY_NAME"') -Root).Output.Trim() -split '\|', 3
+  [pscustomobject]@{ Id = $fields[0]; Like = $(if ($fields.Count -gt 1) { $fields[1] } else { '' }); Pretty = $(if ($fields.Count -gt 2) { $fields[2] } else { '' }) }
+}
+
+function Assert-DmpDistroFamily([string]$Name) {
+  $os = Get-DmpDistroRelease $Name
+  if (-not (Test-DmpOsFamily $os.Id $os.Like)) { throw [DmpInputError]::new("$Name runs $(if ($os.Pretty) { $os.Pretty } else { 'an unknown system' }): the panel needs Ubuntu or Debian. Pick another distro, or let the setup make one") }
+  Write-DmpOk "$Name runs $($os.Pretty)"
+}
+
 # Whether the panel has its password already, for -Yes and -Probe.
 function Test-DmpPanelPassword([string]$Name, [string]$User) {
   if (-not $User) { return $false }
@@ -416,15 +447,23 @@ function Test-DmpPanelPassword([string]$Name, [string]$User) {
 
 # -Probe: read only, what is in place, so the setup asks only what it needs.
 function Get-DmpProbe([string]$Name) {
-  $state = [ordered]@{ wsl = $false; distro = $false; user = ''; panelPassword = $false; virtualization = (Get-DmpVirtualization) }
+  $state = [ordered]@{ wsl = $false; distro = $false; user = ''; panelPassword = $false; virtualization = (Get-DmpVirtualization); distros = ''; os = ''; osOk = $false; panel = $false }
   $status = Invoke-DmpProgram (Get-DmpWslExe) @('--status') 30
   if ($status.TimedOut -or $status.ExitCode -ne 0) { return $state }
   $state.wsl = $true
   $distros = @(ConvertFrom-DmpWslList (Invoke-DmpWsl @('--list', '--verbose')).Output)
-  if (-not ($distros | Where-Object { $_.Name -eq $Name })) { return $state }
+  # One string the setup's Pascal reads easily: name|WSL version|state, ; between distros; Docker's own left out.
+  $state.distros = (@($distros | Where-Object { $_.Name -notlike 'docker-desktop*' } | ForEach-Object { '{0}|{1}|{2}' -f $_.Name, $_.Version, $_.State }) -join ';')
+  $found = $distros | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+  if (-not $found) { return $state }
   $state.distro = $true
+  if ($found.Version -ne 2) { return $state }
+  $os = Get-DmpDistroRelease $Name
+  $state.os = $os.Pretty
+  $state.osOk = Test-DmpOsFamily $os.Id $os.Like
   $state.user = (Invoke-DmpInDistro $Name @('sh', '-c', 'getent passwd 1000 | cut -d: -f1')).Output.Trim()
   $state.panelPassword = Test-DmpPanelPassword $Name $state.user
+  $state.panel = (Invoke-DmpInDistro $Name @('sh', '-c', 'test -f /etc/devmagic-panel/config.env && echo yes')).Output.Trim() -eq 'yes'
   return $state
 }
 
@@ -551,7 +590,7 @@ function Install-DmpHelperFile() {
 }
 
 function Install-DmpWindowsSide([string]$Name) {
-  Set-DmpSetting $Name
+  Set-DmpSetting $Name -Created:([bool]$script:CreatedDistro)
   [void](Install-DmpHelperFile)
   $run = { param([string[]]$a) Invoke-DmpHelper $a }
 
@@ -604,7 +643,7 @@ function Uninstall-DmpPanel([string]$Name, [switch]$KeepDistro, [switch]$RemoveD
   }
   $distros = @(ConvertFrom-DmpWslList (Invoke-DmpWsl @('--list', '--verbose')).Output)
   if (-not ($distros | Where-Object { $_.Name -eq $Name })) { Write-DmpOk "no distro $Name"; Remove-DmpSetting; return }
-  if ($Name -ne 'devmagic-panel') {
+  if (-not (Test-DmpOwnDistro $Name)) {
     Write-DmpOk "$Name is your own distro and stays: run ~/.local/share/devmagic-panel/current/install.sh --uninstall in it to remove the panel there"
   } else {
     $answer = if ($RemoveDistro) { $Name } elseif ($KeepDistro) { 'no' } else { Read-Host "Remove the distro $Name with its sites and databases? A copy is exported first. Type its name to remove it" }
@@ -650,7 +689,8 @@ try {
     exit 10
   }
   Assert-DmpPortFree
-  Install-DmpDistro $Distro
+  $script:CreatedDistro = Install-DmpDistro $Distro
+  Assert-DmpDistroFamily $Distro
   Assert-DmpSystemd $Distro
   $linuxUser = Assert-DmpLinuxUser $Distro
   Install-DmpPanel $Distro $Release $linuxUser

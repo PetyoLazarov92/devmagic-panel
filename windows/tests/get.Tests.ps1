@@ -367,7 +367,7 @@ Describe 'Get-DmpProbe' {
   It 'says only that WSL is off when it does not answer' {
     Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = '' } }
     Mock Get-DmpVirtualization { 'off' }
-    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":false,"distro":false,"user":"","panelPassword":false,"virtualization":"off"}'
+    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":false,"distro":false,"user":"","panelPassword":false,"virtualization":"off","distros":"","os":"","osOk":false,"panel":false}'
   }
 
   It 'reads the distro, its user and whether the panel has a password' {
@@ -376,8 +376,11 @@ Describe 'Get-DmpProbe' {
     Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = "alex`n"; Error = '' } }
     Mock Test-DmpPanelPassword { $true } -ParameterFilter { $User -eq 'alex' }
     Mock Get-DmpVirtualization { 'on' }
-    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":true,"user":"alex","panelPassword":true,"virtualization":"on"}'
-    (Get-DmpProbe 'Missing' | ConvertTo-Json -Compress) | Should -Be '{"wsl":true,"distro":false,"user":"","panelPassword":false,"virtualization":"on"}'
+    Mock Get-DmpDistroRelease { [pscustomobject]@{ Id = 'ubuntu'; Like = 'debian'; Pretty = 'Ubuntu 24.04.3 LTS' } }
+    Mock Invoke-DmpInDistro { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = "yes`n"; Error = '' } } -ParameterFilter { ($Command -join ' ') -like '*config.env*' }
+    $distros = 'devmagic-panel|2|Running;Ubuntu-24.04|2|Stopped;Legacy|1|Stopped'
+    (Get-DmpProbe 'devmagic-panel' | ConvertTo-Json -Compress) | Should -Be ('{"wsl":true,"distro":true,"user":"alex","panelPassword":true,"virtualization":"on","distros":"' + $distros + '","os":"Ubuntu 24.04.3 LTS","osOk":true,"panel":true}')
+    (Get-DmpProbe 'Missing' | ConvertTo-Json -Compress) | Should -Be ('{"wsl":true,"distro":false,"user":"","panelPassword":false,"virtualization":"on","distros":"' + $distros + '","os":"","osOk":false,"panel":false}')
   }
 }
 
@@ -467,5 +470,44 @@ Describe 'Assert-DmpWsl turning WSL on' {
   It 'says so when UAC was declined' {
     Mock Invoke-DmpElevatedProgram { 3 }
     { Assert-DmpWsl } | Should -Throw '*UAC was declined*'
+  }
+}
+
+Describe 'the distro the panel goes into' {
+  BeforeEach {
+    $script:SettingsKey = 'HKCU:\Software\devmagic-panel-pester'
+    Remove-Item -Path $script:SettingsKey -Recurse -Force -ErrorAction SilentlyContinue
+    Mock Write-DmpWarn { }
+  }
+  AfterEach { Remove-Item -Path $script:SettingsKey -Recurse -Force -ErrorAction SilentlyContinue }
+
+  It 'takes the Ubuntu and Debian family, as install.sh does' -TestCases @(
+    @{ Id = 'ubuntu'; Like = 'debian'; Ok = $true }, @{ Id = 'debian'; Like = ''; Ok = $true },
+    @{ Id = 'pop'; Like = 'ubuntu debian'; Ok = $true }, @{ Id = 'fedora'; Like = ''; Ok = $false },
+    @{ Id = 'opensuse-tumbleweed'; Like = 'opensuse suse'; Ok = $false }, @{ Id = ''; Like = ''; Ok = $false }
+  ) {
+    Test-DmpOsFamily $Id $Like | Should -Be $Ok
+  }
+
+  It 'stops before installing into a distro that is not Ubuntu or Debian' {
+    Mock Get-DmpDistroRelease { [pscustomobject]@{ Id = 'fedora'; Like = ''; Pretty = 'Fedora Linux 41' } }
+    { Assert-DmpDistroFamily 'Fedora' } | Should -Throw '*Fedora Linux 41*needs Ubuntu or Debian*'
+  }
+
+  It "counts devmagic-panel, and a distro it made under another name, as the setup's own" {
+    Test-DmpOwnDistro 'devmagic-panel' | Should -BeTrue
+    Test-DmpOwnDistro 'Ubuntu-24.04' | Should -BeFalse
+    Set-DmpSetting 'my-panel' -Created
+    Test-DmpOwnDistro 'my-panel' | Should -BeTrue
+    Set-DmpSetting 'Ubuntu-24.04'
+    Test-DmpOwnDistro 'Ubuntu-24.04' | Should -BeFalse
+  }
+
+  It 'keeps the made-by-setup mark when a repair writes the settings again, and drops it for another distro' {
+    Set-DmpSetting 'my-panel' -Created
+    Set-DmpSetting 'my-panel'
+    (Get-ItemProperty -Path $script:SettingsKey).Created | Should -Be 1
+    Set-DmpSetting 'Ubuntu-24.04'
+    (Get-ItemProperty -Path $script:SettingsKey).PSObject.Properties.Name | Should -Not -Contain 'Created'
   }
 }

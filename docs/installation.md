@@ -155,17 +155,23 @@ Run `devmagic-panel-setup-<version>.exe` (until it is signed, Windows
 SmartScreen warns: More info, Run anyway). It runs as you, not as admin, and:
 
 1. checks Windows, virtualization and WSL, and what is in place already;
-2. asks for your Linux account (a user name and its password) when the distro
-   is new, and for the panel password, or keeps the current one on a repair;
-3. imports Ubuntu 24.04 as the distro `devmagic-panel` (its download is
-   checked against Canonical's SHA-256), makes your Linux user as Ubuntu's own
-   first start would, and installs the panel in it as on Ubuntu, with a sudo
+2. asks where the panel should run: the `devmagic-panel` distro when it is
+   there, a new distro of its own (Ubuntu 24.04, `devmagic-panel` or a name you
+   pick), or one of your WSL 2 distros running Ubuntu or Debian. In one of
+   yours it turns systemd on (the distro restarts), stops WSL rewriting its
+   `/etc/hosts`, keeps Apache on `127.0.0.1` and keeps the distro running; its
+   sites and files stay. A repair goes to the distro of the install there;
+3. asks for your Linux account (a user name and its password) when the distro
+   has none, and for the panel password, or keeps the current one on a repair;
+4. for a new distro, imports Ubuntu 24.04 (its download is checked against
+   Canonical's SHA-256); makes your Linux user, when the distro has none, as
+   Ubuntu's own first start would; and installs the panel in it as on Ubuntu, with a sudo
    rule for the length of the install that it removes again;
-4. on Windows: puts its helper in `C:\Program Files\devmagic-panel`, adds a
+5. on Windows: puts its helper in `C:\Program Files\devmagic-panel`, adds a
    logon task that keeps the distro running with no window, trusts the
    panel's local CA for your user (Windows asks you to confirm), and adds
    the panel's names to Windows' hosts file (UAC);
-5. checks `https://local.devmagic` answers.
+6. checks `https://local.devmagic` answers.
 
 Every step shows under Details in the setup's window, and every run is logged
 in `%LOCALAPPDATA%\devmagic-panel\logs`. Run the setup again any time: it

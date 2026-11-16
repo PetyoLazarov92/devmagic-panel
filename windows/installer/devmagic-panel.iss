@@ -68,13 +68,36 @@ const
   PanelPasswordMax = 1024;
   WM_VSCROLL = $0115;
   SB_BOTTOM = 7;
+  PM_REMOVE = 1;
+  OwnDistro = 'devmagic-panel';
+
+type
+  // Windows' MSG, for letting the window handle its own events while get.ps1 runs.
+  TMsg = record
+    hwnd: HWND;
+    message: UINT;
+    wParam: Longint;
+    lParam: Longint;
+    time: DWORD;
+    ptX: Longint;
+    ptY: Longint;
+    lPrivate: DWORD;
+  end;
 
 var
   // What get.ps1 -Probe found: the setup asks only what is not there yet.
-  ProbeDone, HasWsl, HasDistro, HasPanelPassword: Boolean;
-  ProbeUser, ProbeVirtualization: String;
+  ProbeDone, HasWsl, HasDistro, HasPanelPassword, ProbeOsOk, ProbePanel: Boolean;
+  ProbeUser, ProbeVirtualization, ProbeOs, ProbeDistros: String;
+  // The distro the panel goes into, and the one an earlier install recorded.
+  ChosenDistro, InstalledDistro: String;
+  DistroIsNew: Boolean;
   // get.ps1 exit 10: WSL was just turned on, Windows needs a restart.
   RestartNeeded: Boolean;
+  DistroPage: TWizardPage;
+  RadioOwn, RadioNew, RadioExisting: TNewRadioButton;
+  NewNameEdit: TNewEdit;
+  ExistingCombo: TNewComboBox;
+  DistroNote: TNewStaticText;
   AccountPage, PanelPage: TInputQueryWizardPage;
   KeepPanelPassword: TNewCheckBox;
   DetailsMemo: TNewMemo;
@@ -82,8 +105,23 @@ var
   LastError: String;
   // The uninstaller's answers, and its Details box.
   UninstallDistro: String;
-  RemoveDistroAnswer, NoBackupAnswer: Boolean;
+  RemoveDistroAnswer, NoBackupAnswer, UninstallOwnDistro: Boolean;
   UninstallDetails: TNewMemo;
+
+function PeekMessage(var lpMsg: TMsg; hWnd: HWND; wMsgFilterMin, wMsgFilterMax, wRemoveMsg: UINT): BOOL; external 'PeekMessageW@user32.dll stdcall';
+function TranslateMessage(const lpMsg: TMsg): BOOL; external 'TranslateMessage@user32.dll stdcall';
+function DispatchMessage(const lpMsg: TMsg): Longint; external 'DispatchMessageW@user32.dll stdcall';
+
+// Lets every window of this process handle what waits for it: dragging, scrolling, painting.
+procedure HandleWindowEvents();
+var
+  Msg: TMsg;
+begin
+  while PeekMessage(Msg, 0, 0, 0, PM_REMOVE) do begin
+    TranslateMessage(Msg);
+    DispatchMessage(Msg);
+  end;
+end;
 
 function InstallSucceeded(): Boolean;
 begin
@@ -125,6 +163,23 @@ begin
   for I := 2 to Length(Name) do begin
     C := Name[I];
     if not (((C >= 'a') and (C <= 'z')) or ((C >= '0') and (C <= '9')) or (C = '_') or (C = '-')) then begin
+      Result := False;
+      Exit;
+    end;
+  end;
+end;
+
+// A WSL distro name get.ps1 takes: letters, digits, . _ and -, up to 64.
+function IsDistroName(const Name: String): Boolean;
+var
+  I: Integer;
+  C: Char;
+begin
+  Result := (Length(Name) >= 1) and (Length(Name) <= 64);
+  if not Result then Exit;
+  for I := 1 to Length(Name) do begin
+    C := Name[I];
+    if not (((C >= 'a') and (C <= 'z')) or ((C >= 'A') and (C <= 'Z')) or ((C >= '0') and (C <= '9')) or (C = '_') or (C = '-') or (C = '.')) then begin
       Result := False;
       Exit;
     end;
@@ -178,8 +233,41 @@ begin
   if At > 0 then Result := Copy(Rest, 1, At - 1);
 end;
 
-// get.ps1 -Probe, read only: WSL on, the distro there, its user, a panel password set.
-procedure RunProbe();
+// The next field of S up to Separator, taken off S.
+function TakeField(var S: String; const Separator: String): String;
+var
+  At: Integer;
+begin
+  At := Pos(Separator, S);
+  if At = 0 then begin
+    Result := S;
+    S := '';
+  end else begin
+    Result := Copy(S, 1, At - 1);
+    S := Copy(S, At + Length(Separator), MaxInt);
+  end;
+end;
+
+// The WSL version of a distro in the probe's list (name|version|state;...), '' when not there.
+function DistroVersion(const Name: String): String;
+var
+  Rest, Entry, EntryName: String;
+begin
+  Result := '';
+  Rest := ProbeDistros;
+  while Rest <> '' do begin
+    Entry := TakeField(Rest, ';');
+    EntryName := TakeField(Entry, '|');
+    if CompareText(EntryName, Name) = 0 then begin
+      Result := TakeField(Entry, '|');
+      Exit;
+    end;
+  end;
+end;
+
+// get.ps1 -Probe -Distro <name>, read only: WSL on, virtualization, the distros,
+// and for that one its OS, its user, a panel and its password.
+procedure RunProbe(const Distro: String);
 var
   Output: TExecOutput;
   ResultCode, I: Integer;
@@ -190,7 +278,7 @@ begin
   ExtractTemporaryFile('dmp-win.ps1');
   WizardForm.NextButton.Enabled := False;
   try
-    if ExecAndCaptureOutput(PowerShellExe(), '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\get.ps1') + '" -Probe',
+    if ExecAndCaptureOutput(PowerShellExe(), '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\get.ps1') + '" -Probe -Distro "' + Distro + '"',
       ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ResultCode, Output) and (ResultCode = 0) then begin
       Json := '';
       for I := 0 to GetArrayLength(Output.StdOut) - 1 do Json := Json + Output.StdOut[I];
@@ -199,9 +287,13 @@ begin
       ProbeUser := JsonString(Json, 'user');
       HasPanelPassword := JsonTrue(Json, 'panelPassword');
       ProbeVirtualization := JsonString(Json, 'virtualization');
-      Log('probe: ' + Json);
+      ProbeDistros := JsonString(Json, 'distros');
+      ProbeOs := JsonString(Json, 'os');
+      ProbeOsOk := JsonTrue(Json, 'osOk');
+      ProbePanel := JsonTrue(Json, 'panel');
+      Log('probe ' + Distro + ': ' + Json);
     end else
-      Log(Format('probe did not answer (exit %d): asking everything', [ResultCode]));
+      Log(Format('probe of %s did not answer (exit %d)', [Distro, ResultCode]));
   finally
     WizardForm.NextButton.Enabled := True;
   end;
@@ -213,10 +305,98 @@ begin
   PanelPage.Edits[1].Enabled := not KeepPanelPassword.Checked;
 end;
 
-procedure InitializeWizard();
+procedure DistroChoiceClick(Sender: TObject);
 begin
-  AccountPage := CreateInputQueryPage(wpWelcome, 'Your Linux account',
-    'The panel runs in a Linux distro of its own, with this account.',
+  NewNameEdit.Enabled := RadioNew.Checked;
+  ExistingCombo.Enabled := RadioExisting.Checked;
+end;
+
+// The distro page from the probe's list: devmagic-panel when it is there, a new one, or one of yours.
+procedure FillDistroPage();
+var
+  Rest, Entry, Name, Version: String;
+  N: Integer;
+begin
+  ExistingCombo.Items.Clear();
+  Rest := ProbeDistros;
+  while Rest <> '' do begin
+    Entry := TakeField(Rest, ';');
+    Name := TakeField(Entry, '|');
+    Version := TakeField(Entry, '|');
+    if CompareText(Name, OwnDistro) <> 0 then begin
+      if Version = '2' then ExistingCombo.Items.Add(Name)
+      else ExistingCombo.Items.Add(Name + '  (WSL 1: not supported)');
+    end;
+  end;
+  RadioOwn.Visible := DistroVersion(OwnDistro) <> '';
+  RadioExisting.Enabled := ExistingCombo.Items.Count > 0;
+  if ExistingCombo.Items.Count > 0 then ExistingCombo.ItemIndex := 0;
+  // A free name for a new one: devmagic-panel, else devmagic-panel-2, -3...
+  NewNameEdit.Text := OwnDistro;
+  N := 2;
+  while DistroVersion(NewNameEdit.Text) <> '' do begin
+    NewNameEdit.Text := OwnDistro + '-' + IntToStr(N);
+    N := N + 1;
+  end;
+  if RadioOwn.Visible then RadioOwn.Checked := True else RadioNew.Checked := True;
+  DistroChoiceClick(nil);
+end;
+
+procedure InitializeWizard();
+var
+  Top: Integer;
+begin
+  if not RegQueryStringValue(HKCU, 'Software\devmagic-panel', 'Distro', InstalledDistro) then InstalledDistro := '';
+  ChosenDistro := OwnDistro;
+
+  DistroPage := CreateCustomPage(wpWelcome, 'Where should the panel run?',
+    'The panel, Apache, PHP, MySQL and your sites live in a WSL distro.');
+  Top := 0;
+  RadioOwn := TNewRadioButton.Create(DistroPage);
+  RadioOwn.Parent := DistroPage.Surface;
+  RadioOwn.Top := Top;
+  RadioOwn.Width := DistroPage.SurfaceWidth;
+  RadioOwn.Caption := 'Use the devmagic-panel distro that is here already';
+  RadioOwn.OnClick := @DistroChoiceClick;
+  Top := Top + ScaleY(28);
+  RadioNew := TNewRadioButton.Create(DistroPage);
+  RadioNew.Parent := DistroPage.Surface;
+  RadioNew.Top := Top;
+  RadioNew.Width := DistroPage.SurfaceWidth;
+  RadioNew.Caption := 'Make a new distro for the panel (Ubuntu 24.04), named:';
+  RadioNew.OnClick := @DistroChoiceClick;
+  Top := Top + ScaleY(22);
+  NewNameEdit := TNewEdit.Create(DistroPage);
+  NewNameEdit.Parent := DistroPage.Surface;
+  NewNameEdit.Top := Top;
+  NewNameEdit.Left := ScaleX(18);
+  NewNameEdit.Width := ScaleX(220);
+  Top := Top + ScaleY(34);
+  RadioExisting := TNewRadioButton.Create(DistroPage);
+  RadioExisting.Parent := DistroPage.Surface;
+  RadioExisting.Top := Top;
+  RadioExisting.Width := DistroPage.SurfaceWidth;
+  RadioExisting.Caption := 'Install it into one of my WSL distros (Ubuntu or Debian):';
+  RadioExisting.OnClick := @DistroChoiceClick;
+  Top := Top + ScaleY(22);
+  ExistingCombo := TNewComboBox.Create(DistroPage);
+  ExistingCombo.Parent := DistroPage.Surface;
+  ExistingCombo.Style := csDropDownList;
+  ExistingCombo.Top := Top;
+  ExistingCombo.Left := ScaleX(18);
+  ExistingCombo.Width := ScaleX(260);
+  Top := Top + ScaleY(34);
+  DistroNote := TNewStaticText.Create(DistroPage);
+  DistroNote.Parent := DistroPage.Surface;
+  DistroNote.Top := Top;
+  DistroNote.Width := DistroPage.SurfaceWidth;
+  DistroNote.WordWrap := True;
+  DistroNote.Caption := 'In a distro of yours, the setup turns systemd on (the distro restarts), stops WSL rewriting its /etc/hosts, ' +
+    'keeps Apache on 127.0.0.1 and keeps the distro running while you are logged in. Its sites, databases and files stay, ' +
+    'and uninstalling the panel never removes a distro of yours.';
+
+  AccountPage := CreateInputQueryPage(DistroPage.ID, 'Your Linux account',
+    'The distro is new, so it needs a Linux user.',
     'Pick a user name and a password for Linux. You type the password when Linux asks for it (sudo), so keep it somewhere safe.');
   AccountPage.Add('User name (lowercase letters, digits, _ and -):', False);
   AccountPage.Add('Password:', True);
@@ -250,9 +430,16 @@ begin
   DetailsMemo.Font.Name := 'Consolas';
 end;
 
+// An install already there (the setup recorded its distro, and the panel is in it): a repair, no distro question.
+function IsRepair(): Boolean;
+begin
+  Result := (InstalledDistro <> '') and HasDistro and ProbePanel;
+end;
+
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result := False;
+  if PageID = DistroPage.ID then Result := IsRepair();
   // A distro that has its user already: nothing to ask for Linux.
   if PageID = AccountPage.ID then Result := HasDistro and (ProbeUser <> '');
 end;
@@ -260,7 +447,7 @@ end;
 procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = PanelPage.ID then begin
-    // Only a repair can keep a password: a fresh distro has none.
+    // Only a distro with the panel's password already can keep it.
     KeepPanelPassword.Visible := HasPanelPassword;
     if not HasPanelPassword then KeepPanelPassword.Checked := False;
     KeepPanelPasswordClick(nil);
@@ -277,16 +464,71 @@ begin
   end;
 end;
 
+// The distro page's choice: checked, and probed when it is one of yours.
+function ChooseDistro(): Boolean;
+var
+  Name: String;
+begin
+  Result := True;
+  if RadioOwn.Checked then begin
+    ChosenDistro := OwnDistro;
+    DistroIsNew := False;
+    RunProbe(ChosenDistro);
+  end else if RadioNew.Checked then begin
+    Name := Trim(NewNameEdit.Text);
+    if not IsDistroName(Name) then begin
+      MsgBox('A distro name takes letters, digits, . _ and -, up to 64 of them.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+    if DistroVersion(Name) <> '' then begin
+      MsgBox('There is a distro called ' + Name + ' already: pick another name, or choose it below as one of yours.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+    ChosenDistro := Name;
+    DistroIsNew := True;
+    HasDistro := False;
+    ProbeUser := '';
+    HasPanelPassword := False;
+    ProbePanel := False;
+  end else begin
+    Name := ExistingCombo.Text;
+    if Pos('(WSL 1', Name) > 0 then begin
+      MsgBox('That distro runs under WSL 1, which has no systemd. In PowerShell, wsl --set-version <name> 2 moves it to WSL 2 (it can take a while); then run this setup again.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+    WizardForm.NextButton.Enabled := False;
+    RunProbe(Name);
+    if not ProbeOsOk then begin
+      MsgBox(Name + ' runs ' + ProbeOs + ', and the panel needs Ubuntu or Debian. Pick another distro, or let the setup make one.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+    Result := MsgBox('Install the panel into ' + Name + ' (' + ProbeOs + ')?' + #13#10#13#10 +
+      'The setup turns systemd on in it (the distro restarts), stops WSL rewriting its /etc/hosts, keeps Apache on 127.0.0.1 and keeps it running while you are logged in. ' +
+      'Its sites, databases and files stay, and uninstalling the panel later never removes it.', mbConfirmation, MB_YESNO) = IDYES;
+    if not Result then Exit;
+    ChosenDistro := Name;
+    DistroIsNew := False;
+  end;
+  if HasPanelPassword then KeepPanelPassword.Checked := True;
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  User, Welcome: String;
+  User, Welcome, Target: String;
 begin
   Result := True;
   if (CurPageID = wpWelcome) and not ProbeDone then begin
     Welcome := WizardForm.WelcomeLabel2.Caption;
     WizardForm.WelcomeLabel2.Caption := Welcome + #13#10#13#10 + 'Checking what is already in place...';
     WizardForm.Refresh();
-    RunProbe();
+    // A repair looks at the distro the last install recorded; a first install at devmagic-panel.
+    if InstalledDistro <> '' then Target := InstalledDistro else Target := OwnDistro;
+    RunProbe(Target);
+    ChosenDistro := Target;
     WizardForm.WelcomeLabel2.Caption := Welcome;
     if HasPanelPassword then KeepPanelPassword.Checked := True;
     // Before anything changes: WSL 2 cannot run without it.
@@ -298,8 +540,11 @@ begin
         'Task Manager, Performance, CPU then shows "Virtualization: Enabled". Nothing was changed on this computer.', mbError, MB_OK);
       ProbeDone := False;
       Result := False;
+      Exit;
     end;
+    FillDistroPage();
   end;
+  if CurPageID = DistroPage.ID then Result := ChooseDistro();
   if CurPageID = AccountPage.ID then begin
     if not IsLinuxUserName(AccountPage.Values[0]) then begin
       MsgBox('The Linux user name takes lowercase letters, digits, _ and -, starts with a letter or _, and has at most 32 characters.', mbError, MB_OK);
@@ -347,25 +592,81 @@ begin
   SaveStringsToUTF8File(Result, Lines, False);
 end;
 
-procedure DetailsLine(const S: String; const Error, FirstLine: Boolean);
+// One line of get.ps1's output into a Details box, and the status line above it.
+procedure ShowLine(Memo: TNewMemo; Status: TNewStaticText; const S: String);
 begin
-  if Error then begin
-    DetailsMemo.Lines.Add('(' + S + ')');
-    Exit;
-  end;
-  DetailsMemo.Lines.Add(S);
-  if Copy(S, 1, 4) = '==> ' then WizardForm.StatusLabel.Caption := Copy(S, 5, MaxInt);
+  Memo.Lines.Add(S);
+  if Copy(S, 1, 4) = '==> ' then Status.Caption := Copy(S, 5, MaxInt);
   if Copy(S, 1, 7) = 'error: ' then LastError := Copy(S, 8, MaxInt);
-  SendMessage(DetailsMemo.Handle, WM_VSCROLL, SB_BOTTOM, 0);
+  SendMessage(Memo.Handle, WM_VSCROLL, SB_BOTTOM, 0);
 end;
 
-// get.ps1 hidden, its output in the Details box as it comes.
+// The complete lines of OutFile not shown yet; Shown counts the characters already taken.
+procedure ShowNewLines(Memo: TNewMemo; Status: TNewStaticText; const OutFile: String; var Shown: Integer; const Final: Boolean);
+var
+  Text: AnsiString;
+  Rest, Line: String;
+  At: Integer;
+begin
+  if not LoadStringFromFile(OutFile, Text) then Exit;
+  Rest := Copy(String(Text), Shown + 1, MaxInt);
+  repeat
+    At := Pos(#10, Rest);
+    if At = 0 then Break;
+    Line := Copy(Rest, 1, At - 1);
+    if (Length(Line) > 0) and (Line[Length(Line)] = #13) then Delete(Line, Length(Line), 1);
+    ShowLine(Memo, Status, Line);
+    Shown := Shown + At;
+    Rest := Copy(Rest, At + 1, MaxInt);
+  until False;
+  if Final and (Rest <> '') then begin
+    ShowLine(Memo, Status, Rest);
+    Shown := Shown + Length(Rest);
+  end;
+end;
+
+// get.ps1 hidden, through cmd so its output goes to a file and its exit code to
+// another when it ends (even if it crashes); meanwhile the window keeps handling
+// its own events, so it moves, scrolls and repaints, and Details shows each line.
+function RunGetPs1(const Params: String; Memo: TNewMemo; Status: TNewStaticText): Integer;
+var
+  OutFile, CodeFile: String;
+  Code: AnsiString;
+  Started, Shown, Ticks: Integer;
+begin
+  OutFile := AddBackslash(GetTempDir()) + 'devmagic-panel-get-output.txt';
+  CodeFile := AddBackslash(GetTempDir()) + 'devmagic-panel-get-exitcode.txt';
+  DeleteFile(OutFile);
+  DeleteFile(CodeFile);
+  // /v:on: !errorlevel! is read when PowerShell has ended, not when cmd reads the line.
+  if not Exec(ExpandConstant('{cmd}'), '/v:on /c ""' + PowerShellExe() + '" ' + Params + ' > "' + OutFile + '" 2>&1 & echo !errorlevel!> "' + CodeFile + '""',
+    '', SW_HIDE, ewNoWait, Started) then begin
+    Result := -1;
+    Exit;
+  end;
+  Shown := 0;
+  Ticks := 0;
+  // At most four hours, ten times a second.
+  while not FileExists(CodeFile) and (Ticks < 144000) do begin
+    HandleWindowEvents();
+    Sleep(100);
+    Ticks := Ticks + 1;
+    if Ticks mod 3 = 0 then ShowNewLines(Memo, Status, OutFile, Shown, False);
+  end;
+  Sleep(200);
+  ShowNewLines(Memo, Status, OutFile, Shown, True);
+  Result := -1;
+  if LoadStringFromFile(CodeFile, Code) then Result := StrToIntDef(Trim(String(Code)), -1);
+  DeleteFile(OutFile);
+  DeleteFile(CodeFile);
+end;
+
 procedure RunInstall();
 var
   Params: String;
   ResultCode: Integer;
 begin
-  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\get.ps1') + '" -Release "' + ExpandConstant('{app}\{#ReleaseName}') + '"';
+  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\get.ps1') + '" -Distro "' + ChosenDistro + '" -Release "' + ExpandConstant('{app}\{#ReleaseName}') + '"';
   if WizardSilent() then
     Params := Params + ' -Yes'
   else
@@ -374,8 +675,7 @@ begin
   WizardForm.FilenameLabel.Caption := 'Every step is under Details below.';
   WizardForm.ProgressGauge.Style := npbstMarquee;
   try
-    if not ExecAndLogOutput(PowerShellExe(), Params, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode, @DetailsLine) then
-      ResultCode := -1;
+    ResultCode := RunGetPs1(Params, DetailsMemo, WizardForm.StatusLabel);
   finally
     WizardForm.ProgressGauge.Style := npbstNormal;
     DeleteFile(ExpandConstant('{tmp}\answers.txt'));
@@ -400,7 +700,11 @@ end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 begin
-  Result := 'devmagic-panel {#AppVersion} goes into the WSL distro devmagic-panel.' + NewLine + NewLine;
+  Result := 'devmagic-panel {#AppVersion} goes into the WSL distro ' + ChosenDistro;
+  if DistroIsNew then Result := Result + ' (made now from Ubuntu 24.04)'
+  else if IsRepair() then Result := Result + ' (a repair of the install there)'
+  else if CompareText(ChosenDistro, OwnDistro) <> 0 then Result := Result + ' (yours: ' + ProbeOs + ')';
+  Result := Result + '.' + NewLine + NewLine;
   if HasDistro and (ProbeUser <> '') then
     Result := Result + 'Linux user: ' + ProbeUser + ' (already there)' + NewLine
   else
@@ -413,25 +717,29 @@ begin
     Result := Result + NewLine + 'WSL is off: Windows turns it on (UAC), then asks for a restart; after it the setup starts again by itself and goes on.' + NewLine;
 end;
 
-// --- uninstall: its two questions in dialogs, get.ps1 hidden, its output under Details ---
+// --- uninstall: one question in a dialog, get.ps1 hidden, its output under Details ---
 
 function InitializeUninstall(): Boolean;
 var
   Buttons: TArrayOfString;
+  Created: Cardinal;
 begin
   Result := True;
   RemoveDistroAnswer := False;
   NoBackupAnswer := False;
-  if not RegQueryStringValue(HKCU, 'Software\devmagic-panel', 'Distro', UninstallDistro) then UninstallDistro := 'devmagic-panel';
+  if not RegQueryStringValue(HKCU, 'Software\devmagic-panel', 'Distro', UninstallDistro) then UninstallDistro := OwnDistro;
+  // Only the setup's own distro may go: devmagic-panel, or one it made under another name.
+  UninstallOwnDistro := (UninstallDistro = OwnDistro) or
+    (RegQueryDWordValue(HKCU, 'Software\devmagic-panel', 'Created', Created) and (Created = 1));
   // A silent uninstall keeps the distro, and a distro of your own always stays.
-  if UninstallSilent() or (UninstallDistro <> 'devmagic-panel') then Exit;
+  if UninstallSilent() or not UninstallOwnDistro then Exit;
   // One question, three buttons that say what they do; Enter, Esc and closing it keep the distro.
   // (No line of [Code] may start with "[": Inno reads that as a new section.)
   SetArrayLength(Buttons, 3);
   Buttons[0] := 'Remove it, keep a copy first';
   Buttons[1] := 'Remove it, no copy';
   Buttons[2] := 'Keep the distro';
-  case TaskDialogMsgBox('What should happen to the devmagic-panel distro?',
+  case TaskDialogMsgBox('What should happen to the ' + UninstallDistro + ' distro?',
     'It holds every site, database and file you made in the panel.' + #13#10#13#10 +
     'Keep it: running the setup again later finds it as it was.' + #13#10 +
     'A copy goes to ' + ExpandConstant('{localappdata}') + '\devmagic-panel and takes as much space as the distro uses, often a few GB; wsl --import brings it back.',
@@ -447,18 +755,6 @@ begin
   if not RemoveDistroAnswer then Result := 'keep the distro'
   else if NoBackupAnswer then Result := 'remove the distro, no copy'
   else Result := 'remove the distro, keep a copy first';
-end;
-
-procedure UninstallLine(const S: String; const Error, FirstLine: Boolean);
-begin
-  if Error then begin
-    UninstallDetails.Lines.Add('(' + S + ')');
-    Exit;
-  end;
-  UninstallDetails.Lines.Add(S);
-  if Copy(S, 1, 4) = '==> ' then UninstallProgressForm.StatusLabel.Caption := Copy(S, 5, MaxInt);
-  if Copy(S, 1, 7) = 'error: ' then LastError := Copy(S, 8, MaxInt);
-  SendMessage(UninstallDetails.Handle, WM_VSCROLL, SB_BOTTOM, 0);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -477,7 +773,8 @@ begin
   UninstallDetails.ScrollBars := ssVertical;
   UninstallDetails.WordWrap := True;
   UninstallDetails.Font.Name := 'Consolas';
-  if UninstallDistro = 'devmagic-panel' then UninstallDetails.Lines.Add('Your choice: ' + UninstallChoiceText());
+  if UninstallOwnDistro then UninstallDetails.Lines.Add('Your choice: ' + UninstallChoiceText())
+  else UninstallDetails.Lines.Add(UninstallDistro + ' is your own distro: it stays, the panel in it too.');
 
   Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\get.ps1') + '" -Uninstall -Distro "' + UninstallDistro + '"';
   if RemoveDistroAnswer then begin
@@ -488,8 +785,7 @@ begin
   UninstallProgressForm.StatusLabel.Caption := 'Removing devmagic-panel from Windows...';
   UninstallProgressForm.ProgressBar.Style := npbstMarquee;
   try
-    if not ExecAndLogOutput(PowerShellExe(), Params, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode, @UninstallLine) then
-      ResultCode := -1;
+    ResultCode := RunGetPs1(Params, UninstallDetails, UninstallProgressForm.StatusLabel);
   finally
     UninstallProgressForm.ProgressBar.Style := npbstNormal;
   end;
