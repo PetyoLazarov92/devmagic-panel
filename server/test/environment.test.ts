@@ -363,6 +363,15 @@ describe('WSL on Windows', () => {
     expect(byId(await check(nginx), 'windows.portproxy')).toBeUndefined();
   });
 
+  it("under WSL, leaves browser trust to Windows when this distro has no browser of its own", async () => {
+    const tree = wslTree();
+    rmSync(join(tree.root, 'home/.pki'), { recursive: true });
+    expect(byId(await check(tree), 'ca.browsers')).toMatchObject({ status: 'ok', detail: expect.stringContaining('run in Windows') });
+    const ubuntu = healthyTree();
+    rmSync(join(ubuntu.root, 'home/.pki'), { recursive: true });
+    expect(byId(await check(ubuntu), 'ca.browsers')).toMatchObject({ status: 'warn', detail: 'no Chrome, Edge or Firefox certificate store found' });
+  });
+
   it('says to run get.ps1 when the helper is not there, and asks Windows nothing then, or without interop', async () => {
     const tree = wslTree();
     rmSync(join(tree.root, 'dmp-win.ps1'));

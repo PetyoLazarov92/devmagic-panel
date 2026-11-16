@@ -364,7 +364,10 @@ async function certificateChecks(ctx: CheckContext): Promise<Check[]> {
     const listed = await exec('certutil', ['-L', '-d', `sql:${store}`, '-n', NSS_NICKNAME]);
     if (listed.code !== 0) untrusted.push(store.replace(paths.home, '~'));
   }
-  if (stores.length === 0) {
+  if (stores.length === 0 && wslVersion(ctx.paths.wsl ?? {}) === 2) {
+    // Under WSL the browsers run in Windows and trust what Windows trusts; Local CA in Windows (WSL) checks that.
+    results.push(ok('ca.browsers', 'Trusted by browsers', "your browsers run in Windows and use its trusted roots: see Local CA in Windows, under WSL"));
+  } else if (stores.length === 0) {
     results.push(warn('ca.browsers', 'Trusted by browsers', 'no Chrome, Edge or Firefox certificate store found'));
   } else {
     results.push(
