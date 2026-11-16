@@ -13,7 +13,7 @@ import { checkSystemPassword, newPasswordProblem, resetWays, type ResetWays, set
 import { WPCORE_BIN, type SystemConfig } from './config.js';
 import type { CoreStatusSource } from './core-status.js';
 import { defaultLogsDir, developerReport, type DeveloperContext, listFolder, readLog, REPO_DIR, startupLog } from './developer.js';
-import { packOlderReleases, panelCli, UpdateChecker, type UpdateContext } from './update.js';
+import { packOlderReleases, panelCli, readRelease, UpdateChecker, type UpdateContext } from './update.js';
 import { VulnerabilityWatch } from './vulnerabilities.js';
 import { installStillNews, settleInstall } from './update-install.js';
 import { DraftRefused, draftId, draftInput, Drafts } from './drafts.js';
@@ -66,8 +66,8 @@ import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPath
 import { cachedReport, forgetReport, keepReport, SharedReads } from './wordpress-report-cache.js';
 import { tableGrowth } from './table-growth.js';
 import { countAction, ModeProgress } from './modes.js';
-import { keepInterop, type WindowsPaths } from './windows.js';
-import { wslVersion } from './wsl.js';
+import { keepInterop, syncWindowsAppVersion, type WindowsPaths } from './windows.js';
+import { interopOn, wslVersion } from './wsl.js';
 
 export interface AppDeps {
   config: SystemConfig;
@@ -275,6 +275,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const windows = deps.windows;
     if (windows && wslVersion(windows.kernelRelease ? { kernelRelease: windows.kernelRelease } : {}) === 2) {
       const wsl = { ...(windows.kernelRelease ? { kernelRelease: windows.kernelRelease } : {}), ...(windows.binfmtDir ? { binfmtDir: windows.binfmtDir } : {}) };
+      chores.every('windows-app-version', 'Keep the version in Apps and features', "Under WSL: after the panel updated itself, has Windows' Apps and features show its version, when the Windows part is this release's already (otherwise Machine checks offer to update it).", 6 * 60 * 60_000, async () => {
+        if (!interopOn(wsl)) return 'WSL cannot start Windows programs right now; next time';
+        const note = await syncWindowsAppVersion(deps.exec, windows, deps.version, readRelease(deps.repo ?? REPO_DIR));
+        if (note) app.log.info(`windows: ${note}`);
+        return note || 'Apps and features shows this version, or the Windows part needs its own update';
+      }, 90_000);
       chores.every('wsl-interop', 'Keep WSL able to start Windows programs', 'Under WSL: registers interop with Windows programs again when another distro starting took it away, so the Windows steps and buttons keep working.', 2 * 60_000, async () => {
         const note = await keepInterop(deps.exec, deps.dmpRoot, wsl);
         if (note) app.log.info(`wsl: ${note}`);

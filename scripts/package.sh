@@ -87,6 +87,20 @@ fi
 
 sha() { sha256sum "$1" | cut -d' ' -f1; }
 
+# The Windows part's fingerprint: each shipped file's path and content (text with LF
+# line ends, the icon as it is), in a fixed order, hashed together.
+windows_part() {
+  local repo="$1" file
+  for file in windows/dmp-win.ps1 windows/get.ps1 windows/installer/devmagic-panel.iss windows/installer/devmagic-panel.ico; do
+    [[ -f "$repo/$file" ]] || continue
+    printf '%s\n' "$file"
+    case "$file" in
+      *.ico) cat "$repo/$file" ;;
+      *) tr -d '\r' < "$repo/$file" ;;
+    esac
+  done | sha256sum | cut -d' ' -f1
+}
+
 # release.json, in the package and next to it.
 {
   printf '{\n'
@@ -97,6 +111,9 @@ sha() { sha256sum "$1" | cut -d' ' -f1; }
   # the same way): the panel under WSL compares it with the helper Windows has.
   if [[ -f "$REPO/windows/dmp-win.ps1" ]]; then
     printf '  "windowsHelper": "%s",\n' "$(tr -d '\r' < "$REPO/windows/dmp-win.ps1" | sha256sum | cut -d' ' -f1)"
+    # Everything the Windows setup ships (helper, get.ps1, the setup script, its icon): the
+    # setup records it in Windows, and the panel offers the Windows update when they differ.
+    printf '  "windowsPart": "%s",\n' "$(windows_part "$REPO")"
   fi
   printf '  "scripts": {'
   sep=''

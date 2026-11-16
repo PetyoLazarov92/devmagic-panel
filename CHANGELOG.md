@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.68.2 (2026-11-16)
+* **Windows:** the Start entry Open devmagic-panel is a program shortcut, so Start lists it and finds it when you type devmagic; the internet shortcut it was, which Start does not show, goes
+* **Windows:** after an update from the Updates page, Apps and features shows the new version: the panel has its helper write it when the Windows part is this release's already, and Machine checks offer the whole Windows update otherwise
+* **Windows:** the Windows part check covers everything the setup brings (helper, get.ps1, shortcuts, uninstall steps, icon), not only the helper: each release records a fingerprint of it, the setup keeps it in Windows, and Machine checks offer Update the Windows part when any of it changed
+* Nothing changes in the root scripts. An update installs this release from the panel as usual
+
 ### v1.68.1 (2026-11-16)
 * **Windows:** the setup run without questions, as Update the Windows part runs it, repairs the distro the panel was installed in; it repaired the devmagic-panel distro even when the panel runs in one of yours
 * Nothing changes in the root scripts. An update installs this release from the panel as usual

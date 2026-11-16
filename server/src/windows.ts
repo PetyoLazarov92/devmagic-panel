@@ -59,7 +59,7 @@ export function windowsDrive(paths: WindowsPaths): WindowsDrive | null {
   return drivesOf(paths).find((d) => existsSync(`${d.mount}/Windows/${POWERSHELL}`)) ?? null;
 }
 
-export const WINDOWS_HELPER_COMMANDS = ['status', 'hosts-sync', 'ca-trust', 'autostart-install', 'portproxy-on', 'portproxy-off', 'update-windows'] as const;
+export const WINDOWS_HELPER_COMMANDS = ['status', 'hosts-sync', 'ca-trust', 'autostart-install', 'portproxy-on', 'portproxy-off', 'update-windows', 'set-app-version'] as const;
 export type WindowsHelperCommand = (typeof WINDOWS_HELPER_COMMANDS)[number];
 
 /** What the helper accepts as an argument, and nothing else: same as Assert-DmpArgument. */
@@ -111,6 +111,8 @@ export interface WindowsStatus {
   portproxy?: { rules: string[]; ipHelper: string };
   /** The helper itself: its sha256 (line ends as LF) and the repository its updates come from; an older helper leaves it out. */
   helper?: { sha256: string; repo: string };
+  /** The version Apps and features shows for the setup; null without an entry. An older helper leaves it out. */
+  app?: { version: string | null; part?: string | null };
 }
 
 export async function windowsStatus(exec: Executor, paths: WindowsPaths): Promise<WindowsStatus | null> {
@@ -243,4 +245,32 @@ export async function openWindowsTerminal(exec: Executor, paths: WindowsPaths, d
 export function windowsReleaseTag(version: string): string | null {
   if (!/^[0-9]+\.[0-9]+\.[0-9]+(-[0-9a-z]+(\.[0-9a-z]+)*)?$/.test(version) || /-dev\./.test(version)) return null;
   return `v${version}`;
+}
+
+/**
+ * Whether Windows has this release's Windows part: the fingerprint the setup
+ * recorded against release.json's windowsPart, or for a release from before
+ * that, the helper's own checksum. Null when the release names neither (a checkout).
+ */
+export function windowsPartCurrent(status: WindowsStatus, release: { windowsPart?: string; windowsHelper?: string } | null): boolean | null {
+  if (release?.windowsPart) return status.app?.part === release.windowsPart;
+  if (release?.windowsHelper) return status.helper?.sha256 === release.windowsHelper;
+  return null;
+}
+
+/**
+ * After the panel updated itself from its Updates page, Apps and features still
+ * shows the version the setup installed. When the Windows part is this
+ * release's already, the helper writes the new version there; otherwise the
+ * Windows part check offers the whole update, whose setup writes it. A note of
+ * what it did, empty for nothing.
+ */
+export async function syncWindowsAppVersion(exec: Executor, paths: WindowsPaths, version: string, release: { windowsPart?: string; windowsHelper?: string } | null): Promise<string> {
+  if (!release?.windowsPart && !release?.windowsHelper) return '';
+  const status = await windowsStatus(exec, paths);
+  if (!status?.app?.version || status.app.version === version) return '';
+  if (windowsPartCurrent(status, release) !== true) return '';
+  const r = await runHelper(exec, paths, 'set-app-version', [version], 30_000);
+  if (r.code !== 0) throw new Error(`could not set the version in Apps and features: ${(r.stderr || r.stdout).trim()}`);
+  return `Apps and features shows ${version} now (was ${status.app.version})`;
 }

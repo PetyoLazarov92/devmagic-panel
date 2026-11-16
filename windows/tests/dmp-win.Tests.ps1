@@ -414,3 +414,32 @@ Describe 'update-windows' {
     Get-DmpHelperHash $lf | Should -Be (([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::ASCII.GetBytes("a`nb`n"))) -replace '-', '').ToLowerInvariant())
   }
 }
+
+Describe 'set-app-version' {
+  BeforeEach {
+    $script:DmpAppKey = 'HKCU:\Software\devmagic-panel-pester-app'
+    Remove-Item -Path $script:DmpAppKey -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  AfterEach { Remove-Item -Path $script:DmpAppKey -Recurse -Force -ErrorAction SilentlyContinue }
+
+  It "sets the version Apps and features shows, and reads it back" {
+    New-Item -Path $script:DmpAppKey -Force | Out-Null
+    Set-ItemProperty -Path $script:DmpAppKey -Name DisplayVersion -Value '1.68.0'
+    Get-DmpAppVersion | Should -Be '1.68.0'
+    Set-DmpAppVersion '1.68.2'
+    Get-DmpAppVersion | Should -Be '1.68.2'
+    Set-DmpAppVersion '1.68.3-dev.abc1234'
+    Get-DmpAppVersion | Should -Be '1.68.3-dev.abc1234'
+  }
+
+  It 'makes no entry when the setup has none, and takes only a version' -TestCases @(@{ V = 'v1.68.2' }, @{ V = '1.68' }, @{ V = '1.68.2;x' }, @{ V = '' }) {
+    { Set-DmpAppVersion '1.68.2' } | Should -Throw '*no entry in Apps and features*'
+    Test-Path $script:DmpAppKey | Should -BeFalse
+    { Set-DmpAppVersion $V } | Should -Throw -ExceptionType ([DmpInputError])
+  }
+
+  It 'is no admin command and takes exactly one version' {
+    $script:DmpAdminCommands | Should -Not -Contain 'set-app-version'
+    { Invoke-DmpCommand 'set-app-version' @() } | Should -Throw -ExceptionType ([DmpInputError])
+  }
+}

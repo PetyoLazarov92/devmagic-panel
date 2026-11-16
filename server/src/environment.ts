@@ -20,7 +20,7 @@ import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
 import { hostsKept, interopDisabled, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
 import { readRelease } from './update.js';
-import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsPortproxyHeld, windowsPortproxyRules, windowsStatus, type WindowsPaths } from './windows.js';
+import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsPortproxyHeld, windowsPartCurrent, windowsPortproxyRules, windowsStatus, type WindowsPaths } from './windows.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
 export interface HostPaths {
@@ -649,12 +649,13 @@ async function windowsSideChecks(ctx: CheckContext): Promise<Check[]> {
 
   // The Windows helper this release goes with (release.json), against the one Windows has.
   const release = ctx.self ? readRelease(ctx.self.repo) : null;
-  if (release?.windowsHelper) {
-    const have = status.helper?.sha256;
+  const current = windowsPartCurrent(status, release);
+  if (release && current !== null) {
+    const recorded = release.windowsPart ? status.app?.part : status.helper?.sha256;
     checks.push(
-      have === release.windowsHelper
-        ? ok('windows.part', 'Windows part', `the helper of ${release.name}`)
-        : warn('windows.part', 'Windows part', have ? `the helper in Windows is from another release than this panel (${release.name}): update it, so the panel's Windows steps work as this release expects` : `the helper in Windows is older than this panel (${release.name}): update it, so the panel's Windows steps work as this release expects`, {
+      current
+        ? ok('windows.part', 'Windows part', `the helper, setup and shortcuts of ${release.name}`)
+        : warn('windows.part', 'Windows part', recorded ? `the Windows part (helper, setup, shortcuts) is from another release than this panel (${release.name}): update it, so the Windows side works as this release expects` : `the Windows part (helper, setup, shortcuts) is older than this panel (${release.name}): update it, so the Windows side works as this release expects`, {
             fixes: [{ action: 'windows.update', input: {}, label: 'Update the Windows part', confirm: `The helper downloads the Windows setup of ${release.name} from GitHub, checks it and runs it without a window; it installs ${release.name} again in the distro, which restarts the panel for a minute.` }],
           }),
     );

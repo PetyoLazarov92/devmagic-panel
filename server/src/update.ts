@@ -73,6 +73,8 @@ export interface ReleaseInfo {
   scripts: Record<string, string>;
   /** sha256 of the Windows helper (windows/dmp-win.ps1, line ends as LF) this release goes with. */
   windowsHelper?: string;
+  /** sha256 of everything the Windows setup ships (helper, get.ps1, the setup script, its icon), which the setup records in Windows. */
+  windowsPart?: string;
 }
 
 export function parseRelease(text: string): ReleaseInfo | null {

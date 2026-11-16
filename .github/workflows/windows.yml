@@ -62,7 +62,9 @@ jobs:
           if (-not (Test-Path $package)) { throw "no package at $package" }
           $version = $name.TrimStart('v')
           $file = ($version -replace '-.*$', '') + '.0'
-          $output = & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DFileVersion=$file" "/DReleaseFile=$package" "/O$env:RUNNER_TEMP\setup" windows\installer\devmagic-panel.iss 2>&1
+          # The Windows part's fingerprint from the package's release.json, kept by the setup in Windows.
+          $part = (Get-Content -Raw (Join-Path $env:RUNNER_TEMP "package\devmagic-panel-$name.json") | ConvertFrom-Json).windowsPart
+          $output = & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DFileVersion=$file" "/DReleaseFile=$package" "/DWindowsPart=$part" "/O$env:RUNNER_TEMP\setup" windows\installer\devmagic-panel.iss 2>&1
           $code = $LASTEXITCODE
           $output | ForEach-Object { "$_" }
           if ($code -ne 0) {

@@ -22,6 +22,11 @@
   #error Pass /DReleaseFile=<path to devmagic-panel-<version>.tar.gz>
 #endif
 #define ReleaseName ExtractFileName(ReleaseFile)
+; The Windows part's fingerprint (release.json's windowsPart), written to Windows after an
+; install or repair: the panel compares it with its release's and offers the Windows update.
+#ifndef WindowsPart
+  #define WindowsPart ""
+#endif
 
 [Setup]
 AppId={{6F5D2E1B-8C4A-4F0E-9B7D-3A2C1E5F4D60}
@@ -69,11 +74,14 @@ Name: startmenuicon; Description: "Add it to the Start menu, so typing devmagic 
 ; Internet shortcuts (.url): they open the panel in your default browser; the uninstall removes them.
 Name: "{userdesktop}\devmagic-panel"; Filename: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Tasks: desktopicon
 ; Its own name in Start: WSL adds a devmagic-panel entry of its own there for the distro (a terminal, Ubuntu's icon).
-Name: "{userprograms}\Open devmagic-panel"; Filename: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Tasks: startmenuicon
+; A program shortcut (.lnk), not an internet one: Windows 11's Start lists only those as apps.
+; Explorer given a URL opens it in the default browser.
+Name: "{userprograms}\Open devmagic-panel"; Filename: "{win}\explorer.exe"; Parameters: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Comment: "Opens https://local.devmagic in your browser"; Tasks: startmenuicon
 
 [InstallDelete]
-; The Start shortcut of 1.67.1-dev.9f9939b, named like WSL's entry for the distro.
+; Earlier Start entries: internet shortcuts, which Start does not list (and one named like WSL's entry).
 Type: files; Name: "{userprograms}\devmagic-panel.url"
+Type: files; Name: "{userprograms}\Open devmagic-panel.url"
 
 [Run]
 Filename: "https://local.devmagic"; Description: "Open the panel"; \
@@ -701,6 +709,9 @@ begin
   end;
   Succeeded := ResultCode = 0;
   RestartNeeded := ResultCode = 10;
+  // After get.ps1, which writes this key anew: what this setup's Windows part is.
+  if Succeeded and ('{#WindowsPart}' <> '') then
+    RegWriteStringValue(HKEY_CURRENT_USER, 'Software\devmagic-panel', 'WindowsPart', '{#WindowsPart}');
   // After the restart, when you sign in, this setup starts again by itself (once) and goes on.
   if RestartNeeded then
     RegWriteStringValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', 'devmagic-panel-setup', '"' + ExpandConstant('{srcexe}') + '"');

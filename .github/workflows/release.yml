@@ -95,7 +95,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --pattern "devmagic-panel-$($env:GITHUB_REF_NAME).tar.gz" --dir "$env:RUNNER_TEMP\package"
+        run: gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --pattern "devmagic-panel-$($env:GITHUB_REF_NAME).tar.gz" --pattern "devmagic-panel-$($env:GITHUB_REF_NAME).json" --dir "$env:RUNNER_TEMP\package"
       - name: Inno Setup
         shell: pwsh
         run: |
@@ -109,7 +109,8 @@ jobs:
           $version = $name.TrimStart('v')
           $file = ($version -replace '-.*$', '') + '.0'
           $package = Join-Path $env:RUNNER_TEMP "package\devmagic-panel-$name.tar.gz"
-          $output = & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DFileVersion=$file" "/DReleaseFile=$package" "/O$env:RUNNER_TEMP\setup" windows\installer\devmagic-panel.iss 2>&1
+          $part = (Get-Content -Raw (Join-Path $env:RUNNER_TEMP "package\devmagic-panel-$name.json") | ConvertFrom-Json).windowsPart
+          $output = & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DFileVersion=$file" "/DReleaseFile=$package" "/DWindowsPart=$part" "/O$env:RUNNER_TEMP\setup" windows\installer\devmagic-panel.iss 2>&1
           $code = $LASTEXITCODE
           $output | ForEach-Object { "$_" }
           if ($code -ne 0) {

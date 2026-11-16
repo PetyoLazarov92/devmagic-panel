@@ -96,6 +96,8 @@ setup() {
   [[ "$json" == *"\"php/info.php\": \"$(sha256sum "$SRC/scripts/php/info.php" | cut -d' ' -f1)\""* ]]
   # The Windows helper, hashed with LF line ends whatever the checkout has.
   [[ "$json" == *"\"windowsHelper\": \"$(printf 'param()\nWrite-Output helper\n' | sha256sum | cut -d' ' -f1)\""* ]]
+  # The whole Windows part: each shipped file's path and its LF content, hashed together.
+  [[ "$json" == *"\"windowsPart\": \"$(printf 'windows/dmp-win.ps1\nparam()\nWrite-Output helper\n' | sha256sum | cut -d' ' -f1)\""* ]]
   node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$pkg/release.json"
   # The staging folder is gone.
   [ -z "$(find "$OUT" -name '.stage.*')" ]

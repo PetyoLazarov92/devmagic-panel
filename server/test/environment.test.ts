@@ -375,19 +375,26 @@ describe('WSL on Windows', () => {
   it("compares the helper in Windows with the one this release goes with, and offers the update", async () => {
     const tree = wslTree();
     mkdirSync(join(tree.root, 'release'), { recursive: true });
-    tree.write('release/release.json', JSON.stringify({ name: 'v1.68.0', version: '1.68.0', commit: 'abc', installer: 'x', scripts: {}, windowsHelper: 'a'.repeat(64) }));
-    const run = (helper: unknown) => {
+    const release = (extra: Record<string, string>) => tree.write('release/release.json', JSON.stringify({ name: 'v1.68.2', version: '1.68.2', commit: 'abc', installer: 'x', scripts: {}, ...extra }));
+    const run = (changes: Record<string, unknown>) => {
       const powershell = `${join(tree.root, 'Windows')}/System32/WindowsPowerShell/v1.0/powershell.exe`;
-      const fake = fakeExec({ ...healthyResponses(), 'loginctl show-user': { stdout: 'yes\n' }, [powershell]: { stdout: windowsStatus(helper ? { helper } : {}) } });
-      return checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, self: { repo: join(tree.root, 'release'), version: '1.68.0' } });
+      const fake = fakeExec({ ...healthyResponses(), 'loginctl show-user': { stdout: 'yes\n' }, [powershell]: { stdout: windowsStatus(changes) } });
+      return checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, self: { repo: join(tree.root, 'release'), version: '1.68.2' } });
     };
-    expect(byId(await run({ sha256: 'a'.repeat(64), repo: 'PetyoLazarov92/devmagic-panel' }), 'windows.part')).toMatchObject({ status: 'ok', detail: 'the helper of v1.68.0' });
-    expect(byId(await run({ sha256: 'b'.repeat(64), repo: 'PetyoLazarov92/devmagic-panel' }), 'windows.part')).toMatchObject({
+    // The whole Windows part, as the setup recorded it.
+    release({ windowsHelper: 'a'.repeat(64), windowsPart: 'c'.repeat(64) });
+    expect(byId(await run({ app: { version: '1.68.2', part: 'c'.repeat(64) } }), 'windows.part')).toMatchObject({ status: 'ok', detail: 'the helper, setup and shortcuts of v1.68.2' });
+    expect(byId(await run({ app: { version: '1.68.1', part: 'd'.repeat(64) }, helper: { sha256: 'a'.repeat(64), repo: 'x' } }), 'windows.part')).toMatchObject({
       status: 'warn',
       detail: expect.stringContaining('another release'),
       fixes: [{ action: 'windows.update', input: {}, confirm: expect.stringContaining('restarts the panel') }],
     });
-    expect(byId(await run(null), 'windows.part')).toMatchObject({ status: 'warn', detail: expect.stringContaining('older than this panel') });
+    // A setup from before the fingerprint: older, even with the same helper.
+    expect(byId(await run({ app: { version: '1.68.1', part: null }, helper: { sha256: 'a'.repeat(64), repo: 'x' } }), 'windows.part')).toMatchObject({ status: 'warn', detail: expect.stringContaining('older than this panel') });
+    // A release from before it compares the helper.
+    release({ windowsHelper: 'a'.repeat(64) });
+    expect(byId(await run({ helper: { sha256: 'a'.repeat(64), repo: 'x' } }), 'windows.part')).toMatchObject({ status: 'ok' });
+    expect(byId(await run({}), 'windows.part')).toMatchObject({ status: 'warn', detail: expect.stringContaining('older than this panel') });
     // A checkout, with no release.json, has nothing to compare.
     expect(byId(await check(tree), 'windows.part')).toBeUndefined();
   });

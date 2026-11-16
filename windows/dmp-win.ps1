@@ -25,6 +25,9 @@ calls and programs started with an argument array only.
                                where nginx in WSL answers for Windows (WSL forwards 127.0.0.1
                                only). A TCP relay: TLS goes through untouched. Admin.
   portproxy-off                those two relays removed; others are left alone. Admin.
+  set-app-version <version>    the version Apps and features shows for the setup, when the panel
+                               was updated from its Updates page and the Windows part stays as
+                               it is (the setup writes it otherwise); only that one value
   update-windows <tag>         the Windows part of that release: downloads its setup
                                (devmagic-panel-setup-<version>.exe) and the .sha256 next to it
                                from this script's own repository on GitHub, checks it, and
@@ -43,7 +46,7 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off', 'update-windows')
+$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off', 'update-windows', 'set-app-version')
 # Where update-windows downloads from: written here, in the admin-owned copy, never taken
 # from WSL, so nothing in the distro can make it run another program. A fork changes it.
 $script:DmpRepo = 'PetyoLazarov92/devmagic-panel'
@@ -406,6 +409,31 @@ function Get-DmpIpHelperState() {
   return [string]$service.Status
 }
 
+# --- the Apps and features entry ---
+
+# The setup's entry in Apps and features (Inno Setup's key, by the setup's AppId), for this user.
+$script:DmpAppKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{6F5D2E1B-8C4A-4F0E-9B7D-3A2C1E5F4D60}_is1'
+
+function Get-DmpAppVersion() {
+  $entry = Get-ItemProperty -Path $script:DmpAppKey -ErrorAction SilentlyContinue
+  if ($entry -and ($entry.PSObject.Properties.Name -contains 'DisplayVersion')) { return [string]$entry.DisplayVersion }
+  return $null
+}
+
+# What the last setup that ran recorded of the Windows part it brought (release.json's windowsPart).
+function Get-DmpWindowsPart() {
+  $settings = Get-ItemProperty -Path 'HKCU:\Software\devmagic-panel' -ErrorAction SilentlyContinue
+  if ($settings -and ($settings.PSObject.Properties.Name -contains 'WindowsPart')) { return [string]$settings.WindowsPart }
+  return $null
+}
+
+function Set-DmpAppVersion([string]$Version) {
+  if ($Version -cnotmatch '^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}(-[0-9a-z]+(\.[0-9a-z]+)*)?$') { throw [DmpInputError]::new("not a panel version: '$Version' (like 1.68.2)") }
+  if (-not (Test-Path -Path $script:DmpAppKey)) { throw 'the setup has no entry in Apps and features for this user: run the setup once' }
+  Set-ItemProperty -Path $script:DmpAppKey -Name DisplayVersion -Value $Version
+  Set-ItemProperty -Path $script:DmpAppKey -Name DisplayName -Value 'devmagic-panel'
+}
+
 # --- update-windows ---
 
 # This script's SHA-256 with its line ends as LF: the panel compares it with the
@@ -497,6 +525,7 @@ function Get-DmpStatus([string]$Distro) {
     uac = [ordered]@{ enabled = ($uac -and $uac.EnableLUA -eq 1); promptsAdmins = ($uac -and $uac.ConsentPromptBehaviorAdmin -ne 0) }
     portproxy = [ordered]@{ rules = @(Get-DmpPortproxy); ipHelper = (Get-DmpIpHelperState) }
     helper = [ordered]@{ sha256 = (Get-DmpHelperHash $PSCommandPath); repo = $script:DmpRepo }
+    app = [ordered]@{ version = (Get-DmpAppVersion); part = (Get-DmpWindowsPart) }
   }
 }
 
@@ -505,7 +534,8 @@ function Get-DmpStatus([string]$Distro) {
 function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
   if ($script:DmpCommands -notcontains $Name) { throw [DmpInputError]::new("unknown command: '$Name' (one of: $($script:DmpCommands -join ', '))") }
   foreach ($value in $ArgumentList) { Assert-DmpArgument $value }
-  if ($Name -notin @('hosts-sync', 'portproxy-on', 'update-windows') -and $ArgumentList.Count -gt 0) { throw [DmpInputError]::new("$Name takes no arguments") }
+  if ($Name -notin @('hosts-sync', 'portproxy-on', 'update-windows', 'set-app-version') -and $ArgumentList.Count -gt 0) { throw [DmpInputError]::new("$Name takes no arguments") }
+  if ($Name -eq 'set-app-version' -and $ArgumentList.Count -ne 1) { throw [DmpInputError]::new('set-app-version takes one version, like 1.68.2') }
   if ($Name -eq 'update-windows') {
     if ($ArgumentList.Count -ne 1) { throw [DmpInputError]::new('update-windows takes one release tag, like v1.68.0') }
     Assert-DmpReleaseTag $ArgumentList[0]
@@ -573,6 +603,10 @@ function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
     }
     'portproxy-off' {
       Write-DmpOk "$(Remove-DmpPortproxy) relay(s) on $($script:DmpProxyListen) removed"
+    }
+    'set-app-version' {
+      Set-DmpAppVersion $ArgumentList[0]
+      Write-DmpOk "Apps and features shows devmagic-panel $($ArgumentList[0])"
     }
     'update-windows' {
       $exe = Update-DmpWindowsPart $ArgumentList[0] (Join-Path ([IO.Path]::GetTempPath()) 'devmagic-panel-update')

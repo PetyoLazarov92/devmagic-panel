@@ -6,7 +6,7 @@ import { Jobs } from '../src/jobs.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
-import { helperInstalled, helperPath, keepInterop, openWindowsTerminal, runHelper, windowsReleaseTag, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules, wslDistro } from '../src/windows.js';
+import { helperInstalled, helperPath, keepInterop, openWindowsTerminal, runHelper, syncWindowsAppVersion, windowsReleaseTag, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules, wslDistro } from '../src/windows.js';
 import { DMP, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
@@ -377,5 +377,45 @@ describe('the Windows part of a release', () => {
       expect(result).toMatchObject({ ok: false, output: expect.stringContaining('development build') });
       expect(call).toBeUndefined();
     }
+  });
+});
+
+describe('the version in Apps and features', () => {
+  const HELPER_SUM = 'a'.repeat(64);
+  const sync = async (app: unknown, helperSum = HELPER_SUM, releaseHelper: string | null = HELPER_SUM) => {
+    const s = setup();
+    const helper = `${s.powershell} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${HELPER}`;
+    const status = JSON.stringify({ hosts: { path: 'x', block: [] }, helper: { sha256: helperSum, repo: 'PetyoLazarov92/devmagic-panel' }, ...(app === undefined ? {} : { app }) });
+    const fake = fakeExec({ [`${helper} status`]: { stdout: status }, [`${helper} set-app-version`]: { stdout: 'ok\n' } });
+    const note = await syncWindowsAppVersion(fake.exec, s.ctx.windows!, '1.68.2', releaseHelper === null ? null : { windowsHelper: releaseHelper });
+    return { note, commands: fake.calls.filter((c) => c.file.endsWith('powershell.exe')).map((c) => c.args.slice(6).join(' ')) };
+  };
+
+  it('follows a panel update when the Windows part is this release already', async () => {
+    expect(await sync({ version: '1.68.1' })).toEqual({ note: 'Apps and features shows 1.68.2 now (was 1.68.1)', commands: ['status', 'set-app-version 1.68.2'] });
+  });
+
+  it('leaves it when it shows this version, when the Windows part needs its own update, and without an entry', async () => {
+    expect((await sync({ version: '1.68.2' })).commands).toEqual(['status']);
+    expect((await sync({ version: '1.68.1' }, 'b'.repeat(64))).commands).toEqual(['status']);
+    expect((await sync({ version: null })).commands).toEqual(['status']);
+    expect((await sync(undefined)).commands).toEqual(['status']);
+  });
+
+  it('asks Windows nothing for a checkout, whose release names no helper', async () => {
+    expect(await sync({ version: '1.68.1' }, HELPER_SUM, null)).toEqual({ note: '', commands: [] });
+  });
+});
+
+describe('the Windows part', () => {
+  it('compares the fingerprint the setup recorded, and the helper for a release from before it', async () => {
+    const { windowsPartCurrent } = await import('../src/windows.js');
+    const status = (app: unknown, sha256 = 'a'.repeat(64)) => ({ hosts: { path: 'x', block: [] }, helper: { sha256, repo: 'x' }, app }) as never;
+    expect(windowsPartCurrent(status({ version: '1', part: 'c' }), { windowsPart: 'c', windowsHelper: 'a'.repeat(64) })).toBe(true);
+    expect(windowsPartCurrent(status({ version: '1', part: 'd' }), { windowsPart: 'c', windowsHelper: 'a'.repeat(64) })).toBe(false);
+    expect(windowsPartCurrent(status({ version: '1', part: null }), { windowsPart: 'c' })).toBe(false);
+    expect(windowsPartCurrent(status(undefined), { windowsHelper: 'a'.repeat(64) })).toBe(true);
+    expect(windowsPartCurrent(status(undefined, 'b'.repeat(64)), { windowsHelper: 'a'.repeat(64) })).toBe(false);
+    expect(windowsPartCurrent(status(undefined), null)).toBeNull();
   });
 });
