@@ -180,10 +180,10 @@ for the first install and repairs.
 
 Apps and features, devmagic-panel, Uninstall. It takes the Windows side back
 (hosts lines, nginx's relays, the logon task, the CA, the helper) and asks
-whether to remove the distro too, with every site and database in it, and
-whether to keep a copy of it first (exported to
-`%LOCALAPPDATA%\devmagic-panel`; `wsl --import` brings it back). A distro of
-your own always stays.
+what to do with the distro, which holds every site and database: keep it (the
+default), remove it after exporting a copy to `%LOCALAPPDATA%\devmagic-panel`
+(`wsl --import` brings it back), or remove it with no copy. A distro of your
+own always stays.
 
 Aura's Machine checks have a WSL on Windows group under WSL 2: whether WSL keeps
 `/etc/hosts`, Apache is on `127.0.0.1`, lingering is on, the sites are on the

@@ -50,6 +50,7 @@ UninstallDisplayIcon={sys}\wsl.exe
 SetupLogging=yes
 
 [Messages]
+ConfirmUninstall=Remove %1 from Windows now? Its hosts lines, logon task, certificate and helper go, and the distro is kept or removed as you just chose.
 WelcomeLabel2=This installs devmagic-panel {#AppVersion} inside WSL 2: a Linux distro of its own with Apache, PHP and MySQL, and the panel at https://local.devmagic.%n%nThe next pages ask for your Linux account and the panel password; then everything happens in this window, with each step under Details. Windows asks with UAC for the few steps that need admin (turning WSL on, the hosts file, the helper in Program Files). Nothing else on this computer changes.
 
 [Files]
@@ -422,12 +423,24 @@ begin
   if not RegQueryStringValue(HKCU, 'Software\devmagic-panel', 'Distro', UninstallDistro) then UninstallDistro := 'devmagic-panel';
   // A silent uninstall keeps the distro, and a distro of your own always stays.
   if UninstallSilent() or (UninstallDistro <> 'devmagic-panel') then Exit;
-  RemoveDistroAnswer := MsgBox('Remove the devmagic-panel distro as well, with every site, database and file in it?' + #13#10#13#10 +
-    'No keeps it: running the setup again later finds it as it was.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
-  if not RemoveDistroAnswer then Exit;
-  NoBackupAnswer := MsgBox('Keep a copy of the distro before it goes?' + #13#10#13#10 +
-    'Yes exports it to ' + ExpandConstant('{localappdata}') + '\devmagic-panel first (as much space as the distro uses, often a few GB); wsl --import brings it back.' + #13#10 +
-    'No removes it for good, with no copy.', mbConfirmation, MB_YESNO) = IDNO;
+  // One question, three buttons that say what they do; Enter, Esc and closing it keep the distro.
+  case TaskDialogMsgBox('What should happen to the devmagic-panel distro?',
+    'It holds every site, database and file you made in the panel.' + #13#10#13#10 +
+    'Keep it: running the setup again later finds it as it was.' + #13#10 +
+    'A copy goes to ' + ExpandConstant('{localappdata}') + '\devmagic-panel and takes as much space as the distro uses, often a few GB; wsl --import brings it back.',
+    mbConfirmation, MB_YESNOCANCEL or MB_DEFBUTTON3,
+    ['Remove it, keep a copy first', 'Remove it, no copy', 'Keep the distro'], 0) of
+    IDYES: RemoveDistroAnswer := True;
+    IDNO: begin RemoveDistroAnswer := True; NoBackupAnswer := True; end;
+  end;
+  Log(Format('uninstall choice: remove distro %d, no copy %d', [Ord(RemoveDistroAnswer), Ord(NoBackupAnswer)]));
+end;
+
+function UninstallChoiceText(): String;
+begin
+  if not RemoveDistroAnswer then Result := 'keep the distro'
+  else if NoBackupAnswer then Result := 'remove the distro, no copy'
+  else Result := 'remove the distro, keep a copy first';
 end;
 
 procedure UninstallLine(const S: String; const Error, FirstLine: Boolean);
@@ -458,6 +471,7 @@ begin
   UninstallDetails.ScrollBars := ssVertical;
   UninstallDetails.WordWrap := True;
   UninstallDetails.Font.Name := 'Consolas';
+  if UninstallDistro = 'devmagic-panel' then UninstallDetails.Lines.Add('Your choice: ' + UninstallChoiceText());
 
   Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\get.ps1') + '" -Uninstall -Distro "' + UninstallDistro + '"';
   if RemoveDistroAnswer then begin
