@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { UPDATE_WAYS, type UpdateWay } from '@devmagic-panel/shared';
 import { GIT_URL } from './config.js';
 import type { Executor } from './exec.js';
-import { NO_PROMPTS } from './sites/git.js';
+import { remoteGit } from './sites/git.js';
 
 /**
  * Where the panel's releases come from. Each version is published twice by
@@ -225,7 +225,7 @@ export function ghSource(exec: Executor, repo: string, onDate?: OnGitHubDate): R
 export function gitSource(exec: Executor, url: string, cacheDir: string): ReleaseSource {
   if (!GIT_URL.test(url)) throw new Error(`not a git remote: ${url}`);
   // --git-dir, not -C: git with safe.bareRepository=explicit (some setups, and the desktop app's terminal) refuses to find a bare repository from -C.
-  const git = (args: string[], timeoutMs = 120_000, env: Record<string, string> = {}) => exec('git', [`--git-dir=${cacheDir}`, ...args], { timeoutMs, env: { ...NO_PROMPTS, ...env } });
+  const git = (args: string[], timeoutMs = 120_000, env: Record<string, string> = {}) => exec('git', [`--git-dir=${cacheDir}`, ...args], { timeoutMs, env: { ...remoteGit(), ...env } });
   const ref = (tag: string) => `refs/tags/pkg/${tag}`;
 
   const ensure = async () => {
@@ -279,7 +279,7 @@ export function gitSource(exec: Executor, url: string, cacheDir: string): Releas
       try {
         const r = await exec('git', [`--git-dir=${cacheDir}`, `--work-tree=${work}`, 'checkout', '-q', '-f', ref(tag), '--', name], {
           timeoutMs: 10 * 60_000,
-          env: { ...NO_PROMPTS, GIT_INDEX_FILE: join(work, '.index') },
+          env: { ...remoteGit(), GIT_INDEX_FILE: join(work, '.index') },
         });
         if (r.code !== 0) throw new Error(`could not download ${name}: ${firstLine(r.stderr)}`);
         if (statSync(join(work, name)).size > MAX_PACKAGE_BYTES) throw new Error(`${name} is far larger than a release`);

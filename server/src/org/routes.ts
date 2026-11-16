@@ -7,7 +7,7 @@ import type { Executor } from '../exec.js';
 import type { RunStore } from '../store.js';
 import { RepoRefused } from '../sites/repo.js';
 import { ClaudeCodeError, claudeStatus, connectorProbe, findClaude, runClaude } from './claude-code.js';
-import { DumpRefused, listRemote, rcloneRemotes, recentDownloads, rcloneRemote } from './dumps.js';
+import { DumpRefused, listRemote, rcloneRemotes, recentDownloads, rcloneRemote, searchDrive } from './dumps.js';
 import { z } from 'zod';
 import { MoreDumpsRefused, passwordSignIn, readSignedIn, refusalWithPassword, refusalWithSaved, serverSignIn, serverTables } from '../sites/more-dumps.js';
 import type { Secrets } from '../secrets.js';
@@ -16,6 +16,7 @@ import { serverFiles } from '../sites/server-files.js';
 import { ghStatus } from '../repo-hosts/github.js';
 import { type GitHostDetector, glabOverview, HostRefused, listNamespaces, remotesOf } from '../repo-hosts/index.js';
 import { OrgScanner } from './scan.js';
+import { DRIVE_SEARCH } from '@devmagic-panel/shared';
 
 /** The organization settings in ~/.config/devmagic-panel/organizations.json; nothing secret. */
 export function readOrgSettings(file: string): OrgSettings {
@@ -257,12 +258,24 @@ export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): voi
   const remoteFolder = z.object({
     remote: z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_. -]{0,63}$/),
     path: z.string().max(1000).refine((p) => p === '' || (!p.startsWith('/') && !p.startsWith('-') && !/[\0\n]/.test(p) && !p.split('/').some((x) => x === '..' || x === '.' || x === '')), 'A folder in the remote'),
+    shared: z.boolean().optional(),
   });
   api.post<{ Body: unknown }>('/api/dumps/remote-list', async (request, reply) => {
     const body = remoteFolder.safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'A remote and a folder in it' });
     try {
-      return await listRemote(deps.exec, body.data.remote, body.data.path);
+      return await listRemote(deps.exec, body.data.remote, body.data.path, body.data.shared ?? false);
+    } catch (error) {
+      if (error instanceof DumpRefused) return reply.code(400).send({ error: error.message });
+      throw error;
+    }
+  });
+  const driveSearch = z.object({ remote: z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_. -]{0,63}$/), text: z.string().trim().regex(DRIVE_SEARCH), shared: z.boolean().optional() });
+  api.post<{ Body: unknown }>('/api/dumps/drive-search', async (request, reply) => {
+    const body = driveSearch.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: 'A Drive remote and 2 to 80 letters, digits, spaces, dots, dashes or underscores to look for' });
+    try {
+      return await searchDrive(deps.exec, body.data.remote, body.data.text, body.data.shared ?? false);
     } catch (error) {
       if (error instanceof DumpRefused) return reply.code(400).send({ error: error.message });
       throw error;

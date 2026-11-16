@@ -4,7 +4,7 @@ import { Readable } from 'node:stream';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { withoutPasswords } from '../src/actions.js';
-import { driveIdOf, listRemote, planFetch, rcloneRemotes } from '../src/org/dumps.js';
+import { driveIdOf, listRemote, planFetch, rcloneRemotes, searchDrive } from '../src/org/dumps.js';
 import { repoTrust } from '../src/repo-trust.js';
 import { parseZipList, sqlEntry, sqlFileFor } from '../src/sites/dump.js';
 import { checkDumpFile, sniffDump } from '../src/sites/dump-type.js';
@@ -205,5 +205,47 @@ describe('whose repos may run here', () => {
     expect(repoTrust('git@github.com:sam-lee/tool.git', store, ns).trusted).toBe(false);
     store.saveOrgScan('~shared', [{ name: 'tool', sshUrl: 'git@github.com:sam-lee/tool.git', url: 'https://github.com/sam-lee/tool' }], true, '2026-11-09T10:00:00.000Z');
     expect(repoTrust('git@github.com:sam-lee/tool.git', store, ns)).toMatchObject({ trusted: true, why: 'listed' });
+  });
+});
+
+describe('Google Drive: Shared with me, and a search by name', () => {
+  const REMOTES = { 'rclone listremotes --long': { stdout: 'gdrive: drive\nbackups: s3\n' } };
+
+  it("lists Shared with me with each file's Drive id, and only for a Drive remote", async () => {
+    const fake = fakeExec({
+      ...REMOTES,
+      'rclone lsjson': { stdout: JSON.stringify([{ Name: 'Client backups', IsDir: true, ID: '0AbCdEfGhIjKlMnO' }, { Name: 'shop.sql.gz', Size: 1200, ModTime: '2026-11-12T09:30:00Z', ID: '1AbCdEfGhIjKlMnOpQr' }, { Name: 'notes.txt', Size: 3, ID: '1ZzZzZzZzZzZzZz' }]) },
+    });
+    const entries = await listRemote(fake.exec, 'gdrive', '', true);
+    expect(fake.calls.find((c) => c.args[0] === 'lsjson')?.args).toEqual(['lsjson', '--max-depth', '1', '--no-mimetype', '--drive-shared-with-me', '--', 'gdrive:']);
+    expect(entries).toEqual([
+      { name: 'Client backups', path: 'Client backups', dir: true, sizeBytes: null, modifiedAt: null, id: '0AbCdEfGhIjKlMnO' },
+      { name: 'shop.sql.gz', path: 'shop.sql.gz', dir: false, sizeBytes: 1200, modifiedAt: '2026-11-12T09:30:00Z', id: '1AbCdEfGhIjKlMnOpQr' },
+    ]);
+    await expect(listRemote(fake.exec, 'backups', '', true)).rejects.toThrow(/only Drive has Shared with me/);
+  });
+
+  it("searches with Drive's own query, dumps only, newest first", async () => {
+    const fake = fakeExec({
+      ...REMOTES,
+      'rclone backend query': { stdout: JSON.stringify([{ id: '1OlderOlderOlder', name: 'spellbook-old.sql', size: '900', modifiedTime: '2026-10-01T10:00:00Z' }, { id: '1NewerNewerNewer', name: 'spellbook.sql.gz', size: '48300000', modifiedTime: '2026-11-12T09:30:00Z' }, { id: '1PhotoPhotoPhoto', name: 'spellbook.png', size: '10' }]) },
+    });
+    const hits = await searchDrive(fake.exec, 'gdrive', ' spellbook ');
+    expect(fake.calls.find((c) => c.args[0] === 'backend')?.args).toEqual(['backend', 'query', 'gdrive:', "name contains 'spellbook' and trashed = false and mimeType != 'application/vnd.google-apps.folder'"]);
+    expect(hits.map((h) => [h.name, h.id, h.sizeBytes])).toEqual([
+      ['spellbook.sql.gz', '1NewerNewerNewer', 48300000],
+      ['spellbook-old.sql', '1OlderOlderOlder', 900],
+    ]);
+    await searchDrive(fake.exec, 'gdrive', 'shop', true);
+    expect(fake.calls.filter((c) => c.args[0] === 'backend').at(-1)?.args.at(-1)).toContain(' and sharedWithMe');
+  });
+
+  it('takes no search text that Drive could read as more than a name', async () => {
+    const fake = fakeExec(REMOTES);
+    for (const text of ["x' or name contains '", 'a', 'back\\slash', 'quote"d']) {
+      await expect(searchDrive(fake.exec, 'gdrive', text)).rejects.toThrow(/letters, digits, spaces/);
+    }
+    await expect(searchDrive(fake.exec, 'backups', 'shop')).rejects.toThrow(/search works in Drive/);
+    expect(fake.calls.some((c) => c.args[0] === 'backend')).toBe(false);
   });
 });

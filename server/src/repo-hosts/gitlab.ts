@@ -11,7 +11,7 @@ import { HostRefused, type HostRepo } from './types.js';
  * always with --hostname, so the folder it runs in never picks the host. The
  * panel never reads its config, keyring or token.
  */
-const GLAB_ENV = {
+export const GLAB_ENV = {
   // Both the old and the GLAB_ names: glab renamed them after 1.36.
   GLAB_NO_PROMPT: 'true',
   NO_PROMPT: 'true',
@@ -41,8 +41,26 @@ export const GLAB_RETRY_WAITS_MS = [2_000, 5_000];
 const busy = (stderr: string) => /HTTP 5\d\d|HTTP 429|429 Too Many|timed? ?out|connection reset|unexpected EOF/i.test(stderr);
 const signedOut = (stderr: string) => /401|unauthori[sz]ed|auth login|no token|not authenticated|not logged/i.test(stderr);
 
+/** The GitLab CLI the panel runs: the copy it installed (tools.ts) when it has one, else glab on the PATH. */
+let glabProgram = 'glab';
+export const glabBinary = (): string => glabProgram;
+export function useGlabBinary(path: string | null): void {
+  glabProgram = path ?? 'glab';
+}
+
 function glab(exec: Executor, host: string, path: string, timeoutMs = 60_000) {
-  return exec('glab', ['api', '--hostname', host, path], { timeoutMs, env: GLAB_ENV, cwd: NEUTRAL_CWD });
+  return exec(glabProgram, ['api', '--hostname', host, path], { timeoutMs, env: GLAB_ENV, cwd: NEUTRAL_CWD });
+}
+
+/**
+ * Signs glab in to a GitLab host with a personal access token: on stdin only
+ * (glab auth login --stdin), kept by glab. Then asks GitLab who that is.
+ */
+export async function glabSignIn(exec: Executor, host: string, token: string): Promise<{ code: number; stdout: string; stderr: string }> {
+  const r = await exec(glabProgram, ['auth', 'login', '--hostname', host, '--stdin'], { input: `${token.trim()}\n`, timeoutMs: 60_000, env: GLAB_ENV, cwd: NEUTRAL_CWD });
+  if (r.code !== 0) return { code: r.code, stdout: '', stderr: `glab did not take the token: ${firstLine(r.stderr) || firstLine(r.stdout) || `exit ${r.code}`}` };
+  const me = await glabStatus(exec, host);
+  return me.signedIn ? { code: 0, stdout: `glab is signed in to ${host} as ${me.user}`, stderr: '' } : { code: 1, stdout: '', stderr: `glab took the token but ${host} does not answer as you: ${me.problem ?? 'no answer'}` };
 }
 
 function parseJson(text: string): unknown {
@@ -55,7 +73,7 @@ function parseJson(text: string): unknown {
 
 /** glab's version, like 1.36.0, from `glab --version` ("glab version 1.36.0 (...)" or "glab 1.53.0 (...)"). */
 export async function glabVersion(exec: Executor): Promise<string | null | undefined> {
-  const r = await exec('glab', ['--version'], { timeoutMs: 10_000, env: GLAB_ENV, cwd: NEUTRAL_CWD });
+  const r = await exec(glabProgram, ['--version'], { timeoutMs: 10_000, env: GLAB_ENV, cwd: NEUTRAL_CWD });
   if (r.code === 127) return undefined;
   return /(\d+\.\d+\.\d+)/.exec(`${r.stdout}\n${r.stderr}`)?.[1] ?? null;
 }

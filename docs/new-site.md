@@ -16,10 +16,12 @@ dump once it is in.
 The repos of the site, the main one first. Each has its branch (the default
 one first), where it goes in the site and the folder it is cloned into.
 
-- **Your repos**: once the GitHub CLI (`gh auth login`) or the GitLab CLI
-  (`glab auth login`, `--hostname gitlab.wandworks.test` for your own GitLab) is
+- **Your repos**: once the GitHub CLI or the GitLab CLI (Machine checks
+  install both, and sign glab in per host with a token; or `glab auth login
+  --hostname gitlab.wandworks.test` in a terminal for your own GitLab) is
   signed in, the repos of your GitHub organizations and GitLab groups are
-  listed. Tick as many as the site needs: the first is the main repo, and
+  listed. Aura's Machine checks install the GitHub CLI and sign it in, see
+  [GitHub access](#github-access) below. Tick as many as the site needs: the first is the main repo, and
   **Make main** changes it. The ones you picked stay at the top of the list
   while you scroll, and a filter never hides them. Under the lists, **Repos of
   this site** has each picked repo with its branch and folder. The main repo
@@ -143,8 +145,13 @@ against the free space.
 - **Cloud drive**: any rclone remote (`rclone config`): Google Drive,
   Dropbox, OneDrive, Box, S3 and S3-like storage, Backblaze B2, SFTP, WebDAV
   and Nextcloud, FTP and more. Pick the remote and browse its folders (only
-  folders and dumps are listed), or paste a link to a Google Drive file. rclone
-  keeps its own sign-ins; the panel never reads them.
+  folders and dumps are listed), or paste a link to a Google Drive file. On a
+  Google Drive remote, **My Drive** or **Shared with me** picks what to browse,
+  and **Search** finds dumps by name with Drive's own search (anywhere you can
+  reach, or only in what is shared with you), newest first; a file from either
+  downloads by its Drive id, as a pasted link does. Machine checks install
+  rclone and connect Google Drive (read only) in a terminal. rclone keeps its
+  own sign-ins; the panel never reads them.
 - **Public URL**: any `https://` address that serves the file, signed links
   included. Only https, never an address on this computer or a private
   network (checked on the address actually connected to), at most five
@@ -339,3 +346,54 @@ you confirm; see [Undo and backups](undo-and-backups.md).
 The panel stores no token for any of this: Claude Code, `gh`, `glab` and
 rclone keep their own sign-ins, and the panel runs them as you without reading
 them. The Machine checks in Aura show whether each is set up and signed in.
+
+## GitHub access
+
+One sign-in is enough to list your organizations' repos and clone them, with
+no SSH key. In Aura, Machine checks:
+
+1. **GitHub CLI: Install the GitHub CLI.** The panel downloads the gh release
+   it pins from GitHub, checks it against the pinned SHA-256 and keeps it in
+   its own folder, linked into `~/.local/bin` (your terminal finds it after
+   your next login). No root, no apt source. When a gh of yours is on the PATH,
+   the panel uses that one and offers no install.
+2. **Sign in to GitHub.** A job starts; its page shows a one-time code and
+   https://github.com/login/device. Open the page, enter the code and approve
+   GitHub CLI. gh keeps its own sign-in; the panel never reads the token.
+3. When git over SSH cannot sign in to GitHub (no key there), GitHub repos then
+   clone **over HTTPS through gh**: GitHub's SSH addresses go over HTTPS, and
+   gh gives git the sign-in. A site's repo keeps that in its own `.git/config`,
+   so `git pull` and `git push` work there in a terminal too. Your
+   `~/.gitconfig` stays as it is.
+
+**GitHub access** in Machine checks says which way GitHub repos clone, and
+switches between them: Clone through the GitHub CLI (HTTPS), or Clone over SSH
+again.
+
+### SSH keys for GitHub
+
+Under GitHub access, **SSH keys for GitHub** lists the keys in `~/.ssh` and,
+on Windows, the ones in `%USERPROFILE%\.ssh`, each tested alone against
+GitHub: its type and fingerprint, whether it has a passphrase, and which GitHub
+account knows it ("GitHub knows this key as ...", or "Not on GitHub"). The key
+your Windows `.ssh/config` names for github.com is marked. The panel never
+reads a private key: it hands ssh the file, and tests a Windows key on a copy
+only you can read, deleted right after (ssh refuses the wide-open modes Windows
+files show in WSL).
+
+- **Use for GitHub**: the panel clones GitHub repos over SSH with that key (git
+  tries it first), and a site's repo keeps it in its own `.git/config`.
+  `~/.ssh/config` and your other keys stay as they are. Only a key without a
+  passphrase: the panel cannot type one.
+- **Copy into this distro** (a Windows key without a passphrase): copied to
+  `~/.ssh/windows-<name>`, readable only by you, and used for GitHub. Windows'
+  copy stays; Undo on the job moves the copy aside.
+- **Make a new key**: an ed25519 key without a passphrase (`id_ed25519`, or
+  `id_ed25519_devmagic` when that name is taken; never over a key), used for
+  GitHub. Its public key is in the job's output.
+- **Add to GitHub** (a key not on GitHub, with the GitHub CLI signed in): adds
+  its public key to your account. The first time, gh needs the right to add
+  keys: the job shows a one-time code for github.com/login/device again. Or
+  **Copy public key** and paste it on GitHub's add key page. With your SSH key on GitHub, nothing changes: repos keep cloning over
+SSH. An organization with single sign-on or app restrictions asks you once, on
+GitHub, to authorize the GitHub CLI for it, or an admin approves it.

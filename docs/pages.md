@@ -69,13 +69,55 @@ problem in one list, with one-click fixes and **Fix all**:
 
 **Machine checks** (`/aura/machine`): every check of this machine, passing or
 not. The panel's own installation (files, root scripts, build), Apache,
-nginx once it is installed (set up, running, `nginx -t`, each server on its own
-address, configs made by hand that take Apache's ports), certificates, hosts
+nginx (an install button while it is missing; once installed, set up, running,
+`nginx -t`, each server on its own address, configs made by hand that take
+Apache's ports), certificates, hosts
 entries, MySQL (with the read-only account the SQL runner uses, and whether
 its memory for InnoDB data fits the sites: a buffer pool far smaller than
 them gets a fix that sets it, as the MySQL page's Settings do), PHP, tools and
 access. Each check is marked required, recommended or optional, most have a
 one-click fix, and groups that all pass start closed.
+
+What is missing installs from there, one by one or together: **Install what
+is missing**, at the top while tools are missing, lists every install below,
+the ones the panel needs or recommends ticked, and installs the ticked ones on
+one click (those that need your sudo password in one install, so it is asked
+once). **Hide this** keeps it to one line until you show it again.
+
+- **Imagick and Xdebug**: Install for PHP <version>, the command line's PHP,
+  with Undo (Services, PHP for the other versions). No password.
+- **The GitHub CLI, the GitLab CLI and rclone**: their pinned releases,
+  checked, in your user folder. No password; see
+  [GitHub access](new-site.md#github-access). The GitLab CLI is offered even
+  before you use GitLab; once it is installed, gitlab.com is checked (or each
+  GitLab host you use), with two ways to sign in: **Sign in in a terminal**
+  (`glab auth login`, which offers GitLab's browser sign-in or a token), or
+  **Sign in with a token** right in the check, which links GitLab's token page
+  (read_api is enough). rclone gets **Connect Google Drive in a terminal**:
+  `rclone config create gdrive drive scope=drive.readonly` shows a Google
+  sign-in link, and the remote can only read your Drive, for dumps.
+- **Claude Code**: the way Anthropic's installer does it, the newest version
+  from downloads.claude.ai checked against the SHA-256 its manifest gives
+  (about 370 MB), then its own `claude install` in `~/.local/bin`; it updates
+  itself from then on. No password. **Sign in in a terminal** opens one running
+  `claude auth login`.
+
+**Open terminal**, next to Expand all, opens a terminal in your home folder:
+Windows Terminal in the distro under WSL, your desktop's terminal on Ubuntu. A
+check whose fix needs one (Claude Code's sign-in) opens it with the command
+already started; the panel starts only commands from a fixed list, never one
+typed in.
+- **git, unzip, Composer, WP-CLI, nginx and phpMyAdmin**: **Install with your password**
+  asks for your sudo password right there. apt installs the packages from the
+  sources it already has (never a new one); WP-CLI comes from its pinned
+  release, checked against its SHA-256, as `/usr/local/bin/wp`. The password
+  goes to sudo's stdin once for that install, is never saved, and run history
+  shows it as (hidden); sudo keeps no cached sign-in from it. Under Windows it
+  is the Linux password you chose in the setup. A job follows the install;
+  removing a package stays with apt. phpMyAdmin is set up for Apache at
+  `/phpmyadmin` without a control database of its own (`sudo dpkg-reconfigure
+  phpmyadmin` adds one), and when sites run through PHP-FPM the panel gives it
+  its pool, as switching PHP to FPM on Services, PHP does.
 
 ## WP Cores
 

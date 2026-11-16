@@ -78,6 +78,12 @@ Name: "{userdesktop}\devmagic-panel"; Filename: "https://local.devmagic"; IconFi
 ; Explorer given a URL opens it in the default browser.
 Name: "{userprograms}\Open devmagic-panel"; Filename: "{win}\explorer.exe"; Parameters: "https://local.devmagic"; IconFilename: "{app}\devmagic-panel.ico"; Comment: "Opens https://local.devmagic in your browser"; Tasks: startmenuicon
 
+[Registry]
+; The name and icon the panel's Windows notifications show (the helper writes it too, for setups
+; from before 1.69.0); removed with an uninstall.
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\devmagic.panel"; ValueType: string; ValueName: "DisplayName"; ValueData: "devmagic-panel"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\devmagic.panel"; ValueType: string; ValueName: "IconUri"; ValueData: "{app}\devmagic-panel.ico"
+
 [InstallDelete]
 ; Earlier Start entries: internet shortcuts, which Start does not list (and one named like WSL's entry).
 Type: files; Name: "{userprograms}\devmagic-panel.url"
@@ -629,13 +635,15 @@ begin
 end;
 
 // The complete lines of OutFile not shown yet; Shown counts the characters already taken.
+// LoadStringFromLockedFile: cmd holds OutFile open for writing while get.ps1 runs, and
+// LoadStringFromFile cannot open it then, which left Details empty until get.ps1 ended.
 procedure ShowNewLines(Memo: TNewMemo; Status: TNewStaticText; const OutFile: String; var Shown: Integer; const Final: Boolean);
 var
   Text: AnsiString;
   Rest, Line: String;
   At: Integer;
 begin
-  if not LoadStringFromFile(OutFile, Text) then Exit;
+  if not LoadStringFromLockedFile(OutFile, Text) then Exit;
   Rest := Copy(String(Text), Shown + 1, MaxInt);
   repeat
     At := Pos(#10, Rest);

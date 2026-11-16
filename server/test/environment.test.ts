@@ -1,8 +1,10 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { actions } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { checkEnvironment, enabledSiteNames, hostsNames } from '../src/environment.js';
+import { useGithubHttps, useGithubSshKey } from '../src/sites/git.js';
 import type { Secrets } from '../src/secrets.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { DMP, fakeExec, healthyResponses, tempTree } from './helpers.js';
@@ -32,12 +34,18 @@ describe('checkEnvironment', () => {
     expect(byId(report, 'access.github')?.status).toBe('ok');
   });
 
-  it('shows nothing about GitLab when it is not in use', async () => {
+  it('shows only the GitLab CLI when GitLab is not in use: an install while it is missing, ok once it is there', async () => {
     const tree = healthyTree();
-    const fake = fakeExec(healthyResponses());
+    const fake = fakeExec({ ...healthyResponses(), 'glab --version': { code: 127 } });
     const report = await checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => [] });
-    expect(report.checks.filter((c) => /gitlab/i.test(c.id))).toEqual([]);
-    expect(fake.calls.some((c) => c.file === 'glab' || (c.file === 'ssh' && c.args.includes('git@gitlab.com')))).toBe(false);
+    expect(report.checks.filter((c) => /gitlab/i.test(c.id))).toMatchObject([{ id: 'access.gitlabCli', status: 'warn', optional: true, fixes: [{ action: 'tools.install', input: { tool: 'glab' } }] }]);
+    // Nothing asks a GitLab host anything.
+    expect(fake.calls.some((c) => (c.file === 'glab' && c.args[0] !== '--version') || (c.file === 'ssh' && c.args.includes('git@gitlab.com')))).toBe(false);
+    // Installed: gitlab.com, so your own account can list and sign in.
+    const signedIn = await checkEnvironment({ config: tree.config, exec: fakeExec({ ...healthyResponses(), 'glab --version': { stdout: 'glab 1.130.0 (abc)\n' }, 'glab api --hostname gitlab.com user': { stdout: JSON.stringify({ username: 'alex', name: 'Alex' }) } }).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => [] });
+    expect(signedIn.checks.filter((c) => /gitlab/i.test(c.id))).toMatchObject([{ id: 'access.gitlabCli.gitlab.com', status: 'ok', detail: expect.stringContaining('signed in as alex') }]);
+    const out = await checkEnvironment({ config: tree.config, exec: fakeExec({ ...healthyResponses(), 'glab --version': { stdout: 'glab 1.130.0 (abc)\n' }, 'glab api': { code: 1, stderr: '401 Unauthorized' } }).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => [] });
+    expect(out.checks.filter((c) => /gitlab/i.test(c.id))).toMatchObject([{ id: 'access.gitlabCli.gitlab.com', status: 'warn', fixes: [{ action: 'machine.openTerminal', input: { run: 'glab-login', host: 'gitlab.com' } }, { action: 'gitlab.signIn' }] }]);
   });
 
   it('checks the GitLab CLI and SSH on each GitLab host in use, as optional warnings at most', async () => {
@@ -55,7 +63,7 @@ describe('checkEnvironment', () => {
     expect(byId(report, 'access.gitlabCli.git.wandworks.test')).toMatchObject({ status: 'warn', optional: true });
     expect(byId(report, 'access.gitlabCli.git.wandworks.test')?.detail).toContain('glab auth login --hostname git.wandworks.test');
     expect(byId(report, 'access.gitlab.gitlab.com')).toMatchObject({ status: 'ok', optional: true });
-    expect(byId(report, 'access.gitlab.git.wandworks.test')).toMatchObject({ status: 'warn', optional: true, detail: 'cannot authenticate: add your SSH key to git.wandworks.test, or cloning its private repos will fail' });
+    expect(byId(report, 'access.gitlab.git.wandworks.test')).toMatchObject({ status: 'warn', optional: true, label: 'git.wandworks.test access', detail: expect.stringContaining('SSH is refused: sign the GitLab CLI in to git.wandworks.test') });
     expect(byId(report, 'access.github')?.status).toBe('ok');
   });
 
@@ -122,7 +130,7 @@ describe('checkEnvironment', () => {
     expect(byId(await run('LISTEN 0 511 *:80 *:*\nLISTEN 0 511 *:443 *:*\nLISTEN 0 4096 127.0.0.1:1025 0.0.0.0:*\n'), 'tools.mailpit')?.status).toBe('ok');
   });
 
-  it('needs git and unzip, and recommends Composer, with the apt command for each', async () => {
+  it('needs git and unzip, and recommends Composer, each with an install that asks your password', async () => {
     const tree = healthyTree();
     const healthy = await checkEnvironment({ config: tree.config, exec: fakeExec(healthyResponses()).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
     expect(byId(healthy, 'tools.git')).toMatchObject({ status: 'ok', detail: 'git version 2.43.0' });
@@ -135,11 +143,17 @@ describe('checkEnvironment', () => {
       exec: fakeExec({ ...healthyResponses(), 'git --version': missing, 'unzip -v': missing, 'composer --version': missing }).exec,
       secrets, paths: tree.hostPaths, dmpRoot: DMP,
     });
-    expect(byId(bare, 'tools.git')).toMatchObject({ status: 'fail' });
-    expect(byId(bare, 'tools.git')?.detail).toContain('apt install git');
-    expect(byId(bare, 'tools.unzip')).toMatchObject({ status: 'fail' });
-    expect(byId(bare, 'tools.composer')).toMatchObject({ status: 'warn', recommended: true });
-    expect(byId(bare, 'tools.composer')?.detail).toContain('apt install composer');
+    const install = (item: string) => [{ action: 'system.install', input: { items: [item] }, needsPassword: true, confirm: expect.stringContaining('never saves it') }];
+    expect(byId(bare, 'tools.git')).toMatchObject({ status: 'fail', fixes: install('git') });
+    expect(byId(bare, 'tools.unzip')).toMatchObject({ status: 'fail', fixes: install('unzip') });
+    expect(byId(bare, 'tools.composer')).toMatchObject({ status: 'warn', recommended: true, fixes: install('composer') });
+    // The page adds the password: with it, each fix is input the action takes.
+    expect(byId(bare, 'tools.phpmyadmin')).toMatchObject({ status: 'warn', optional: true, fixes: install('phpmyadmin') });
+    for (const id of ['tools.git', 'tools.unzip', 'tools.composer', 'tools.phpmyadmin']) {
+      const fix = byId(bare, id)!.fixes![0]!;
+      expect(actions[fix.action as keyof typeof actions].input.safeParse({ ...fix.input, password: '' }).success).toBe(true);
+    }
+    expect(byId(bare, 'tools.composer')?.detail).toContain('composer.json');
   });
 
   it('says nothing about the old devmagic CLI', async () => {
@@ -200,6 +214,108 @@ describe('checkEnvironment', () => {
     expect(byId(report, 'php.modules')?.detail).toContain('mysqli');
   });
 
+  it('offers to install the GitHub CLI and sign it in, and to clone through it without an SSH key', async () => {
+    const tree = healthyTree();
+    const refused = { 'ssh -T': { code: 255, stderr: 'git@github.com: Permission denied (publickey).\n' } };
+    const check = (more: Record<string, unknown>) => checkEnvironment({ config: tree.config, exec: fakeExec({ ...healthyResponses(), ...refused, ...more } as never).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+    // No gh: install it.
+    let report = await check({ 'gh api user --jq .login': { code: 127 } });
+    expect(byId(report, 'access.githubCli')).toMatchObject({ status: 'warn', fixes: [{ action: 'tools.install', input: { tool: 'gh' }, confirm: expect.stringContaining('no root') }] });
+    expect(byId(report, 'access.github')).toMatchObject({ status: 'warn', label: 'GitHub access', fixes: [{ action: 'tools.install' }] });
+    // gh not signed in: sign in.
+    report = await check({ 'gh api user --jq .login': { code: 1, stderr: 'To get started with GitHub CLI, please run:  gh auth login\n' } });
+    expect(byId(report, 'access.githubCli')).toMatchObject({ status: 'warn', detail: expect.stringContaining('not signed in'), fixes: [{ action: 'github.signIn' }] });
+    expect(byId(report, 'access.github')?.fixes).toEqual([expect.objectContaining({ action: 'github.signIn' })]);
+    // Signed in, SSH refused: clone through gh.
+    report = await check({});
+    expect(byId(report, 'access.github')).toMatchObject({ status: 'warn', fixes: [{ action: 'github.cloneWith', input: { way: 'https' } }] });
+    for (const id of ['access.githubCli', 'access.github']) {
+      for (const fix of byId(report, id)?.fixes ?? []) expect(actions[fix.action as keyof typeof actions].input.safeParse(fix.input).success).toBe(true);
+    }
+  });
+
+  it('offers to install Claude Code, and glab with a token sign-in per GitLab host', async () => {
+    const tree = healthyTree();
+    const report = await checkEnvironment({
+      config: tree.config,
+      exec: fakeExec({ ...healthyResponses(), 'glab --version': { stdout: 'glab 1.130.0 (abc)\n' }, 'glab api': { code: 1, stderr: '401 Unauthorized' } }).exec,
+      secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => ['gitlab.wandworks.test'],
+    });
+    expect(byId(report, 'access.gitlabCli.gitlab.wandworks.test')).toMatchObject({
+      status: 'warn',
+      fixes: [
+        { action: 'machine.openTerminal', input: { run: 'glab-login', host: 'gitlab.wandworks.test' }, label: 'Sign in in a terminal' },
+        { action: 'gitlab.signIn', input: { host: 'gitlab.wandworks.test' }, secret: { field: 'token', link: { href: 'https://gitlab.wandworks.test/-/user_settings/personal_access_tokens?name=devmagic-panel&scopes=read_api' } } },
+      ],
+    });
+    expect(actions['machine.openTerminal'].input.safeParse({ run: 'glab-login', host: 'gitlab.wandworks.test' }).success).toBe(true);
+    const fix = byId(report, 'access.gitlabCli.gitlab.wandworks.test')!.fixes![1]!;
+    expect(actions['gitlab.signIn'].input.safeParse({ ...fix.input, token: 'glpat-abcdefgh' }).success).toBe(true);
+    const bare = await checkEnvironment({ config: tree.config, exec: fakeExec({ ...healthyResponses(), 'glab --version': { code: 127 } }).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, gitlabHosts: async () => ['gitlab.com'] });
+    expect(byId(bare, 'access.gitlabCli')).toMatchObject({ status: 'warn', fixes: [{ action: 'tools.install', input: { tool: 'glab' } }] });
+  });
+
+  it('offers rclone, then its Google Drive remote in a terminal, read only', async () => {
+    const tree = healthyTree();
+    const check = async (rclone: unknown) => byId(await checkEnvironment({ config: tree.config, exec: fakeExec({ ...healthyResponses(), 'rclone listremotes --long': rclone } as never).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP }), 'tools.rclone');
+    expect(await check({ code: 127 })).toMatchObject({ status: 'warn', fixes: [{ action: 'tools.install', input: { tool: 'rclone' } }] });
+    expect(await check({ stdout: 'backup: s3\n' })).toMatchObject({ status: 'warn', fixes: [{ action: 'machine.openTerminal', input: { run: 'rclone-drive' }, confirm: expect.stringContaining('scope=drive.readonly') }] });
+    expect(await check({ stdout: 'gdrive: drive\n' })).toMatchObject({ status: 'ok', detail: expect.stringContaining('gdrive remote') });
+  });
+
+  it('says GitHub repos clone through the GitHub CLI once that is on', async () => {
+    const tree = healthyTree();
+    useGithubHttps('gh');
+    try {
+      const signedIn = await checkEnvironment({ config: tree.config, exec: fakeExec(healthyResponses()).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+      expect(byId(signedIn, 'access.github')).toMatchObject({ status: 'ok', detail: 'clones over HTTPS through the GitHub CLI, signed in as alex-morgan' });
+      const out = await checkEnvironment({ config: tree.config, exec: fakeExec({ ...healthyResponses(), 'gh api user --jq .login': { code: 1, stderr: 'please run:  gh auth login\n' } }).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+      // SSH works there too, so going back to it is offered.
+      expect(byId(out, 'access.github')).toMatchObject({ status: 'warn', fixes: [{ action: 'github.signIn' }, { action: 'github.cloneWith', input: { way: 'ssh' } }] });
+    } finally {
+      useGithubHttps(null);
+    }
+  });
+
+  it('tests GitHub over SSH with the chosen key', async () => {
+    const tree = healthyTree();
+    useGithubSshKey('/home/dev/.ssh/id_ed25519');
+    try {
+      const fake = fakeExec(healthyResponses());
+      const report = await checkEnvironment({ config: tree.config, exec: fake.exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+      expect(byId(report, 'access.github')).toMatchObject({ status: 'ok', detail: expect.stringMatching(/^over SSH with id_ed25519: Hi dev!/) });
+      expect(fake.calls.find((c) => c.file === 'ssh' && c.args.includes('git@github.com'))?.args.slice(0, 3)).toEqual(['-T', '-i', '/home/dev/.ssh/id_ed25519']);
+    } finally {
+      useGithubSshKey(null);
+    }
+  });
+
+  it('says how GitHub repos clone over SSH', async () => {
+    const tree = healthyTree();
+    const report = await checkEnvironment({ config: tree.config, exec: fakeExec(healthyResponses()).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+    expect(byId(report, 'access.github')).toMatchObject({ status: 'ok', label: 'GitHub access', detail: expect.stringMatching(/^over SSH: Hi dev!/) });
+  });
+
+  it('offers Imagick and Xdebug for the command line PHP, versioned, with Undo', async () => {
+    const tree = healthyTree();
+    const { exec } = fakeExec({ ...healthyResponses(), 'php -r': { stdout: '8.3.6' }, 'php -m': { stdout: '[PHP Modules]\ncurl\ngd\nintl\nmbstring\nmysqli\nxml\nzip\n' } });
+    const report = await checkEnvironment({ config: tree.config, exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+    expect(byId(report, 'php.imagick')).toMatchObject({
+      status: 'warn',
+      detail: 'not installed, WordPress falls back to GD',
+      fixes: [{ action: 'php.package', input: { version: '8.3', name: 'imagick', how: 'install' }, label: 'Install for PHP 8.3', confirm: expect.stringContaining('Undo on the job removes it again') }],
+    });
+    expect(byId(report, 'php.xdebug')).toMatchObject({
+      status: 'warn',
+      fixes: [{ action: 'php.package', input: { version: '8.3', name: 'xdebug', how: 'install' }, confirm: expect.stringContaining('default mode (develop)') }],
+    });
+    // Each fix is input the action takes.
+    for (const id of ['php.imagick', 'php.xdebug']) {
+      const fix = byId(report, id)!.fixes![0]!;
+      expect(actions[fix.action as keyof typeof actions].input.safeParse(fix.input).success).toBe(true);
+    }
+  });
+
   it('says whether Claude Code is signed in, and with claude.ai', async () => {
     const tree = healthyTree();
     const bin = join(tree.hostPaths.home, '.local/bin/claude');
@@ -209,7 +325,7 @@ describe('checkEnvironment', () => {
       checkEnvironment({ config: tree.config, exec: fakeExec({ ...healthyResponses(), [`${bin} --version`]: { stdout: '2.1.309 (Claude Code)' }, [`${bin} auth status --json`]: { stdout: auth } }).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
     const claude = async (auth: string) => byId(await report(auth), 'access.claudeCode');
     expect(await claude(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai' }))).toMatchObject({ status: 'ok', optional: true });
-    expect((await claude(JSON.stringify({ loggedIn: false })))?.detail).toContain('not signed in: run claude auth login');
+    expect((await claude(JSON.stringify({ loggedIn: false })))?.detail).toContain('not signed in: sign it in with claude auth login');
     expect((await claude(JSON.stringify({ loggedIn: true, authMethod: 'api_key' })))?.detail).toContain('Asana and Google links need');
   });
 });

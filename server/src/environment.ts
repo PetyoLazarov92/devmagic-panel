@@ -1,14 +1,15 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { dirname, join } from 'node:path';
-import type { CheckFix, CheckResult, EnvironmentReport } from '@devmagic-panel/shared';
-import { APACHE_MODULES, isLocalName, MAILPIT_SMTP, MAILPIT_WEB } from '@devmagic-panel/shared';
+import { basename, dirname, join } from 'node:path';
+import type { CheckFix, CheckResult, EnvironmentReport, SystemInstall } from '@devmagic-panel/shared';
+import { APACHE_MODULES, isLocalName, MAILPIT_SMTP, MAILPIT_WEB, TOOLS, WP_CLI_RELEASE } from '@devmagic-panel/shared';
 import { encryptedHome, missingPaths, readAutostart } from './autostart.js';
 import type { SystemConfig } from './config.js';
 import type { ExecResult, Executor } from './exec.js';
 import { claudeStatus } from './org/claude-code.js';
 import { rcloneRemote } from './org/dumps.js';
 import { ghStatus } from './repo-hosts/github.js';
+import { githubHttpsOn, githubSshKey, gitlabHttpsHosts } from './sites/git.js';
 import { glabOverview } from './repo-hosts/index.js';
 import { glabTooOld, MIN_GLAB } from './repo-hosts/gitlab.js';
 import { runRoot } from './exec.js';
@@ -119,11 +120,18 @@ async function apacheChecks(ctx: CheckContext): Promise<Check[]> {
 /**
  * nginx next to Apache, only once nginx is installed: whether the panel set
  * it up, runs, passes nginx -t, and each server answers on its own address
- * only. Nothing when nginx is not installed: the panel needs only Apache.
+ * only. When nginx is not installed, an optional check that installs it: the panel needs only Apache.
  */
 async function nginxChecks(ctx: CheckContext): Promise<Check[]> {
   const { exec, config } = ctx;
-  if (!nginxInstalled(config)) return [];
+  if (!nginxInstalled(config)) {
+    return [
+      warn('nginx.installed', 'nginx', 'not installed: it can serve sites next to Apache, set up on Services, nginx once it is here', {
+        optional: true,
+        fixes: installWithPassword('nginx', 'Installs nginx with apt; it stays off until you set it up next to Apache on Services, nginx.'),
+      }),
+    ];
+  }
   const conflicts = nginxConfigs(config).filter((c) => c.conflict);
   const conflictCheck = conflicts.length
     ? fail('nginx.conflicts', 'nginx leaves Apache its ports', `${conflicts.map((c) => `${c.file} ${c.conflict}`).join('; ')}: make ${conflicts.length === 1 ? 'it' : 'them'} listen on ${config.NGINX_ADDRESS}, or turn ${conflicts.length === 1 ? 'it' : 'them'} off`)
@@ -244,6 +252,19 @@ async function readOnlyCheck(ctx: CheckContext): Promise<Check> {
 
 // ── PHP and tools ────────────────────────────────────────────
 
+/** A fix that installs one item of SYSTEM_INSTALLS with your sudo password, which the page asks for. */
+function installWithPassword(item: SystemInstall, what: string): CheckFix[] {
+  return [
+    {
+      action: 'system.install',
+      input: { items: [item] },
+      label: 'Install with your password',
+      needsPassword: true,
+      confirm: `${what} Your sudo password goes to sudo once, for this install; the panel never saves it.`,
+    },
+  ];
+}
+
 async function phpChecks(ctx: CheckContext): Promise<Check[]> {
   const version = await ctx.exec('php', ['-r', 'echo PHP_VERSION;']);
   if (version.code !== 0) return [fail('php.version', 'PHP', 'php is not installed')];
@@ -264,15 +285,29 @@ async function phpChecks(ctx: CheckContext): Promise<Check[]> {
       ? ok('php.modules', 'PHP modules for WordPress', REQUIRED_PHP_MODULES.join(', '))
       : fail('php.modules', 'PHP modules for WordPress', `missing: ${missing.join(', ')} (apt install php-${missing[0]})`),
   );
+  // A module the command line's PHP lacks installs for that version (php<version>-<name>), so
+  // this check is ok afterwards; never the unversioned php-<name>, which can pull in a newer PHP.
+  const cli = `${major}.${minor}`;
+  const install = (name: string, what: string, after = ''): CheckFix[] => [
+    {
+      action: 'php.package',
+      input: { version: cli, name, how: 'install' },
+      label: `Install for PHP ${cli}`,
+      confirm: `Installs php${cli}-${name} (${what}) from the sources apt has; Apache restarts when it runs PHP ${cli}, and PHP ${cli}'s FPM reloads.${after} Undo on the job removes it again. Other PHP versions get it on Services, PHP.`,
+    },
+  ];
   results.push(
     modules.has('imagick')
       ? ok('php.imagick', 'Imagick', 'installed', { recommended: true })
-      : warn('php.imagick', 'Imagick', 'not installed, WordPress falls back to GD (apt install php-imagick)', { recommended: true }),
+      : warn('php.imagick', 'Imagick', 'not installed, WordPress falls back to GD', { recommended: true, fixes: install('imagick', 'ImageMagick for PHP') }),
   );
   results.push(
     modules.has('xdebug')
       ? ok('php.xdebug', 'Xdebug', 'installed', { optional: true })
-      : warn('php.xdebug', 'Xdebug', 'not installed', { optional: true }),
+      : warn('php.xdebug', 'Xdebug', 'not installed: step debugging and profiling need it', {
+          optional: true,
+          fixes: install('xdebug', 'step debugging and profiling', ' Xdebug then runs in its default mode (develop) on every request, which makes PHP a little slower: pick its modes or turn it off on Services, PHP, Xdebug.'),
+        }),
   );
   return results;
 }
@@ -303,17 +338,19 @@ async function toolChecks(ctx: CheckContext): Promise<Check[]> {
     ctx.exec('composer', ['--version', '--no-ansi'], { timeoutMs: 15_000 }),
   ]);
   const results: Check[] = [
-    wp.code === 0 ? ok('tools.wpcli', 'WP-CLI', wp.stdout.trim()) : fail('tools.wpcli', 'WP-CLI', 'wp is not installed'),
+    wp.code === 0
+      ? ok('tools.wpcli', 'WP-CLI', wp.stdout.trim())
+      : fail('tools.wpcli', 'WP-CLI', 'wp is not installed', { fixes: installWithPassword('wp-cli', `Downloads WP-CLI ${WP_CLI_RELEASE.version} from its release on GitHub, checks its SHA-256 and puts it at /usr/local/bin/wp.`) }),
     wpcoreCheck(ctx),
     git.code === 0
       ? ok('tools.git', 'git', firstLine(git.stdout))
-      : fail('tools.git', 'git', 'not installed: installs from a repo and updates over git need it (apt install git)'),
+      : fail('tools.git', 'git', 'not installed: installs from a repo and updates over git need it', { fixes: installWithPassword('git', 'Installs git with apt.') }),
     unzip.code === 0
       ? ok('tools.unzip', 'unzip', firstLine(unzip.stdout).split(' of ')[0] ?? 'installed')
-      : fail('tools.unzip', 'unzip', 'not installed: zipped database dumps need it (apt install unzip)'),
+      : fail('tools.unzip', 'unzip', 'not installed: zipped database dumps need it', { fixes: installWithPassword('unzip', 'Installs unzip with apt.') }),
     composer.code === 0
       ? ok('tools.composer', 'Composer', firstLine(composer.stdout).replace(/ \d{4}-\d\d-\d\d.*$/, ''), { recommended: true })
-      : warn('tools.composer', 'Composer', 'not installed: repos with a composer.json need it to install their dependencies (apt install composer)', { recommended: true }),
+      : warn('tools.composer', 'Composer', 'not installed: repos with a composer.json need it to install their dependencies', { recommended: true, fixes: installWithPassword('composer', 'Installs Composer with apt (the one your release has).') }),
   ];
   results.push(
     (await isListening(ctx.exec, MAILPIT_SMTP.port))
@@ -324,7 +361,10 @@ async function toolChecks(ctx: CheckContext): Promise<Check[]> {
   results.push(
     pma
       ? ok('tools.phpmyadmin', 'phpMyAdmin', `found at ${pma}`, { optional: true })
-      : warn('tools.phpmyadmin', 'phpMyAdmin', 'not installed', { optional: true }),
+      : warn('tools.phpmyadmin', 'phpMyAdmin', 'not installed: once it is, a site\'s Database tab opens its database and tables in it too', {
+          optional: true,
+          fixes: installWithPassword('phpmyadmin', "Installs phpMyAdmin with apt, set up for Apache at /phpmyadmin, without a control database of its own (dpkg-reconfigure phpmyadmin adds one later); under PHP-FPM the panel gives it its pool."),
+        }),
   );
   return results;
 }
@@ -451,31 +491,64 @@ function hostsChecks(ctx: CheckContext): Check[] {
 
 // ── Access ───────────────────────────────────────────────────
 
+const INSTALL_GH: CheckFix = {
+  action: 'tools.install',
+  input: { tool: 'gh' },
+  label: 'Install the GitHub CLI',
+  confirm: `Downloads gh ${TOOLS.gh.version} from GitHub, checks it against its SHA-256 and keeps it in the panel's folder, linked into ~/.local/bin: no root, no apt source. Undo on the job removes it.`,
+};
+const SIGN_IN_GITHUB: CheckFix = { action: 'github.signIn', input: {}, label: 'Sign in to GitHub' };
+/** Claude Code signs in in a terminal: one opens where you sit, running claude auth login. */
+const CLAUDE_LOGIN: CheckFix = { action: 'machine.openTerminal', input: { run: 'claude-login' }, label: 'Sign in in a terminal' };
+const CLONE_HTTPS: CheckFix = {
+  action: 'github.cloneWith',
+  input: { way: 'https' },
+  label: 'Clone through the GitHub CLI (HTTPS)',
+  confirm: "GitHub repos then clone over HTTPS, with gh giving git the sign-in: no SSH key needed. A site's repo keeps that in its own .git/config; your ~/.gitconfig stays as it is.",
+};
+const CLONE_SSH: CheckFix = { action: 'github.cloneWith', input: { way: 'ssh' }, label: 'Clone over SSH again' };
+
 /** What installing a site from an organization needs; all optional, since the rest of the panel works without. */
 async function organizationChecks(ctx: CheckContext): Promise<Check[]> {
   const gitlabHosts = (await ctx.gitlabHosts?.().catch(() => [])) ?? [];
   const [claude, gh, glab, rclone] = await Promise.all([
     claudeStatus(ctx.exec, ctx.paths.home, ctx.paths.searchPath ?? process.env.PATH ?? ''),
     ghStatus(ctx.exec),
-    gitlabHosts.length ? glabOverview(ctx.exec, gitlabHosts) : null,
+    // Always: glab installs from here before any GitLab host is in use; once it is installed, gitlab.com when no host is.
+    glabOverview(ctx.exec, gitlabHosts.length ? gitlabHosts : ['gitlab.com']),
     rcloneRemote(ctx.exec),
   ]);
   const where = `Claude Code ${claude.version ?? ''} at ${claude.path ?? ''}`;
   return [
     !claude.found
-      ? warn('access.claudeCode', 'Claude Code', 'not found: install it and sign in with claude auth login to install sites from an organization', { optional: true })
+      ? warn('access.claudeCode', 'Claude Code', 'not found: installs from an organization read their repos with it (sign it in with claude auth login after)', {
+          optional: true,
+          fixes: [{ action: 'claude.install', input: {}, label: 'Install Claude Code', confirm: "Installs the newest Claude Code as you, as Anthropic's installer does: the binary for this machine from downloads.claude.ai (about 370 MB), checked against the SHA-256 its manifest gives, then its own claude install (~/.local/bin/claude; it updates itself). Sign it in with claude auth login in a terminal after." }],
+        })
       : !claude.signedIn
-        ? warn('access.claudeCode', 'Claude Code', `${where}, not signed in: run claude auth login in a terminal`, { optional: true })
+        ? warn('access.claudeCode', 'Claude Code', `${where}, not signed in: sign it in with claude auth login`, { optional: true, fixes: [CLAUDE_LOGIN] })
         : !claude.claudeAi
-          ? warn('access.claudeCode', 'Claude Code', `${where}, signed in without claude.ai: it reads repos, but Asana and Google links need claude auth login with your claude.ai account`, { optional: true })
+          ? warn('access.claudeCode', 'Claude Code', `${where}, signed in without claude.ai: it reads repos, but Asana and Google links need claude auth login with your claude.ai account`, { optional: true, fixes: [CLAUDE_LOGIN] })
           : ok('access.claudeCode', 'Claude Code', `${where}, signed in with claude.ai; it reads repos and their Asana and Google links`, { optional: true }),
     gh.signedIn
       ? ok('access.githubCli', 'GitHub CLI', `signed in as ${gh.user}; it lists your organizations and their repos`, { optional: true })
-      : warn('access.githubCli', 'GitHub CLI', `${gh.problem ?? 'not set up'}: it lists the repos of your organizations`, { optional: true }),
-    ...(glab ? gitlabCliChecks(glab) : []),
+      : !gh.installed
+        ? warn('access.githubCli', 'GitHub CLI', 'not installed: it lists the repos of your organizations, and GitHub repos clone through it without an SSH key', { optional: true, fixes: [INSTALL_GH] })
+        : /not signed in/.test(gh.problem ?? '')
+          ? warn('access.githubCli', 'GitHub CLI', 'not signed in: it lists the repos of your organizations', { optional: true, fixes: [SIGN_IN_GITHUB] })
+          : warn('access.githubCli', 'GitHub CLI', `${gh.problem ?? 'not set up'}: it lists the repos of your organizations`, { optional: true }),
+    ...gitlabCliChecks(glab),
     rclone.remote
       ? ok('tools.rclone', 'rclone', `downloads database dumps from Google Drive through the ${rclone.remote} remote`, { optional: true })
-      : warn('tools.rclone', 'rclone', rclone.installed ? 'no Google Drive remote: run rclone config once, or download dumps in the browser' : 'not installed: dumps from Google Drive are downloaded in the browser instead', { optional: true }),
+      : rclone.installed
+        ? warn('tools.rclone', 'rclone', 'no Google Drive remote yet: dumps are downloaded in the browser until you connect one', {
+            optional: true,
+            fixes: [{ action: 'machine.openTerminal', input: { run: 'rclone-drive' }, label: 'Connect Google Drive in a terminal', confirm: 'Opens a terminal running rclone config create gdrive drive scope=drive.readonly: rclone shows a Google sign-in link, you approve in your browser, and the remote can then only read your Drive, for dumps.' }],
+          })
+        : warn('tools.rclone', 'rclone', 'not installed: dumps from Google Drive are downloaded in the browser instead', {
+            optional: true,
+            fixes: [{ action: 'tools.install', input: { tool: 'rclone' }, label: 'Install rclone', confirm: `Downloads rclone ${TOOLS.rclone.version} from GitHub, checks it against its SHA-256 and keeps it in the panel's folder, linked into ~/.local/bin: no root, no apt source. Undo on the job removes it.` }],
+          }),
   ];
 }
 
@@ -483,7 +556,12 @@ async function organizationChecks(ctx: CheckContext): Promise<Check[]> {
 function gitlabCliChecks(glab: NonNullable<Awaited<ReturnType<typeof glabOverview>>>): Check[] {
   const min = MIN_GLAB.join('.');
   if (!glab.installed) {
-    return [warn('access.gitlabCli', 'GitLab CLI', `not installed: it lists the projects of your GitLab groups. Install glab ${min} or newer (sudo apt install glab where your release has it), then sign in with glab auth login`, { optional: true })];
+    return [
+      warn('access.gitlabCli', 'GitLab CLI', 'not installed: it lists the projects of your GitLab groups', {
+        optional: true,
+        fixes: [{ action: 'tools.install', input: { tool: 'glab' }, label: 'Install the GitLab CLI', confirm: `Downloads glab ${TOOLS.glab.version} from GitLab, checks it against its SHA-256 and keeps it in the panel's folder, linked into ~/.local/bin: no root, no apt source. Undo on the job removes it.` }],
+      }),
+    ];
   }
   const version = glab.version ? `glab ${glab.version}` : 'glab';
   if (glab.version && glabTooOld(glab.version)) {
@@ -492,33 +570,72 @@ function gitlabCliChecks(glab: NonNullable<Awaited<ReturnType<typeof glabOvervie
   return glab.hosts.map((h) =>
     h.signedIn
       ? ok(`access.gitlabCli.${h.host}`, `GitLab CLI on ${h.host}`, `${version}, signed in as ${h.user}; it lists your groups and their projects`, { optional: true })
-      : warn(`access.gitlabCli.${h.host}`, `GitLab CLI on ${h.host}`, `${version}, ${h.problem ?? 'not signed in'}: it lists the projects of your groups`, { optional: true }),
+      : warn(`access.gitlabCli.${h.host}`, `GitLab CLI on ${h.host}`, `${version}, ${h.problem ?? 'not signed in'}: it lists the projects of your groups`, {
+          optional: true,
+          fixes: [
+            { action: 'machine.openTerminal', input: { run: 'glab-login', host: h.host }, label: 'Sign in in a terminal' },
+            {
+              action: 'gitlab.signIn',
+              input: { host: h.host },
+              label: 'Sign in with a token',
+              secret: {
+                field: 'token',
+                label: `A personal access token for ${h.host}`,
+                hint: 'Make one on GitLab with the read_api scope (enough to list your groups and projects). It goes to glab once, which keeps it; the panel never saves it.',
+                link: { href: `https://${h.host}/-/user_settings/personal_access_tokens?name=devmagic-panel&scopes=read_api`, text: `Make a token on ${h.host}` },
+              },
+            },
+          ],
+        }),
+  );
+}
+
+/** How the panel clones GitHub repos: over HTTPS through the GitHub CLI when that is on, else over SSH with your key. */
+async function githubAccessCheck(ctx: CheckContext, sshText: string): Promise<Check> {
+  const label = 'GitHub access';
+  const overSsh = /successfully authenticated/i.test(sshText);
+  if (githubHttpsOn()) {
+    const gh = await ghStatus(ctx.exec);
+    return gh.signedIn
+      ? ok('access.github', label, `clones over HTTPS through the GitHub CLI, signed in as ${gh.user}`)
+      : warn('access.github', label, `clones over HTTPS through the GitHub CLI, which ${gh.installed ? 'is not signed in' : 'is not installed'}: cloning private repos will fail`, {
+          fixes: [gh.installed ? SIGN_IN_GITHUB : INSTALL_GH, ...(overSsh ? [CLONE_SSH] : [])],
+        });
+  }
+  const key = githubSshKey();
+  if (overSsh) return ok('access.github', label, `over SSH${key ? ` with ${basename(key)}` : ''}: ${firstLine(sshText.replace(/^\s+/, ''))}`);
+  const gh = await ghStatus(ctx.exec);
+  return warn(
+    'access.github',
+    label,
+    `git over SSH cannot sign in to GitHub, so cloning private repos will fail: ${gh.signedIn ? 'clone through the GitHub CLI instead' : 'sign in to GitHub with the GitHub CLI (no SSH key needed), or add your SSH key to GitHub'}`,
+    { fixes: [gh.signedIn ? CLONE_HTTPS : gh.installed ? SIGN_IN_GITHUB : INSTALL_GH] },
   );
 }
 
 /** `ssh -T git@<host>`: no shell, never a prompt, a new host key taken once. */
-function sshHello(ctx: CheckContext, host: string) {
-  return ctx.exec('ssh', ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'StrictHostKeyChecking=accept-new', `git@${host}`], { timeoutMs: 10_000 });
+function sshHello(ctx: CheckContext, host: string, key: string | null = null) {
+  return ctx.exec('ssh', ['-T', ...(key ? ['-i', key] : []), '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', '-o', 'StrictHostKeyChecking=accept-new', `git@${host}`], { timeoutMs: 10_000 });
 }
 
 async function accessChecks(ctx: CheckContext): Promise<Check[]> {
   const gitlabHosts = (await ctx.gitlabHosts?.().catch(() => [])) ?? [];
-  const [sudo, ssh, ...gitlab] = await Promise.all([ctx.exec('sudo', ['-n', '-l', ctx.dmpRoot]), sshHello(ctx, 'github.com'), ...gitlabHosts.map((h) => sshHello(ctx, h))]);
+  const [sudo, ssh, ...gitlab] = await Promise.all([ctx.exec('sudo', ['-n', '-l', ctx.dmpRoot]), sshHello(ctx, 'github.com', githubSshKey()), ...gitlabHosts.map((h) => sshHello(ctx, h))]);
   const sshText = `${ssh.stdout}\n${ssh.stderr}`;
+  const github = await githubAccessCheck(ctx, sshText);
   return [
     sudo.code === 0
       ? ok('access.sudo', 'Passwordless dmp-root', 'the sudoers rule is in place')
       : fail('access.sudo', 'Passwordless dmp-root', 'sudo asks for a password, run install.sh'),
-    /successfully authenticated/i.test(sshText)
-      ? ok('access.github', 'GitHub over SSH', firstLine(sshText.replace(/^\s+/, '')))
-      : warn('access.github', 'GitHub over SSH', 'cannot authenticate, cloning private repos will fail'),
+    github,
     // GitLab answers "Welcome to GitLab, @alex!"; a warn at most, since only the sites from that host need it.
     ...gitlabHosts.map((host, i) => {
       const r = gitlab[i];
       const text = r ? `${r.stdout}\n${r.stderr}` : '';
+      if (gitlabHttpsHosts().includes(host)) return ok(`access.gitlab.${host}`, `${host} access`, 'clones over HTTPS through the GitLab CLI (SSH was refused there)', { optional: true });
       return /welcome to gitlab/i.test(text)
-        ? ok(`access.gitlab.${host}`, `${host} over SSH`, firstLine(text.replace(/^\s+/, '')), { optional: true })
-        : warn(`access.gitlab.${host}`, `${host} over SSH`, `cannot authenticate: add your SSH key to ${host}, or cloning its private repos will fail`, { optional: true });
+        ? ok(`access.gitlab.${host}`, `${host} access`, `over SSH: ${firstLine(text.replace(/^\s+/, ''))}`, { optional: true })
+        : warn(`access.gitlab.${host}`, `${host} access`, `SSH is refused: sign the GitLab CLI in to ${host} and the panel reads its repos over HTTPS through it the first time SSH is refused, or add your SSH key there`, { optional: true });
     }),
   ];
 }

@@ -28,6 +28,8 @@ calls and programs started with an argument array only.
   set-app-version <version>    the version Apps and features shows for the setup, when the panel
                                was updated from its Updates page and the Windows part stays as
                                it is (the setup writes it otherwise); only that one value
+  notify-update <tag> <url>    a Windows notification that this release of the panel is out; it
+                               and its button open <url>, the panel's Updates page (https only)
   update-windows <tag>         the Windows part of that release: downloads its setup
                                (devmagic-panel-setup-<version>.exe) and the .sha256 next to it
                                from this script's own repository on GitHub, checks it, and
@@ -46,7 +48,7 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off', 'update-windows', 'set-app-version')
+$script:DmpCommands = @('status', 'hosts-sync', 'ca-trust', 'ca-untrust', 'autostart-install', 'autostart-remove', 'wsl-restart', 'self-install', 'self-remove', 'portproxy-on', 'portproxy-off', 'update-windows', 'set-app-version', 'notify-update')
 # Where update-windows downloads from: written here, in the admin-owned copy, never taken
 # from WSL, so nothing in the distro can make it run another program. A fork changes it.
 $script:DmpRepo = 'PetyoLazarov92/devmagic-panel'
@@ -434,6 +436,69 @@ function Set-DmpAppVersion([string]$Version) {
   Set-ItemProperty -Path $script:DmpAppKey -Name DisplayName -Value 'devmagic-panel'
 }
 
+# --- notify-update ---
+
+# The name Windows shows the panel's notifications under (and lists in Settings, Notifications),
+# registered for this user: a program without a Start shortcut of its own needs that.
+$script:DmpNotifierId = 'devmagic.panel'
+$script:DmpNotifierKey = 'HKCU:\Software\Classes\AppUserModelId\devmagic.panel'
+
+function Assert-DmpPanelUrl([string]$Url) {
+  if ($Url -cnotmatch '^https://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9/._-]*)?$') { throw [DmpInputError]::new("not a page of the panel: '$Url' (like https://local.devmagic/update)") }
+}
+
+# The setup's icon, from its entry in Apps and features; null without one.
+function Get-DmpAppIcon() {
+  $entry = Get-ItemProperty -Path $script:DmpAppKey -ErrorAction SilentlyContinue
+  if (-not $entry -or -not ($entry.PSObject.Properties.Name -contains 'DisplayIcon')) { return $null }
+  $path = ([string]$entry.DisplayIcon -replace ',-?[0-9]+$', '').Trim('"')
+  if ($path -and (Test-Path -LiteralPath $path -PathType Leaf)) { return $path }
+  return $null
+}
+
+function Register-DmpNotifier() {
+  New-Item -Path $script:DmpNotifierKey -Force | Out-Null
+  Set-ItemProperty -Path $script:DmpNotifierKey -Name DisplayName -Value 'devmagic-panel'
+  $icon = Get-DmpAppIcon
+  if ($icon) { Set-ItemProperty -Path $script:DmpNotifierKey -Name IconUri -Value $icon }
+}
+
+# The notification: the release, and a button to the Updates page (clicking it anywhere opens that too).
+function New-DmpUpdateToastXml([string]$Tag, [string]$Url) {
+  Assert-DmpReleaseTag $Tag
+  Assert-DmpPanelUrl $Url
+  $page = [Security.SecurityElement]::Escape($Url)
+  $version = $Tag.Substring(1)
+  @"
+<toast activationType="protocol" launch="$page" duration="long">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>devmagic-panel $version is out</text>
+      <text>Update from the panel's Updates page: it backs up, installs and restarts the panel for you.</text>
+    </binding>
+  </visual>
+  <actions>
+    <action content="Open the Updates page" activationType="protocol" arguments="$page"/>
+  </actions>
+</toast>
+"@
+}
+
+function Show-DmpUpdateNotice([string]$Tag, [string]$Url) {
+  $text = New-DmpUpdateToastXml $Tag $Url
+  if ($PSVersionTable.PSEdition -eq 'Core') { throw 'Windows notifications need Windows PowerShell 5.1 (powershell.exe), as the panel runs this script' }
+  Register-DmpNotifier
+  $null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+  $null = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]
+  $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+  $xml.LoadXml($text)
+  $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+  # One at a time: a newer release replaces the notification of the one before.
+  $toast.Tag = 'update'
+  $toast.Group = 'devmagic-panel'
+  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($script:DmpNotifierId).Show($toast)
+}
+
 # --- update-windows ---
 
 # This script's SHA-256 with its line ends as LF: the panel compares it with the
@@ -534,7 +599,8 @@ function Get-DmpStatus([string]$Distro) {
 function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
   if ($script:DmpCommands -notcontains $Name) { throw [DmpInputError]::new("unknown command: '$Name' (one of: $($script:DmpCommands -join ', '))") }
   foreach ($value in $ArgumentList) { Assert-DmpArgument $value }
-  if ($Name -notin @('hosts-sync', 'portproxy-on', 'update-windows', 'set-app-version') -and $ArgumentList.Count -gt 0) { throw [DmpInputError]::new("$Name takes no arguments") }
+  if ($Name -notin @('hosts-sync', 'portproxy-on', 'update-windows', 'set-app-version', 'notify-update') -and $ArgumentList.Count -gt 0) { throw [DmpInputError]::new("$Name takes no arguments") }
+  if ($Name -eq 'notify-update' -and $ArgumentList.Count -ne 2) { throw [DmpInputError]::new('notify-update takes a release tag and the Updates page, like v1.69.0 https://local.devmagic/update') }
   if ($Name -eq 'set-app-version' -and $ArgumentList.Count -ne 1) { throw [DmpInputError]::new('set-app-version takes one version, like 1.68.2') }
   if ($Name -eq 'update-windows') {
     if ($ArgumentList.Count -ne 1) { throw [DmpInputError]::new('update-windows takes one release tag, like v1.68.0') }
@@ -607,6 +673,10 @@ function Invoke-DmpCommand([string]$Name, [string[]]$ArgumentList) {
     'set-app-version' {
       Set-DmpAppVersion $ArgumentList[0]
       Write-DmpOk "Apps and features shows devmagic-panel $($ArgumentList[0])"
+    }
+    'notify-update' {
+      Show-DmpUpdateNotice $ArgumentList[0] $ArgumentList[1]
+      Write-DmpOk "Windows shows that devmagic-panel $($ArgumentList[0]) is out"
     }
     'update-windows' {
       $exe = Update-DmpWindowsPart $ArgumentList[0] (Join-Path ([IO.Path]::GetTempPath()) 'devmagic-panel-update')

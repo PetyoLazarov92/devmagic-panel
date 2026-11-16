@@ -9,6 +9,7 @@ import { checkFreeSpace } from '../sites/create.js';
 import { formatBytes, progressNote } from '../sites/db.js';
 import { adoptUpload, MAX_UPLOAD_BYTES, removeUpload } from '../sites/uploads.js';
 import { fetchDump, FetchRefused, type Getter, shownUrl } from '../sites/fetch-dump.js';
+import { DRIVE_SEARCH } from '@devmagic-panel/shared';
 
 export class DumpRefused extends Error {}
 
@@ -16,8 +17,15 @@ const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 const DUMP = /\.(?:sql|sql\.gz|zip)$/i;
 
 /** The first Google Drive remote rclone has, like gdrive; null without rclone or one. */
+/** rclone as the panel runs it: the copy it installed (tools.ts) when it has one, else rclone on the PATH. */
+let rcloneProgram = 'rclone';
+export const rcloneBinary = (): string => rcloneProgram;
+export function useRcloneBinary(path: string | null): void {
+  rcloneProgram = path ?? 'rclone';
+}
+
 export async function rcloneRemote(exec: Executor): Promise<{ installed: boolean; remote?: string }> {
-  const r = await exec('rclone', ['listremotes', '--long'], { timeoutMs: 15_000 });
+  const r = await exec(rcloneProgram, ['listremotes', '--long'], { timeoutMs: 15_000 });
   if (r.code === 127) return { installed: false };
   const remote = r.code === 0 ? /^([A-Za-z0-9_. -]+?):\s+drive\s*$/m.exec(r.stdout)?.[1] : undefined;
   return { installed: true, ...(remote ? { remote } : {}) };
@@ -98,7 +106,7 @@ export async function planDriveDownload(ctx: DumpContext, input: ActionInput<'du
         }, 1000);
         let r: ExecResult;
         try {
-          r = await ctx.exec('rclone', ['backend', 'copyid', `${remote}:`, fileId, input.name ? join(scratch, 'dump.part') : `${scratch}/`], { timeoutMs: 3 * 60 * 60_000 });
+          r = await ctx.exec(rcloneProgram, ['backend', 'copyid', `${remote}:`, fileId, input.name ? join(scratch, 'dump.part') : `${scratch}/`], { timeoutMs: 3 * 60 * 60_000 });
         } finally {
           clearInterval(timer);
         }
@@ -146,7 +154,7 @@ function folderBytes(dir: string): number {
 
 /** The rclone remotes, with their type (drive, dropbox, onedrive, s3, sftp, webdav...); empty without rclone. */
 export async function rcloneRemotes(exec: Executor): Promise<{ installed: boolean; remotes: Array<{ name: string; type: string }> }> {
-  const r = await exec('rclone', ['listremotes', '--long'], { timeoutMs: 15_000 });
+  const r = await exec(rcloneProgram, ['listremotes', '--long'], { timeoutMs: 15_000 });
   if (r.code === 127) return { installed: false, remotes: [] };
   const remotes = r.code === 0 ? [...r.stdout.matchAll(/^([A-Za-z0-9_][A-Za-z0-9_. -]{0,63}?):\s+(\S+)\s*$/gm)].map((m) => ({ name: m[1] as string, type: m[2] as string })) : [];
   return { installed: true, remotes };
@@ -159,15 +167,22 @@ export interface RemoteEntry {
   dir: boolean;
   sizeBytes: number | null;
   modifiedAt: string | null;
+  /** Google Drive's id of the file, for a Drive remote: it downloads by it. */
+  id?: string;
 }
 
-/** One folder of a remote: its folders and its dumps, never other files, read with rclone lsjson. */
-export async function listRemote(exec: Executor, remote: string, path: string): Promise<RemoteEntry[]> {
+/**
+ * One folder of a remote: its folders and its dumps, never other files, read
+ * with rclone lsjson. shared: a Drive remote's Shared with me instead of My Drive.
+ */
+export async function listRemote(exec: Executor, remote: string, path: string, shared = false): Promise<RemoteEntry[]> {
   const known = await rcloneRemotes(exec);
-  if (!known.remotes.some((r) => r.name === remote)) throw new DumpRefused(`rclone has no remote called ${remote}`);
-  const r = await exec('rclone', ['lsjson', '--max-depth', '1', '--no-mimetype', '--', `${remote}:${path}`], { timeoutMs: 60_000, maxBufferBytes: 32 * 1024 * 1024 });
+  const found = known.remotes.find((r) => r.name === remote);
+  if (!found) throw new DumpRefused(`rclone has no remote called ${remote}`);
+  if (shared && found.type !== 'drive') throw new DumpRefused(`${remote} is no Google Drive remote: only Drive has Shared with me`);
+  const r = await exec(rcloneProgram, ['lsjson', '--max-depth', '1', '--no-mimetype', ...(shared ? ['--drive-shared-with-me'] : []), '--', `${remote}:${path}`], { timeoutMs: 60_000, maxBufferBytes: 32 * 1024 * 1024 });
   if (r.code !== 0) throw new DumpRefused(`rclone could not list ${remote}:${path}: ${(r.stderr || r.stdout).trim().split('\n').at(-1) ?? ''}`);
-  let list: Array<{ Name?: string; Path?: string; IsDir?: boolean; Size?: number; ModTime?: string }>;
+  let list: Array<{ Name?: string; Path?: string; IsDir?: boolean; Size?: number; ModTime?: string; ID?: string }>;
   try {
     list = JSON.parse(r.stdout) as typeof list;
   } catch {
@@ -175,9 +190,52 @@ export async function listRemote(exec: Executor, remote: string, path: string): 
   }
   return list
     .filter((e) => typeof e.Name === 'string' && (e.IsDir || DUMP.test(e.Name)))
-    .map((e) => ({ name: e.Name as string, path: path ? `${path}/${e.Name}` : (e.Name as string), dir: Boolean(e.IsDir), sizeBytes: !e.IsDir && typeof e.Size === 'number' && e.Size >= 0 ? e.Size : null, modifiedAt: e.ModTime && !Number.isNaN(Date.parse(e.ModTime)) ? e.ModTime : null }))
+    .map((e) => ({
+      name: e.Name as string,
+      path: path ? `${path}/${e.Name}` : (e.Name as string),
+      dir: Boolean(e.IsDir),
+      sizeBytes: !e.IsDir && typeof e.Size === 'number' && e.Size >= 0 ? e.Size : null,
+      modifiedAt: e.ModTime && !Number.isNaN(Date.parse(e.ModTime)) ? e.ModTime : null,
+      ...(found.type === 'drive' && typeof e.ID === 'string' && DRIVE_ID.test(e.ID) ? { id: e.ID } : {}),
+    }))
     .sort((a, b) => Number(b.dir) - Number(a.dir) || (b.modifiedAt ?? '').localeCompare(a.modifiedAt ?? '') || a.name.localeCompare(b.name))
     .slice(0, 500);
+}
+
+/** A Google Drive file id, as Drive links carry them. */
+const DRIVE_ID = /^[A-Za-z0-9_-]{10,200}$/;
+
+/**
+ * The dumps whose name holds text, anywhere in a Drive remote (My Drive and
+ * what is shared with you), or only in Shared with me: Drive's own search
+ * through rclone backend query, so nothing walks the whole Drive. Newest first,
+ * at most 200, each with its id to download by.
+ */
+export async function searchDrive(exec: Executor, remote: string, text: string, shared = false): Promise<RemoteEntry[]> {
+  if (!DRIVE_SEARCH.test(text.trim())) throw new DumpRefused('Search with letters, digits, spaces, dots, dashes and underscores, 2 to 80 of them');
+  const known = await rcloneRemotes(exec);
+  const found = known.remotes.find((r) => r.name === remote);
+  if (!found) throw new DumpRefused(`rclone has no remote called ${remote}`);
+  if (found.type !== 'drive') throw new DumpRefused(`${remote} is no Google Drive remote: search works in Drive`);
+  const query = `name contains '${text.trim()}' and trashed = false and mimeType != 'application/vnd.google-apps.folder'${shared ? ' and sharedWithMe' : ''}`;
+  const r = await exec(rcloneProgram, ['backend', 'query', `${remote}:`, query], { timeoutMs: 60_000, maxBufferBytes: 32 * 1024 * 1024 });
+  if (r.code !== 0) throw new DumpRefused(`Drive did not answer the search: ${(r.stderr || r.stdout).trim().split('\n').at(-1) ?? ''}`);
+  let hits: Array<{ id?: unknown; name?: unknown; size?: unknown; modifiedTime?: unknown }>;
+  try {
+    const parsed: unknown = JSON.parse(r.stdout || '[]');
+    hits = Array.isArray(parsed) ? (parsed as typeof hits) : [];
+  } catch {
+    throw new DumpRefused('rclone answered something that is not a list');
+  }
+  return hits
+    .filter((h): h is { id: string; name: string; size?: unknown; modifiedTime?: unknown } => typeof h.id === 'string' && DRIVE_ID.test(h.id) && typeof h.name === 'string' && DUMP.test(h.name))
+    .map((h) => {
+      const size = Number(h.size);
+      const modified = typeof h.modifiedTime === 'string' && !Number.isNaN(Date.parse(h.modifiedTime)) ? h.modifiedTime : null;
+      return { name: h.name, path: h.name, dir: false, sizeBytes: Number.isFinite(size) && size >= 0 && h.size !== undefined ? size : null, modifiedAt: modified, id: h.id };
+    })
+    .sort((a, b) => (b.modifiedAt ?? '').localeCompare(a.modifiedAt ?? '') || a.name.localeCompare(b.name))
+    .slice(0, 200);
 }
 
 /** Downloads a dump from any rclone remote (Dropbox, OneDrive, S3, SFTP, WebDAV...) into the uploads, like the Drive download. */
@@ -207,7 +265,7 @@ export async function planRemoteDownload(ctx: DumpContext, input: ActionInput<'d
           }
         }, 1000);
         try {
-          const r = await ctx.exec('rclone', ['copyto', '--', `${input.remote}:${input.path}`, part], { timeoutMs: 3 * 60 * 60_000 });
+          const r = await ctx.exec(rcloneProgram, ['copyto', '--', `${input.remote}:${input.path}`, part], { timeoutMs: 3 * 60 * 60_000 });
           if (r.code !== 0 || !existsSync(part)) throw new Error(`rclone could not download it: ${(r.stderr || r.stdout).trim().split('\n').at(-1) ?? `exit ${r.code}`}`);
           renameSync(part, file);
         } finally {

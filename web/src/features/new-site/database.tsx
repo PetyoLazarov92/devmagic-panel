@@ -1,8 +1,8 @@
 import type { OrgStatus, RcloneRemotes, RemoteEntry, ServerSignIn, ServerTables, Site, SnapshotInfo, TrashEntry, UploadResult } from '@devmagic-panel/shared';
-import { defaultLeftOut, isWpCliCommand, knownLeftOut, splitSshHost } from '@devmagic-panel/shared';
+import { defaultLeftOut, DRIVE_SEARCH, isWpCliCommand, knownLeftOut, splitSshHost } from '@devmagic-panel/shared';
 import { TablesPicker } from '@/features/database/tables-picker';
-import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, KeyRound, PlugZap, RefreshCw, Server, ShieldCheck, Sparkles, Table2, Trash2, Upload } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { ChevronRight, CircleAlert, Cloud, FileArchive, FolderOpen, Globe, HardDrive, HardDriveDownload, KeyRound, PlugZap, RefreshCw, Search, Server, ShieldCheck, Sparkles, Table2, Trash2, Upload } from 'lucide-react';
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { CopyChoice, findings } from '@/features/database/copy-choice';
 import { DumpFactsCard } from '@/features/new-site/dump-facts';
 import { settled, StepList, useJob } from '@/features/jobs/job-steps';
@@ -333,18 +333,44 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
   const [entries, setEntries] = useState<RemoteEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState('');
+  // Drive only: Shared with me instead of My Drive, and a search by name.
+  const [shared, setShared] = useState(false);
+  const [text, setText] = useState('');
+  const [hits, setHits] = useState<RemoteEntry[] | null>(null);
+  const [searching, setSearching] = useState(false);
   useEffect(() => {
     api.rcloneRemotes().then((r) => {
       setRemotes(r);
       setRemote((now) => now || r.remotes[0]?.name || '');
     }, (err: Error) => setError(err.message));
   }, []);
+  const isDrive = remotes?.remotes.find((r) => r.name === remote)?.type === 'drive';
   useEffect(() => {
     if (!remote) return;
     setEntries(null);
     setError(null);
-    api.remoteList(remote, path).then(setEntries, (err: Error) => setError(err.message));
-  }, [remote, path]);
+    api.remoteList(remote, path, shared && isDrive).then(setEntries, (err: Error) => setError(err.message));
+  }, [remote, path, shared, isDrive]);
+
+  async function search(event: FormEvent) {
+    event.preventDefault();
+    setSearching(true);
+    setError(null);
+    try {
+      setHits(await api.driveSearch(remote, text.trim(), shared));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+  const byId = (entry: RemoteEntry) => (entry.id ? `https://drive.google.com/file/d/${entry.id}/view` : null);
+  // A Drive file from a search or Shared with me downloads by its id, as a pasted link does.
+  const download = (entry: RemoteEntry) => {
+    const viaId = (shared || hits !== null) && byId(entry);
+    if (viaId) onDriveLink(viaId);
+    else onRemote(remote, entry);
+  };
 
   if (!remotes) return <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Asking rclone for its remotes...</p>;
   if (!remotes.installed || remotes.remotes.length === 0) {
@@ -353,8 +379,8 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
         <p className="flex items-center gap-2 font-medium"><CircleAlert className="size-4 text-warning" />{remotes.installed ? 'rclone has no remote yet' : 'rclone is not installed'}</p>
         <p className="text-muted-foreground">
           rclone reaches Google Drive, Dropbox, OneDrive, S3, SFTP, WebDAV and more, each with its own sign-in that the panel never reads.{' '}
-          {remotes.installed ? <>Add one in a terminal with <code className="font-mono text-foreground">rclone config</code>, then come back.</> : <>Install it with <code className="font-mono text-foreground">sudo apt install rclone</code>, add a remote with <code className="font-mono text-foreground">rclone config</code>, then come back.</>}{' '}
-          Aura's <TextLink href="/aura/machine">Machine checks</TextLink> show where it stands. Until then, download the file in the browser and use Downloads folder.
+          {remotes.installed ? <>Connect Google Drive from Aura&apos;s <TextLink href="/aura/machine">Machine checks</TextLink> (rclone, Connect Google Drive in a terminal), or add another remote with <code className="font-mono text-foreground">rclone config</code>, then come back.</> : <>Install it from Aura&apos;s <TextLink href="/aura/machine">Machine checks</TextLink> (rclone, Install rclone), connect Google Drive there, then come back.</>}{' '}
+          Until then, download the file in the browser and use Downloads folder.
         </p>
       </div>
     );
@@ -369,12 +395,48 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
           <FilterChips
             label="Remote"
             value={remote}
-            onChange={(name) => { setRemote(name); setPath(''); }}
+            onChange={(name) => { setRemote(name); setPath(''); setShared(false); setHits(null); }}
             options={remotes.remotes.map((r) => ({ value: r.name, label: `${r.name} (${r.type})` }))}
           />
         </div>
+        {isDrive && (
+          <div className="grid gap-2">
+            <FilterChips
+              label="Drive"
+              value={shared ? 'shared' : 'mine'}
+              onChange={(v) => { setShared(v === 'shared'); setPath(''); setHits(null); }}
+              options={[{ value: 'mine', label: 'My Drive' }, { value: 'shared', label: 'Shared with me' }]}
+            />
+            <form className="flex gap-2" onSubmit={(e) => void search(e)}>
+              <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={shared ? 'Search what is shared with you, like spellbook' : 'Search your Drive by name, like spellbook'} aria-label="Search by name" className="text-dense" spellCheck={false} />
+              <Button type="submit" variant="outline" disabled={searching || !DRIVE_SEARCH.test(text.trim())}>
+                {searching ? <Spinner /> : <Search />}
+                Search
+              </Button>
+              {hits !== null && (
+                <Button type="button" variant="soft" onClick={() => { setHits(null); setText(''); }}>
+                  Clear
+                </Button>
+              )}
+            </form>
+          </div>
+        )}
+        {hits !== null && (
+          <ul className="grid max-h-80 gap-1 overflow-y-auto" aria-label="Search results">
+            {hits.length === 0 && <li className="text-muted-foreground">No dumps with that in their name{shared ? ' shared with you' : ''}.</li>}
+            {hits.map((e) => (
+              <li key={e.id ?? e.path} className="flex flex-wrap items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/50">
+                <FileArchive className="size-4 text-muted-foreground" />
+                <span className="font-mono text-dense">{e.name}</span>
+                <span className="text-xs text-muted-foreground">{[e.sizeBytes !== null ? bytes(e.sizeBytes) : null, e.modifiedAt ? shortDate(e.modifiedAt) : null].filter(Boolean).join(' · ')}</span>
+                <Button size="sm" variant="outline" disabled={working || !e.id} onClick={() => download(e)}>Download</Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {hits === null && (
         <nav aria-label="Folder" className="flex flex-wrap items-center gap-1 font-mono text-xs">
-          <Button variant="ghost" size="xs" className="h-6 px-1 text-primary" onClick={() => setPath('')}>{remote}:</Button>
+          <Button variant="ghost" size="xs" className="h-6 px-1 text-primary" onClick={() => setPath('')}>{remote}:{isDrive && shared ? ' Shared with me' : ''}</Button>
           {parts.map((p, i) => (
             <span key={`${p}${i}`} className="flex items-center gap-1">
               <ChevronRight className="size-3 text-muted-foreground" />
@@ -382,9 +444,10 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
             </span>
           ))}
         </nav>
+        )}
         {error && <p role="alert" className="text-danger">{error}</p>}
-        {!entries && !error && <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Reading the folder...</p>}
-        {entries && (
+        {hits === null && !entries && !error && <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-4" />Reading the folder...</p>}
+        {hits === null && entries && (
           <ul className="grid max-h-80 gap-1 overflow-y-auto">
             {entries.length === 0 && <li className="text-muted-foreground">No folders or dumps here.</li>}
             {entries.map((e) => (
@@ -396,7 +459,7 @@ function FromCloud({ working, onRemote, onDriveLink }: { working: boolean; onRem
                     <FileArchive className="size-4 text-muted-foreground" />
                     <span className="font-mono text-dense">{e.name}</span>
                     <span className="text-xs text-muted-foreground">{[e.sizeBytes !== null ? bytes(e.sizeBytes) : null, e.modifiedAt ? shortDate(e.modifiedAt) : null].filter(Boolean).join(' · ')}</span>
-                    <Button size="sm" variant="outline" disabled={working} onClick={() => onRemote(remote, e)}>Download</Button>
+                    <Button size="sm" variant="outline" disabled={working} onClick={() => download(e)}>Download</Button>
                   </>
                 )}
               </li>

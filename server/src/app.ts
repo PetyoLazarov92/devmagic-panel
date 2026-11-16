@@ -1,8 +1,8 @@
 import { createReadStream, existsSync } from 'node:fs';
-import { dirname, join, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
-import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, Site, TaskRun, ApacheReport, ModesDeveloperView, ModePuzzleQuestion, ModesView, WordModeId, DbCellValue, DbOverview, DbRowsPage, CleanupInfo, DbQueryResult, DbSchema, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, WriteCheck, DbStructure, RowChangeDetail, RowChangeInfo, WpDbReport, WpDbSection, CronReport, CronRunView, DeveloperReport, EnvironmentReport, InstallDraft, UpdateStatus, MailMessage, MailPage, MysqlReport, MysqlSettings, NginxReport, NginxState, HtaccessChanges, Preferences, QueuedProposal, RememberedRepo, ServicesReport, SessionInfo, SiteLog } from '@devmagic-panel/shared';
+import type { ActionRunResult, PanelStatus, PanelStorage, PanelWatcher, ApacheReport, TaskRun, CleanupInfo, CronReport, CronRunView, DbCellValue, DbOverview, DbQueryResult, DbRowsPage, DbSchema, DbStructure, DeveloperReport, HtaccessChanges, InstallDraft, MailMessage, MailPage, ModePuzzleQuestion, ModesDeveloperView, ModesView, MysqlProcess, MysqlReport, MysqlSettings, NginxReport, NginxState, EnvironmentReport, QueuedProposal, Preferences, RememberedRepo, ProfileList, ProfileSummary, RowChangeDetail, RowChangeInfo, ServicesReport, SessionInfo, Site, SiteLog, SlowQueryReport, SshKeysReport, UpdateStatus, WordModeId, WpDbReport, WpDbSection, WriteCheck } from '@devmagic-panel/shared';
 import { browserCounter, FILE_TEXT_MAX, gitUrl, MODE_PATHS, modeForWord, nextPuzzle, puzzleQuestion, sealedModeId, isActionId, isLocalName, localConstants, localName, mountPath, mysqlDatabaseName, mysqlIdentifier, preferences, preferencesUpdate, repoPreset, RUN_KEEP_DAYS, RUN_KEEP_MAX, WP_DB_ON_DEMAND, WP_DB_SECTIONS } from '@devmagic-panel/shared';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -66,8 +66,14 @@ import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPath
 import { cachedReport, forgetReport, keepReport, SharedReads } from './wordpress-report-cache.js';
 import { tableGrowth } from './table-growth.js';
 import { countAction, ModeProgress } from './modes.js';
-import { keepInterop, syncWindowsAppVersion, type WindowsPaths } from './windows.js';
+import { keepInterop, noticeWindowsUpdate, syncWindowsAppVersion, type WindowsPaths, windowsProfile } from './windows.js';
+import { ghBinary, useGhBinary } from './repo-hosts/github.js';
+import { GITHUB_CLONE_META, GITHUB_SSH_KEY_META, githubHttpsOn, githubSshKey, GITLAB_HTTPS_META, useGithubHttps, useGithubSshKey, useGitlabHttps, useGlabSignedIn } from './sites/git.js';
+import { resolveTool } from './tools.js';
 import { interopOn, wslVersion } from './wsl.js';
+import { listSshKeys } from './ssh-keys.js';
+import { glabBinary, glabStatus, useGlabBinary } from './repo-hosts/gitlab.js';
+import { useRcloneBinary } from './org/dumps.js';
 
 export interface AppDeps {
   config: SystemConfig;
@@ -188,6 +194,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (!ways || Date.now() - ways.at > 5 * 60_000) ways = { at: Date.now(), value: resetWays(deps.exec) };
     return ways.value;
   };
+  // The GitHub CLI the panel installed, when it did, and how GitHub repos clone (kept in the store).
+  const ghPlaces = { dataDir: dirname(deps.uploadsDir), home: deps.hostPaths.home };
+  const ghPath = resolveTool(ghPlaces, 'gh');
+  useGhBinary(ghPath === 'gh' ? null : ghPath);
+  const glabPath = resolveTool(ghPlaces, 'glab');
+  useGlabBinary(glabPath === 'glab' ? null : glabPath);
+  const rclonePath = resolveTool(ghPlaces, 'rclone');
+  useRcloneBinary(rclonePath === 'rclone' ? null : rclonePath);
+  useGithubHttps(deps.store.getMeta(GITHUB_CLONE_META) === 'https' ? ghBinary() : null);
+  useGithubSshKey(deps.store.getMeta(GITHUB_SSH_KEY_META) || null);
+  // GitLab hosts that refused SSH while glab was signed in: over HTTPS through glab, remembered here.
+  let gitlabHttpsHosts: string[] = [];
+  try {
+    const kept: unknown = JSON.parse(deps.store.getMeta(GITLAB_HTTPS_META) ?? '[]');
+    gitlabHttpsHosts = Array.isArray(kept) ? kept.filter((h): h is string => typeof h === 'string') : [];
+  } catch {
+    gitlabHttpsHosts = [];
+  }
+  useGitlabHttps(gitlabHttpsHosts, glabBinary(), (hosts) => deps.store.setMeta(GITLAB_HTTPS_META, JSON.stringify(hosts)));
+  useGlabSignedIn(async (host) => ((await glabStatus(deps.exec, host)).signedIn ? glabBinary() : null));
   const hosts = allowedHosts(deps.config, deps.production);
   const logsDir = deps.logsDir ?? defaultLogsDir(deps.hostPaths.home);
   const update: UpdateContext = {
@@ -325,9 +351,24 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     chores.every('versions', 'Pack older panel versions', 'Packs the panel versions it does not run into gzip archives; switching back to one unpacks it first.', 24 * 60 * 60_000, () => packOlderReleases(update), 2 * 60_000);
   }
   if (deps.checkUpdates) {
-    chores.every('updates', 'Check for a new release', 'Looks for a new release of the panel.', 6 * 60 * 60_000, async () => {
+    chores.every('updates', 'Check for a new release', 'Looks for a new release of the panel; under WSL, Windows shows a notification for each new one, which opens the Updates page.', 6 * 60 * 60_000, async () => {
       const status = await updates.status(true);
-      return status.available && status.latest ? `${status.latest} is out` : 'up to date';
+      const said = status.available && status.latest ? `${status.latest} is out` : 'up to date';
+      // Under WSL 2, with interop on: a Windows notification for a new release.
+      const windows = deps.windows;
+      const wsl = windows ? { ...(windows.kernelRelease ? { kernelRelease: windows.kernelRelease } : {}), ...(windows.binfmtDir ? { binfmtDir: windows.binfmtDir } : {}) } : null;
+      if (!windows || !wsl || wslVersion(wsl) !== 2 || !interopOn(wsl)) return said;
+      try {
+        const note = await noticeWindowsUpdate(deps.exec, windows, status, `https://${deps.config.PANEL_DOMAIN}/update`, readRelease(deps.repo ?? REPO_DIR), {
+          get: () => deps.store.getMeta('windows-update-notified'),
+          set: (tag) => deps.store.setMeta('windows-update-notified', tag),
+        });
+        if (note) app.log.info(`windows: ${note}`);
+        return note ? `${said}; ${note}` : said;
+      } catch (err) {
+        app.log.warn(`windows: ${(err as Error).message}`);
+        return `${said}; ${(err as Error).message}`;
+      }
     }, 30_000);
   }
   app.addHook('onClose', async () => chores.stop());
@@ -478,6 +519,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // Every other session ended with the old password; this browser gets a new one.
       reply.setCookie(SESSION_COOKIE, sessions.create(), { httpOnly: true, sameSite: 'strict', secure: 'auto', path: '/' });
       return reply.code(204).send();
+    });
+
+    // The SSH keys here and (under WSL) in Windows, each tested against GitHub alone; reads only.
+    api.get('/api/github/ssh-keys', async (): Promise<SshKeysReport> => {
+      const windows = deps.windows;
+      const wsl = !!windows && wslVersion(windows.kernelRelease ? { kernelRelease: windows.kernelRelease } : {}) === 2;
+      const profile = wsl && windows ? await windowsProfile(deps.exec, windows) : null;
+      const keys = await listSshKeys(deps.exec, { home: deps.hostPaths.home, tmpDir: join(deps.uploadsDir, '..', 'tmp'), windowsProfile: profile });
+      const chosen = githubSshKey();
+      return { keys, way: githubHttpsOn() ? 'https' : 'ssh', ...(chosen ? { chosen: basename(chosen) } : {}), ...(wsl ? { windows: profile ? ('read' as const) : ('unreachable' as const) } : {}) };
     });
 
     api.get('/api/environment', async (): Promise<EnvironmentReport> =>

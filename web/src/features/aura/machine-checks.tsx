@@ -1,7 +1,11 @@
 import type { CheckFix, CheckGroup, CheckResult, EnvironmentReport } from '@devmagic-panel/shared';
+import { JobLine, settled, startedJobId, useJob } from '@/features/jobs/job-steps';
+import { lastLine } from '@/lib/site-actions';
+import { GithubKeys } from './github-keys';
+import { InstallMissing } from './install-missing';
 import { CHECK_GROUP_LABELS } from '@devmagic-panel/shared';
-import { ChevronRight, CircleAlert, CircleCheck, CircleX, Wrench } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { ChevronRight, CircleAlert, CircleCheck, CircleX, KeyRound, SquareTerminal, Wrench } from 'lucide-react';
+import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,7 +15,9 @@ import { cn } from '@/lib/utils';
 import { CheckAgain, Notice } from '@/components/layout/page';
 import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
+import { SecretInput } from '@/components/ui/secret-input';
 import { reportModeEvent } from '@/lib/modes';
+import { TextLink } from '@/components/ui/text-link';
 
 const statusIcon = {
   ok: <CircleCheck className="size-4.5 text-success" aria-label="OK" />,
@@ -21,7 +27,7 @@ const statusIcon = {
 
 interface FixState {
   key: string;
-  phase: 'confirm' | 'running' | 'done' | 'failed';
+  phase: 'confirm' | 'password' | 'running' | 'job' | 'done' | 'failed';
   output?: string;
 }
 
@@ -44,6 +50,19 @@ export function MachineChecks() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fix, setFix] = useState<FixState | null>(null);
+  const runner = useJob();
+  const [terminal, setTerminal] = useState<{ busy: boolean; ok?: boolean; said?: string } | null>(null);
+  async function openShell() {
+    terminalAt.current = Date.now();
+    setTerminal({ busy: true });
+    try {
+      const r = await api.runAction('machine.openTerminal', {});
+      setTerminal({ busy: false, ok: r.ok, said: lastLine(r.output) });
+    } catch (err) {
+      setTerminal({ busy: false, ok: false, said: (err as Error).message });
+    }
+  }
+  const [cardBusy, setCardBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,10 +82,33 @@ export function MachineChecks() {
     void load();
   }, [load]);
 
+  // A terminal this page opened (a sign-in): coming back to the tab checks again, for 15 minutes.
+  const terminalAt = useRef(0);
+  useEffect(() => {
+    const back = () => {
+      if (document.visibilityState === 'visible' && Date.now() - terminalAt.current < 15 * 60_000) void load();
+    };
+    window.addEventListener('focus', back);
+    document.addEventListener('visibilitychange', back);
+    return () => {
+      window.removeEventListener('focus', back);
+      document.removeEventListener('visibilitychange', back);
+    };
+  }, [load]);
+
   async function runFix(key: string, f: CheckFix) {
+    if (f.action === 'machine.openTerminal') terminalAt.current = Date.now();
     setFix({ key, phase: 'running' });
     try {
       const result = await api.runAction(f.action, f.input);
+      const jobId = result.ok ? startedJobId(result.output) : null;
+      if (jobId) {
+        // A job (an install, a sign-in): followed here until it ends, the buttons locked meanwhile.
+        setFix({ key, phase: 'job' });
+        reportModeEvent('auraFix');
+        await runner.follow(Promise.resolve(jobId));
+        return;
+      }
       setFix({ key, phase: result.ok ? 'done' : 'failed', output: result.output });
       if (result.ok) {
         reportModeEvent('auraFix');
@@ -77,8 +119,24 @@ export function MachineChecks() {
     }
   }
 
+  // The fix's job ended: how, in its row, and the checks read again.
+  const ended = runner.job && settled(runner.job) ? runner.job : null;
+  useEffect(() => {
+    if (!ended) return;
+    const failedStep = ended.steps.find((s) => s.status === 'failed');
+    setFix((now) => (now?.phase === 'job' ? { key: now.key, phase: ended.status === 'done' ? 'done' : 'failed', output: lastLine(failedStep?.output ?? ended.steps.at(-1)?.output ?? '') || (ended.status === 'done' ? 'Done.' : `It ended ${ended.status}.`) } : now));
+    runner.clear();
+    void load();
+  }, [ended, runner, load]);
+  const fixBusy = fix?.phase === 'running' || fix?.phase === 'job';
+  const busy = fixBusy || cardBusy;
+
   function startFix(check: CheckResult, f: CheckFix, index: number) {
     const key = `${check.id}:${index}`;
+    if (f.needsPassword || f.secret) {
+      setFix({ key, phase: 'password' });
+      return;
+    }
     if (f.confirm && fix?.key !== key) {
       setFix({ key, phase: 'confirm' });
       return;
@@ -103,6 +161,13 @@ export function MachineChecks() {
     <div>
       <p className="mt-5 text-sm text-muted-foreground">What this machine needs for local WordPress sites: the panel's install, Apache, nginx, certificates, MySQL, PHP and tools, with one-click fixes where possible.</p>
 
+      {terminal?.said && (
+        <p className={cn('mt-3 text-sm', terminal.ok ? 'text-muted-foreground' : 'text-danger')} role={terminal.ok ? undefined : 'alert'}>
+          {terminal.said}
+        </p>
+      )}
+      {tab === 'checks' && report && <InstallMissing report={report} locked={fixBusy} onBusy={setCardBusy} onChanged={() => void load()} />}
+
       {tab === 'checks' && (report || error) && (
         <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
           {report && (
@@ -120,6 +185,10 @@ export function MachineChecks() {
               <>
                 <Button size="sm" variant="soft" disabled={open.size === groups.length} onClick={() => setOpen(new Set(groups.map((g) => g.group)))}>Expand all</Button>
                 <Button size="sm" variant="soft" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</Button>
+                <Button size="sm" variant="soft" disabled={terminal?.busy} onClick={() => void openShell()} title="A terminal in your home folder: Windows Terminal in this distro under WSL, your desktop's terminal on Ubuntu">
+                  {terminal?.busy ? <Spinner /> : <SquareTerminal />}
+                  Open terminal
+                </Button>
               </>
             )}
             <CheckAgain size="sm" onClick={() => void load()} loading={loading} />
@@ -171,6 +240,7 @@ export function MachineChecks() {
                               {check.recommended && <Badge>recommended</Badge>}
                             </div>
                             <p className="mt-0.5 text-sm break-words text-muted-foreground">{check.detail}</p>
+                            {check.id === 'access.github' && <GithubKeys onChanged={() => void load()} />}
                             {check.status !== 'ok' && check.fixes && (
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {check.fixes.map((f, i) => {
@@ -180,7 +250,7 @@ export function MachineChecks() {
                                       key={i}
                                       size="sm"
                                       variant="outline"
-                                      disabled={fix?.phase === 'running'}
+                                      disabled={busy}
                                       onClick={() => startFix(check, f, i)}
                                     >
                                       {running ? <Spinner /> : <Wrench />}
@@ -193,6 +263,13 @@ export function MachineChecks() {
                             {check.fixes?.map((f, i) => {
                               const key = `${check.id}:${i}`;
                               if (fix?.key !== key) return null;
+                              if (fix.phase === 'job') {
+                                if (runner.error) return <p key={key} className="mt-2 text-sm text-danger">{runner.error}</p>;
+                                return runner.job ? <JobLine key={key} job={runner.job} /> : null;
+                              }
+                              if (fix.phase === 'password') {
+                                return <PasswordFix key={key} fix={f} onRun={(secret) => void runFix(key, { ...f, input: { ...f.input, [f.secret?.field ?? 'password']: secret } })} onCancel={() => setFix(null)} />;
+                              }
                               if (fix.phase === 'confirm') {
                                 return (
                                   <Notice key={key} tone="warning" size="inline" className="mt-2">
@@ -233,5 +310,48 @@ export function MachineChecks() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A fix that takes your sudo password: what it does, the password field and
+ * the button. The password goes with that one run and is cleared from the page.
+ */
+function PasswordFix({ fix, onRun, onCancel }: { fix: CheckFix; onRun: (password: string) => void; onCancel: () => void }) {
+  const [secret, setSecret] = useState('');
+  const id = useId();
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const password = secret;
+    setSecret('');
+    onRun(password);
+  }
+  return (
+    <Notice tone="info" size="inline" className="mt-2">
+      <form className="grid gap-2" onSubmit={submit} autoComplete="off">
+        {fix.confirm && <p>{fix.confirm}</p>}
+        <label htmlFor={id} className="text-sm font-medium">
+          {fix.secret?.label ?? 'Your sudo password'}
+        </label>
+        <div className="sm:max-w-xs">
+          <SecretInput id={id} value={secret} onChange={(e) => setSecret(e.target.value)} autoFocus />
+        </div>
+        <p className="text-xs text-muted-foreground">{fix.secret ? fix.secret.hint : 'The password you log in to this computer with. Leave it empty if sudo asks you for none.'}</p>
+        {fix.secret?.link && (
+          <TextLink href={fix.secret.link.href} className="text-xs">
+            {fix.secret.link.text}
+          </TextLink>
+        )}
+        <div className="flex gap-2">
+          <Button size="sm" type="submit">
+            <KeyRound />
+            {fix.label.replace(/ with (your password|a token)$/, '')}
+          </Button>
+          <Button size="sm" variant="soft" type="button" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </Notice>
   );
 }

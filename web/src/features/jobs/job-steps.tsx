@@ -1,4 +1,5 @@
 import type { JobView, RunStep } from '@devmagic-panel/shared';
+import { TextLink } from '@/components/ui/text-link';
 import { Check, ChevronRight, CircleX, SkipForward } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AnsiText } from '@/components/layout/ansi-text';
@@ -142,7 +143,7 @@ export function StepList({ steps, open, setOpen }: { steps: RunStep[]; open: str
                         <span className="block h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round(s.progress * 100)}%` }} />
                       </span>
                     )}
-                    {s.note}
+                    <NoteText text={s.note ?? ''} />
                   </span>
                 )}
                 {/* A Claude Code step: the last thing it did. */}
@@ -167,4 +168,49 @@ export function StepIcon({ status }: { status: RunStep['status'] }) {
   if (status === 'failed') return <CircleX className="size-4 shrink-0 text-danger" aria-label="Failed" />;
   if (status === 'skipped') return <SkipForward className="size-4 shrink-0 text-warning" aria-label="Skipped" />;
   return <span className="size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" aria-label="Pending" />;
+}
+
+/** The id in an action's answer that started a job ("started <id>"); null for any other answer. */
+export const startedJobId = (output: string): string | null => /^started ([\w-]+)/.exec(output)?.[1] ?? null;
+
+/**
+ * A job that runs, in one line where its button was: a spinner, the step it is
+ * on and that step's note (a link in it opens, like a sign-in page), and its page.
+ */
+export function JobLine({ job }: { job: JobView }) {
+  const step = job.steps.find((s) => s.status === 'running') ?? job.steps.find((s) => s.status === 'pending');
+  return (
+    <div className="mt-2 grid gap-0.5 text-sm">
+      <p className="flex items-center gap-2">
+        <Spinner className="size-4 shrink-0 text-primary" />
+        <span className="min-w-0">{step?.label ?? job.title}</span>
+        <TextLink href={`/jobs/${encodeURIComponent(job.id)}`} tone="muted" className="ml-auto shrink-0 text-xs">
+          its page
+        </TextLink>
+      </p>
+      {step?.note && (
+        <p className="pl-6 text-xs text-muted-foreground">
+          <NoteText text={step.note} />
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A step's note, a web address in it as a link (a sign-in page, say). */
+export function NoteText({ text }: { text: string }) {
+  const parts = text.split(/(https:\/\/[^\s]+)/);
+  return (
+    <span>
+      {parts.map((part, i) =>
+        i % 2 ? (
+          <TextLink key={i} href={part}>
+            {part}
+          </TextLink>
+        ) : (
+          part
+        ),
+      )}
+    </span>
+  );
 }

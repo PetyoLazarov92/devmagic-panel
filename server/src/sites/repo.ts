@@ -5,7 +5,7 @@ import type { LocalHelperPlugin, RepoInspection, RepoLookup } from '@devmagic-pa
 import { classifyRepo, headerCandidate, holdsCore, LOCAL_HELPER_PLUGINS, MEDIA_PLUGIN, themeFolderIn, wpHeaderIn } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { BUILD_FILES, composerPlugins, planBuilds, SKIPPED_DIRS } from './builds.js';
-import { NO_PROMPTS } from './git.js';
+import { gitReason, remoteGit, withHttpsFallback } from './git.js';
 import { installedNodes, nodeEnv, nodeFor, nodeForFiles } from './node.js';
 
 /** The most a repo's file list may take: about 1.8 million files. */
@@ -62,10 +62,10 @@ export async function inspectRepo(
   /** Also read these files from the repo root (first 4000 characters each), for the assistant. */
   docs: string[] = [],
 ): Promise<Omit<RepoInspection, 'preset'> & { docs?: Record<string, string> }> {
-  const remote = (args: string[]) => exec('git', args, { timeoutMs: 60_000, env: NO_PROMPTS });
+  const remote = (args: string[]) => withHttpsFallback(exec, url, () => exec('git', args, { timeoutMs: 60_000, env: remoteGit() }));
   // One call: the default branch (HEAD) and every branch, without tags or pull request refs.
   const head = await remote(['ls-remote', '--symref', '--', url, 'HEAD', 'refs/heads/*']);
-  if (head.code !== 0) throw new RepoRefused(head.stderr.trim().split('\n').at(-1) || `cannot read ${url}`);
+  if (head.code !== 0) throw new RepoRefused(gitReason(head.stderr, `cannot read ${url}`));
   const defaultBranch = parseDefaultBranch(head.stdout);
   const branches = parseBranches(head.stdout, defaultBranch);
   const ref = branch ?? defaultBranch;
@@ -77,10 +77,10 @@ export async function inspectRepo(
   const tmp = mkdtempSync(join(workDir, 'inspect-'));
   try {
     const clone = await remote(['clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--single-branch', '--branch', ref, '--', url, tmp]);
-    if (clone.code !== 0) throw new RepoRefused(clone.stderr.trim().split('\n').at(-1) || `cannot clone ${url}`);
+    if (clone.code !== 0) throw new RepoRefused(gitReason(clone.stderr, `cannot clone ${url}`));
     const found: Record<string, string> = {};
     for (const name of docs) {
-      const doc = await exec('git', ['-C', tmp, 'show', `HEAD:${name}`], { timeoutMs: 60_000, env: NO_PROMPTS });
+      const doc = await exec('git', ['-C', tmp, 'show', `HEAD:${name}`], { timeoutMs: 60_000, env: remoteGit() });
       if (doc.code === 0) found[name] = doc.stdout.slice(0, 4000);
     }
     return { ...base, docs: found };
@@ -100,12 +100,12 @@ export async function inspectRepo(
 export async function repoLookup(exec: Executor, workDir: string, url: string, branch: string, home = homedir()): Promise<RepoLookup> {
   mkdirSync(workDir, { recursive: true, mode: 0o700 });
   const tmp = mkdtempSync(join(workDir, 'helpers-'));
-  const git = (args: string[], input?: string) => exec('git', args, { timeoutMs: 120_000, env: NO_PROMPTS, ...(input !== undefined ? { input } : {}) });
+  const git = (args: string[], input?: string) => withHttpsFallback(exec, url, () => exec('git', args, { timeoutMs: 120_000, env: remoteGit(), ...(input !== undefined ? { input } : {}) }));
   // About 140 bytes a file: a site repo with its plugins can list hundreds of thousands, past the usual 8 MB.
-  const list = (args: string[]) => exec('git', args, { timeoutMs: 120_000, env: NO_PROMPTS, maxBufferBytes: LIST_BYTES });
+  const list = (args: string[]) => exec('git', args, { timeoutMs: 120_000, env: remoteGit(), maxBufferBytes: LIST_BYTES });
   try {
     const clone = await git(['clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--single-branch', '--branch', branch, '--', url, tmp]);
-    if (clone.code !== 0) throw new RepoRefused(clone.stderr.trim().split('\n').at(-1) || `cannot clone ${url}`);
+    if (clone.code !== 0) throw new RepoRefused(gitReason(clone.stderr, `cannot clone ${url}`));
     const tree = await list(['-C', tmp, 'ls-tree', '-r', '--full-tree', 'HEAD']);
     if (tree.code !== 0) throw new RepoRefused(/maxBuffer/i.test(tree.stderr) ? 'the repo has too many files to list' : tree.stderr.trim() || 'cannot list the repo');
     // Lines are "<mode> <type> <id>\t<path>".

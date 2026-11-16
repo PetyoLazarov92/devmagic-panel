@@ -15,6 +15,145 @@ const failed = (stderr: string): ExecResult => ({ code: 1, stdout: '', stderr })
 /** Remote git never asks for a password or a host key: it fails at once instead. */
 export const NO_PROMPTS = { GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o ConnectTimeout=15' };
 
+/** The store key for how GitHub repos clone: https (through gh) or ssh, the default. */
+export const GITHUB_CLONE_META = 'github-clone';
+
+/** The store key for the key in ~/.ssh GitHub repos clone with over SSH (a full path). */
+export const GITHUB_SSH_KEY_META = 'github-ssh-key';
+
+/** Set: over SSH, git tries this key first (ssh -i), then ssh's own choice. */
+let githubKey: string | null = null;
+export function useGithubSshKey(key: string | null): void {
+  githubKey = key;
+}
+export const githubSshKey = (): string | null => githubKey;
+
+/** Set: GitHub repos clone over HTTPS with this GitHub CLI giving git the sign-in. */
+let githubHttps: string | null = null;
+export function useGithubHttps(gh: string | null): void {
+  githubHttps = gh;
+}
+export const githubHttpsOn = (): boolean => githubHttps !== null;
+
+/** The store key for the GitLab hosts whose repos clone over HTTPS through glab (a JSON list). */
+export const GITLAB_HTTPS_META = 'gitlab-https-hosts';
+
+/** GitLab hosts whose repos clone over HTTPS with this glab giving git the sign-in: SSH was refused there and glab is signed in. */
+const gitlabHttps = new Map<string, string>();
+let rememberGitlabHttps: (hosts: string[]) => void = () => undefined;
+export function useGitlabHttps(hosts: readonly string[], glab: string, remember?: (hosts: string[]) => void): void {
+  gitlabHttps.clear();
+  for (const host of hosts) gitlabHttps.set(host, glab);
+  if (remember) rememberGitlabHttps = remember;
+}
+export const gitlabHttpsHosts = (): string[] => [...gitlabHttps.keys()];
+
+/** Settings that send one host's SSH addresses over HTTPS, with a CLI as git's credential helper there. */
+function httpsSettings(host: string, helper: string): Array<[string, string]> {
+  return [
+    [`credential.https://${host}.helper`, ''],
+    [`credential.https://${host}.helper`, helper],
+    [`url.https://${host}/.insteadOf`, `git@${host}:`],
+    [`url.https://${host}/.insteadOf`, `ssh://git@${host}/`],
+  ];
+}
+
+/**
+ * git's settings for GitHub over HTTPS through gh: GitHub's SSH addresses
+ * become HTTPS ones, and gh answers git's question for the sign-in (as
+ * gh auth setup-git would write them, here only for the panel's own git).
+ */
+export function githubHttpsSettings(gh: string): Array<[string, string]> {
+  return httpsSettings('github.com', `!'${gh}' auth git-credential`);
+}
+
+/**
+ * The environment for git that talks to a remote: never a prompt, and with
+ * GitHub over HTTPS on, those settings through git's GIT_CONFIG_* variables,
+ * so ~/.gitconfig stays as it is.
+ */
+export function remoteGit(): Record<string, string> {
+  const ssh = !githubHttps && githubKey ? { GIT_SSH_COMMAND: `${NO_PROMPTS.GIT_SSH_COMMAND} -i '${githubKey}'` } : {};
+  const settings = [...(githubHttps ? githubHttpsSettings(githubHttps) : []), ...[...gitlabHttps].flatMap(([host, glab]) => httpsSettings(host, `!'${glab}' auth git-credential`))];
+  if (settings.length === 0) return { ...NO_PROMPTS, ...ssh };
+  return {
+    ...NO_PROMPTS,
+    ...ssh,
+    GIT_CONFIG_COUNT: String(settings.length),
+    ...Object.fromEntries(settings.flatMap(([key, value], i) => [[`GIT_CONFIG_KEY_${i}`, key], [`GIT_CONFIG_VALUE_${i}`, value]])),
+  };
+}
+
+/** The host of an SSH address (git@host:path or ssh://git@host/path), lower case; null for anything else. */
+export function sshHost(url: string): string | null {
+  const m = /^(?:git@([A-Za-z0-9.-]+):|ssh:\/\/git@([A-Za-z0-9.-]+)(?::\d+)?\/)/.exec(url);
+  return (m?.[1] ?? m?.[2])?.toLowerCase() ?? null;
+}
+
+/**
+ * The most telling line of what remote git said: the reason (refused key,
+ * unknown host, missing repo) before git's closing advice ("Please make sure
+ * you have the correct access rights and the repository exists").
+ */
+export function gitReason(stderr: string, fallback: string): string {
+  const lines = stderr.split('\n').map((l) => l.trim()).filter(Boolean);
+  const reason = lines.find((l) => /permission denied|could not resolve|repository not found|not found|authentication failed|host key verification|access denied|timed out/i.test(l)) ?? lines.find((l) => /^(fatal|error|ERROR):/.test(l)) ?? lines.at(-1);
+  if (!reason) return fallback;
+  return /Permission denied \(publickey\)/.test(reason) ? `${reason}: no SSH key here that the host takes. Sign its CLI in (Aura, Machine checks) and the panel reads its repos over HTTPS through it; or add your SSH key there` : reason;
+}
+
+/**
+ * A GitLab host that refused SSH, where glab is signed in: its repos go over
+ * HTTPS through glab from now on (remembered), and the caller tries once more.
+ * GitHub keeps its own choice (github.cloneWith). False: nothing to try.
+ */
+export async function overHttpsInstead(url: string, stderr: string, glabSignedIn: (host: string) => Promise<string | null>): Promise<boolean> {
+  if (!/Permission denied \(publickey\)/.test(stderr)) return false;
+  const host = sshHost(url);
+  if (!host || host === 'github.com' || gitlabHttps.has(host)) return false;
+  const glab = await glabSignedIn(host);
+  if (!glab) return false;
+  gitlabHttps.set(host, glab);
+  rememberGitlabHttps(gitlabHttpsHosts());
+  return true;
+}
+
+/** A GitHub SSH address as HTTPS (git@github.com:org/repo.git, ssh://git@github.com/org/repo); null for anything else. */
+export function githubHttpsUrl(url: string): string | null {
+  const m = /^(?:git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/.exec(url);
+  return m ? `https://github.com/${m[1]}.git` : null;
+}
+
+/** A GitHub repo cloned over SSH with the chosen key keeps it in its .git/config (core.sshCommand), so git pull and push there use it too. */
+export async function keepGithubSshKey(exec: Executor, dir: string, url: string): Promise<string> {
+  if (githubHttps || !githubKey || !githubHttpsUrl(url)) return '';
+  const r = await exec('git', ['-C', dir, 'config', 'core.sshCommand', `ssh -i '${githubKey}'`], { timeoutMs: 10_000 });
+  return r.code === 0 ? `note: the repo uses ${githubKey} for GitHub` : `note: the repo could not keep its key (${(r.stderr || r.stdout).trim()})`;
+}
+
+/**
+ * A GitHub repo the panel cloned over HTTPS through gh keeps that in its own
+ * .git/config: origin is the HTTPS address and gh gives git the sign-in, so
+ * git pull and push work there in a terminal too. A note, empty when nothing changed.
+ */
+export async function keepGithubHttps(exec: Executor, dir: string, url: string): Promise<string> {
+  const host = sshHost(url);
+  const cli = host === 'github.com' ? githubHttps : host ? (gitlabHttps.get(host) ?? null) : null;
+  const path = /^(?:git@[^:]+:|ssh:\/\/git@[^/]+\/)([\w.-]+(?:\/[\w.-]+)+)\/?$/.exec(url)?.[1]?.replace(/\.git$/, '');
+  if (!host || !cli || !path) return '';
+  const https = `https://${host}/${path}.git`;
+  const steps: string[][] = [
+    ['remote', 'set-url', 'origin', https],
+    ['config', '--replace-all', `credential.https://${host}.helper`, ''],
+    ['config', '--add', `credential.https://${host}.helper`, `!'${cli}' auth git-credential`],
+  ];
+  for (const args of steps) {
+    const r = await exec('git', ['-C', dir, ...args], { timeoutMs: 10_000 });
+    if (r.code !== 0) return `note: the repo could not keep GitHub over HTTPS (${(r.stderr || r.stdout).trim()}); its git pull may need an SSH key`;
+  }
+  return `note: origin is ${https}, with the ${host === 'github.com' ? 'GitHub' : 'GitLab'} CLI giving git the sign-in`;
+}
+
 /**
  * The repo folder for a site or one of its mounted folders, read from the
  * vhost; never a path from the request. With `repo`, one of the repos inside
@@ -43,7 +182,7 @@ export function gitFolder(config: SystemConfig, domain: string, mount?: string, 
 }
 
 const git = (exec: Executor, dir: string, args: string[], remote = false) =>
-  exec('git', ['-C', dir, ...args], remote ? { timeoutMs: 120_000, env: NO_PROMPTS } : { timeoutMs: 10_000 });
+  exec('git', ['-C', dir, ...args], remote ? { timeoutMs: 120_000, env: remoteGit() } : { timeoutMs: 10_000 });
 
 export function parseBranches(refs: string): GitDetails['branches'] {
   const local: GitDetails['branches'] = [];
@@ -265,3 +404,19 @@ export async function restoreBranches(ctx: GitActionContext, { domain, mount, re
 }
 
 const mib = (bytes: number) => (bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0.1, bytes / 1024 ** 2).toFixed(1)} MB`);
+
+/** Who tells whether glab is signed in to a host (its path, or null); the app sets it, so this file needs no glab import. */
+let glabSignedInHook: (host: string) => Promise<string | null> = async () => null;
+export function useGlabSignedIn(check: (host: string) => Promise<string | null>): void {
+  glabSignedInHook = check;
+}
+
+/**
+ * Runs a remote git call for url; when a GitLab host refused SSH and glab is
+ * signed in there, once more over HTTPS through glab (remembered for that host).
+ */
+export async function withHttpsFallback(exec: Executor, url: string, run: () => Promise<ExecResult>): Promise<ExecResult> {
+  const first = await run();
+  if (first.code === 0 || !(await overHttpsInstead(url, first.stderr, glabSignedInHook))) return first;
+  return run();
+}

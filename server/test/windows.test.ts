@@ -6,7 +6,7 @@ import { Jobs } from '../src/jobs.js';
 import { HOSTS_BEGIN, HOSTS_END } from '../src/sites/hosts-block.js';
 import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
-import { helperInstalled, helperPath, keepInterop, openWindowsTerminal, runHelper, syncWindowsAppVersion, windowsReleaseTag, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules, wslDistro } from '../src/windows.js';
+import { helperInstalled, helperPath, keepInterop, noticeWindowsUpdate, openWindowsTerminal, runHelper, syncWindowsAppVersion, windowsReleaseTag, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules, wslDistro } from '../src/windows.js';
 import { DMP, fakeExec, tempTree, wpSiteTree } from './helpers.js';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
@@ -321,6 +321,15 @@ describe('a terminal in Windows', () => {
     expect(cmdLines(d.fake.calls)).toEqual(['/d /c where wt.exe', `/d /c wt.exe -w new wsl.exe -d devmagic-panel --cd ${DIR}`]);
   });
 
+  it('starts a program in the new tab with wsl.exe --exec, no shell', async () => {
+    const d = desktop(['wt.exe']);
+    const command = { argv: ['/home/alex/.local/bin/claude', 'auth', 'login'], said: 'claude auth login' };
+    expect(await openWindowsTerminal(d.fake.exec, d.paths, DIR, command)).toMatchObject({ code: 0, stdout: `Opened Windows Terminal in ${DIR} (devmagic-panel), running claude auth login: go on there` });
+    expect(cmdLines(d.fake.calls).at(-1)).toBe(`/d /c wt.exe -w new wsl.exe -d devmagic-panel --cd ${DIR} --exec /home/alex/.local/bin/claude auth login`);
+    const odd = { argv: ['/home/alex/my claude', '&calc'], said: 'it' };
+    expect((await openWindowsTerminal(d.fake.exec, d.paths, DIR, odd)).code).toBe(1);
+  });
+
   it("opens WSL's own window where Windows has no Windows Terminal", async () => {
     const d = desktop([]);
     expect(await openWindowsTerminal(d.fake.exec, d.paths, DIR)).toMatchObject({ code: 0, stdout: expect.stringContaining('a WSL window') });
@@ -417,5 +426,40 @@ describe('the Windows part', () => {
     expect(windowsPartCurrent(status(undefined), { windowsHelper: 'a'.repeat(64) })).toBe(true);
     expect(windowsPartCurrent(status(undefined, 'b'.repeat(64)), { windowsHelper: 'a'.repeat(64) })).toBe(false);
     expect(windowsPartCurrent(status(undefined), null)).toBeNull();
+  });
+});
+
+describe('the Windows notification of a new release', () => {
+  const PART = 'c'.repeat(64);
+  const out = { available: true, latest: 'v1.69.0', mode: 'panel', changelog: [{ version: '1.69.0', items: ['x'] }] };
+  const notice = async (update: Parameters<typeof noticeWindowsUpdate>[2], opts: { part?: string | null; seen?: string; fails?: boolean } = {}) => {
+    const s = setup();
+    const helper = `${s.powershell} -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${HELPER}`;
+    const status = JSON.stringify({ hosts: { path: 'x', block: [] }, helper: { sha256: 'a'.repeat(64), repo: 'PetyoLazarov92/devmagic-panel' }, app: { version: '1.68.2', part: opts.part === undefined ? PART : opts.part } });
+    const fake = fakeExec({ [`${helper} status`]: { stdout: status }, [`${helper} notify-update`]: opts.fails ? { code: 1, stderr: 'no notifications' } : { stdout: 'ok\n' } });
+    let seen = opts.seen;
+    const note = await noticeWindowsUpdate(fake.exec, s.ctx.windows!, update, 'https://local.devmagic/update', { windowsPart: PART }, { get: () => seen, set: (tag) => (seen = tag) });
+    return { note, seen, commands: fake.calls.filter((c) => c.file.endsWith('powershell.exe')).map((c) => c.args.slice(6).join(' ')) };
+  };
+
+  it('shows each new release once, with the Updates page', async () => {
+    expect(await notice(out)).toEqual({ note: 'Windows shows that v1.69.0 is out', seen: 'v1.69.0', commands: ['status', 'notify-update v1.69.0 https://local.devmagic/update'] });
+    expect((await notice(out, { seen: 'v1.69.0' })).commands).toEqual([]);
+    expect((await notice(out, { seen: 'v1.68.3' })).commands).toEqual(['status', 'notify-update v1.69.0 https://local.devmagic/update']);
+  });
+
+  it('leaves out what the panel cannot install yet, and an older Windows part', async () => {
+    expect((await notice({ available: false, latest: 'v1.68.2', changelog: [] })).commands).toEqual([]);
+    expect((await notice({ ...out, changelog: [] })).commands).toEqual([]);
+    expect((await notice({ ...out, error: 'could not read' })).commands).toEqual([]);
+    expect((await notice({ ...out, mode: 'blocked' })).commands).toEqual([]);
+    const older = await notice(out, { part: null });
+    expect(older).toMatchObject({ seen: undefined, commands: ['status'] });
+    expect(older.note).toContain('older than this panel');
+  });
+
+  it('tries again next time when Windows could not show it', async () => {
+    const s = notice(out, { fails: true });
+    await expect(s).rejects.toThrow('could not show the Windows notification: no notifications');
   });
 });

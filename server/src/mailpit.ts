@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -59,9 +59,10 @@ WantedBy=default.target
 }
 
 /** Downloads a URL to a file, reporting bytes; injectable for tests. */
-export type Downloader = (url: string, file: string, onProgress: (done: number, total: number) => void) => Promise<void>;
+/** Downloads a URL to a file, reporting bytes; stops past maxBytes (100 MB unless set). Injectable for tests. */
+export type Downloader = (url: string, file: string, onProgress: (done: number, total: number) => void, maxBytes?: number) => Promise<void>;
 
-export const download: Downloader = async (url, file, onProgress) => {
+export const download: Downloader = async (url, file, onProgress, maxBytes = 100 * 1024 * 1024) => {
   const response = await fetch(url, { redirect: 'follow' });
   if (!response.ok || !response.body) throw new Error(`download failed: HTTP ${response.status}`);
   const total = Number(response.headers.get('content-length') ?? 0);
@@ -69,7 +70,7 @@ export const download: Downloader = async (url, file, onProgress) => {
   const body = Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]);
   body.on('data', (chunk: Buffer) => {
     done += chunk.length;
-    if (done > 100 * 1024 * 1024) body.destroy(new Error('download is far larger than a Mailpit release'));
+    if (done > maxBytes) body.destroy(new Error(`the download is larger than expected (over ${Math.round(maxBytes / 1024 / 1024)} MB); it was stopped`));
     onProgress(done, total);
   });
   await pipeline(body, createWriteStream(file, { mode: 0o600 }));
@@ -79,6 +80,13 @@ const ok = (stdout: string): ExecResult => ({ code: 0, stdout, stderr: '' });
 const failed = (stderr: string): ExecResult => ({ code: 1, stdout: '', stderr });
 
 export const sha256File = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
+
+/** The SHA-256 of a big file, read as a stream rather than into memory. */
+export async function sha256OfFile(file: string): Promise<string> {
+  const hash = createHash('sha256');
+  await pipeline(createReadStream(file), hash);
+  return hash.digest('hex');
+}
 
 /**
  * Installs (or starts) Mailpit: download the pinned release, check its

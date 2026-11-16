@@ -9,6 +9,8 @@ export * from './addresses.js';
 export * from './assistant.js';
 export * from './text.js';
 export * from './password.js';
+export * from './tools.js';
+export * from './ssh-keys.js';
 
 export interface SessionInfo {
   authenticated: boolean;

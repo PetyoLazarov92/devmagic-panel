@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { ActionId, ActionInput, ActionRunResult, ClaudeRun, ClaudeStep, ClaudeUsage } from '@devmagic-panel/shared';
-import { accessKey, actions, FILE_TRASH_DAYS, LINKS_EFFORT, MIN_CLAUDE_CAP, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, totalTokens } from '@devmagic-panel/shared';
+import type { ActionId, ActionInput, ActionRunResult, ClaudeRun, ClaudeStep, ClaudeUsage, TerminalRun } from '@devmagic-panel/shared';
+import { accessKey, actions, FILE_TRASH_DAYS, LINKS_EFFORT, MIN_CLAUDE_CAP, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, TERMINAL_RUN_LABELS, TOOLS, totalTokens } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { CoreStatusMap } from './core-status.js';
 import { NSS_NICKNAME } from './environment.js';
@@ -33,14 +33,17 @@ import { planCleanCurrent } from './sites/clean-current.js';
 import { deleteCleanCopy, planExportClean } from './sites/export.js';
 import { deleteKept, planRestoreKept } from './sites/kept.js';
 import { DbRefused, deleteSnapshot, planImport, planRestore, planSearchReplace, planSnapshot } from './sites/db.js';
-import { fetchOrigin, pull, restoreBranches, switchBranch, tidy } from './sites/git.js';
+import { fetchOrigin, GITHUB_CLONE_META, GITHUB_SSH_KEY_META, tidy, restoreBranches, switchBranch, pull, useGithubHttps, useGithubSshKey } from './sites/git.js';
+import { planGithubSignIn } from './github-access.js';
+import { ghBinary, ghStatus, useGhBinary } from './repo-hosts/github.js';
+import { otherCopy, planInstallTool, resolveTool } from './tools.js';
 import { setPlugin } from './sites/plugins.js';
 import { planAddNetworkAdmin } from './sites/network-admin.js';
-import { openTerminal } from './terminal.js';
+import { openTerminal, type TerminalCommand } from './terminal.js';
 import { readVersion } from './version.js';
 import type { Drafts } from './drafts.js';
-import { findClaude } from './org/claude-code.js';
-import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded } from './org/dumps.js';
+import { claudeStatus, findClaude } from './org/claude-code.js';
+import { DumpRefused, planDriveDownload, planFetch, planRemoteDownload, planUseDownloaded, rcloneRemotes, useRcloneBinary } from './org/dumps.js';
 import { type Getter, shownUrl, urlProblem } from './sites/fetch-dump.js';
 import { MoreDumpsRefused, planLocalDump, planServerDump, signedInWith } from './sites/more-dumps.js';
 import { planRefresh } from './sites/refresh.js';
@@ -75,8 +78,13 @@ import { deleteWpCronEvent, restoreWpCronEvent, runWpCronHook, setSiteWpCron } f
 import { planFixTable, planFixTables, planToInnodb } from './mysql-health.js';
 import { planAutoloadOff } from './wordpress-plugins.js';
 import { cleanStorage } from './storage-clean.js';
-import { helperInstalled, openWindowsTerminal, runHelper, windowsReleaseTag, windowsHostsDiffer, windowsHostsPairs, windowsPortproxyDiffers, type WindowsHelperCommand, type WindowsPaths } from './windows.js';
+import { helperInstalled, openWindowsTerminal, runHelper, type WindowsHelperCommand, windowsHostsDiffer, windowsHostsPairs, type WindowsPaths, windowsPortproxyDiffers, windowsProfile, windowsReleaseTag } from './windows.js';
 import { interopOn, wslVersion } from './wsl.js';
+import { keyFiles, planAddSshKey, planCopyWindowsKey, planMakeSshKey, sshDir, publicWithoutPassphrase } from './ssh-keys.js';
+import { planSystemInstall, SYSTEM_INSTALL_LABELS } from './system-install.js';
+import { apachePhpVersion, fpmDefaultVersion } from './php/versions.js';
+import { glabSignIn, useGlabBinary } from './repo-hosts/gitlab.js';
+import { planInstallClaude } from './claude-install.js';
 
 export interface ActionContext {
   config: SystemConfig;
@@ -353,6 +361,52 @@ function startJob(ctx: ActionContext, steps: JobStep[], title: string, target: s
 interface Activity {
   add: (line: string) => void;
   lines: string[];
+}
+
+/**
+ * What a terminal from the panel starts, by name: a fixed program with its
+ * arguments, by its full path (wsl.exe --exec and a desktop terminal do not
+ * read your login's PATH). The only input is a GitLab host, checked as one.
+ */
+async function terminalRun(ctx: ActionContext, run: TerminalRun, host?: string): Promise<TerminalCommand> {
+  const places = { dataDir: dirname(ctx.uploadsDir), home: ctx.home };
+  const program = (id: 'glab' | 'rclone', name: string) => {
+    const own = resolveTool(places, id);
+    const bin = own !== id ? own : otherCopy(places, id);
+    if (!bin) throw new ActionInputError(`${name} is not installed: install it from Machine checks first`);
+    return bin;
+  };
+  if (run === 'claude-login') {
+    const claude = findClaude(ctx.home);
+    if (!claude) throw new ActionInputError('Claude Code is not installed: install it from Machine checks first');
+    return { argv: [claude, 'auth', 'login'], said: TERMINAL_RUN_LABELS[run] };
+  }
+  if (run === 'glab-login') {
+    const on = host ?? 'gitlab.com';
+    return { argv: [program('glab', 'The GitLab CLI'), 'auth', 'login', '--hostname', on], said: `glab auth login for ${on}` };
+  }
+  // A Google Drive remote that only reads, under a name not taken yet: the panel finds any drive remote.
+  const taken = new Set((await rcloneRemotes(ctx.exec)).remotes.map((r) => r.name));
+  const name = ['gdrive', ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `gdrive${n}`)].find((n) => !taken.has(n)) ?? 'gdrive10';
+  return { argv: [program('rclone', 'rclone'), 'config', 'create', name, 'drive', 'scope=drive.readonly'], said: `rclone config create ${name} drive (read only): sign in to Google in the browser it shows` };
+}
+
+/** Under PHP-FPM (no mod_php): the version sites run, for phpMyAdmin's pool after it is installed. */
+function phpMyAdminPool(ctx: ActionContext): { fpm?: { version: string; dmpRoot: string } } {
+  if (apachePhpVersion(ctx.config)) return {};
+  const version = fpmDefaultVersion(ctx.config);
+  return version ? { fpm: { version, dmpRoot: ctx.dmpRoot } } : {};
+}
+
+/** How GitHub repos clone from now on (over SSH: with which key in ~/.ssh, or ssh's own choice), kept in the panel's store for its next start. */
+function cloneGithubWith(ctx: ActionContext, way: 'https' | 'ssh', key?: string | null): void {
+  ctx.store.setMeta(GITHUB_CLONE_META, way);
+  useGithubHttps(way === 'https' ? ghBinary() : null);
+  if (key !== undefined) {
+    const file = key ? join(sshDir(ctx.home), key) : '';
+    ctx.store.setMeta(GITHUB_SSH_KEY_META, file);
+    useGithubSshKey(file || null);
+  }
 }
 
 function claudeJob(ctx: ActionContext, step: ClaudeStep, draftId: string, key: string, title: string, label: string, settings: ClaudeRun, run: (claude: ClaudeSettings, workDir: string, activity: Activity) => Promise<string>): HandlerOutcome | ExecResult[] {
@@ -682,6 +736,62 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   },
   'mailpit.install': async (ctx) =>
     startJob(ctx, planInstallMailpit({ exec: ctx.exec, dataDir: dirname(ctx.uploadsDir), home: ctx.home, ...(ctx.download ? { download: ctx.download } : {}) }), 'Install Mailpit', 'mailpit'),
+  'tools.install': async (ctx, { tool }) =>
+    startJob(
+      ctx,
+      planInstallTool({ exec: ctx.exec, places: { dataDir: dirname(ctx.uploadsDir), home: ctx.home }, ...(ctx.download ? { download: ctx.download } : {}), onInstalled: (bin) => (tool === 'gh' ? useGhBinary(bin) : tool === 'glab' ? useGlabBinary(bin) : useRcloneBinary(bin)) }, tool),
+      `Install the ${TOOLS[tool].name}`,
+      `tool:${tool}`,
+    ),
+  'system.install': async (ctx, { items, password }) =>
+    startJob(
+      ctx,
+      planSystemInstall(
+        {
+          exec: ctx.exec,
+          tmpDir: join(dirname(ctx.uploadsDir), 'tmp'),
+          ...(ctx.download ? { download: ctx.download } : {}),
+          ...phpMyAdminPool(ctx),
+        },
+        items,
+        password,
+      ),
+      `Install ${items.map((i) => SYSTEM_INSTALL_LABELS[i]).join(', ')}`,
+      'system-install',
+    ),
+  'machine.openTerminal': async (ctx, { run, host }) => {
+    const command = run ? await terminalRun(ctx, run, host) : undefined;
+    const windows = await windowsDesktop(ctx);
+    return [windows ? await openWindowsTerminal(ctx.exec, windows, ctx.home, command) : await openTerminal(ctx.exec, ctx.home, {}, command)];
+  },
+  'gitlab.signIn': async (ctx, { host, token }) => [await glabSignIn(ctx.exec, host, token)],
+  'claude.install': async (ctx) => {
+    const yours = (await claudeStatus(ctx.exec, ctx.home, process.env.PATH ?? '')).path;
+    if (yours) throw new ActionInputError(`Claude Code is installed already at ${yours}: the panel uses that one and leaves it as it is`);
+    return startJob(ctx, planInstallClaude({ exec: ctx.exec, home: ctx.home, tmpDir: join(dirname(ctx.uploadsDir), 'tmp'), ...(ctx.download ? { download: ctx.download } : {}) }), 'Install Claude Code', 'claude-install');
+  },
+  'github.signIn': async (ctx) => startJob(ctx, planGithubSignIn({ exec: ctx.exec, cloneOverHttps: () => cloneGithubWith(ctx, 'https') }), 'Sign in to GitHub', 'github'),
+  'github.cloneWith': async (ctx, { way, key }) => {
+    if (way === 'https') {
+      const gh = await ghStatus(ctx.exec);
+      if (!gh.signedIn) return [{ code: 1, stdout: '', stderr: `sign in to GitHub first: ${gh.problem ?? 'the GitHub CLI is not signed in'}` }];
+      cloneGithubWith(ctx, 'https');
+      return [{ code: 0, stdout: 'GitHub repos clone over HTTPS now, with the GitHub CLI giving git the sign-in', stderr: '' }];
+    }
+    if (key) {
+      const file = join(sshDir(ctx.home), key);
+      if (!keyFiles(sshDir(ctx.home)).includes(key)) return [{ code: 1, stdout: '', stderr: `${file} is not a key in ~/.ssh` }];
+      if (!(await publicWithoutPassphrase(ctx.exec, file))) return [{ code: 1, stdout: '', stderr: `${key} has a passphrase, which the panel cannot type: pick a key without one, or make one` }];
+    }
+    cloneGithubWith(ctx, 'ssh', key ?? null);
+    return [{ code: 0, stdout: `GitHub repos clone over SSH now, ${key ? `with ${key}` : "with ssh's own choice of your keys"}`, stderr: '' }];
+  },
+  'github.makeSshKey': async (ctx) => startJob(ctx, planMakeSshKey({ exec: ctx.exec, home: ctx.home, chosen: (name) => cloneGithubWith(ctx, 'ssh', name) }), 'Make an SSH key for GitHub', 'github-key'),
+  'github.copyWindowsKey': async (ctx, { name }) => {
+    const profile = ctx.windows ? await windowsProfile(ctx.exec, ctx.windows) : null;
+    return startJob(ctx, planCopyWindowsKey({ exec: ctx.exec, home: ctx.home, windowsProfile: profile, chosen: (key) => cloneGithubWith(ctx, 'ssh', key) }, name), `Copy the Windows key ${name}`, 'github-key');
+  },
+  'github.addSshKey': async (ctx, { key }) => startJob(ctx, planAddSshKey({ exec: ctx.exec, home: ctx.home }, key), `Add ${key} to GitHub`, 'github-key'),
   'panel.autostart': async (ctx) => {
     const file = writeAutostart(ctx.home, process.execPath, panelCli(ctx.update));
     return [{ code: 0, stdout: `wrote ${file}: the panel and Mailpit start after you log in`, stderr: '' }];
@@ -1093,7 +1203,7 @@ export function lockKey(id: ActionId, input: unknown): string | undefined {
 }
 
 /** Inputs run history never keeps: passwords, a row's values and key or SQL that writes (data from a database), and a file's text. */
-const HIDDEN_INPUTS = new Set(['password', 'rowKey', 'rowKeys', 'rowValues', 'rowWas', 'sql', 'content']);
+const HIDDEN_INPUTS = new Set(['password', 'token', 'rowKey', 'rowKeys', 'rowValues', 'rowWas', 'sql', 'content']);
 
 /** The input as run history keeps it: any field called password, or holding a row's data, is blanked out, and an address keeps no query (signed links carry tokens there). */
 export function withoutPasswords(value: unknown): unknown {

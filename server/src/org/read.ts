@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import type { AccessReport, ClaudeUsage, RepoFacts } from '@devmagic-panel/shared';
 import { accessReport, cleanDumps, cleanLinks, repoFacts } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
-import { NO_PROMPTS } from '../sites/git.js';
+import { gitReason, remoteGit, withHttpsFallback } from '../sites/git.js';
 import { RepoRefused } from '../sites/repo.js';
 import { ASANA_TOOLS, DOCS_TOOLS, DRIVE_TOOLS, FILE_TOOLS, runClaude } from './claude-code.js';
 
@@ -51,10 +51,10 @@ export async function readRepo(
   mkdirSync(workDir, { recursive: true, mode: 0o700 });
   const clone = mkdtempSync(join(workDir, 'org-clone-'));
   const docs = mkdtempSync(join(workDir, 'org-docs-'));
-  const git = (args: string[]) => exec('git', args, { timeoutMs: 120_000, env: NO_PROMPTS });
+  const git = (args: string[]) => withHttpsFallback(exec, repo.url, () => exec('git', args, { timeoutMs: 120_000, env: remoteGit() }));
   try {
     const cloned = await git(['clone', '--depth=1', '--filter=blob:none', '--no-checkout', '--single-branch', '--branch', repo.branch, '--', repo.url, clone]);
-    if (cloned.code !== 0) throw new RepoRefused(cloned.stderr.trim().split('\n').at(-1) || `cannot clone ${repo.url}`);
+    if (cloned.code !== 0) throw new RepoRefused(gitReason(cloned.stderr, `cannot clone ${repo.url}`));
     const tree = await git(['-C', clone, 'ls-tree', '-r', '--name-only', 'HEAD']);
     if (tree.code !== 0) throw new RepoRefused(tree.stderr.trim() || 'cannot list the repo');
     const files: string[] = [];

@@ -38,7 +38,7 @@ import { signedInWith } from './more-dumps.js';
 import { copyFromServer, removeCopied } from './server-files.js';
 import { copyUploads } from './server-uploads.js';
 import { cleanStep, newCleanState, pluginsOffStep, userStep } from './clean.js';
-import { NO_PROMPTS } from './git.js';
+import { keepGithubHttps, keepGithubSshKey, remoteGit, withHttpsFallback } from './git.js';
 
 export interface CreateContext {
   config: SystemConfig;
@@ -317,14 +317,14 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
       const into = atRoot ? join(docroot, '.dmp-clone') : target;
       if (!atRoot) mkdirSync(dirname(into), { recursive: true });
       // core.fileMode false: a chmod on the site's files never shows as a change in git. Only SSH and HTTPS, never a local or ext:: transport.
-      const cloned = await exec('git', ['clone', '--progress', '--no-recurse-submodules', '-c', 'core.fileMode=false', '-c', 'protocol.allow=never', '-c', 'protocol.https.allow=always', '-c', 'protocol.ssh.allow=always', '--branch', repo.branch, '--single-branch', '--', repo.url, into], {
+      const cloned = await withHttpsFallback(exec, repo.url, () => exec('git', ['clone', '--progress', '--no-recurse-submodules', '-c', 'core.fileMode=false', '-c', 'protocol.allow=never', '-c', 'protocol.https.allow=always', '-c', 'protocol.ssh.allow=always', '--branch', repo.branch, '--single-branch', '--', repo.url, into], {
         timeoutMs: 30 * 60_000,
-        env: NO_PROMPTS,
+        env: remoteGit(),
         onStderr: (chunk) => {
           const at = cloneProgress(chunk);
           if (at) job.progress(at.fraction, at.note);
         },
-      });
+      }));
       // git's progress lines would bury the real output.
       const r = { ...cloned, stderr: cloned.stderr.split(/[\r\n]+/).filter((l) => l && !/\d+%/.test(l)).join('\n') };
       if (r.code !== 0) return r;
@@ -336,6 +336,10 @@ export async function planCreate(ctx: CreateContext, input: CreateInput): Promis
         await excludeLocally(exec, target, `devmagic-panel: ${repo.url} is a repo of its own here`);
       }
       const notes = [...placementWarnings(repoTarget(repo)).map((w) => `note: ${w}`)];
+      const https = await keepGithubHttps(exec, target, repo.url);
+      if (https) notes.push(https);
+      const key = await keepGithubSshKey(exec, target, repo.url);
+      if (key) notes.push(key);
       const away = await linksOutOfSite(exec, target, docroot);
       if (away.length) notes.push(`note: the repo has links out of the site's folder, which PHP served from it can follow:\n  ${away.join('\n  ')}`);
       return notes.length ? [r, ok(notes.join('\n'))] : r;

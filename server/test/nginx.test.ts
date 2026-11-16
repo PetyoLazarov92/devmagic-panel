@@ -175,8 +175,10 @@ describe('nginx on the Services page and in the machine checks', () => {
     return report.checks.filter((c) => c.group === 'nginx');
   };
 
-  it('has no nginx checks while nginx is not installed', async () => {
-    expect(await nginxChecks(tempTree())).toEqual([]);
+  it('offers to install nginx, as an optional warning, while it is not installed', async () => {
+    expect(await nginxChecks(tempTree())).toMatchObject([
+      { id: 'nginx.installed', status: 'warn', optional: true, fixes: [{ action: 'system.install', input: { items: ['nginx'] }, needsPassword: true }] },
+    ]);
   });
 
   it('suggests setting nginx up once it is installed, as an optional warning', async () => {

@@ -151,8 +151,8 @@ WSL's localhost forwarding. The Windows setup does all of it from one window.
 
 ### The setup
 
-Run `devmagic-panel-setup-<version>.exe` (until it is signed, Windows
-SmartScreen warns: More info, Run anyway). It runs as you, not as admin, and:
+Download `devmagic-panel-setup-<version>.exe` from the release on GitHub
+(Assets) and run it. It runs as you, not as admin, and:
 
 1. checks Windows, virtualization and WSL, and what is in place already;
 2. asks where the panel should run: the `devmagic-panel` distro when it is
@@ -188,9 +188,40 @@ the helper downloads that release's setup from GitHub, checks it against the
 for a minute). Each release carries its setup for that, built by the release
 workflow.
 
+When a new release is out, Windows shows a notification from devmagic-panel
+once for it (the panel looks every six hours); it opens the Updates page. You
+can turn these off in Windows' Settings, System, Notifications, devmagic-panel.
+
 The setup can also put a shortcut to the panel on the desktop and in Start
 ("Open devmagic-panel"; WSL adds its own Start entry for the distro, which
 opens a terminal there).
+
+### When Windows warns about the setup
+
+The setup is not signed yet, so Windows does not know its publisher. When you
+run a copy your browser downloaded, Microsoft Defender SmartScreen may show
+"Windows protected your PC" with only Don't run. Click **More info**, check that
+the app is `devmagic-panel-setup-<version>.exe` and the publisher reads
+Unknown publisher, then click **Run anyway**. Your browser may first ask
+whether to keep the download, as it does for programs few people have
+downloaded yet: keep it.
+
+To be sure the file is the one the release built, compare its checksum with
+`devmagic-panel-setup-<version>.exe.sha256` from the same release, in
+PowerShell in your Downloads folder:
+
+```powershell
+(Get-FileHash .\devmagic-panel-setup-<version>.exe -Algorithm SHA256).Hash
+```
+
+The two must match (the `.sha256` file holds it in lower case). Some computers
+give no Run anyway: Windows 11 with Smart App Control on, and computers whose
+company allows only approved apps. There the setup cannot run until it is
+signed; install by hand instead (below), or ask your administrator.
+
+Updates do not go through this: the panel updates itself from its Updates page,
+and Update the Windows part downloads the setup with the helper, checks it
+against the release's `.sha256` and runs it, with no SmartScreen question.
 
 ### Uninstall
 

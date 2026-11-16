@@ -10,6 +10,10 @@ export interface CheckFix {
   label: string;
   /** Shown before running, for fixes the user should think about first. */
   confirm?: string;
+  /** The action takes your sudo password (input.password): the page asks for it before running. */
+  needsPassword?: true;
+  /** The action takes another secret typed on the page (input.token): what to call it, a hint, and where to make one. */
+  secret?: { field: 'token'; label: string; hint?: string; link?: { href: string; text: string } };
 }
 
 export interface CheckResult {

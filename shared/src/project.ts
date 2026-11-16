@@ -57,7 +57,12 @@ export interface RemoteEntry {
   dir: boolean;
   sizeBytes: number | null;
   modifiedAt: string | null;
+  /** Google Drive's id of the file: a search hit or a file shared with you downloads by it. */
+  id?: string;
 }
+
+/** What a Drive search may look for: letters, digits, spaces and . _ - (nothing Drive's query language reads as more). */
+export const DRIVE_SEARCH = /^[\p{L}\p{N} ._-]{2,80}$/u;
 
 /** A repo's remembered answers, as Settings lists them. */
 export interface RememberedRepo {

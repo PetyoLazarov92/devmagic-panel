@@ -59,7 +59,7 @@ export function windowsDrive(paths: WindowsPaths): WindowsDrive | null {
   return drivesOf(paths).find((d) => existsSync(`${d.mount}/Windows/${POWERSHELL}`)) ?? null;
 }
 
-export const WINDOWS_HELPER_COMMANDS = ['status', 'hosts-sync', 'ca-trust', 'autostart-install', 'portproxy-on', 'portproxy-off', 'update-windows', 'set-app-version'] as const;
+export const WINDOWS_HELPER_COMMANDS = ['status', 'hosts-sync', 'ca-trust', 'autostart-install', 'portproxy-on', 'portproxy-off', 'update-windows', 'set-app-version', 'notify-update'] as const;
 export type WindowsHelperCommand = (typeof WINDOWS_HELPER_COMMANDS)[number];
 
 /** What the helper accepts as an argument, and nothing else: same as Assert-DmpArgument. */
@@ -224,21 +224,38 @@ async function windowsCmd(exec: Executor, paths: WindowsPaths, words: readonly s
 
 const failed = (stderr: string): ExecResult => ({ code: 1, stdout: '', stderr });
 
+/** Windows' %USERPROFILE% as this distro sees it (/mnt/c/Users/<you>), asked through cmd.exe; null when Windows cannot be asked. */
+export async function windowsProfile(exec: Executor, paths: WindowsPaths, wslpath = '/usr/bin/wslpath'): Promise<string | null> {
+  try {
+    const r = await windowsCmd(exec, paths, ['set', 'USERPROFILE'], 15_000);
+    const windows = /^USERPROFILE=(.+?)\r?$/m.exec(r.stdout)?.[1]?.trim();
+    if (r.code !== 0 || !windows) return null;
+    const u = await exec(wslpath, ['-u', windows], { timeoutMs: 10_000 });
+    const path = u.stdout.trim();
+    return u.code === 0 && path.startsWith('/') ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A terminal in Windows at a folder of this distro: Windows Terminal in a new
  * window (wt.exe, the store app every Windows 11 has), else WSL's own console
  * window (Windows 10 without Windows Terminal).
  */
-export async function openWindowsTerminal(exec: Executor, paths: WindowsPaths, dir: string): Promise<ExecResult> {
+export async function openWindowsTerminal(exec: Executor, paths: WindowsPaths, dir: string, command?: { argv: readonly string[]; said: string }): Promise<ExecResult> {
   if (!CMD_SAFE_PATH.test(dir)) return failed(`the panel does not open a terminal at ${dir}: open one yourself and cd there`);
   const distro = await wslDistro(exec);
   if (!distro) return failed('could not tell which WSL distro this is (wslpath -w /): open a terminal yourself with wsl -d <distro>');
   const wt = (await windowsCmd(exec, paths, ['where', 'wt.exe'], 15_000)).code === 0;
+  // A program: wsl.exe --exec starts it without a shell; Windows Terminal keeps the tab open when it fails.
+  if (command && !command.argv.every((word) => /^[A-Za-z0-9._/:+=-]{1,500}$/.test(word))) return failed(`the panel does not start ${command.said} from here: open a terminal and run it yourself`);
+  const run = command ? ['--exec', ...command.argv] : [];
   const r = wt
-    ? await windowsCmd(exec, paths, ['wt.exe', '-w', 'new', 'wsl.exe', '-d', distro, '--cd', dir])
-    : await windowsCmd(exec, paths, ['start', 'wsl.exe', '-d', distro, '--cd', dir]);
+    ? await windowsCmd(exec, paths, ['wt.exe', '-w', 'new', 'wsl.exe', '-d', distro, '--cd', dir, ...run])
+    : await windowsCmd(exec, paths, ['start', 'wsl.exe', '-d', distro, '--cd', dir, ...run]);
   if (r.code !== 0) return failed(`${wt ? 'Windows Terminal' : 'wsl.exe'} did not start: ${(r.stderr || r.stdout).trim()}`);
-  return { code: 0, stdout: `Opened ${wt ? 'Windows Terminal' : 'a WSL window'} in ${dir} (${distro})`, stderr: '' };
+  return { code: 0, stdout: `Opened ${wt ? 'Windows Terminal' : 'a WSL window'} in ${dir} (${distro})${command ? `, running ${command.said}: go on there` : ''}`, stderr: '' };
 }
 
 /** The GitHub release tag a panel version's Windows setup is published under; null for a development build, which has none. */
@@ -273,4 +290,31 @@ export async function syncWindowsAppVersion(exec: Executor, paths: WindowsPaths,
   const r = await runHelper(exec, paths, 'set-app-version', [version], 30_000);
   if (r.code !== 0) throw new Error(`could not set the version in Apps and features: ${(r.stderr || r.stdout).trim()}`);
   return `Apps and features shows ${version} now (was ${status.app.version})`;
+}
+
+/**
+ * A Windows notification that a newer release is out, once per release: it
+ * and its button open the panel's Updates page. Only a release the panel can
+ * install (its package and notes are there), and only when the Windows part
+ * is the running release's (an older helper has no notifications; Machine
+ * checks offer its update). A note of what it did, empty for nothing.
+ */
+export async function noticeWindowsUpdate(
+  exec: Executor,
+  paths: WindowsPaths,
+  update: { available: boolean; latest?: string; error?: string; mode?: string; changelog: readonly unknown[] },
+  page: string,
+  release: { windowsPart?: string; windowsHelper?: string } | null,
+  shown: { get(): string | undefined; set(tag: string): void },
+): Promise<string> {
+  const tag = update.latest;
+  if (!update.available || !tag || update.error || update.mode === 'blocked' || update.changelog.length === 0) return '';
+  if (shown.get() === tag) return '';
+  const status = await windowsStatus(exec, paths);
+  if (!status) return '';
+  if (windowsPartCurrent(status, release) === false) return `no Windows notification for ${tag}: the Windows part is older than this panel (Machine checks offer its update)`;
+  const r = await runHelper(exec, paths, 'notify-update', [tag, page], 30_000);
+  if (r.code !== 0) throw new Error(`could not show the Windows notification: ${(r.stderr || r.stdout).trim()}`);
+  shown.set(tag);
+  return `Windows shows that ${tag} is out`;
 }

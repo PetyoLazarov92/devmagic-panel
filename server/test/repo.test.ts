@@ -139,7 +139,8 @@ describe('inspectRepo', () => {
   it("passes git's reason on when the repo cannot be read", async () => {
     const s = wpSiteTree();
     const fake = fakeExec({ 'git ls-remote': { code: 128, stderr: 'git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.' } });
-    await expect(inspectRepo(fake.exec, join(s.root, 'tmp'), URL)).rejects.toThrow('fatal: Could not read from remote repository.');
+    // The reason, not git's closing advice, and what to do about a refused key.
+    await expect(inspectRepo(fake.exec, join(s.root, 'tmp'), URL)).rejects.toThrow('git@github.com: Permission denied (publickey).: no SSH key here that the host takes');
     expect(existsSync(join(s.root, 'tmp'))).toBe(false);
   });
 

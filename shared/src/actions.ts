@@ -15,7 +15,9 @@ const htaccessChoice = z.object({
 });
 import { PHP_VERSION_PATTERN, phpIniValueError } from './php.js';
 import { cronSchedule } from './cron.js';
-import { namespaceRef } from './repo-host.js';
+import { SYSTEM_INSTALLS, TERMINAL_RUNS, TOOL_IDS } from './tools.js';
+import { SSH_KEY_NAME } from './ssh-keys.js';
+import { gitlabHost, namespaceRef } from './repo-host.js';
 import { cloneFolder, MAX_SITE_REPOS_PER_INSTALL, placementForLayout, placementProblems, repoTarget, siteDir } from './site-repos.js';
 
 /** A row's primary key values, in the key's column order. */
@@ -1216,6 +1218,76 @@ export const actions = {
     description: `Installs Mailpit, the local mail catcher Local mode sends mail to, as the panel user: downloads the pinned release from GitHub, checks its checksum, and runs it as a systemd user service on 127.0.0.1 (SMTP 1025, web 8025). Starts it when it is already installed. Starts a job.`,
     changesSystem: true,
     input: z.object({}),
+  },
+  'tools.install': {
+    title: 'Install a tool',
+    description:
+      "Installs a tool Machine checks lists (the GitHub CLI) as the panel user, without root: downloads the release the panel pins from the tool's project on GitHub, checks it against the pinned SHA-256, keeps only its program in the panel's data folder, and links it into ~/.local/bin when that name is free there. Refused when a copy of yours is on the PATH: the panel uses that one. A job; Undo removes it again.",
+    changesSystem: true,
+    input: z.object({ tool: z.enum(TOOL_IDS) }),
+  },
+  'system.install': {
+    title: 'Install tools with your sudo password',
+    description:
+      "Installs what Machine checks lists as missing, from a fixed list: nginx, Composer, unzip, git and phpMyAdmin with apt (from the sources apt already has, never a new one; phpMyAdmin answered for Apache and without its own control database, and under PHP-FPM given its pool with dmp-root php-switch-fpm on the version sites run), and WP-CLI from its pinned release, checked against its SHA-256, as /usr/local/bin/wp. Your sudo password goes to sudo's stdin only (sudo -k: no cached sign-in used or kept), is held only while the job runs, never saved, and run history shows it as (hidden). A job; no Undo (it would need the password again): remove a package with apt.",
+    changesSystem: true,
+    input: z.object({ items: z.array(z.enum(SYSTEM_INSTALLS)).min(1).max(SYSTEM_INSTALLS.length), password: z.string().max(1024) }),
+  },
+  'machine.openTerminal': {
+    title: 'Open a terminal on this machine',
+    description:
+      "Opens a terminal in your home folder where you sit: Windows Terminal in this distro under WSL, the desktop's terminal on Ubuntu. With run, it starts one of a fixed list there, which you go on with in that window: claude-login (claude auth login), glab-login (glab auth login --hostname host, gitlab.com when no host), rclone-drive (rclone config create gdrive drive scope=drive.readonly, a Google Drive remote that only reads, for dumps). Nothing from input reaches a command line.",
+    changesSystem: false,
+    input: z.object({ run: z.enum(TERMINAL_RUNS).optional(), host: gitlabHost.optional() }),
+  },
+  'gitlab.signIn': {
+    title: 'Sign the GitLab CLI in with a token',
+    description:
+      "Signs the GitLab CLI (glab) in to one GitLab host with a personal access token you made there (read_api is enough to list your groups and projects): glab auth login --stdin, the token on its stdin only, kept by glab; the panel never saves it and run history shows it as (hidden). Then checks glab answers as you.",
+    changesSystem: true,
+    input: z.object({ host: gitlabHost, token: z.string().min(8).max(500) }),
+  },
+  'claude.install': {
+    title: 'Install Claude Code',
+    description:
+      "Installs Claude Code as the panel user the way Anthropic's installer does: the newest version from downloads.claude.ai, the binary for this machine checked against the SHA-256 its manifest gives, then its own claude install (~/.local/bin/claude; it updates itself from then on). Refused when a claude of yours is on the PATH. Sign it in with claude auth login in a terminal. A job.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'github.signIn': {
+    title: 'Sign in to GitHub',
+    description:
+      "Signs the GitHub CLI in with GitHub's device sign-in: the job shows a one-time code and https://github.com/login/device, where you enter it and approve. gh keeps its own sign-in; the panel never reads the token. When git over SSH cannot sign in to GitHub, GitHub repos then clone over HTTPS through gh. A job.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'github.cloneWith': {
+    title: 'Choose how GitHub repos clone',
+    description:
+      "https: the panel clones GitHub repos over HTTPS, with the GitHub CLI giving git the sign-in, so no SSH key is needed; a site's repo keeps that in its own .git/config, so git pull and push work there in a terminal too. ssh: over SSH, with key (a key in ~/.ssh without a passphrase, by file name) or ssh's own choice of your keys; a site's repo keeps the key in its .git/config. ~/.gitconfig and ~/.ssh/config stay as they are either way. https needs gh signed in.",
+    changesSystem: true,
+    input: z.object({ way: z.enum(['https', 'ssh']), key: z.string().regex(SSH_KEY_NAME, 'A key file name in ~/.ssh').optional() }),
+  },
+  'github.makeSshKey': {
+    title: 'Make an SSH key for GitHub',
+    description:
+      "Makes an ed25519 key without a passphrase in ~/.ssh (id_ed25519, or id_ed25519_devmagic when that name is taken; never over a key) and clones GitHub repos over SSH with it. Its public key is in the output, to add to GitHub. A job; Undo moves the key aside (<name>.removed-<stamp>), never deleting it.",
+    changesSystem: true,
+    input: z.object({}),
+  },
+  'github.copyWindowsKey': {
+    title: 'Copy a Windows SSH key into this distro',
+    description:
+      "Under WSL: copies a key from Windows' %USERPROFILE%\\.ssh into ~/.ssh as windows-<name> (0600), only a key without a passphrase, and clones GitHub repos over SSH with it. Windows' copy stays. A job; Undo moves the copy aside.",
+    changesSystem: true,
+    input: z.object({ name: z.string().regex(SSH_KEY_NAME, 'A key file name') }),
+  },
+  'github.addSshKey': {
+    title: 'Add an SSH key to your GitHub account',
+    description:
+      "Adds the public key of a key in ~/.ssh to your GitHub account through the GitHub CLI (signed in), after letting gh add keys (admin:public_key) with GitHub's device sign-in when it may not yet: the job shows the one-time code. Then checks GitHub knows the key. A job.",
+    changesSystem: true,
+    input: z.object({ key: z.string().regex(SSH_KEY_NAME, 'A key file name in ~/.ssh') }),
   },
   'panel.autostart': {
     title: 'Start the panel after login',

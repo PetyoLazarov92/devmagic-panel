@@ -443,3 +443,53 @@ Describe 'set-app-version' {
     { Invoke-DmpCommand 'set-app-version' @() } | Should -Throw -ExceptionType ([DmpInputError])
   }
 }
+
+Describe 'notify-update' {
+  BeforeEach {
+    $script:DmpAppKey = 'HKCU:\Software\devmagic-panel-pester-app'
+    $script:DmpNotifierKey = 'HKCU:\Software\devmagic-panel-pester-notifier'
+    Remove-Item -Path $script:DmpAppKey, $script:DmpNotifierKey -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  AfterEach { Remove-Item -Path $script:DmpAppKey, $script:DmpNotifierKey -Recurse -Force -ErrorAction SilentlyContinue }
+
+  It 'says which release is out and opens the Updates page' {
+    [xml]$toast = New-DmpUpdateToastXml 'v1.69.0' 'https://local.devmagic/update'
+    $toast.toast.activationType | Should -Be 'protocol'
+    $toast.toast.launch | Should -Be 'https://local.devmagic/update'
+    $toast.toast.visual.binding.text[0] | Should -Be 'devmagic-panel 1.69.0 is out'
+    $toast.toast.actions.action.arguments | Should -Be 'https://local.devmagic/update'
+    $toast.toast.actions.action.activationType | Should -Be 'protocol'
+  }
+
+  It 'takes only a release tag and an https page of the panel' -TestCases @(
+    @{ T = '1.69.0'; U = 'https://local.devmagic/update' },
+    @{ T = 'v1.69'; U = 'https://local.devmagic/update' },
+    @{ T = 'v1.69.0'; U = 'http://local.devmagic/update' },
+    @{ T = 'v1.69.0'; U = 'file:///c:/windows/system32/calc.exe' },
+    @{ T = 'v1.69.0'; U = 'https://local.devmagic/update?x=1' },
+    @{ T = 'v1.69.0'; U = 'https://local.devmagic/"><x' }
+  ) {
+    { New-DmpUpdateToastXml $T $U } | Should -Throw -ExceptionType ([DmpInputError])
+  }
+
+  It 'registers its name and the setup icon with Windows' {
+    $icon = Join-Path $TestDrive 'devmagic-panel.ico'
+    Set-Content -LiteralPath $icon -Value 'x'
+    New-Item -Path $script:DmpAppKey -Force | Out-Null
+    Set-ItemProperty -Path $script:DmpAppKey -Name DisplayIcon -Value $icon
+    Register-DmpNotifier
+    (Get-ItemProperty -Path $script:DmpNotifierKey).DisplayName | Should -Be 'devmagic-panel'
+    (Get-ItemProperty -Path $script:DmpNotifierKey).IconUri | Should -Be $icon
+  }
+
+  It 'registers its name without an icon when the setup has no entry' {
+    Register-DmpNotifier
+    (Get-ItemProperty -Path $script:DmpNotifierKey).DisplayName | Should -Be 'devmagic-panel'
+    (Get-ItemProperty -Path $script:DmpNotifierKey).PSObject.Properties.Name | Should -Not -Contain 'IconUri'
+  }
+
+  It 'is no admin command and takes a tag and a page' {
+    $script:DmpAdminCommands | Should -Not -Contain 'notify-update'
+    { Invoke-DmpCommand 'notify-update' @('v1.69.0') } | Should -Throw -ExceptionType ([DmpInputError])
+  }
+}

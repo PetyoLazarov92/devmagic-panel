@@ -8,8 +8,16 @@ import { HostRefused } from './types.js';
  * do: list the organizations you belong to and their repos. The panel never
  * reads its token.
  */
-const GH_ENV = { GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' };
-const gh = (exec: Executor, args: string[], timeoutMs = 60_000) => exec('gh', args, { timeoutMs, env: GH_ENV });
+export const GH_ENV = { GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' };
+
+/** The GitHub CLI the panel runs: the copy it installed (tools.ts) when it has one, else gh on the PATH. */
+let ghProgram = 'gh';
+export const ghBinary = (): string => ghProgram;
+export function useGhBinary(path: string | null): void {
+  ghProgram = path ?? 'gh';
+}
+
+const gh = (exec: Executor, args: string[], timeoutMs = 60_000) => exec(ghProgram, args, { timeoutMs, env: GH_ENV });
 
 /** The GitHub CLI refused or did not answer; the stored list stays. */
 export class GhRefused extends HostRefused {}

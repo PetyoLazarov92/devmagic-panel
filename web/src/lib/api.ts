@@ -1,4 +1,4 @@
-import type { BrowserCounter, DailyLine, ModePuzzleQuestion, ModesDeveloperView, ModesView, SealedModeId, WordModeId, BackgroundTask, PanelStatus, PanelStorage, TaskRun, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeDetail, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails } from '@devmagic-panel/shared';
+import type { BrowserCounter, DailyLine, ModePuzzleQuestion, ModesDeveloperView, ModesView, SealedModeId, WordModeId, BackgroundTask, PanelStatus, PanelStorage, TaskRun, FileDiff, FileFindResult, FileGitStatus, FileSize, FileListing, FileTrashEntry, FileView, HtaccessChanges, HtaccessReport, ActionId, ActionRunResult, ApacheReport, DbCellQuery, DbCellValue, DbOverview, DbRowsPage, DbRowsQuery, CleanupInfo, DbQuery, DbQueryResult, DbSchema, DbStructure, MysqlProcess, ProfileList, ProfileSummary, SlowQueryReport, RowChangeDetail, RowChangeInfo, WriteCheck, WpDbReport, WpDbSection, NginxReport, NginxState, CronReport, CronRunView, WpCronReport, AssistantSettings, AuraReport, Briefing, ChatReply, ChatTurn, CleanCopyInfo, CleanPreview, CoresReport, DeveloperReport, EnvironmentReport, FolderListing, GitDetails, GitPullRequest, GitTidyPreview, VulnerabilityState, InstallDraft, JobView, KeptDatabaseInfo, LocalHelperPlugin, MailMessage, MailPage, GitHosts, OrgNamespace, OrgRepoList, OrgScanMode, LocalConstant, OrgSettings, OrgStatus, Preferences, PreferencesUpdate, QueuedProposal, RcloneRemotes, RememberedRepo, RemoteEntry, ProductionSettings, ServerFiles, ServerSignIn, ServerTables, RepoPreset, RepoTrustAnswer, TakeoverPreview, TrustedOwner, MissingScanState, WporgPlugin, RemovalInfo, RepoInspection, RepoLookup, RunDetail, RunPage, RunStep, MysqlReport, MysqlSettings, NetworkAdmins, PhpFpmFinding, PhpInfo, PhpIniReport, PhpPackage, PhpReport, PhpSettings, ServicesReport, SiteCompat, SitePhp, SessionInfo, Site, SiteLog, SitePlugins, SiteThemes, SnapshotInfo, TrashEntry, UpdateStatus, UploadResult, UploadsCompare, UploadsHere, VersionCompat, WizardSuggestion, WporgDetails, SshKeysReport } from '@devmagic-panel/shared';
 import type { CreateSiteInput } from '@/lib/plan';
 import { sendWithRetry, unreachableMessage } from '@/lib/connection';
 import { noteStatus, refused } from '@/lib/session-watch';
@@ -63,6 +63,7 @@ export interface Api {
   resetWays: () => Promise<{ system: boolean; reason?: string; command: string; lockedUntil?: string }>;
   resetPassword: (system: string, next: string) => Promise<void>;
   environment: () => Promise<EnvironmentReport>;
+  sshKeys: () => Promise<SshKeysReport>;
   assistant: () => Promise<AssistantSettings>;
   saveAssistant: (settings: Partial<Pick<AssistantSettings, 'enabled' | 'model'>>) => Promise<AssistantSettings>;
   saveAssistantKey: (apiKey: string) => Promise<AssistantSettings>;
@@ -301,7 +302,8 @@ export interface Api {
   wporgDetails: (kind: 'plugin' | 'theme', slug: string) => Promise<WporgDetails>;
   /** The themes a site's database uses that its files lack, and whether themes are on WordPress.org. */
   wporgThemes: (slugs: string[]) => Promise<Record<string, WporgPlugin | null>>;
-  remoteList: (remote: string, path: string) => Promise<RemoteEntry[]>;
+  remoteList: (remote: string, path: string, shared?: boolean) => Promise<RemoteEntry[]>;
+  driveSearch: (remote: string, text: string, shared?: boolean) => Promise<RemoteEntry[]>;
   repoTrust: (url: string) => Promise<RepoTrustAnswer>;
   trustedOwners: () => Promise<TrustedOwner[]>;
   trustOwner: (host: string, owner: string) => Promise<TrustedOwner[]>;
@@ -369,6 +371,7 @@ const realApi: Api = {
   resetWays: () => request('GET', '/api/password/reset'),
   resetPassword: (system, next) => request('POST', '/api/password/reset', { system, next }),
   environment: () => request('GET', '/api/environment'),
+  sshKeys: () => request('GET', '/api/github/ssh-keys'),
   assistant: () => request('GET', '/api/assistant'),
   saveAssistant: (settings) => request('PUT', '/api/assistant', settings),
   saveAssistantKey: (apiKey) => request('PUT', '/api/assistant/key', { apiKey }),
@@ -546,7 +549,8 @@ const realApi: Api = {
   wporgPlugins: (slugs) => request('POST', '/api/wporg/plugins', { slugs }),
   wporgDetails: (kind, slug) => request('POST', '/api/wporg/details', { kind, slug }),
   wporgThemes: (slugs) => request('POST', '/api/wporg/themes', { slugs }),
-  remoteList: (remote, path) => request('POST', '/api/dumps/remote-list', { remote, path }),
+  remoteList: (remote, path, shared) => request('POST', '/api/dumps/remote-list', { remote, path, ...(shared ? { shared } : {}) }),
+  driveSearch: (remote, text, shared) => request('POST', '/api/dumps/drive-search', { remote, text, ...(shared ? { shared } : {}) }),
   repoTrust: (url) => request('GET', `/api/repo-trust?url=${encodeURIComponent(url)}`),
   trustedOwners: () => request('GET', '/api/trusted-owners'),
   trustOwner: (host, owner) => request('POST', '/api/trusted-owners', { host, owner }),

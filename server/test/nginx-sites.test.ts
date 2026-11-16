@@ -362,7 +362,8 @@ describe('the scan for .htaccess files', () => {
     expect(report.foldersStopped?.limit).toBe(SCAN_FOLDERS);
     expect(report.foldersStopped?.at).toMatch(/^\/many\/f\d{5}$/);
     expect(report.rulesStopped).toBeUndefined();
-  });
+    // Thousands of folders made first: past the usual 5 s when the whole suite runs at once.
+  }, 20_000);
 });
 
 describe('nginx in front of Apache', () => {

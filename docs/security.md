@@ -48,7 +48,10 @@ job you switch to, that saves the tables it names first. See
 ## Sign-ins the panel never reads
 
 Updates need no GitHub token: the GitHub CLI and git keep their own sign-in,
-and the panel never reads it. The same goes for the GitLab CLI, which lists
+and the panel never reads it. Signing gh in from Aura runs GitHub's device
+sign-in: the one-time code shows only on the job's page while it runs, and
+lands in no log or run history. Cloning over HTTPS through gh has gh hand git
+the sign-in directly. The same goes for the GitLab CLI, which lists
 GitLab groups and merge requests, and for Claude Code and rclone in an install
 from an organization.
 

@@ -127,7 +127,7 @@ const environment: EnvironmentReport = {
       detail: 'not installed: repos with a composer.json need it to install their dependencies (apt install composer)',
     },
     { id: 'tools.phpmyadmin', group: 'tools', label: 'phpMyAdmin', status: 'warn', detail: 'not installed', optional: true },
-    { id: 'access.github', group: 'access', label: 'GitHub over SSH', status: 'ok', detail: "Hi! You've successfully authenticated" },
+    { id: 'access.github', group: 'access', label: 'GitHub access', status: 'ok', detail: "over SSH: Hi! You've successfully authenticated" },
   ],
 };
 
@@ -1199,6 +1199,19 @@ export const mockApi: Api = {
   environment: async () => {
     await wait(400);
     return { ...environment, checkedAt: new Date().toISOString() };
+  },
+  sshKeys: async () => {
+    await wait(700);
+    return {
+      way: 'ssh',
+      chosen: 'id_ed25519',
+      windows: 'read',
+      keys: [
+        { name: 'id_ed25519', where: 'here', type: 'ED25519', bits: 256, fingerprint: 'SHA256:q8kD2mXr0Yv1n5uWfT3LcPz9aHjB7eRsK4GoVdN6iQw', comment: 'alex@laptop (devmagic-panel)', passphrase: false, github: 'alex-morgan', publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMock alex@laptop (devmagic-panel)' },
+        { name: 'id_ed25519_github', where: 'windows', type: 'ED25519', bits: 256, fingerprint: 'SHA256:Zx91LkQ2pVw8sNc4yRb7TgHm3dEfUoJa6iKq0WtYrS5', comment: 'HP W11', passphrase: true, windowsForGithub: true },
+        { name: 'work-rsa', where: 'windows', type: 'RSA', bits: 4096, fingerprint: 'SHA256:Hn4pQ7rTx2vB9mLc6sWk1yZf8gDj3aEoU5iKqRtN0Pw', passphrase: false, github: null },
+      ],
+    };
   },
   runAction: async (id, input): Promise<ActionRunResult> => {
     // Clean up now on Sanctum: that kind reads empty afterwards.
@@ -2503,6 +2516,14 @@ export const mockApi: Api = {
   rcloneRemotes: async () => {
     await wait(120);
     return { installed: true, remotes: [{ name: 'gdrive', type: 'drive' }, { name: 'backups', type: 's3' }] };
+  },
+  driveSearch: async (_remote, text, shared) => {
+    await wait(500);
+    const hits = [
+      { name: 'spellbook-2026-11-12.sql.gz', path: 'spellbook-2026-11-12.sql.gz', dir: false, sizeBytes: 48_300_000, modifiedAt: '2026-11-12T09:30:00Z', id: '1AbCdEfGhIjKlMnOpQrStUvWx' },
+      { name: 'wandworks-store-prod.sql.zip', path: 'wandworks-store-prod.sql.zip', dir: false, sizeBytes: 131_000_000, modifiedAt: '2026-11-03T17:05:00Z', id: '1ZyXwVuTsRqPoNmLkJiHgFeDc' },
+    ];
+    return hits.filter((h) => h.name.toLowerCase().includes(text.trim().toLowerCase()) && (!shared || h.name.startsWith('wandworks')));
   },
   remoteList: async (remote, path) => {
     await wait(200);
