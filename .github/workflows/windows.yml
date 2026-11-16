@@ -60,8 +60,14 @@ jobs:
           if (-not (Test-Path $package)) { throw "no package at $package" }
           $version = $name.TrimStart('v')
           $file = ($version -replace '-.*$', '') + '.0'
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DFileVersion=$file" "/DReleaseFile=$package" "/O$env:RUNNER_TEMP\setup" windows\installer\devmagic-panel.iss
-          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+          $output = & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DFileVersion=$file" "/DReleaseFile=$package" "/O$env:RUNNER_TEMP\setup" windows\installer\devmagic-panel.iss 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { "$_" }
+          if ($code -ne 0) {
+            # The compiler error as an annotation too: the run page shows those without signing in.
+            $output | ForEach-Object { "$_" } | Where-Object { $_ -match 'Error|error|Line \d+' } | Select-Object -First 5 | ForEach-Object { "::error file=windows/installer/devmagic-panel.iss::$_" }
+            throw "ISCC failed with $code"
+          }
           Get-ChildItem "$env:RUNNER_TEMP\setup" | Format-Table Name, Length -AutoSize
       - uses: actions/upload-artifact@v4
         with:

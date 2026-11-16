@@ -416,6 +416,8 @@ end;
 // --- uninstall: its two questions in dialogs, get.ps1 hidden, its output under Details ---
 
 function InitializeUninstall(): Boolean;
+var
+  Buttons: TArrayOfString;
 begin
   Result := True;
   RemoveDistroAnswer := False;
@@ -424,12 +426,16 @@ begin
   // A silent uninstall keeps the distro, and a distro of your own always stays.
   if UninstallSilent() or (UninstallDistro <> 'devmagic-panel') then Exit;
   // One question, three buttons that say what they do; Enter, Esc and closing it keep the distro.
+  // (No line of [Code] may start with "[": Inno reads that as a new section.)
+  SetArrayLength(Buttons, 3);
+  Buttons[0] := 'Remove it, keep a copy first';
+  Buttons[1] := 'Remove it, no copy';
+  Buttons[2] := 'Keep the distro';
   case TaskDialogMsgBox('What should happen to the devmagic-panel distro?',
     'It holds every site, database and file you made in the panel.' + #13#10#13#10 +
     'Keep it: running the setup again later finds it as it was.' + #13#10 +
     'A copy goes to ' + ExpandConstant('{localappdata}') + '\devmagic-panel and takes as much space as the distro uses, often a few GB; wsl --import brings it back.',
-    mbConfirmation, MB_YESNOCANCEL or MB_DEFBUTTON3,
-    ['Remove it, keep a copy first', 'Remove it, no copy', 'Keep the distro'], 0) of
+    mbConfirmation, MB_YESNOCANCEL or MB_DEFBUTTON3, Buttons, 0) of
     IDYES: RemoveDistroAnswer := True;
     IDNO: begin RemoveDistroAnswer := True; NoBackupAnswer := True; end;
   end;
