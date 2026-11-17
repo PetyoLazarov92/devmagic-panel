@@ -1,6 +1,6 @@
 import type { InstallHow, Preferences, Site, SiteGit } from '@devmagic-panel/shared';
 import { branchWebUrl, INSTALL_HOW_LABELS, INSTALL_HOWS, repoWeb, SITE_SERVER_LABEL, siteRepoLabel, SITES_SORT_LABELS, SITES_SORTS } from '@devmagic-panel/shared';
-import { Archive, ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Layers, LayoutGrid, List, LogIn, PackageOpen, Plus, Search, Server } from 'lucide-react';
+import { Archive, ArrowUpRight, Code2, Database, Eraser, ExternalLink, FolderGit2, FolderOpen, GitBranch, Globe, Layers, LayoutGrid, List, LogIn, PackageOpen, Plus, Search, Server } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { SitesSkeleton } from '@/components/layout/skeletons';
 import { BriefingCard } from '@/features/assistant/briefing-card';
@@ -176,7 +176,23 @@ export function SitesPage() {
       {filter !== 'removed' && error && <Notice className="mt-6">{error}</Notice>}
 
       {filter !== 'removed' && loading && !sites && <SitesSkeleton view={view} className="mt-5" />}
-      {filter !== 'removed' && sites && shown.length === 0 && (
+      {/* No site at all: nothing to clear, so the way to make the first one. */}
+      {filter !== 'removed' && sites && sites.length === 0 && (
+        <EmptyState
+          icon={Globe}
+          title={text('noSites')}
+          className="mt-5"
+          action={
+            <Button size="sm" onClick={() => navigate('/sites/new')}>
+              <Plus />
+              {text('newSite')}
+            </Button>
+          }
+        >
+          A new site, one copied from production or a backup, or one already on this computer: each shows here once it is set up.
+        </EmptyState>
+      )}
+      {filter !== 'removed' && sites && sites.length > 0 && shown.length === 0 && (
         <EmptyState
           icon={Search}
           title="No sites match."

@@ -86,6 +86,8 @@ describe('mode names and lines', () => {
     expect(pageName('Sites', 'ink')).toBe('Scrolls');
     expect(pageName('Aura', 'ink')).toBe('Proofreading');
     expect(modeText('noJobs', 'ink')).toBe('Blank page');
+    expect(modeText('noSites', 'ink')).toBe('No scrolls begun yet');
+    expect(modeText('noSites', 'classic')).toBe('No sites yet');
   });
 
   it("gives pages Dune's names", () => {

@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.70.6 (2026-11-17)
+* **Sites:** with no site yet, the Sites page says so and offers New site, instead of No sites match with a filter to clear. Its title and button take the active mode's own words, like the button at the top
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.5 (2026-11-17)
 * **Updates:** the page you are on loads again once the panel answers on the new release, also when you left the Updates page or the update's job while it ran. The wait for the restart ended with the page that started it, so another page kept the old panel's code and the update badge until you reloaded it. Every page change also checks the panel's version, and loads the page again on a newer one
 * Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
