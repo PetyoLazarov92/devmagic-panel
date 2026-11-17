@@ -141,11 +141,20 @@ WSL's localhost forwarding. The Windows setup does all of it from one window.
   "Virtualization: Enabled". When it says Disabled, restart the computer, open
   its BIOS/UEFI setup (the key shows at power-on, often F2, F10, Del or Esc),
   turn on "Intel Virtualization Technology" (VT-x) or "SVM Mode" on AMD, save
-  and start Windows. The setup checks this first and stops with these steps,
-  before it changes anything.
-- **WSL.** Nothing to do: when WSL is off, the setup turns it on (Windows asks
-  with UAC) and Windows needs one restart. The setup offers it, and after you
-  sign in again it starts by itself and goes on from where it stopped.
+  and start Windows. The setup checks this first, before its window opens and
+  before it changes anything. When it is off, the setup offers to turn WSL on
+  (when that is off too) and restart Windows straight into its BIOS/UEFI setup,
+  with one UAC prompt, so one restart does both; after you turn virtualization
+  on there and sign in again, the setup starts by itself and goes on. A
+  computer that cannot restart into its firmware setup (an older BIOS) gets the
+  steps and a normal restart instead. Close the setup instead, and nothing
+  changes.
+- **WSL.** Nothing to do: when WSL is off, the setup turns it on with
+  `wsl --install --no-distribution` (Windows asks with UAC; it turns on the
+  "Windows Subsystem for Linux" and "Virtual Machine Platform" features, so you
+  never tick them yourself) and Windows needs one restart. The setup offers it,
+  and after you sign in again it starts by itself and goes on from where it
+  stopped. It asks for your passwords again then: they are never kept.
 - About 10 GB free on the drive of your user folder, and a Windows user that
   is an administrator, or the password of one for the UAC questions.
 

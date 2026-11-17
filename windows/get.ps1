@@ -26,6 +26,12 @@ window and runs this script hidden, showing its output as it comes:
                   whether a panel password is set), so the setup asks only what it needs
   -Answers <file> its answers, from a file only you can read, deleted once read:
                   linux-user=, linux-password=, panel-password= or keep-panel-password=yes
+  -TurnOnWsl [-FirmwareRestart]
+                  when virtualization is off: turns WSL on and, with -FirmwareRestart,
+                  restarts Windows into its BIOS/UEFI setup, with one UAC prompt, so one
+                  restart does both. Exit 0 nothing to do, 10 WSL turned on (restart
+                  needed), 11 Windows restarts into the firmware setup in 30 seconds,
+                  12 this computer cannot restart into it (restart it yourself)
 With -Answers or -Yes nothing opens a window or asks: the Linux user is made as
 root, install.sh runs with a sudo rule that is removed again when it ends, and the
 panel's setup takes the password on stdin. -Yes alone (a silent update) keeps the
@@ -40,7 +46,9 @@ param(
   [switch]$Probe,
   [string]$Answers = '',
   [switch]$RemoveDistro,
-  [switch]$NoBackup
+  [switch]$NoBackup,
+  [switch]$TurnOnWsl,
+  [switch]$FirmwareRestart
 )
 
 Set-StrictMode -Version 2.0
@@ -254,6 +262,53 @@ function Assert-DmpVirtualization() {
   if ($state -eq 'off') { throw [DmpInputError]::new($script:VirtualizationSteps) }
   if ($state -eq 'on') { Write-DmpOk 'virtualization is on' }
   else { Write-DmpWarn 'Windows did not say whether virtualization is on; going on (if WSL then fails with 0x80370102, it is off in the BIOS/UEFI)' }
+}
+
+# Virtualization off: the setup turns WSL on before the restart that turns
+# virtualization on, so one restart does both. One UAC prompt covers the two:
+# wsl --install when WSL is off and, when asked, a restart into the firmware
+# setup (shutdown /fw: UEFI computers that offer it).
+$script:FirmwareRestartSeconds = 30
+
+# The elevated PowerShell's script: exit 20 when wsl --install failed, 21 when
+# this computer cannot restart into its firmware setup, 0 when all went.
+function Get-DmpTurnOnWslScript([bool]$WslOff, [bool]$Firmware) {
+  $lines = @()
+  if ($WslOff) {
+    $lines += "& '$(Get-DmpWslExe)' --install --no-distribution"
+    $lines += 'if ($LASTEXITCODE -ne 0) { exit 20 }'
+  }
+  if ($Firmware) {
+    $shutdown = Join-Path $env:SystemRoot 'System32\shutdown.exe'
+    $lines += "& '$shutdown' /r /fw /t $($script:FirmwareRestartSeconds) /c 'devmagic-panel setup: Windows restarts into the BIOS/UEFI setup. Turn virtualization on there, save, and sign in again: the setup goes on by itself.'"
+    $lines += 'if ($LASTEXITCODE -ne 0) { exit 21 }'
+  }
+  $lines += 'exit 0'
+  return ($lines -join "`n")
+}
+
+# -TurnOnWsl: what the setup does when virtualization is off. Returns get.ps1's exit code.
+function Invoke-DmpTurnOnWsl([switch]$Firmware) {
+  Write-DmpStep 'Checking WSL'
+  $status = Invoke-DmpProgram (Get-DmpWslExe) @('--status') 30
+  # Not answering in time: WSL is there, so it is not installed again.
+  $wslOff = (-not $status.TimedOut) -and ($status.ExitCode -ne 0)
+  if (-not $wslOff -and -not $Firmware) { Write-DmpOk 'WSL is on already'; return 0 }
+  if ($wslOff) { Write-DmpStep 'Turning WSL on (Windows asks with UAC)' } else { Write-DmpOk 'WSL is on already' }
+  if ($Firmware) { Write-DmpStep "Restarting Windows into its BIOS/UEFI setup in $($script:FirmwareRestartSeconds) seconds" }
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes((Get-DmpTurnOnWslScript $wslOff $Firmware.IsPresent)))
+  $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $code = Invoke-DmpElevatedProgram $powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
+  if ($code -eq 3) { throw [DmpInputError]::new('UAC was declined, so nothing changed: run the setup again and allow it') }
+  if ($code -eq 20) { throw 'wsl --install did not finish: run wsl --install --no-distribution yourself in an admin PowerShell' }
+  if ($code -eq 21) {
+    Write-DmpWarn 'this computer does not offer a restart into its firmware setup: restart it yourself and press the setup key at power-on'
+    return 12
+  }
+  if ($code -ne 0) { throw "the step with UAC ended with exit $code" }
+  if ($Firmware) { Write-DmpOk 'Windows restarts into its BIOS/UEFI setup'; return 11 }
+  Write-DmpOk 'WSL is on; Windows needs a restart before it works'
+  return 10
 }
 
 # True when WSL was just turned on and Windows needs a restart before it works.
@@ -678,9 +733,10 @@ try {
   if ($Probe) { [Console]::Out.WriteLine((Get-DmpProbe $Distro | ConvertTo-Json -Compress)); exit 0 }
   if ($Answers) { $script:Answered = Read-DmpAnswerFile $Answers }
   $script:Quiet = [bool]$Answers -or [bool]$Yes
-  Start-DmpLog $(if ($Uninstall) { 'uninstall' } else { 'install' })
-  Write-DmpLog "arguments: -Distro $Distro$(if ($Release) { " -Release $Release" })$(if ($Yes) { ' -Yes' })$(if ($RemoveDistro) { ' -RemoveDistro' })$(if ($NoBackup) { ' -NoBackup' })"
+  Start-DmpLog $(if ($Uninstall) { 'uninstall' } elseif ($TurnOnWsl) { 'turn-on-wsl' } else { 'install' })
+  Write-DmpLog "arguments: -Distro $Distro$(if ($Release) { " -Release $Release" })$(if ($Yes) { ' -Yes' })$(if ($RemoveDistro) { ' -RemoveDistro' })$(if ($NoBackup) { ' -NoBackup' })$(if ($TurnOnWsl) { ' -TurnOnWsl' })$(if ($FirmwareRestart) { ' -FirmwareRestart' })"
   if ($Uninstall) { Uninstall-DmpPanel $Distro -KeepDistro:$Yes -RemoveDistro:$RemoveDistro -NoBackup:$NoBackup; Write-DmpLog 'done'; exit 0 }
+  if ($TurnOnWsl) { $code = Invoke-DmpTurnOnWsl -Firmware:$FirmwareRestart; Write-DmpLog "done (exit $code)"; exit $code }
   Assert-DmpWindows
   Assert-DmpVirtualization
   if (Assert-DmpWsl) {

@@ -117,7 +117,9 @@ type
 
 var
   // What get.ps1 -Probe found: the setup asks only what is not there yet.
-  ProbeDone, HasWsl, HasDistro, HasPanelPassword, ProbeOsOk, ProbePanel: Boolean;
+  HasWsl, HasDistro, HasPanelPassword, ProbeOsOk, ProbePanel: Boolean;
+  // The wizard's window and pages exist (InitializeWizard ran): the probe runs before them too.
+  WizardReady: Boolean;
   ProbeUser, ProbeVirtualization, ProbeOs, ProbeDistros: String;
   // The distro the panel goes into, and the one an earlier install recorded.
   ChosenDistro, InstalledDistro: String;
@@ -304,10 +306,9 @@ var
   ResultCode, I: Integer;
   Json: String;
 begin
-  ProbeDone := True;
   ExtractTemporaryFile('get.ps1');
   ExtractTemporaryFile('dmp-win.ps1');
-  WizardForm.NextButton.Enabled := False;
+  if WizardReady then WizardForm.NextButton.Enabled := False;
   try
     if ExecAndCaptureOutput(PowerShellExe(), '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\get.ps1') + '" -Probe -Distro "' + Distro + '"',
       ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, ResultCode, Output) and (ResultCode = 0) then begin
@@ -326,7 +327,7 @@ begin
     end else
       Log(Format('probe of %s did not answer (exit %d)', [Distro, ResultCode]));
   finally
-    WizardForm.NextButton.Enabled := True;
+    if WizardReady then WizardForm.NextButton.Enabled := True;
   end;
 end;
 
@@ -377,11 +378,7 @@ procedure InitializeWizard();
 var
   Top: Integer;
 begin
-  if not RegQueryStringValue(HKCU, 'Software\devmagic-panel', 'Distro', InstalledDistro) then InstalledDistro := '';
-  // The distro of the install there, else devmagic-panel: a silent run (the panel's
-  // Update the Windows part) asks nothing, so it repairs the distro the panel is in.
-  if InstalledDistro <> '' then ChosenDistro := InstalledDistro else ChosenDistro := OwnDistro;
-
+  WizardReady := True;
   DistroPage := CreateCustomPage(wpWelcome, 'Where should the panel run?',
     'The panel, Apache, PHP, MySQL and your sites live in a WSL distro.');
   Top := 0;
@@ -461,6 +458,10 @@ begin
   DetailsMemo.ScrollBars := ssVertical;
   DetailsMemo.WordWrap := True;
   DetailsMemo.Font.Name := 'Consolas';
+
+  // What InitializeSetup's probe found.
+  FillDistroPage();
+  if HasPanelPassword then KeepPanelPassword.Checked := True;
 end;
 
 // An install already there (the setup recorded its distro, and the panel is in it): a repair, no distro question.
@@ -549,34 +550,116 @@ begin
   if HasPanelPassword then KeepPanelPassword.Checked := True;
 end;
 
-function NextButtonClick(CurPageID: Integer): Boolean;
+const
+  RunOnceKey = 'Software\Microsoft\Windows\CurrentVersion\RunOnce';
+  FirmwareSteps = 'In the BIOS/UEFI setup, turn on "Intel Virtualization Technology" (VT-x), or "SVM Mode" on AMD, then save and exit.';
+
+// After the restart, when you sign in, this setup starts again by itself (once) and goes on.
+procedure StartAgainAfterRestart();
+begin
+  RegWriteStringValue(HKEY_CURRENT_USER, RunOnceKey, 'devmagic-panel-setup', '"' + ExpandConstant('{srcexe}') + '"');
+end;
+
+// get.ps1 -TurnOnWsl, hidden (its UAC prompt shows): its exit code, and its error line in LastError.
+function RunTurnOnWsl(const Firmware: Boolean): Integer;
 var
-  User, Welcome, Target: String;
+  Output: TExecOutput;
+  Params: String;
+  I, Code: Integer;
+begin
+  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\get.ps1') + '" -TurnOnWsl';
+  if Firmware then Params := Params + ' -FirmwareRestart';
+  LastError := '';
+  if not ExecAndCaptureOutput(PowerShellExe(), Params, ExpandConstant('{tmp}'), SW_HIDE, ewWaitUntilTerminated, Code, Output) then begin
+    LastError := 'PowerShell did not start: ' + SysErrorMessage(Code);
+    Code := -1;
+  end;
+  Result := Code;
+  for I := 0 to GetArrayLength(Output.StdErr) - 1 do
+    if Copy(Output.StdErr[I], 1, 7) = 'error: ' then LastError := Copy(Output.StdErr[I], 8, MaxInt);
+  Log(Format('get.ps1 -TurnOnWsl (firmware %d) ended with exit code %d', [Ord(Firmware), Result]));
+end;
+
+// Virtualization is off in the firmware, and WSL 2 cannot run without it: the setup
+// can turn WSL on and restart into the firmware setup, so one restart does both.
+// False: the setup ends here (it starts again after the restart, or you run it again).
+function VirtualizationOff(): Boolean;
+var
+  Buttons: TArrayOfString;
+  Text: String;
+  Choice, Code, Ignored: Integer;
+  Firmware, Turn: Boolean;
+begin
+  Result := False;
+  if WizardSilent() then begin
+    Log('virtualization is off in the firmware: a silent setup stops here');
+    Exit;
+  end;
+  Text := 'WSL 2 runs a small virtual machine, which needs virtualization turned on in the computer''s firmware (BIOS/UEFI). Windows cannot turn that on itself.' + #13#10#13#10 +
+    FirmwareSteps + #13#10#13#10;
+  if HasWsl then begin
+    Text := Text + 'Windows can restart straight into the BIOS/UEFI setup (it asks with UAC). After you sign in again, this setup starts by itself and goes on.';
+    SetArrayLength(Buttons, 2);
+    Buttons[0] := 'Restart into the BIOS/UEFI setup';
+    Buttons[1] := 'Close the setup';
+    Choice := TaskDialogMsgBox('Virtualization is off on this computer', Text, mbError, MB_OKCANCEL, Buttons, IDOK);
+    Firmware := Choice = IDOK;
+    Turn := Firmware;
+  end else begin
+    Text := Text + 'WSL is off too. The setup can turn it on now (one UAC prompt) and restart straight into the BIOS/UEFI setup, so one restart does both. After you sign in again, this setup starts by itself and goes on.';
+    SetArrayLength(Buttons, 3);
+    Buttons[0] := 'Turn WSL on and restart into the BIOS/UEFI setup';
+    Buttons[1] := 'Turn WSL on only (I restart myself)';
+    Buttons[2] := 'Close the setup';
+    Choice := TaskDialogMsgBox('Virtualization is off on this computer', Text, mbError, MB_YESNOCANCEL, Buttons, IDYES);
+    Firmware := Choice = IDYES;
+    Turn := (Choice = IDYES) or (Choice = IDNO);
+  end;
+  Log(Format('virtualization off: choice %d (WSL on %d)', [Choice, Ord(HasWsl)]));
+  if not Turn then Exit;
+  if Firmware and (MsgBox('Save your work first: Windows restarts 30 seconds after you allow UAC.', mbConfirmation, MB_OKCANCEL) <> IDOK) then Exit;
+
+  StartAgainAfterRestart();
+  Code := RunTurnOnWsl(Firmware);
+  case Code of
+    11: MsgBox('Windows restarts into its BIOS/UEFI setup in 30 seconds.' + #13#10#13#10 + FirmwareSteps + #13#10#13#10 +
+          'When you sign in again, this setup starts by itself and goes on (it asks for your passwords again; they are never kept).', mbInformation, MB_OK);
+    10, 12: begin
+      if Code = 12 then Text := 'This computer does not offer a restart straight into its firmware setup.' + #13#10#13#10
+      else Text := 'WSL is on now.' + #13#10#13#10;
+      Text := Text + 'Restart the computer and open its BIOS/UEFI setup: the key shows at power-on, often F2, F10, Del or Esc. ' + FirmwareSteps + #13#10#13#10 +
+        'When you sign in again, this setup starts by itself and goes on.' + #13#10#13#10 + 'Restart now?';
+      if MsgBox(Text, mbConfirmation, MB_YESNO) = IDYES then
+        Exec(ExpandConstant('{sys}\shutdown.exe'), '/r /t 5', '', SW_HIDE, ewNoWait, Ignored);
+    end;
+  else begin
+    // Nothing to resume: UAC declined, or the step failed.
+    RegDeleteValue(HKEY_CURRENT_USER, RunOnceKey, 'devmagic-panel-setup');
+    MsgBox('Nothing was changed: ' + LastError + #13#10#13#10 +
+      'Every step is in the log in ' + ExpandConstant('{localappdata}') + '\devmagic-panel\logs.', mbError, MB_OK);
+  end;
+  end;
+end;
+
+// Before the wizard shows: what is in place, so the pages ask only what they need. A
+// repair looks at the distro the last install recorded, a first install at devmagic-panel;
+// a silent run (the panel's Update the Windows part) asks nothing and repairs that distro.
+// With virtualization off, nothing can install: False ends the setup here, at once (a
+// check on the first page made Inno click Next for ever, as that page is skipped).
+function InitializeSetup(): Boolean;
 begin
   Result := True;
-  if (CurPageID = wpWelcome) and not ProbeDone then begin
-    Welcome := WizardForm.WelcomeLabel2.Caption;
-    WizardForm.WelcomeLabel2.Caption := Welcome + #13#10#13#10 + 'Checking what is already in place...';
-    WizardForm.Refresh();
-    // A repair looks at the distro the last install recorded; a first install at devmagic-panel.
-    if InstalledDistro <> '' then Target := InstalledDistro else Target := OwnDistro;
-    RunProbe(Target);
-    ChosenDistro := Target;
-    WizardForm.WelcomeLabel2.Caption := Welcome;
-    if HasPanelPassword then KeepPanelPassword.Checked := True;
-    // Before anything changes: WSL 2 cannot run without it.
-    if ProbeVirtualization = 'off' then begin
-      MsgBox('Virtualization is off in this computer''s firmware, and WSL 2 needs it.' + #13#10#13#10 +
-        '1. Restart the computer and open its BIOS/UEFI setup: the key shows at power-on, often F2, F10, Del or Esc.' + #13#10 +
-        '2. Turn on "Intel Virtualization Technology" (VT-x), or "SVM Mode" on AMD.' + #13#10 +
-        '3. Save, start Windows, and run this setup again.' + #13#10#13#10 +
-        'Task Manager, Performance, CPU then shows "Virtualization: Enabled". Nothing was changed on this computer.', mbError, MB_OK);
-      ProbeDone := False;
-      Result := False;
-      Exit;
-    end;
-    FillDistroPage();
-  end;
+  if not RegQueryStringValue(HKCU, 'Software\devmagic-panel', 'Distro', InstalledDistro) then InstalledDistro := '';
+  if InstalledDistro <> '' then ChosenDistro := InstalledDistro else ChosenDistro := OwnDistro;
+  RunProbe(ChosenDistro);
+  if ProbeVirtualization = 'off' then Result := VirtualizationOff();
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  User: String;
+begin
+  Result := True;
   if CurPageID = DistroPage.ID then Result := ChooseDistro();
   if CurPageID = AccountPage.ID then begin
     if not IsLinuxUserName(AccountPage.Values[0]) then begin
@@ -721,8 +804,7 @@ begin
   if Succeeded and ('{#WindowsPart}' <> '') then
     RegWriteStringValue(HKEY_CURRENT_USER, 'Software\devmagic-panel', 'WindowsPart', '{#WindowsPart}');
   // After the restart, when you sign in, this setup starts again by itself (once) and goes on.
-  if RestartNeeded then
-    RegWriteStringValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\RunOnce', 'devmagic-panel-setup', '"' + ExpandConstant('{srcexe}') + '"');
+  if RestartNeeded then StartAgainAfterRestart();
   Log(Format('get.ps1 ended with exit code %d', [ResultCode]));
 end;
 

@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.70.2 (2026-11-17)
+* **Windows:** the setup no longer gets stuck on a computer with virtualization off: its message came back each time you closed it, and only Task Manager ended the setup (the check ran on the first page, which the setup skips, so it kept clicking Next for you). The check now runs before the window opens, and closing it ends the setup with nothing changed
+* **Windows:** with virtualization off, the setup offers to turn WSL on (when it is off too) and restart Windows straight into its BIOS/UEFI setup, with one UAC prompt, so one restart does both; after you turn virtualization on and sign in again, the setup starts by itself and goes on. A computer that cannot restart into its firmware setup gets the steps and a normal restart instead
+* The Windows part changes (the setup and get.ps1), so the Updates page updates both parts in one click. Nothing changes in the root scripts
+
 ### v1.70.1 (2026-11-17)
 * **Aura:** Install what is missing names each tool: the GitLab CLI and rclone showed as GitHub CLI
 * **Aura:** a Google Drive sign-in for rclone that stopped before Google answered (its terminal closed) no longer counts as connected: rclone left the remote without a token, so dumps could not be listed. Machine checks say so and offer the sign-in again, under the same name; the Database step leaves that remote out. The panel reads this with rclone config redacted and never sees a token

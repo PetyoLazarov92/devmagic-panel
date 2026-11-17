@@ -473,6 +473,62 @@ Describe 'Assert-DmpWsl turning WSL on' {
   }
 }
 
+Describe 'virtualization off: WSL on and the firmware restart, one UAC prompt' {
+  BeforeEach {
+    Mock Write-DmpStep { }
+    Mock Write-DmpOk { }
+    Mock Write-DmpWarn { }
+    $script:Elevated = @()
+    Mock Invoke-DmpElevatedProgram {
+      $script:Elevated += [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($ArgumentList[-1]))
+      $script:ElevatedCode
+    }
+    $script:ElevatedCode = 0
+  }
+
+  It 'turns WSL on and restarts into the firmware setup in one elevated step' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = '' } }
+    Invoke-DmpTurnOnWsl -Firmware | Should -Be 11
+    $script:Elevated | Should -HaveCount 1
+    $script:Elevated[0] | Should -Match ([regex]::Escape('wsl.exe'' --install --no-distribution'))
+    $script:Elevated[0] | Should -Match ([regex]::Escape('shutdown.exe'' /r /fw /t 30'))
+    # wsl --install first: the restart only once WSL is on.
+    $script:Elevated[0].IndexOf('--install') | Should -BeLessThan $script:Elevated[0].IndexOf('/fw')
+  }
+
+  It 'only restarts into the firmware setup when WSL is on already' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+    Invoke-DmpTurnOnWsl -Firmware | Should -Be 11
+    $script:Elevated[0] | Should -Not -Match 'install'
+    $script:Elevated[0] | Should -Match '/fw'
+  }
+
+  It 'turns WSL on without a restart when asked so, and does nothing when it is on' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = '' } }
+    Invoke-DmpTurnOnWsl | Should -Be 10
+    $script:Elevated[0] | Should -Not -Match 'shutdown'
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+    $script:Elevated = @()
+    Invoke-DmpTurnOnWsl | Should -Be 0
+    $script:Elevated | Should -HaveCount 0
+  }
+
+  It 'says when this computer cannot restart into its firmware setup' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 0; Output = ''; Error = '' } }
+    $script:ElevatedCode = 21
+    Invoke-DmpTurnOnWsl -Firmware | Should -Be 12
+    Should -Invoke Write-DmpWarn -Times 1 -Exactly
+  }
+
+  It 'stops with what went wrong when UAC was declined or wsl --install failed' {
+    Mock Invoke-DmpProgram { [pscustomobject]@{ TimedOut = $false; ExitCode = 1; Output = ''; Error = '' } }
+    $script:ElevatedCode = 3
+    { Invoke-DmpTurnOnWsl -Firmware } | Should -Throw '*UAC was declined*'
+    $script:ElevatedCode = 20
+    { Invoke-DmpTurnOnWsl -Firmware } | Should -Throw '*wsl --install did not finish*'
+  }
+}
+
 Describe 'the distro the panel goes into' {
   BeforeEach {
     $script:SettingsKey = 'HKCU:\Software\devmagic-panel-pester'
