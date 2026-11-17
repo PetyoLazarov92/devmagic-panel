@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.70.4 (2026-11-17)
+* **Modes:** the popup for a mode you unlocked closes only with Later, Switch, its × or Escape. It comes up a moment after a page change, often while you are still clicking, and a click outside it closed it at once and marked the unlock seen, so it never came back. Unlocked modes are on the Modes page either way
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.3 (2026-11-17)
 * **Windows:** a terminal the panel opens (Open terminal, a site's terminal, and the sign-ins and connections Machine checks run in one) now comes up in front of the browser. Windows kept it behind, as the panel starts it from the background, so only its taskbar button flashed. The panel starts Windows Terminal through a short PowerShell script that waits for its new window, restores it and brings it to the front; where PowerShell cannot, it starts as before
 * Nothing changes in the root scripts or the Windows part. An update installs this release from the panel

@@ -16,7 +16,9 @@ export function quietMoment(): boolean {
 /**
  * Once per unlock, across every browser: you unlocked a new mode, with Switch
  * now and Later. It waits for a quiet moment: never over another dialog or a
- * form with unsaved changes.
+ * form with unsaved changes. Closing it marks the unlock seen, so only its
+ * buttons, the × and Escape close it: it comes up while you may still be
+ * clicking on the page, and a click outside it is not an answer.
  */
 export function UnlockDialog({ path }: { path: string }) {
   const view = useModesView();
@@ -57,6 +59,7 @@ export function UnlockDialog({ path }: { path: string }) {
     <Dialog
       open
       onClose={close}
+      closeOnBackdrop={false}
       title={`You unlocked ${title} mode`}
       size="lg"
       footer={

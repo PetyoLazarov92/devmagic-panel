@@ -56,9 +56,10 @@ turns at midnight in the computer's time zone.
 The panel shows it once, in a dialog: **You unlocked Wizard mode**, what
 earned it, and **Switch to Wizard** or **Later**. It waits for a quiet moment,
 never opening over another dialog or a form with unsaved changes, and it shows
-once, whichever browser you use: the panel keeps that it was shown. Later
-leaves everything as it is; the mode waits on the Modes page with a **New**
-badge.
+once, whichever browser you use: the panel keeps that it was shown. Only its
+buttons, its × and Escape close it, never a click beside it, so a click meant
+for the page cannot dismiss it unread. Later leaves everything as it is; the
+mode waits on the Modes page with a **New** badge.
 
 What the panel counts for this stays in its own database and is sent
 nowhere, and nothing you type in Ctrl+K is kept.
