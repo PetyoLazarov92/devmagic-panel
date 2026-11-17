@@ -1,8 +1,9 @@
 import type { ClaudeRun, OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, RepoTrustAnswer, Site, UseClaude } from '@devmagic-panel/shared';
-import { branchName, gitUrl, isShared, namespaceLabel, namespaceShortLabel, parseNamespaceRef, placementWarnings, REPO_KIND_LABELS, repoWeb, sameRepo } from '@devmagic-panel/shared';
+import { branchName, gitUrl, isShared, namespaceLabel, namespaceShortLabel, orgScanDue, parseNamespaceRef, placementWarnings, REPO_KIND_LABELS, repoWeb, sameRepo } from '@devmagic-panel/shared';
 import { Check, CircleAlert, FolderGit2, FolderTree, Plus, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Sparkles, Star, TriangleAlert, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BranchPicker } from '@/features/site/branch-picker';
+import { settled, useJob } from '@/features/jobs/job-steps';
 import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS, ClaudeRunFields } from '@/features/assistant/claude-run-fields';
 import { PlacementFields, placementError } from '@/features/new-site/repo-placement';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,7 @@ import { TextLink } from '@/components/ui/text-link';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { siteHref } from '@/lib/site-ref';
+import { lastLine } from '@/lib/site-actions';
 import { pastedRepo } from '@/lib/org-repos';
 import { allRows, isPicked, makeMain, shownOrder, pickRepo, placementOf, planLines, repoKindLabel, type RepoRow, rowPlacement, rowsProblem, unpickRepo, updateRow } from '@/lib/project-repos';
 import { cn } from '@/lib/utils';
@@ -355,8 +357,12 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
   const shown = useRef('');
   const signedIn = status ? cliSignedIn(status, current) : false;
   const anySignedIn = status ? status.gh.signedIn || status.glab.hosts.some((h) => h.signedIn) : false;
+  // Reading every repo (the first time, then every 7 days) is a job: its progress shows here, in the top bar and in Activity, and it goes on on any page.
+  const reader = useJob();
+  const readJob = reader.job?.target === current ? reader.job : null;
+  const reading = readJob !== null && !settled(readJob);
 
-  async function scan(name: string, mode: OrgScanMode) {
+  async function scan(name: string, mode: OrgScanMode): Promise<OrgRepoList | null> {
     if (mode !== 'none') setScanning(mode);
     try {
       const r = await api.orgRepos(name, mode);
@@ -364,8 +370,10 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
         setList(r);
         setListError(null);
       }
+      return r;
     } catch (e) {
       if (shown.current === name) setListError((e as Error).message);
+      return null;
     } finally {
       if (mode !== 'none' && shown.current === name) setScanning(null);
     }
@@ -375,8 +383,26 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
     setList(null);
     setListError(null);
     if (!current) return;
-    void scan(current, 'none').then(() => (signedIn ? scan(current, 'auto') : undefined));
+    // The stored list at once, then only what is due: every repo as a job, the new pushes as a quick check, or nothing.
+    void scan(current, 'none').then((stored) => {
+      if (!stored || !signedIn || shown.current !== current) return;
+      const due = orgScanDue(stored, Date.now());
+      if (due === 'full') void reader.follow(api.startJob('org.scanRepos', { org: current, mode: 'full' }));
+      else if (due === 'check') void scan(current, 'auto');
+    });
   }, [current, signedIn]);
+  // The read ended: the list as it saved it.
+  const readEnded = readJob !== null && settled(readJob);
+  useEffect(() => {
+    if (readEnded) void scan(current, 'none');
+  }, [readEnded]);
+  const label = namespaceShortLabel(current);
+  const readStep = readJob?.steps[0];
+  const scanLine = reading
+    ? list?.listedAt ? `Reading every repo of ${label} again (last full read ${timeAgo(list.listedAt)})` : `Reading every repo of ${label} for the first time`
+    : scanning === 'auto' ? `Checking ${label} for new repos (last check ${list?.checkedAt ? timeAgo(list.checkedAt) : 'not yet'})`
+      : scanning === 'check' ? `Checking ${label} for new repos`
+        : null;
 
   const rows = allRows(state);
   const repos = list?.repos ?? [];
@@ -434,8 +460,8 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
         )}
         <span className="flex-1" />
         {signedIn && current && (
-          <Button variant="outline" className="h-10" disabled={scanning !== null} title="Asks the host now for repos made or pushed since the last check. Opening the list asks again once the last check is an hour old, and reads the whole list again after 7 days; nothing scans in the background." onClick={() => void scan(current, 'check')}>
-            <RefreshCw className={cn(scanning && 'animate-spin')} />
+          <Button variant="outline" className="h-10" disabled={scanning !== null || reading} title="Asks the host now for repos made or pushed since the last check. Opening the list asks again once the last check is an hour old, and reads the whole list again after 7 days; nothing scans in the background." onClick={() => void scan(current, 'check')}>
+            <RefreshCw className={cn((scanning || reading) && 'animate-spin')} />
             Check now
           </Button>
         )}
@@ -465,7 +491,24 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
       </div>
       {listError && <p role="alert" className="text-sm text-danger">{listError}</p>}
       {list?.problem && <p role="alert" className="text-sm text-warning">Could not read the host: {list.problem}</p>}
-      {scanning && !list?.listedAt && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-4" />Reading the repos of {namespaceShortLabel(current)}...</p>}
+      {/* What is read now, and why: nothing shows when nothing is due. */}
+      {scanLine && (
+        <div role="status" className="grid gap-1.5 text-sm text-muted-foreground">
+          <p className="flex items-center gap-2"><Spinner className="size-4 shrink-0" />{scanLine}...</p>
+          {reading && (
+            <p className="flex flex-wrap items-center gap-2 pl-6 text-xs">
+              {readStep?.progress !== undefined && (
+                <span className="h-1 w-32 overflow-hidden rounded-full bg-muted" aria-hidden>
+                  <span className="block h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round(readStep.progress * 100)}%` }} />
+                </span>
+              )}
+              {readStep?.note && <span>{readStep.note}.</span>}
+              <span>It goes on if you leave this page; the top bar and Activity show it.</span>
+            </p>
+          )}
+        </div>
+      )}
+      {readJob?.status === 'failed' && <p role="alert" className="text-sm text-warning">Reading {label} stopped: {lastLine(readJob.steps[0]?.output ?? '') || 'it failed'}. Check now tries the new repos; opening the list again reads every repo.</p>}
       <ul aria-label="Repos" className="grid max-h-[30rem] gap-2 overflow-y-auto overscroll-contain pr-1">
         {picked.length > 0 && (
           <li className="sticky top-0 z-10 grid gap-2 rounded-lg border bg-muted/90 p-2 backdrop-blur">
@@ -474,7 +517,7 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
           </li>
         )}
         {rest.map((r) => row(r, false))}
-        {list && !scanning && rest.length === 0 && <li className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">No other repo matches.</li>}
+        {list && !scanning && !reading && rest.length === 0 && <li className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">No other repo matches.</li>}
       </ul>
       {list?.checkedAt && <p className="text-xs text-muted-foreground">{query.trim() ? `${rest.length} of ${repos.length - picked.length} match. ` : ''}{repos.length === 1 ? '1 repo' : `${repos.length} repos`}, checked for new ones {timeAgo(list.checkedAt)}.</p>}
     </div>

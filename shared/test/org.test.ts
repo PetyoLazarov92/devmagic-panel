@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyRepo, cleanDumps, cleanLinks, hostOf, prefillFromFacts, type RepoFacts } from '../src/org.js';
+import { classifyRepo, cleanDumps, cleanLinks, hostOf, ORG_CHECK_EVERY_MS, ORG_LIST_EVERY_MS, orgScanDue, prefillFromFacts, type RepoFacts } from '../src/org.js';
 
 const facts = (over: Partial<RepoFacts> = {}): RepoFacts => ({
   buildCommands: [],
@@ -97,5 +97,16 @@ describe('what Claude answers is checked before use', () => {
     expect(hostOf('wandworks.example')).toBe('wandworks.example');
     expect(hostOf('not a host')).toBeNull();
     expect(hostOf(null)).toBeNull();
+  });
+});
+
+describe('what opening the repo list reads', () => {
+  it('reads every repo the first time and after 7 days, the new pushes after an hour, and nothing sooner', () => {
+    const now = Date.parse('2026-11-18T12:00:00Z');
+    const at = (ago: number) => new Date(now - ago).toISOString();
+    expect(orgScanDue({}, now)).toBe('full');
+    expect(orgScanDue({ listedAt: at(ORG_LIST_EVERY_MS + 1), checkedAt: at(60_000) }, now)).toBe('full');
+    expect(orgScanDue({ listedAt: at(2 * 86_400_000), checkedAt: at(ORG_CHECK_EVERY_MS + 1) }, now)).toBe('check');
+    expect(orgScanDue({ listedAt: at(2 * 86_400_000), checkedAt: at(ORG_CHECK_EVERY_MS - 1) }, now)).toBeNull();
   });
 });

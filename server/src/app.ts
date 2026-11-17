@@ -54,6 +54,7 @@ import { sitesByVersion } from './php/pools.js';
 import { registerPhpRoutes } from './php/routes.js';
 import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
 import { readOrgSettings, registerOrgRoutes } from './org/routes.js';
+import { OrgScanner } from './org/scan.js';
 import { repoTrust } from './repo-trust.js';
 import { GitHostDetector, gitlabHostsInUse, remotesOf } from './repo-hosts/index.js';
 import { listTrash, purgeTrash, sweepArchives, TRASH_DAYS } from './sites/trash.js';
@@ -483,6 +484,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const trustOf = (url: string) => repoTrust(url, deps.store, readOrgSettings(orgSettingsFile).selected);
     // What runs the hosts in the sites' remotes, when their name does not say: asked over SSH once a week.
     const gitHosts = new GitHostDetector(deps.exec, deps.store);
+    // One scanner for the repo list and the job that reads an organization: one scan per organization at a time.
+    const orgScanner = new OrgScanner(deps.exec, deps.store);
     gitHosts.apply();
     // Read at request time, once the site routes below exist.
     const gitlabHosts = async () => {
@@ -558,6 +561,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             ...(deps.cron ? { cron: deps.cron } : {}),
             ...(deps.windows ? { windows: deps.windows } : {}),
             repoTrusted: (url: string) => trustOf(url).trusted,
+            orgScanner,
           },
           id,
           request.body,
@@ -1103,6 +1107,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerOrgRoutes(api, {
       exec: deps.exec,
       store: deps.store,
+      scanner: orgScanner,
       gitHosts,
       home: deps.hostPaths.home,
       searchPath: deps.hostPaths.searchPath ?? process.env.PATH ?? '',

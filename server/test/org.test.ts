@@ -213,6 +213,17 @@ describe('an organization scan', () => {
     expect(pages()).toEqual([1]);
   });
 
+  it('reads every repo as a job would, saying how far it is, and a second scan of the same organization waits and then finds nothing due', async () => {
+    const gh = github(Array.from({ length: 3 }, (_, i) => repo(`site-${i}`, `2026-10-0${i + 1}T00:00:00Z`)));
+    const scanner = new OrgScanner(gh.fake.exec, new RunStore(':memory:'), () => Date.parse('2026-10-26T09:00:00Z'));
+    const notes: string[] = [];
+    const [first, second] = await Promise.all([scanner.scanNow('wandworks', 'full', (_, note) => notes.push(note)), scanner.scanNow('wandworks', 'auto')]);
+    expect([first, second]).toEqual([{}, {}]);
+    expect(notes[0]).toBe('Listed 3 repos');
+    expect(notes.at(-1)).toBe('Read 3 of 3 repos');
+    expect(gh.looked()).toHaveLength(3);
+  });
+
   it('checks only the repos pushed since the last check, and looks again only into those', async () => {
     let now = Date.parse('2026-10-26T09:00:00Z');
     const old = Array.from({ length: 250 }, (_, i) => repo(`site-${String(i).padStart(3, '0')}`, new Date(Date.parse('2026-01-01T00:00:00Z') + i * 60_000).toISOString()));

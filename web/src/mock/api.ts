@@ -307,6 +307,39 @@ const mockOrgRepos: OrgRepo[] = [
   { org: 'wandworks', name: 'design-tokens', fullName: 'wandworks/design-tokens', sshUrl: 'git@github.com:wandworks/design-tokens.git', url: 'https://github.com/wandworks/design-tokens', defaultBranch: 'main', pushedAt: new Date(Date.now() - 20 * 86_400_000).toISOString(), archived: false, kind: 'other' },
 ];
 let mockOrgScan = { checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), listedAt: new Date(Date.now() - 2 * 86_400_000).toISOString() };
+// ?scan=first in the address: wandworks was never read, so opening its list reads every repo as a job.
+let mockFirstRead = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('scan') === 'first';
+
+/** Reading every repo of an organization, as the panel's job does: a bar that fills, then the list with its times. One per organization. */
+function mockScanJob(input: Record<string, unknown>): string {
+  const org = String(input.org);
+  const running = [...mockJobs.values()].find((j) => j.kind === 'org.scanRepos' && j.target === org && j.status === 'running');
+  if (running) return running.id;
+  const id = `mock-scan-${Date.now()}`;
+  const total = 40;
+  const step: JobView['steps'][number] = { id: 'scan', label: `Read the repos of ${org}`, status: 'running', progress: 0.05, note: `Listed ${total} repos` };
+  const job: JobView = { id, title: actions['org.scanRepos'].title, target: org, status: 'running', steps: [step], undo: [], undoable: [], progress: 0.05, startedAt: new Date().toISOString(), kind: 'org.scanRepos', runId: 900 + mockJobs.size };
+  mockJobs.set(id, job);
+  let read = 0;
+  const timer = window.setInterval(() => {
+    read = Math.min(total, read + 4);
+    step.progress = 0.1 + (0.9 * read) / total;
+    step.note = `Read ${read} of ${total} repos`;
+    job.progress = step.progress;
+    if (read < total) return;
+    window.clearInterval(timer);
+    step.status = 'done';
+    step.output = `${org}: ${mockOrgRepos.length} repos`;
+    delete step.progress;
+    delete step.note;
+    job.status = 'done';
+    job.progress = 1;
+    mockFirstRead = false;
+    const at = new Date().toISOString();
+    mockOrgScan = { checkedAt: at, listedAt: at };
+  }, 500);
+  return id;
+}
 const mockFacts: RepoFacts = {
   productionUrl: 'https://www.wandworks-store.example', docsLocalSetup: 'Lando',
   wordpressVersion: '6.8.3', phpVersion: '8.2', branch: 'develop', composer: true, npm: true, buildCommands: [{ folder: 'wp-content/themes/wandworks', command: 'npm run prod' }, { folder: 'wp-content/plugins/wandworks-slider', command: 'npm run prod-bundle' }],
@@ -1954,6 +1987,7 @@ export const mockApi: Api = {
   startJob: async (id, input) => {
     await wait(300);
     if (id === 'org.readProject') return mockProjectJob(input);
+    if (id === 'org.scanRepos') return mockScanJob(input);
     if (id === 'org.readRepo' || id === 'org.checkAccess') return mockClaudeJob(id, input);
     // The mockup's updates land with the job: once it ends, the plugins and themes read again show their new version.
     if (id === 'site.updatePlugins') [...((input.plugins as string[] | undefined) ?? []), ...((input.themes as string[] | undefined) ?? [])].forEach((slug) => mockUpdated.add(slug));
@@ -2299,6 +2333,10 @@ export const mockApi: Api = {
       return { repos: structuredClone(mockGitlabRepos), ...mockOrgScan };
     }
     if (org !== 'wandworks') return { repos: [] };
+    if (mockFirstRead) {
+      await wait(150);
+      return { repos: [] };
+    }
     const due = scan === 'check' || scan === 'full' || (scan === 'auto' && Date.now() - Date.parse(mockOrgScan.checkedAt) > 3_600_000);
     await wait(scan === 'none' ? 150 : !due ? 200 : scan === 'full' ? 2500 : 1500);
     if (due && new URLSearchParams(window.location.search).get('scan') === 'fail') {

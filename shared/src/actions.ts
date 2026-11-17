@@ -1352,6 +1352,13 @@ export const actions = {
     changesSystem: false,
     input: z.object({ draftId: z.string().uuid(), url: gitUrl, branch: branchName, fullName: repoFullName, settings: claudeRun, checkLinks: z.boolean().default(true) }),
   },
+  'org.scanRepos': {
+    title: 'Read the repos of an organization or group',
+    description:
+      "Reads an organization (GitHub) or group (GitLab) from its host as a job with its progress, as the new site wizard's repo list does when it opens: mode full reads every repo and what each holds (the first time, and after 7 days), auto only what is due. One per organization: a second start follows the one that runs. Read-only; the list is kept in the panel's database.",
+    changesSystem: false,
+    input: z.object({ org: namespaceRef, mode: z.enum(['auto', 'full']).default('full') }),
+  },
   'org.checkAccess': {
     title: 'Check the linked tasks and files with Claude Code',
     description:

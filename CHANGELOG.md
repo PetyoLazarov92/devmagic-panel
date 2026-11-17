@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.70.10 (2026-11-18)
+* **New site:** the repo list says what it reads and why, under the list: Checking wandworks for new repos (last check 3 hours ago), or Reading every repo of wandworks for the first time. When nothing is due, nothing spins
+* **New site:** reading every repo of an organization or group (the first time, then every 7 days) is a job, with how far it is (Read 120 of 300 repos) in the list, the top bar and Activity. It goes on whatever page you are on, and coming back follows the one that runs instead of starting another. A quick check for new pushes stays a plain request
+* **New site:** GitHub and GitLab are named alike: the dialog's blocks are titled GitHub and GitLab with their host beside them, and the organization list says wandworks-web (GitLab) instead of (gitlab.com); a GitLab server of your own still goes by its host
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.9 (2026-11-18)
 * **New site:** Check now says rightly when the panel asks for new repos on its own: when you open the list, once the last check is an hour old (the whole list after 7 days). 1.70.8 said every hour, as if it ran in the background; no scan runs in the background, and it is not one of the tasks on Sanctum
 * Nothing changes in the root scripts or the Windows part. An update installs this release from the panel

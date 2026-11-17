@@ -73,6 +73,19 @@ export const LINKS_EFFORT: ClaudeEffort = 'low';
 /** The least a Claude Code run can be capped at; with less left of the cap, the links are not checked. */
 export const MIN_CLAUDE_CAP = 0.05;
 
+/** Opening the repo list checks for new pushes when the last check is older than this. */
+export const ORG_CHECK_EVERY_MS = 3_600_000;
+/** And reads every repo again, to drop deleted and renamed ones, when the last full read is older than this. */
+export const ORG_LIST_EVERY_MS = 7 * 24 * 3_600_000;
+
+/** What opening the list reads now, from the stored list's times: every repo, the new pushes, or nothing. */
+export function orgScanDue(list: { listedAt?: string; checkedAt?: string }, now: number): 'full' | 'check' | null {
+  const listed = Date.parse(list.listedAt ?? '');
+  if (!(now - listed <= ORG_LIST_EVERY_MS)) return 'full';
+  const checked = Date.parse(list.checkedAt ?? '');
+  return now - checked <= ORG_CHECK_EVERY_MS ? null : 'check';
+}
+
 export interface OrgSettings {
   /** The organizations and groups to scan, as namespace refs. */
   selected: string[];

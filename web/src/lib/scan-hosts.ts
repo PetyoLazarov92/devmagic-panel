@@ -4,7 +4,10 @@ import { namespaceShortLabel, parseNamespaceRef } from '@devmagic-panel/shared';
 /** One host in the scan dialog: its CLI's state, what to run when it is not signed in, and its organizations or groups. */
 export interface ScanHost {
   host: string;
+  /** How the text names it: GitHub, GitLab (gitlab.com), or the host of a server of your own. */
   name: string;
+  /** The block's title: the service, GitHub or GitLab, with the host beside it. */
+  service: 'GitHub' | 'GitLab';
   provider: 'github' | 'gitlab';
   /** One of your own GitLab hosts, which you can remove. */
   own: boolean;
@@ -46,6 +49,6 @@ export function scanHosts(status: OrgStatus, namespaces: readonly OrgNamespace[]
       const label = namespaceShortLabel(ref);
       return { ref, label: cli?.user && path?.toLowerCase() === cli.user.toLowerCase() ? `${label} (your account)` : label };
     });
-    return { host, name: github ? 'GitHub' : host, provider: github ? 'github' : 'gitlab', own: gitlabHosts.includes(host), signedIn, state, commands, items } satisfies ScanHost;
+    return { host, name: github ? 'GitHub' : host === 'gitlab.com' ? 'GitLab' : host, service: github ? 'GitHub' : 'GitLab', provider: github ? 'github' : 'gitlab', own: gitlabHosts.includes(host), signedIn, state, commands, items } satisfies ScanHost;
   });
 }

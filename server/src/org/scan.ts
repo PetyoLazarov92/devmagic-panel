@@ -1,5 +1,5 @@
 import type { InstallDraft, Namespace, OrgRepo, OrgRepoList, OrgScanMode, RepoKind, Site, SiteInstall, TrashEntry } from '@devmagic-panel/shared';
-import { classifyRepo, isShared, parseNamespaceRef, repoKey } from '@devmagic-panel/shared';
+import { classifyRepo, isShared, ORG_CHECK_EVERY_MS, ORG_LIST_EVERY_MS, parseNamespaceRef, repoKey } from '@devmagic-panel/shared';
 import type { Executor } from '../exec.js';
 import { HostRefused, type HostRepo, hostFor, type RepoHost } from '../repo-hosts/index.js';
 import type { RunStore } from '../store.js';
@@ -8,14 +8,17 @@ import type { RunStore } from '../store.js';
 const REPO_PAGE_SIZE = 100;
 
 /** Opening the page checks for new pushes when the last check is older than this. */
-export const CHECK_EVERY_MS = 3_600_000;
+export const CHECK_EVERY_MS = ORG_CHECK_EVERY_MS;
 /** And lists every repo, to drop deleted and renamed ones, when the last full list is older than this. */
-export const LIST_EVERY_MS = 7 * 24 * 3_600_000;
+export const LIST_EVERY_MS = ORG_LIST_EVERY_MS;
 /** No organization has more pages than this; a guard against a loop that never ends. */
 const MAX_PAGES = 100;
 
 /** A repo as stored: what its host listed, its kind, and the push its kind was read at. */
 type StoredRepo = Omit<OrgRepo, 'local'> & { kindPushedAt?: string };
+
+/** How far a scan is, for a job's bar: 0 to 1, and a note like "Read 120 of 300 repos". */
+export type ScanProgress = (fraction: number, note: string) => void;
 
 /** What this machine has of each repo: installed sites, archived copies, an unfinished install. */
 export interface LocalState {
@@ -80,20 +83,7 @@ export class OrgScanner {
   ) {}
 
   async repos(org: string, local: LocalState, mode: OrgScanMode = 'none'): Promise<OrgRepoList> {
-    let problem: string | undefined;
-    if (mode !== 'none') {
-      const key = org.toLowerCase();
-      const run = (this.running.get(key) ?? Promise.resolve()).catch(() => undefined).then(() => this.scan(org, mode));
-      this.running.set(key, run);
-      try {
-        await run;
-      } catch (error) {
-        if (!(error instanceof HostRefused)) throw error;
-        problem = error.message;
-      } finally {
-        if (this.running.get(key) === run) this.running.delete(key);
-      }
-    }
+    const problem = mode === 'none' ? undefined : (await this.scanNow(org, mode)).problem;
     const scan = this.store.orgScan(org);
     const repos = (this.store.orgRepos(org) as StoredRepo[])
       .map(({ kindPushedAt: _, ...r }): OrgRepo => {
@@ -102,6 +92,26 @@ export class OrgScanner {
       })
       .sort((a, b) => (b.pushedAt ?? '').localeCompare(a.pushedAt ?? '') || a.name.localeCompare(b.name));
     return { repos, ...(scan ? { checkedAt: scan.checkedAt, listedAt: scan.listedAt } : {}), ...(problem ? { problem } : {}) };
+  }
+
+  /**
+   * Reads an organization from its host now, as much as the mode asks and is
+   * due, one scan per organization at a time: a second waits for the first and
+   * then finds nothing due. A host that refuses is a problem, not an error.
+   */
+  async scanNow(org: string, mode: Exclude<OrgScanMode, 'none'>, progress?: ScanProgress): Promise<{ problem?: string }> {
+    const key = org.toLowerCase();
+    const run = (this.running.get(key) ?? Promise.resolve()).catch(() => undefined).then(() => this.scan(org, mode, progress));
+    this.running.set(key, run);
+    try {
+      await run;
+      return {};
+    } catch (error) {
+      if (!(error instanceof HostRefused)) throw error;
+      return { problem: error.message };
+    } finally {
+      if (this.running.get(key) === run) this.running.delete(key);
+    }
   }
 
   /** What a scan in this mode reads now: nothing when the stored list is fresh enough. */
@@ -113,7 +123,7 @@ export class OrgScanner {
     return this.now() - Date.parse(scan.checkedAt) > CHECK_EVERY_MS ? 'check' : null;
   }
 
-  private async scan(org: string, mode: Exclude<OrgScanMode, 'none'>): Promise<void> {
+  private async scan(org: string, mode: Exclude<OrgScanMode, 'none'>, progress?: ScanProgress): Promise<void> {
     const what = this.due(org, mode);
     if (!what) return;
     const ns = parseNamespaceRef(org);
@@ -128,6 +138,8 @@ export class OrgScanner {
     for (let page = 1; page <= MAX_PAGES; page++) {
       const repos = await host.repoPage(ns, self, page);
       listed.push(...repos);
+      // Listing is quick next to reading what each repo holds: a tenth of the bar.
+      progress?.(0.05, `Listed ${listed.length} repos`);
       if (repos.length < REPO_PAGE_SIZE) break;
       // Newest first: once a page ends before the last check, the rest is older still.
       const oldest = Date.parse(repos.at(-1)?.pushedAt ?? '');
@@ -136,7 +148,14 @@ export class OrgScanner {
     const keep = await host.keepFor?.(ns);
     const kept = keep ? listed.filter(keep) : listed;
     const stored = new Map((this.store.orgRepos(org) as StoredRepo[]).map((r) => [r.fullName.toLowerCase(), r]));
-    const repos = await pooled(kept, 8, (r) => this.withKind(host, org, r, stored.get(r.path.toLowerCase())));
+    let read = 0;
+    progress?.(0.1, `Read 0 of ${kept.length} repos`);
+    const repos = await pooled(kept, 8, async (r) => {
+      const repo = await this.withKind(host, org, r, stored.get(r.path.toLowerCase()));
+      read += 1;
+      progress?.(0.1 + (0.9 * read) / Math.max(1, kept.length), `Read ${read} of ${kept.length} repos`);
+      return repo;
+    });
     this.store.saveOrgScan(org, repos, what === 'full', new Date(started).toISOString(), (r) => (ns.provider === 'github' && !isShared(ns) ? r.name : r.fullName.toLowerCase()));
   }
 

@@ -10,7 +10,7 @@ describe('namespace refs', () => {
     expect(parseNamespaceRef('git.wandworks.test/wandworks')).toEqual({ provider: 'gitlab', host: 'git.wandworks.test', path: 'wandworks' });
     expect(namespaceRefOf({ provider: 'gitlab', host: 'gitlab.com', path: 'wandworks/web' })).toBe('gitlab.com/wandworks/web');
     expect(namespaceRefOf({ provider: 'github', host: 'github.com', path: 'wandworks' })).toBe('wandworks');
-    expect([namespaceLabel('wandworks'), namespaceLabel('gitlab.com/wandworks/web')]).toEqual(['wandworks (GitHub)', 'wandworks/web (gitlab.com)']);
+    expect([namespaceLabel('wandworks'), namespaceLabel('gitlab.com/wandworks/web')]).toEqual(['wandworks (GitHub)', 'wandworks/web (GitLab)']);
   });
 
   it('name the repos shared with you on each host with a ~, which no real name has', () => {

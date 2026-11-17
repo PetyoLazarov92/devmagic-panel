@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ActionId, ActionInput, ActionRunResult, ClaudeRun, ClaudeStep, ClaudeUsage, TerminalRun } from '@devmagic-panel/shared';
-import { accessKey, actions, FILE_TRASH_DAYS, LINKS_EFFORT, MIN_CLAUDE_CAP, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, TERMINAL_RUN_LABELS, TOOLS, totalTokens } from '@devmagic-panel/shared';
+import { accessKey, actions, FILE_TRASH_DAYS, LINKS_EFFORT, MIN_CLAUDE_CAP, namespaceLabel, presetFromCreate, readKey, repoKey, repoTarget, SITE_SERVER_LABEL, TERMINAL_RUN_LABELS, TOOLS, totalTokens } from '@devmagic-panel/shared';
 import type { SystemConfig } from './config.js';
 import type { CoreStatusMap } from './core-status.js';
 import { NSS_NICKNAME } from './environment.js';
@@ -54,6 +54,7 @@ import { copyFromServer, removeCopied } from './sites/server-files.js';
 import { copyUploads } from './sites/server-uploads.js';
 import { copyChosenUploads, uploadsCopied } from './sites/uploads-compare.js';
 import { checkAccess, type ClaudeSettings, readRepo } from './org/read.js';
+import type { OrgScanner } from './org/scan.js';
 import { archiveSteps, currentSite } from './sites/archive.js';
 import { planRemove, RemoveRefused, stampDate } from './sites/remove.js';
 import { removeUpload } from './sites/uploads.js';
@@ -114,6 +115,8 @@ export interface ActionContext {
   fetchGet?: Getter;
   /** Whether code from a repo may run here (repo-trust.ts). */
   repoTrusted?: (url: string) => boolean;
+  /** The panel's repo scanner, for reading an organization as a job. */
+  orgScanner?: OrgScanner;
   /** Install drafts, which site.create keeps while it runs and finishes once it is done. */
   drafts?: Drafts;
   /** Where Claude Code is looked for and works, for the organization install's steps. */
@@ -677,6 +680,28 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       return `Read ${files.length} files of ${input.fullName} (${input.branch}): ${usageText(usage)}`;
     }),
   'org.readProject': async (ctx, input) => projectReadJob(ctx, input),
+  'org.scanRepos': async (ctx, { org, mode }) => {
+    const scanner = ctx.orgScanner;
+    if (!scanner) throw new ActionInputError('The repo scanner is not running in this panel');
+    // One read per organization: a second start follows the one that runs.
+    const running = ctx.jobs.activeFor('org.scanRepos', org);
+    if (running) return { results: [{ code: 0, stdout: `started ${running.id}`, stderr: '' }], data: { jobId: running.id }, detached: true };
+    return startJob(
+      ctx,
+      [
+        {
+          id: 'scan',
+          label: `Read the repos of ${namespaceLabel(org)}`,
+          run: async (job) => {
+            const { problem } = await scanner.scanNow(org, mode, (fraction, note) => job.progress(fraction, note));
+            return problem ? { code: 1, stdout: '', stderr: problem } : { code: 0, stdout: `${namespaceLabel(org)}: ${ctx.store.orgRepos(org).length} repos`, stderr: '' };
+          },
+        },
+      ],
+      `Read the repos of ${namespaceLabel(org)}`,
+      org,
+    );
+  },
   'org.checkAccess': async (ctx, input) =>
     claudeJob(ctx, 'access', input.draftId, accessKey(input.fullName, input.links, input.dumpHints), `Check the links of ${input.fullName} with Claude Code`, `Claude Code checks ${input.links.length} links`, input.settings, async (claude, workDir, activity) => {
       const r = await checkAccess(ctx.exec, workDir, claude, { fullName: input.fullName }, input.links, input.dumpHints, activity.add);

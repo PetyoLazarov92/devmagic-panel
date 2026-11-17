@@ -53,6 +53,8 @@ export function withAccountsTicked(settings: OrgSettings, gh: OrgStatus['gh'], g
 
 export interface OrgRouteDeps {
   exec: Executor;
+  /** The one scanner of the panel, shared with the action that reads an organization as a job. */
+  scanner?: OrgScanner;
   /** Where the scanned repos are kept. */
   store: RunStore;
   /** What runs the hosts in the sites' remotes, found over SSH. */
@@ -84,7 +86,7 @@ export interface OrgRouteDeps {
 const SIGN_IN_KEPT_MS = 60 * 60 * 1000;
 
 export function registerOrgRoutes(api: FastifyInstance, deps: OrgRouteDeps): void {
-  const scanner = new OrgScanner(deps.exec, deps.store);
+  const scanner = deps.scanner ?? new OrgScanner(deps.exec, deps.store);
   // Links to your own GitLab hosts come out right from the start, not only once this page is opened.
   registerGitlabHosts(readOrgSettings(deps.settingsFile).gitlabHosts);
   const claude = () => {

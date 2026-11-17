@@ -93,9 +93,9 @@ describe('organizations and groups to scan', () => {
       ['wandworks', 'wandworks (GitHub)'],
       ['alex', 'alex (GitHub)'],
       ['~shared', 'Shared with you (GitHub)'],
-      ['gitlab.com/wandworks/web', 'wandworks/web (gitlab.com)'],
-      ['gitlab.com/alex', 'alex (gitlab.com)'],
-      ['gitlab.com/~shared', 'Shared with you (gitlab.com)'],
+      ['gitlab.com/wandworks/web', 'wandworks/web (GitLab)'],
+      ['gitlab.com/alex', 'alex (GitLab)'],
+      ['gitlab.com/~shared', 'Shared with you (GitLab)'],
     ]);
     expect(found.problems).toEqual(['the GitLab CLI cannot list your groups on git.wandworks.test: 500 Internal Server Error']);
   });

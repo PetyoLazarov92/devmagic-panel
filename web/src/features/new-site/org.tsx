@@ -310,7 +310,10 @@ export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?
         return (
           <section key={h.host} aria-label={h.name} className="grid gap-2.5 rounded-lg border bg-card px-4 py-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h3 className="font-medium">{h.name}</h3>
+              <h3 className="flex items-baseline gap-2">
+                <span className="font-medium">{h.service}</span>
+                <span className="font-mono text-xs text-muted-foreground">{h.host}</span>
+              </h3>
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span aria-hidden className={cn('size-1.5 rounded-full', h.signedIn ? 'bg-success' : 'bg-muted-foreground/50')} />
                 {h.state}
@@ -339,7 +342,7 @@ export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?
       <Field
         htmlFor="gitlab-host-add"
         label="Add a GitLab host"
-        hint={hostError ? <span className="text-danger">{hostError}</span> : 'A GitLab server of your own, like gitlab.wandworks.test; gitlab.com is always listed.'}
+        hint={hostError ? <span className="text-danger">{hostError}</span> : 'A GitLab server of your own, like gitlab.wandworks.test: it gets a block of its own above.'}
       >
         <div className="flex gap-2">
           <Input

@@ -74,11 +74,11 @@ export function namespaceShortLabel(ref: string): string {
   return isShared(ns) ? 'Shared with you' : ns.path;
 }
 
-/** wandworks (GitHub), wandworks/web (gitlab.com), Shared with you (gitlab.com) */
+/** wandworks (GitHub), wandworks/web (GitLab), Shared with you (gitlab.wandworks.test): the service by its name, a server of your own by its host. */
 export function namespaceLabel(ref: string): string {
   const ns = parseNamespaceRef(ref);
   if (!ns) return ref;
-  return `${namespaceShortLabel(ref)} (${ns.provider === 'github' ? 'GitHub' : ns.host})`;
+  return `${namespaceShortLabel(ref)} (${ns.provider === 'github' ? 'GitHub' : ns.host === GITLAB_HOST ? 'GitLab' : ns.host})`;
 }
 
 /** The GitLab hosts the panel lists from: gitlab.com and the ones you added, without duplicates. */

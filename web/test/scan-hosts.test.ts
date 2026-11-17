@@ -20,10 +20,10 @@ const namespaces = [
 describe('the hosts of the scan dialog', () => {
   it('lists GitHub, gitlab.com, then your own hosts, each with its state and its organizations', () => {
     const hosts = scanHosts(status(), namespaces, ['wandworks'], ['git.wandworks.test']);
-    expect(hosts.map((h) => [h.name, h.state, h.own])).toEqual([
-      ['GitHub', 'signed in as wandworksco', false],
-      ['gitlab.com', 'signed in as wandworksco', false],
-      ['git.wandworks.test', 'not signed in', true],
+    expect(hosts.map((h) => [h.service, h.host, h.name, h.state, h.own])).toEqual([
+      ['GitHub', 'github.com', 'GitHub', 'signed in as wandworksco', false],
+      ['GitLab', 'gitlab.com', 'GitLab', 'signed in as wandworksco', false],
+      ['GitLab', 'git.wandworks.test', 'git.wandworks.test', 'not signed in', true],
     ]);
     // Your own account says so.
     expect(hosts[0]?.items.map((i) => i.label)).toEqual(['wandworks', 'wandworksco (your account)']);
