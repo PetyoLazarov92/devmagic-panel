@@ -1,12 +1,13 @@
 import type { ClaudeRun, OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, RepoTrustAnswer, Site, UseClaude } from '@devmagic-panel/shared';
 import { branchName, gitUrl, isShared, namespaceLabel, namespaceShortLabel, parseNamespaceRef, placementWarnings, REPO_KIND_LABELS, repoWeb, sameRepo } from '@devmagic-panel/shared';
-import { Check, ChevronDown, CircleAlert, FolderGit2, FolderTree, Plus, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Sparkles, Star, TriangleAlert, X } from 'lucide-react';
+import { Check, CircleAlert, FolderGit2, FolderTree, Plus, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Sparkles, Star, TriangleAlert, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BranchPicker } from '@/features/site/branch-picker';
 import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS, ClaudeRunFields } from '@/features/assistant/claude-run-fields';
 import { PlacementFields, placementError } from '@/features/new-site/repo-placement';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Field, Select } from '@/components/ui/field';
 import { IconButton } from '@/components/ui/icon-button';
@@ -423,12 +424,12 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
             {selected.map((o) => <option key={o} value={o}>{namespaceLabel(o)}</option>)}
           </Select>
         </Field>
-        {/* Beside a field, a button takes its height (h-10); the toggle keeps its name, so the row never shifts. */}
+        {/* Beside a field, a button takes its height (h-10). What is scanned is the list in the field; this changes it, in a dialog. */}
         {anySignedIn && (
-          <Button variant="outline" className="h-10" aria-expanded={editing} aria-controls="code-scan-picker" onClick={() => setEditing((v) => !v)}>
+          <Button variant="outline" className="h-10" aria-haspopup="dialog" onClick={() => setEditing(true)}>
             <SlidersHorizontal />
             Which to scan
-            <ChevronDown className={cn('text-muted-foreground transition-transform', editing && 'rotate-180')} />
+            {selected.length > 0 && <Badge>{selected.length}</Badge>}
           </Button>
         )}
         <span className="flex-1" />
@@ -439,7 +440,18 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
           </Button>
         )}
       </div>
-      {editing && <div id="code-scan-picker"><OrgPicker status={status} onRecheck={onRecheck} /></div>}
+      {editing && (
+        <Dialog
+          open
+          onClose={() => setEditing(false)}
+          size="lg"
+          title="Organizations and groups to scan"
+          description="The GitHub organizations and GitLab groups you belong to, your own account, and the repos shared with you. A GitLab group is scanned with its subgroups."
+          footer={<Button onClick={() => setEditing(false)}>Done</Button>}
+        >
+          <OrgPicker status={status} onRecheck={onRecheck} />
+        </Dialog>
+      )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -464,7 +476,7 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
         {rest.map((r) => row(r, false))}
         {list && !scanning && rest.length === 0 && <li className="rounded-lg border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">No other repo matches.</li>}
       </ul>
-      {list?.checkedAt && <p className="text-xs text-muted-foreground">{repos.length === 1 ? '1 repo' : `${repos.length} repos`}, checked for new ones {timeAgo(list.checkedAt)}.</p>}
+      {list?.checkedAt && <p className="text-xs text-muted-foreground">{query.trim() ? `${rest.length} of ${repos.length - picked.length} match. ` : ''}{repos.length === 1 ? '1 repo' : `${repos.length} repos`}, checked for new ones {timeAgo(list.checkedAt)}.</p>}
     </div>
   );
 }

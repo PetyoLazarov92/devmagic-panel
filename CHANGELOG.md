@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.70.8 (2026-11-18)
+* **New site:** Which to scan opens a dialog instead of a box that pushed your repos down, and shows how many organizations and groups you scan. The dialog has one block per host (GitHub, gitlab.com, then your own GitLab hosts), each with its sign-in state, its organizations and groups with All and None, and, while it is not signed in, the command to run with a copy button. Your own account is marked as such, a filter shows once there are more than 10, and a GitLab host of your own is added with one field and removed from its block, in place of a text box and Save hosts
+* **New site:** a filter on your repos says how many match
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.7 (2026-11-17)
 * **New site:** in the code step, Which to scan and Check now are as tall as the organization field beside them, like every button next to a field. Which to scan keeps its name and turns its arrow while the list is open, instead of turning into a smaller Done
 * **New site:** with the GitHub CLI or the GitLab CLI signed in, the other one is an option, said quietly (Repos list from GitHub. Only if you use GitLab too: ...), never a warning. The warning stays while neither lists anything

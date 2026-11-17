@@ -1,15 +1,16 @@
 import type { AccessReport, ClaudeUsage, ClaudeRun, ClaudeStep, InstallDraft, OrgRepo, OrgStatus, Prefill, RepoFacts, UploadResult } from '@devmagic-panel/shared';
-import { accessKey, DEFAULT_CLAUDE_RUN, LINKS_EFFORT, gitlabHost, namespaceShortLabel, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, repoWeb } from '@devmagic-panel/shared';
-import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
+import { accessKey, DEFAULT_CLAUDE_RUN, LINKS_EFFORT, gitlabHost, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, repoWeb } from '@devmagic-panel/shared';
+import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, Copy, ExternalLink, Plus, RefreshCw, Search, Sparkles } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {} from '@/features/site/branch-picker';
 import { settled, useJob } from '@/features/jobs/job-steps';
 import { DumpFactsCard } from '@/features/new-site/dump-facts';
 import {} from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/icon-button';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Card } from '@/components/ui/card';
-import { Input, Textarea } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { KeyValue } from '@/components/ui/key-value';
 import { TextLink } from '@/components/ui/text-link';
 import {} from '@/components/ui/menu';
@@ -20,6 +21,7 @@ import { bytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import type { RepoProgress } from '@/lib/org-repos';
+import { scanHosts } from '@/lib/scan-hosts';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './wizard-shared';
 import { CheckAgain, Notice } from '@/components/layout/page';
@@ -156,16 +158,34 @@ export function RepoLink({ url, name }: { url: string | undefined; name: string 
   );
 }
 
+/** A command to run in a terminal, with a button that copies it. */
+function CommandLine({ command }: { command: string }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md border bg-muted/50 py-0.5 pr-0.5 pl-2">
+      <code className="font-mono text-xs break-all">{command}</code>
+      <IconButton
+        icon={Copy}
+        label={`Copy ${command}`}
+        size="xs"
+        className="size-6 px-0"
+        onClick={() => void navigator.clipboard?.writeText(command).then(() => toast({ tone: 'success', title: 'Copied' }))}
+      />
+    </span>
+  );
+}
+
 /**
- * Which of your organizations and groups the panel scans, from every CLI that
- * is signed in, and your own GitLab hosts; saved in the panel's settings.
+ * Which of your organizations and groups the panel scans, in a dialog: one
+ * block per host with its sign-in state and its choices, then a field to add
+ * one of your own GitLab hosts. Each change is saved at once.
  */
 export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => void }) {
   const orgs = useAsync(() => api.orgOrgs(), []);
   const [settings, setSettings] = useState(status.settings);
   const [saving, setSaving] = useState(false);
-  const [hostsText, setHostsText] = useState(status.settings.gitlabHosts.join('\n'));
-  const [hostsError, setHostsError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [newHost, setNewHost] = useState('');
+  const [hostError, setHostError] = useState<string | null>(null);
   async function save(next: typeof settings) {
     setSettings(next);
     setSaving(true);
@@ -178,45 +198,106 @@ export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?
     }
   }
   const selected = settings.selected;
-  const toggle = (ref: string, on: boolean) => save({ ...settings, selected: on ? [...selected, ref] : selected.filter((n) => n !== ref) });
-  async function saveHosts() {
-    const hosts = hostsText.split(/[\s,]+/).map((h) => h.trim().toLowerCase()).filter(Boolean);
-    const bad = hosts.find((h) => !gitlabHost.safeParse(h).success);
-    if (bad) return setHostsError(`${bad} is not a hostname like gitlab.wandworks.test`);
-    setHostsError(null);
-    await save({ ...settings, gitlabHosts: [...new Set(hosts)].filter((h) => h !== 'gitlab.com') });
+  const setRefs = (refs: readonly string[], on: boolean) => save({ ...settings, selected: on ? [...new Set([...selected, ...refs])] : selected.filter((n) => !refs.includes(n)) });
+  const recheck = () => {
     orgs.reload();
+    onRecheck?.();
+  };
+  async function addHost() {
+    const host = newHost.trim().toLowerCase();
+    if (!gitlabHost.safeParse(host).success) return setHostError(`${host || 'That'} is not a hostname like gitlab.wandworks.test`);
+    if (host === 'gitlab.com' || settings.gitlabHosts.includes(host)) return setHostError(`${host} is listed already`);
+    setHostError(null);
+    await save({ ...settings, gitlabHosts: [...settings.gitlabHosts, host] });
+    setNewHost('');
+    recheck();
   }
-  // One block per host, GitHub first, then gitlab.com and yours.
-  const byHost = new Map<string, Array<{ ref: string; label: string }>>();
-  for (const n of orgs.data?.namespaces ?? []) byHost.set(n.host, [...(byHost.get(n.host) ?? []), { ref: n.ref, label: namespaceShortLabel(n.ref) }]);
+  async function removeHost(host: string) {
+    await save({ ...settings, gitlabHosts: settings.gitlabHosts.filter((h) => h !== host), selected: selected.filter((ref) => parseNamespaceRef(ref)?.host !== host) });
+    recheck();
+  }
+
+  const hosts = scanHosts(status, orgs.data?.namespaces ?? [], selected, settings.gitlabHosts);
+  const total = hosts.reduce((n, h) => n + h.items.length, 0);
+  const q = query.trim().toLowerCase();
+  const anySignedIn = hosts.some((h) => h.signedIn);
   return (
-    <div className="grid gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
-      <div>
-        <p className="font-medium">Organizations and groups to scan {saving && <Spinner className="inline size-3.5" />}</p>
-        <p className="text-muted-foreground">The GitHub organizations and GitLab groups you belong to, your own accounts, and the repos shared with you: ones you were added to outside those. A GitLab group is scanned with its subgroups.</p>
-      </div>
-      <CliHints status={status} {...(onRecheck ? { onRecheck } : {})} />
+    <div className="grid gap-4 text-sm">
+      {total > 10 && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter organizations and groups" aria-label="Filter organizations and groups" className="pl-9" />
+        </div>
+      )}
       {orgs.error && <p role="alert" className="text-danger">{orgs.error}</p>}
       {orgs.data?.problems.map((p) => <p key={p} role="alert" className="text-warning">{p}</p>)}
-      {[...byHost].map(([host, list]) => (
-        <div key={host}>
-          <p className="text-xs font-medium text-muted-foreground">{host === 'github.com' ? 'GitHub' : host}</p>
-          <div className="mt-1 flex flex-wrap gap-x-5 gap-y-2">
-            {list.map((o) => <Checkbox key={o.ref} id={`org-${o.ref}`} checked={selected.includes(o.ref)} onChange={(v) => void toggle(o.ref, v)} label={o.label} />)}
-          </div>
-        </div>
-      ))}
+      {hosts.map((h) => {
+        const shown = q ? h.items.filter((i) => i.label.toLowerCase().includes(q) || i.ref.toLowerCase().includes(q)) : h.items;
+        const on = h.items.filter((i) => selected.includes(i.ref)).length;
+        if (q && shown.length === 0) return null;
+        return (
+          <section key={h.host} aria-label={h.name} className="grid gap-2.5 rounded-lg border bg-card px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h3 className="font-medium">{h.name}</h3>
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span aria-hidden className={cn('size-1.5 rounded-full', h.signedIn ? 'bg-success' : 'bg-muted-foreground/50')} />
+                {h.state}
+              </span>
+              <span className="flex-1" />
+              {h.items.length > 1 && (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {on} of {h.items.length}
+                  <Button variant="soft" size="xs" disabled={on === h.items.length} aria-label={`Scan every one on ${h.name}`} onClick={() => void setRefs(h.items.map((i) => i.ref), true)}>All</Button>
+                  <Button variant="soft" size="xs" disabled={on === 0} aria-label={`Scan none on ${h.name}`} onClick={() => void setRefs(h.items.map((i) => i.ref), false)}>None</Button>
+                </span>
+              )}
+              {h.own && <Button variant="soft" size="xs" disabled={saving} onClick={() => void removeHost(h.host)}>Remove</Button>}
+            </div>
+            {!h.signedIn && (
+              <div className="grid gap-2 text-xs text-muted-foreground">
+                {/* One CLI is enough: once another lists repos, this one is an option. */}
+                <p>{anySignedIn ? `Only if you use ${h.name}: run` : 'To list its repos, run'} {h.commands.length > 1 ? 'these' : 'this'} in a terminal, then check again.</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {h.commands.map((c) => <CommandLine key={c} command={c} />)}
+                  {onRecheck && <CheckAgain size="sm" onClick={recheck} />}
+                </div>
+              </div>
+            )}
+            {shown.length > 0 ? (
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                {shown.map((o) => <Checkbox key={o.ref} id={`org-${o.ref}`} checked={selected.includes(o.ref)} onChange={(v) => void setRefs([o.ref], v)} label={o.label} />)}
+              </div>
+            ) : h.signedIn && (
+              <p className="text-xs text-muted-foreground">{orgs.loading ? 'Reading its organizations...' : 'No organizations or groups here.'}</p>
+            )}
+          </section>
+        );
+      })}
       <Field
-        htmlFor="gitlab-hosts"
-        label="Your own GitLab hosts"
-        hint={hostsError ? <span className="text-danger">{hostsError}</span> : <>One per line, like gitlab.wandworks.test; gitlab.com is always listed. Sign in to each once with <code className="font-mono whitespace-nowrap">glab auth login --hostname gitlab.wandworks.test</code>.</>}
+        htmlFor="gitlab-host-add"
+        label="Add a GitLab host"
+        hint={hostError ? <span className="text-danger">{hostError}</span> : 'A GitLab server of your own, like gitlab.wandworks.test; gitlab.com is always listed.'}
       >
-        <div className="flex max-w-md items-start gap-2">
-          <Textarea id="gitlab-hosts" value={hostsText} onChange={(e) => setHostsText(e.target.value)} rows={2} spellCheck={false} placeholder="gitlab.wandworks.test" className="min-h-16 flex-1 font-mono text-dense" />
-          <Button variant="outline" size="sm" disabled={saving || hostsText.trim() === settings.gitlabHosts.join('\n')} onClick={() => void saveHosts()}>Save hosts</Button>
+        <div className="flex gap-2">
+          <Input
+            id="gitlab-host-add"
+            value={newHost}
+            onChange={(e) => setNewHost(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void addHost()}
+            placeholder="gitlab.wandworks.test"
+            spellCheck={false}
+            className="font-mono text-dense"
+          />
+          <Button variant="outline" className="h-10" disabled={saving || newHost.trim() === ''} onClick={() => void addHost()}>
+            <Plus />
+            Add
+          </Button>
         </div>
       </Field>
+      {/* Always there, so saving never changes the dialog's height. */}
+      <p aria-live="polite" className="flex h-4 items-center gap-2 text-xs text-muted-foreground">
+        {saving ? <><Spinner className="size-3.5" />Saving...</> : 'Each change is saved at once.'}
+      </p>
     </div>
   );
 }
