@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.70.3 (2026-11-17)
+* **Windows:** a terminal the panel opens (Open terminal, a site's terminal, and the sign-ins and connections Machine checks run in one) now comes up in front of the browser. Windows kept it behind, as the panel starts it from the background, so only its taskbar button flashed. The panel starts Windows Terminal through a short PowerShell script that waits for its new window, restores it and brings it to the front; where PowerShell cannot, it starts as before
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.2 (2026-11-17)
 * **Windows:** the setup no longer gets stuck on a computer with virtualization off: its message came back each time you closed it, and only Task Manager ended the setup (the check ran on the first page, which the setup skips, so it kept clicking Next for you). The check now runs before the window opens, and closing it ends the setup with nothing changed
 * **Windows:** with virtualization off, the setup offers to turn WSL on (when it is off too) and restart Windows straight into its BIOS/UEFI setup, with one UAC prompt, so one restart does both; after you turn virtualization on and sign in again, the setup starts by itself and goes on. A computer that cannot restart into its firmware setup gets the steps and a normal restart instead

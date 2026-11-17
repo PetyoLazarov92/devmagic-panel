@@ -224,6 +224,76 @@ async function windowsCmd(exec: Executor, paths: WindowsPaths, words: readonly s
 
 const failed = (stderr: string): ExecResult => ({ code: 1, stdout: '', stderr });
 
+/** Windows PowerShell with a script of the panel's own, as -EncodedCommand (UTF-16, base64): no quoting for cmd or the interop to get wrong. */
+async function windowsPowerShell(exec: Executor, paths: WindowsPaths, script: string, timeoutMs = 30_000): Promise<ExecResult> {
+  const root = systemRoot(paths);
+  if (!root) throw new Error('no Windows drive with Windows on it is mounted in this distro');
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return exec(`${root}/${POWERSHELL}`, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { cwd: root, timeoutMs });
+}
+
+/**
+ * Starts Windows Terminal with these words and brings its new window to the
+ * front. The panel starts it from the background, and Windows keeps a window a
+ * background program opens behind the one you use (only its taskbar button
+ * flashes). The script waits for the new window (up to 8 s), restores it, and
+ * makes it the foreground window while attached to the input of the window in
+ * front, which Windows allows. It prints started once wt.exe is running, then
+ * front, behind or no window.
+ */
+export function terminalFrontScript(words: readonly string[]): string {
+  for (const word of words) if (!/^[A-Za-z0-9._/:+=-]{1,500}$/.test(word)) throw new Error(`not a word for Windows Terminal: ${word}`);
+  return `$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+namespace DevmagicPanel {
+  public static class Front {
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int c);
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr p);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool f);
+    public static List<IntPtr> Visible(string cls) {
+      var list = new List<IntPtr>();
+      EnumWindows((h, l) => { var sb = new StringBuilder(256); GetClassName(h, sb, 256); if (sb.ToString() == cls && IsWindowVisible(h)) list.Add(h); return true; }, IntPtr.Zero);
+      return list;
+    }
+    public static bool Bring(IntPtr h) {
+      ShowWindow(h, IsIconic(h) ? 9 : 5);
+      uint front = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero), me = GetCurrentThreadId();
+      bool attached = front != me && AttachThreadInput(me, front, true);
+      BringWindowToTop(h);
+      SetForegroundWindow(h);
+      if (attached) AttachThreadInput(me, front, false);
+      return GetForegroundWindow() == h;
+    }
+  }
+}
+'@
+$class = 'CASCADIA_HOSTING_WINDOW_CLASS'
+$before = [DevmagicPanel.Front]::Visible($class)
+Start-Process -FilePath 'wt.exe' -ArgumentList '${words.join(' ')}'
+'started'
+$new = $null
+for ($i = 0; $i -lt 80 -and -not $new; $i++) {
+  Start-Sleep -Milliseconds 100
+  $new = [DevmagicPanel.Front]::Visible($class) | Where-Object { $before -notcontains $_ } | Select-Object -First 1
+}
+if (-not $new) { 'no window' } elseif ([DevmagicPanel.Front]::Bring($new)) { 'front' } else { 'behind' }
+`;
+}
+
 /** Windows' %USERPROFILE% as this distro sees it (/mnt/c/Users/<you>), asked through cmd.exe; null when Windows cannot be asked. */
 export async function windowsProfile(exec: Executor, paths: WindowsPaths, wslpath = '/usr/bin/wslpath'): Promise<string | null> {
   try {
@@ -240,8 +310,8 @@ export async function windowsProfile(exec: Executor, paths: WindowsPaths, wslpat
 
 /**
  * A terminal in Windows at a folder of this distro: Windows Terminal in a new
- * window (wt.exe, the store app every Windows 11 has), else WSL's own console
- * window (Windows 10 without Windows Terminal).
+ * window in front (wt.exe, the store app every Windows 11 has), else WSL's own
+ * console window (Windows 10 without Windows Terminal).
  */
 export async function openWindowsTerminal(exec: Executor, paths: WindowsPaths, dir: string, command?: { argv: readonly string[]; said: string }): Promise<ExecResult> {
   if (!CMD_SAFE_PATH.test(dir)) return failed(`the panel does not open a terminal at ${dir}: open one yourself and cd there`);
@@ -251,9 +321,13 @@ export async function openWindowsTerminal(exec: Executor, paths: WindowsPaths, d
   // A program: wsl.exe --exec starts it without a shell; Windows Terminal keeps the tab open when it fails.
   if (command && !command.argv.every((word) => /^[A-Za-z0-9._/:+=-]{1,500}$/.test(word))) return failed(`the panel does not start ${command.said} from here: open a terminal and run it yourself`);
   const run = command ? ['--exec', ...command.argv] : [];
-  const r = wt
-    ? await windowsCmd(exec, paths, ['wt.exe', '-w', 'new', 'wsl.exe', '-d', distro, '--cd', dir, ...run])
-    : await windowsCmd(exec, paths, ['start', 'wsl.exe', '-d', distro, '--cd', dir, ...run]);
+  const words = ['-w', 'new', 'wsl.exe', '-d', distro, '--cd', dir, ...run];
+  let r: ExecResult;
+  if (wt) {
+    // Started and brought to the front; a PowerShell that cannot (locked down, say) leaves cmd.exe to start it, maybe behind.
+    const front = await windowsPowerShell(exec, paths, terminalFrontScript(words)).catch((error: Error) => failed(error.message));
+    r = /^started\r?$/m.test(front.stdout) ? { code: 0, stdout: '', stderr: '' } : await windowsCmd(exec, paths, ['wt.exe', ...words]);
+  } else r = await windowsCmd(exec, paths, ['start', 'wsl.exe', '-d', distro, '--cd', dir, ...run]);
   if (r.code !== 0) return failed(`${wt ? 'Windows Terminal' : 'wsl.exe'} did not start: ${(r.stderr || r.stdout).trim()}`);
   return { code: 0, stdout: `Opened ${wt ? 'Windows Terminal' : 'a WSL window'} in ${dir} (${distro})${command ? `, running ${command.said}: go on there` : ''}`, stderr: '' };
 }

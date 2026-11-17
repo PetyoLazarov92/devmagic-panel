@@ -112,7 +112,8 @@ the panel needs or recommends an install it did not offer when you hid it.
   `claude auth login`.
 
 **Open terminal**, next to Expand all, opens a terminal in your home folder:
-Windows Terminal in the distro under WSL, your desktop's terminal on Ubuntu. A
+Windows Terminal in the distro under WSL (in a new window, brought in front of
+the browser), your desktop's terminal on Ubuntu. A
 check whose fix needs one (Claude Code's sign-in) opens it with the command
 already started; the panel starts only commands from a fixed list, never one
 typed in.

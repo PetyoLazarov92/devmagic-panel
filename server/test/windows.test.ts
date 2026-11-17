@@ -296,18 +296,22 @@ describe('a terminal in Windows', () => {
   const DIR = '/var/www/local.shop.com';
   const WSLPATH = { stdout: '\\\\wsl.localhost\\devmagic-panel\\\n' };
   /** Windows' cmd.exe in the test tree, with where answering for the programs Windows has. */
-  const desktop = (has: string[], extra: Record<string, { code?: number; stdout?: string; stderr?: string }> = {}) => {
+  const desktop = (has: string[], extra: Record<string, { code?: number; stdout?: string; stderr?: string }> = {}, powershell: { code?: number; stdout?: string; stderr?: string } = { stdout: 'started\r\nfront\r\n' }) => {
     const s = setup();
     const cmd = `${join(s.root, 'Windows')}/System32/cmd.exe`;
     const fake = fakeExec({
       '/usr/bin/wslpath -w /': WSLPATH,
       ...Object.fromEntries(['wt.exe', 'code'].map((p) => [`${cmd} /d /c where ${p}`, has.includes(p) ? { stdout: `C:\\Users\\me\\${p}\r\n` } : { code: 1, stderr: 'INFO: Could not find files' }])),
       [cmd]: { stdout: '' },
+      [`${join(s.root, 'Windows')}/System32/WindowsPowerShell/v1.0/powershell.exe`]: powershell,
       ...extra,
     });
     return { ...s, cmd, fake, paths: s.ctx.windows! };
   };
   const cmdLines = (calls: Array<{ file: string; args: string[] }>) => calls.filter((c) => c.file.endsWith('cmd.exe')).map((c) => c.args.join(' '));
+  /** The scripts given to PowerShell, decoded. */
+  const scripts = (calls: Array<{ file: string; args: string[] }>) =>
+    calls.filter((c) => c.file.endsWith('powershell.exe')).map((c) => Buffer.from(c.args.at(-1) as string, 'base64').toString('utf16le'));
 
   it('reads the distro from wslpath, on current and older WSL', async () => {
     expect(await wslDistro(fakeExec({ '/usr/bin/wslpath -w /': WSLPATH }).exec)).toBe('devmagic-panel');
@@ -316,17 +320,33 @@ describe('a terminal in Windows', () => {
     expect(await wslDistro(fakeExec({ '/usr/bin/wslpath -w /': { code: 1, stderr: 'no' } }).exec)).toBeNull();
   });
 
-  it('opens Windows Terminal in a new window at the folder in this distro, from Windows\' own folder', async () => {
+  it('opens Windows Terminal in a new window at the folder in this distro, in front of the browser', async () => {
     const d = desktop(['wt.exe']);
     expect(await openWindowsTerminal(d.fake.exec, d.paths, DIR)).toMatchObject({ code: 0, stdout: `Opened Windows Terminal in ${DIR} (devmagic-panel)` });
-    expect(cmdLines(d.fake.calls)).toEqual(['/d /c where wt.exe', `/d /c wt.exe -w new wsl.exe -d devmagic-panel --cd ${DIR}`]);
+    expect(cmdLines(d.fake.calls)).toEqual(['/d /c where wt.exe']);
+    const [script] = scripts(d.fake.calls);
+    expect(script).toContain(`Start-Process -FilePath 'wt.exe' -ArgumentList '-w new wsl.exe -d devmagic-panel --cd ${DIR}'`);
+    // Its new window found by Windows Terminal's window class, restored and made the foreground window.
+    expect(script).toContain("'CASCADIA_HOSTING_WINDOW_CLASS'");
+    expect(script).toContain('SetForegroundWindow(h)');
+  });
+
+  it('still starts it with cmd.exe when PowerShell cannot, and never twice', async () => {
+    // A PowerShell that cannot (a locked-down one): cmd.exe starts it, as before.
+    const blocked = desktop(['wt.exe'], {}, { code: 1, stderr: 'Cannot add type. Compilation errors occurred.' });
+    expect((await openWindowsTerminal(blocked.fake.exec, blocked.paths, DIR)).code).toBe(0);
+    expect(cmdLines(blocked.fake.calls).at(-1)).toBe(`/d /c wt.exe -w new wsl.exe -d devmagic-panel --cd ${DIR}`);
+    // Started, but Windows kept it behind: it is open, so nothing starts it again.
+    const behind = desktop(['wt.exe'], {}, { stdout: 'started\r\nbehind\r\n' });
+    expect((await openWindowsTerminal(behind.fake.exec, behind.paths, DIR)).code).toBe(0);
+    expect(cmdLines(behind.fake.calls)).toEqual(['/d /c where wt.exe']);
   });
 
   it('starts a program in the new tab with wsl.exe --exec, no shell', async () => {
     const d = desktop(['wt.exe']);
     const command = { argv: ['/home/alex/.local/bin/claude', 'auth', 'login'], said: 'claude auth login' };
     expect(await openWindowsTerminal(d.fake.exec, d.paths, DIR, command)).toMatchObject({ code: 0, stdout: `Opened Windows Terminal in ${DIR} (devmagic-panel), running claude auth login: go on there` });
-    expect(cmdLines(d.fake.calls).at(-1)).toBe(`/d /c wt.exe -w new wsl.exe -d devmagic-panel --cd ${DIR} --exec /home/alex/.local/bin/claude auth login`);
+    expect(scripts(d.fake.calls).at(-1)).toContain(`-ArgumentList '-w new wsl.exe -d devmagic-panel --cd ${DIR} --exec /home/alex/.local/bin/claude auth login'`);
     const odd = { argv: ['/home/alex/my claude', '&calc'], said: 'it' };
     expect((await openWindowsTerminal(d.fake.exec, d.paths, DIR, odd)).code).toBe(1);
   });
