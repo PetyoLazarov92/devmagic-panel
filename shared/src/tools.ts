@@ -76,10 +76,11 @@ export const WP_CLI_RELEASE = {
  * What a terminal the panel opens may start, by name, never a command line
  * from input: each is a fixed program and its arguments on the server.
  */
-export const TERMINAL_RUNS = ['claude-login', 'glab-login', 'rclone-drive'] as const;
+export const TERMINAL_RUNS = ['claude-login', 'gh-login', 'glab-login', 'rclone-drive'] as const;
 export type TerminalRun = (typeof TERMINAL_RUNS)[number];
 export const TERMINAL_RUN_LABELS: Record<TerminalRun, string> = {
   'claude-login': 'claude auth login',
+  'gh-login': 'gh auth login',
   'glab-login': 'glab auth login',
   'rclone-drive': 'rclone config create (Google Drive, read only)',
 };

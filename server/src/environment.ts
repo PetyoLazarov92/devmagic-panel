@@ -500,6 +500,7 @@ const INSTALL_GH: CheckFix = {
   confirm: `Downloads gh ${TOOLS.gh.version} from GitHub, checks it against its SHA-256 and keeps it in the panel's folder, linked into ~/.local/bin: no root, no apt source. Undo on the job removes it.`,
 };
 const SIGN_IN_GITHUB: CheckFix = { action: 'github.signIn', input: {}, label: 'Sign in to GitHub' };
+const GH_LOGIN: CheckFix = { action: 'machine.openTerminal', input: { run: 'gh-login' }, label: 'Sign in in a terminal' };
 /** Claude Code signs in in a terminal: one opens where you sit, running claude auth login. */
 const CLAUDE_LOGIN: CheckFix = { action: 'machine.openTerminal', input: { run: 'claude-login' }, label: 'Sign in in a terminal' };
 const CLONE_HTTPS: CheckFix = {
@@ -537,7 +538,7 @@ async function organizationChecks(ctx: CheckContext): Promise<Check[]> {
       : !gh.installed
         ? info('access.githubCli', 'GitHub CLI', 'not installed: it lists the repos of your organizations, and GitHub repos clone through it without an SSH key', { optional: true, fixes: [INSTALL_GH] })
         : /not signed in/.test(gh.problem ?? '')
-          ? info('access.githubCli', 'GitHub CLI', 'not signed in: it lists the repos of your organizations', { optional: true, fixes: [SIGN_IN_GITHUB] })
+          ? info('access.githubCli', 'GitHub CLI', 'not signed in: it lists the repos of your organizations', { optional: true, fixes: [SIGN_IN_GITHUB, GH_LOGIN] })
           : warn('access.githubCli', 'GitHub CLI', `${gh.problem ?? 'not set up'}: it lists the repos of your organizations`, { optional: true }),
     ...gitlabCliChecks(glab),
     rclone.remote

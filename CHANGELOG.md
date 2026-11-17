@@ -3,6 +3,9 @@
 ### v1.70.8 (2026-11-18)
 * **New site:** Which to scan opens a dialog instead of a box that pushed your repos down, and shows how many organizations and groups you scan. The dialog has one block per host (GitHub, gitlab.com, then your own GitLab hosts), each with its sign-in state, its organizations and groups with All and None, and, while it is not signed in, the command to run with a copy button. Your own account is marked as such, a filter shows once there are more than 10, and a GitLab host of your own is added with one field and removed from its block, in place of a text box and Save hosts
 * **New site:** a filter on your repos says how many match
+* **New site:** a host of the dialog that is not signed in signs in from there, as on Machine checks: Sign in in a terminal (gh auth login or glab auth login runs in a terminal that opens where you sit, and coming back checks again), and for GitLab Sign in with a token, a personal access token with read_api. A CLI that is not installed links to Machine checks
+* **Machine checks:** the GitHub CLI also signs in in a terminal (gh auth login), beside Sign in to GitHub
+* **New site:** Check now says what it does when you point at it: it asks the host now for repos made or pushed since the last check, which the panel does on its own every hour, with the whole list every 7 days
 * Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
 
 ### v1.70.7 (2026-11-17)

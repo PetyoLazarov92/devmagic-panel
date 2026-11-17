@@ -224,7 +224,7 @@ describe('checkEnvironment', () => {
     expect(byId(report, 'access.github')).toMatchObject({ status: 'warn', label: 'GitHub access', fixes: [{ action: 'tools.install' }] });
     // gh not signed in: sign in.
     report = await check({ 'gh api user --jq .login': { code: 1, stderr: 'To get started with GitHub CLI, please run:  gh auth login\n' } });
-    expect(byId(report, 'access.githubCli')).toMatchObject({ status: 'info', detail: expect.stringContaining('not signed in'), fixes: [{ action: 'github.signIn' }] });
+    expect(byId(report, 'access.githubCli')).toMatchObject({ status: 'info', detail: expect.stringContaining('not signed in'), fixes: [{ action: 'github.signIn' }, { action: 'machine.openTerminal', input: { run: 'gh-login' } }] });
     expect(byId(report, 'access.github')?.fixes).toEqual([expect.objectContaining({ action: 'github.signIn' })]);
     // Signed in, SSH refused: clone through gh.
     report = await check({});

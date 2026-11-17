@@ -434,7 +434,7 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
         )}
         <span className="flex-1" />
         {signedIn && current && (
-          <Button variant="outline" className="h-10" disabled={scanning !== null} onClick={() => void scan(current, 'check')}>
+          <Button variant="outline" className="h-10" disabled={scanning !== null} title="Asks the host now for repos made or pushed since the last check. On its own the panel asks every hour, and reads the whole list again every 7 days." onClick={() => void scan(current, 'check')}>
             <RefreshCw className={cn(scanning && 'animate-spin')} />
             Check now
           </Button>

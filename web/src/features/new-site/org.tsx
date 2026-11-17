@@ -1,7 +1,7 @@
 import type { AccessReport, ClaudeUsage, ClaudeRun, ClaudeStep, InstallDraft, OrgRepo, OrgStatus, Prefill, RepoFacts, UploadResult } from '@devmagic-panel/shared';
 import { accessKey, DEFAULT_CLAUDE_RUN, LINKS_EFFORT, gitlabHost, parseNamespaceRef, prefillFromFacts, registerGitlabHosts, readKey, repoWeb } from '@devmagic-panel/shared';
-import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, Copy, ExternalLink, Plus, RefreshCw, Search, Sparkles } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { Check, CircleAlert, CircleCheck, CircleHelp, CircleX, Copy, ExternalLink, KeyRound, LogIn, Plus, RefreshCw, Search, Sparkles, SquareTerminal } from 'lucide-react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import {} from '@/features/site/branch-picker';
 import { settled, useJob } from '@/features/jobs/job-steps';
 import { DumpFactsCard } from '@/features/new-site/dump-facts';
@@ -11,6 +11,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { SecretInput } from '@/components/ui/secret-input';
 import { KeyValue } from '@/components/ui/key-value';
 import { TextLink } from '@/components/ui/text-link';
 import {} from '@/components/ui/menu';
@@ -21,7 +22,8 @@ import { bytes } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
 import type { RepoProgress } from '@/lib/org-repos';
-import { scanHosts } from '@/lib/scan-hosts';
+import { type ScanHost, scanHosts } from '@/lib/scan-hosts';
+import { runWithToast } from '@/lib/site-actions';
 import { cn } from '@/lib/utils';
 import type { WizardState } from './wizard-shared';
 import { CheckAgain, Notice } from '@/components/layout/page';
@@ -175,6 +177,61 @@ function CommandLine({ command }: { command: string }) {
 }
 
 /**
+ * A host whose CLI does not list repos yet: the ways to sign it in, as on
+ * Machine checks. A terminal that runs the sign-in (gh or glab asks its own
+ * questions there), a GitLab token entered here, or the commands to copy.
+ * A CLI that is not installed is installed from Machine checks.
+ */
+function HostSignIn({ host, anySignedIn, onTerminal, onSignedIn, onRecheck }: { host: ScanHost; anySignedIn: boolean; onTerminal: () => void; onSignedIn: () => void; onRecheck?: () => void }) {
+  const installed = host.commands.length === 1;
+  const [tokenOpen, setTokenOpen] = useState(false);
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function terminal() {
+    onTerminal();
+    await runWithToast('machine.openTerminal', host.provider === 'github' ? { run: 'gh-login' } : { run: 'glab-login', host: host.host }, `A terminal runs the sign-in to ${host.name}`);
+  }
+  async function signIn(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    const r = await runWithToast('gitlab.signIn', { host: host.host, token: token.trim() }, `Signed in to ${host.name}`);
+    setBusy(false);
+    if (!r?.ok) return;
+    setToken('');
+    setTokenOpen(false);
+    onSignedIn();
+  }
+  return (
+    <div className="grid gap-2 text-xs text-muted-foreground">
+      {/* One CLI is enough: once another lists repos, this one is an option. */}
+      <p>
+        {anySignedIn ? `Only if you use ${host.name}: ` : 'To list its repos, '}
+        {installed ? 'sign it in, or run this in a terminal and check again.' : <>install the {host.provider === 'github' ? 'GitHub' : 'GitLab'} CLI from <TextLink href="/aura/machine">Machine checks</TextLink>, or run these in a terminal and check again.</>}
+      </p>
+      {installed && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => void terminal()}><SquareTerminal />Sign in in a terminal</Button>
+          {host.provider === 'gitlab' && <Button variant="soft" size="sm" aria-expanded={tokenOpen} onClick={() => setTokenOpen((o) => !o)}><KeyRound />Sign in with a token</Button>}
+        </div>
+      )}
+      {tokenOpen && (
+        <form onSubmit={(e) => void signIn(e)} className="grid gap-1.5">
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1"><SecretInput value={token} onChange={(e) => setToken(e.target.value)} placeholder="glpat-..." aria-label={`Access token for ${host.name}`} className="font-mono text-dense" /></div>
+            <Button type="submit" className="h-10" disabled={busy || token.trim().length < 8}>{busy ? <Spinner className="size-4" /> : <LogIn />}Sign in</Button>
+          </div>
+          <p>A personal access token you make on {host.host} under Preferences, Access tokens, with read_api. glab keeps it; the panel never saves it.</p>
+        </form>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {host.commands.map((c) => <CommandLine key={c} command={c} />)}
+        {onRecheck && <CheckAgain size="sm" onClick={onRecheck} />}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Which of your organizations and groups the panel scans, in a dialog: one
  * block per host with its sign-in state and its choices, then a field to add
  * one of your own GitLab hosts. Each change is saved at once.
@@ -203,6 +260,21 @@ export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?
     orgs.reload();
     onRecheck?.();
   };
+  // A sign-in in a terminal this dialog opened: coming back to the panel checks again, for 15 minutes.
+  const terminalAt = useRef(0);
+  const recheckNow = useRef(recheck);
+  recheckNow.current = recheck;
+  useEffect(() => {
+    const back = () => {
+      if (document.visibilityState === 'visible' && Date.now() - terminalAt.current < 15 * 60_000) recheckNow.current();
+    };
+    window.addEventListener('focus', back);
+    document.addEventListener('visibilitychange', back);
+    return () => {
+      window.removeEventListener('focus', back);
+      document.removeEventListener('visibilitychange', back);
+    };
+  }, []);
   async function addHost() {
     const host = newHost.trim().toLowerCase();
     if (!gitlabHost.safeParse(host).success) return setHostError(`${host || 'That'} is not a hostname like gitlab.wandworks.test`);
@@ -253,16 +325,7 @@ export function OrgPicker({ status, onRecheck }: { status: OrgStatus; onRecheck?
               )}
               {h.own && <Button variant="soft" size="xs" disabled={saving} onClick={() => void removeHost(h.host)}>Remove</Button>}
             </div>
-            {!h.signedIn && (
-              <div className="grid gap-2 text-xs text-muted-foreground">
-                {/* One CLI is enough: once another lists repos, this one is an option. */}
-                <p>{anySignedIn ? `Only if you use ${h.name}: run` : 'To list its repos, run'} {h.commands.length > 1 ? 'these' : 'this'} in a terminal, then check again.</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {h.commands.map((c) => <CommandLine key={c} command={c} />)}
-                  {onRecheck && <CheckAgain size="sm" onClick={recheck} />}
-                </div>
-              </div>
-            )}
+            {!h.signedIn && <HostSignIn host={h} anySignedIn={anySignedIn} onTerminal={() => (terminalAt.current = Date.now())} onSignedIn={recheck} {...(onRecheck ? { onRecheck: recheck } : {})} />}
             {shown.length > 0 ? (
               <div className="flex flex-wrap gap-x-5 gap-y-2">
                 {shown.map((o) => <Checkbox key={o.ref} id={`org-${o.ref}`} checked={selected.includes(o.ref)} onChange={(v) => void setRefs([o.ref], v)} label={o.label} />)}

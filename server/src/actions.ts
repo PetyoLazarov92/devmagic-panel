@@ -367,10 +367,12 @@ interface Activity {
  * What a terminal from the panel starts, by name: a fixed program with its
  * arguments, by its full path (wsl.exe --exec and a desktop terminal do not
  * read your login's PATH). The only input is a GitLab host, checked as one.
+ * gh-login is gh's own questions in the terminal, for whoever would rather
+ * sign in there than through the panel's device sign-in.
  */
 async function terminalRun(ctx: ActionContext, run: TerminalRun, host?: string): Promise<TerminalCommand> {
   const places = { dataDir: dirname(ctx.uploadsDir), home: ctx.home };
-  const program = (id: 'glab' | 'rclone', name: string) => {
+  const program = (id: 'gh' | 'glab' | 'rclone', name: string) => {
     const own = resolveTool(places, id);
     const bin = own !== id ? own : otherCopy(places, id);
     if (!bin) throw new ActionInputError(`${name} is not installed: install it from Machine checks first`);
@@ -381,6 +383,7 @@ async function terminalRun(ctx: ActionContext, run: TerminalRun, host?: string):
     if (!claude) throw new ActionInputError('Claude Code is not installed: install it from Machine checks first');
     return { argv: [claude, 'auth', 'login'], said: TERMINAL_RUN_LABELS[run] };
   }
+  if (run === 'gh-login') return { argv: [program('gh', 'The GitHub CLI'), 'auth', 'login', '--hostname', 'github.com'], said: TERMINAL_RUN_LABELS[run] };
   if (run === 'glab-login') {
     const on = host ?? 'gitlab.com';
     return { argv: [program('glab', 'The GitLab CLI'), 'auth', 'login', '--hostname', on], said: `glab auth login for ${on}` };

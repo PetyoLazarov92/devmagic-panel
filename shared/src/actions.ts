@@ -1236,7 +1236,7 @@ export const actions = {
   'machine.openTerminal': {
     title: 'Open a terminal on this machine',
     description:
-      "Opens a terminal in your home folder where you sit: Windows Terminal in this distro under WSL, the desktop's terminal on Ubuntu. With run, it starts one of a fixed list there, which you go on with in that window: claude-login (claude auth login), glab-login (glab auth login --hostname host, gitlab.com when no host), rclone-drive (rclone config create gdrive drive scope=drive.readonly, a Google Drive remote that only reads, for dumps). Nothing from input reaches a command line.",
+      "Opens a terminal in your home folder where you sit: Windows Terminal in this distro under WSL, the desktop's terminal on Ubuntu. With run, it starts one of a fixed list there, which you go on with in that window: claude-login (claude auth login), gh-login (gh auth login --hostname github.com), glab-login (glab auth login --hostname host, gitlab.com when no host), rclone-drive (rclone config create gdrive drive scope=drive.readonly, a Google Drive remote that only reads, for dumps). Nothing from input reaches a command line.",
     changesSystem: false,
     input: z.object({ run: z.enum(TERMINAL_RUNS).optional(), host: gitlabHost.optional() }),
   },
