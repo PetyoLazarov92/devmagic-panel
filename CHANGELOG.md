@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.70.9 (2026-11-18)
+* **New site:** Check now says rightly when the panel asks for new repos on its own: when you open the list, once the last check is an hour old (the whole list after 7 days). 1.70.8 said every hour, as if it ran in the background; no scan runs in the background, and it is not one of the tasks on Sanctum
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.8 (2026-11-18)
 * **New site:** Which to scan opens a dialog instead of a box that pushed your repos down, and shows how many organizations and groups you scan. The dialog has one block per host (GitHub, gitlab.com, then your own GitLab hosts), each with its sign-in state, its organizations and groups with All and None, and, while it is not signed in, the command to run with a copy button. Your own account is marked as such, a filter shows once there are more than 10, and a GitLab host of your own is added with one field and removed from its block, in place of a text box and Save hosts
 * **New site:** a filter on your repos says how many match
