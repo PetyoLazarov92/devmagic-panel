@@ -1,6 +1,6 @@
 import type { JobView } from '@devmagic-panel/shared';
 import { ArrowRight, CircleX, ExternalLink, LogIn, RotateCcw, SkipForward, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useId, useState } from 'react';
 import { settled, StepList, useFollowed } from '@/features/jobs/job-steps';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -13,6 +13,7 @@ import { lastLine, openWpAdmin } from '@/lib/site-actions';
 import { loadThroughRestart } from '@/lib/startup';
 import { cn } from '@/lib/utils';
 import { Notice } from '@/components/ui/notice';
+import { SecretInput } from '@/components/ui/secret-input';
 import { TextLink } from '@/components/ui/text-link';
 import { Bar, ListSkeleton, Reading } from '@/components/layout/skeletons';
 
@@ -29,6 +30,9 @@ export function JobScreen({ jobId, wordpress, wide = false }: { jobId: string; w
   const [job, setJob] = useState<JobView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // A job that let go of your password when it failed: Retry takes it again, from here, for that retry only.
+  const [secret, setSecret] = useState('');
+  const secretId = useId();
   useFollowed(jobId);
 
   useEffect(() => {
@@ -54,6 +58,13 @@ export function JobScreen({ jobId, wordpress, wide = false }: { jobId: string; w
     expectRestart();
     return waitForRestart(api.health, () => window.location.assign('/update'));
   }, [updated]);
+
+  function retryWithSecret(event: FormEvent) {
+    event.preventDefault();
+    const given = secret;
+    setSecret('');
+    void act((id) => api.retryJob(id, given));
+  }
 
   async function act(fn: (id: string) => Promise<JobView>) {
     setError(null);
@@ -145,8 +156,19 @@ export function JobScreen({ jobId, wordpress, wide = false }: { jobId: string; w
               <span className="font-medium">The site works without this step.</span> Skip it and the install goes on; the site's page keeps what is left to do: {failed.skippable}
             </Notice>
           )}
+          {job.retryAsks && (
+            <form id={`${secretId}-form`} className="grid max-w-sm gap-1.5" onSubmit={retryWithSecret} autoComplete="off">
+              <label htmlFor={secretId} className="text-sm font-medium">Retry needs {job.retryAsks} again</label>
+              <SecretInput id={secretId} value={secret} onChange={(e) => setSecret(e.target.value)} />
+              <p className="text-xs text-muted-foreground">The job let go of it when the step failed, as the panel never keeps a password. It goes to sudo for this retry only.</p>
+            </form>
+          )}
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => void act(api.retryJob)}><RotateCcw />Retry from this step</Button>
+            {job.retryAsks ? (
+              <Button type="submit" form={`${secretId}-form`} disabled={!secret}><RotateCcw />Retry from this step</Button>
+            ) : (
+              <Button onClick={() => void act((id) => api.retryJob(id))}><RotateCcw />Retry from this step</Button>
+            )}
             {failed.skippable && <Button variant="outline" onClick={() => void act(api.skipJob)}><SkipForward />Skip and continue</Button>}
             {job.undoable.length > 0 && <Button variant="outline" onClick={() => void act(api.undoJob)}><Trash2 />Undo everything</Button>}
           </div>

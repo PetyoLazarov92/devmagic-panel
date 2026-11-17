@@ -7,25 +7,28 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/field';
 import { SecretInput } from '@/components/ui/secret-input';
 import { Spinner } from '@/components/ui/spinner';
+import { TextLink } from '@/components/ui/text-link';
 import { JobLine, settled, startedJobId, useJob } from '@/features/jobs/job-steps';
 import { api } from '@/lib/api';
-import { installRuns, missingInstalls, pickedAtFirst, showsInstallCard } from '@/lib/install-missing';
+import { installRuns, missingInstalls, pickedAtFirst, picksAfter, showsInstallCard, staysHidden } from '@/lib/install-missing';
 import { lastLine } from '@/lib/site-actions';
 import { cn } from '@/lib/utils';
 
 const HIDDEN_KEY = 'dmp.aura.installMissing';
 
-function readHidden(): boolean {
+/** The installs offered when you hid the card, kept in this browser; null while it shows. */
+function readHidden(): string[] | null {
   try {
-    return localStorage.getItem(HIDDEN_KEY) === 'hidden';
+    const kept: unknown = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? 'null');
+    return Array.isArray(kept) ? kept.filter((k): k is string => typeof k === 'string') : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-function writeHidden(hidden: boolean) {
+function writeHidden(keys: string[] | null) {
   try {
-    if (hidden) localStorage.setItem(HIDDEN_KEY, 'hidden');
+    if (keys) localStorage.setItem(HIDDEN_KEY, JSON.stringify(keys));
     else localStorage.removeItem(HIDDEN_KEY);
   } catch {
     // A browser without storage shows the card each time.
@@ -47,8 +50,11 @@ interface Ended {
  */
 export function InstallMissing({ report, locked, onBusy, onChanged }: { report: EnvironmentReport; locked: boolean; onBusy: (busy: boolean) => void; onChanged: () => void }) {
   const missing = useMemo(() => missingInstalls(report), [report]);
-  const [hidden, setHidden] = useState(readHidden);
+  const [hiddenFor, setHiddenFor] = useState(readHidden);
+  const hidden = staysHidden(missing, hiddenFor);
+  const hide = (keys: string[] | null) => (setHiddenFor(keys), writeHidden(keys));
   const [picked, setPicked] = useState<Set<string>>(() => pickedAtFirst(missing));
+  const seen = useRef(new Set(missing.map((m) => m.key)));
   const [secret, setSecret] = useState('');
   const [starting, setStarting] = useState(false);
   const [running, setRunning] = useState<string[]>([]);
@@ -56,9 +62,10 @@ export function InstallMissing({ report, locked, onBusy, onChanged }: { report: 
   const [error, setError] = useState<string | null>(null);
   const id = useId();
 
-  // A newer report: keep the picks that are still missing.
+  // A newer report (Check again, an install that ended): keep the picks still missing, tick a needed one that is new.
   useEffect(() => {
-    setPicked((now) => new Set(missing.filter((m) => now.has(m.key)).map((m) => m.key)));
+    setPicked((now) => picksAfter(missing, now, seen.current));
+    for (const m of missing) seen.current.add(m.key);
   }, [missing]);
 
   const busy = starting || running.length > 0;
@@ -86,7 +93,7 @@ export function InstallMissing({ report, locked, onBusy, onChanged }: { report: 
     return (
       <p className="mt-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         {missing.length === 1 ? '1 tool' : `${missing.length} tools`} can be installed from here.
-        <Button size="xs" variant="soft" onClick={() => (setHidden(false), writeHidden(false))}>
+        <Button size="xs" variant="soft" onClick={() => hide(null)}>
           Show
         </Button>
       </p>
@@ -131,7 +138,7 @@ export function InstallMissing({ report, locked, onBusy, onChanged }: { report: 
         title="Install what is missing"
         description="Ticked: what the panel needs or recommends. Nothing installs until you click Install."
         actions={
-          <Button size="sm" variant="soft" disabled={busy} onClick={() => (setHidden(true), writeHidden(true))}>
+          <Button size="sm" variant="soft" disabled={busy} onClick={() => hide(missing.map((m) => m.key))} title="Keeps the card to one line in this browser until the panel needs or recommends an install it did not offer now">
             Hide this
           </Button>
         }
@@ -184,6 +191,14 @@ export function InstallMissing({ report, locked, onBusy, onChanged }: { report: 
               {ended.map((e) => (
                 <li key={e.id} className={cn(e.ok ? 'text-success' : 'text-danger')}>
                   {e.title}: {e.ok ? e.line || 'done' : e.line || 'it failed'}
+                  {!e.ok && (
+                    <>
+                      {' '}
+                      <TextLink href={`/jobs/${encodeURIComponent(e.id)}`} className="text-xs">
+                        Retry on its page
+                      </TextLink>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

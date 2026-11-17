@@ -42,6 +42,53 @@ describe('Jobs', () => {
     expect(store.recent()[0]).toMatchObject({ exitCode: 0 });
   });
 
+  it('asks for a password again on Retry when the failed step let go of it, and never keeps it', async () => {
+    const store = new RunStore(':memory:');
+    const jobs = new Jobs(store);
+    const held: { value: string | undefined } = { value: 's3cret' };
+    const given: Array<string | undefined> = [];
+    let attempts = 0;
+    const steps: JobStep[] = [
+      {
+        id: 'apt',
+        label: 'apt-get install',
+        run: async () => {
+          given.push(held.value);
+          // As system.install does: a failed step lets go of the password.
+          if (++attempts === 1) return ((held.value = undefined), fail('dpkg was interrupted'));
+          held.value = undefined;
+          return ok();
+        },
+      },
+    ];
+    const started = jobs.start(steps, { runId: store.start('system.install', {}), title: 'Install nginx', secret: { held, label: 'your sudo password' } });
+    expect(started.retryAsks).toBe('your sudo password');
+    await settle(jobs, started.id);
+    expect(jobs.retryNeeds(started.id)).toBe('your sudo password');
+    // Without it, Retry does not start.
+    expect(jobs.retry(started.id)).toBeUndefined();
+    expect(jobs.get(started.id)?.status).toBe('failed');
+    expect(jobs.retry(started.id, 'typed-again')?.status).toBe('running');
+    const view = await settle(jobs, started.id);
+    expect(view.status).toBe('done');
+    expect(given).toEqual(['s3cret', 'typed-again']);
+    expect(held.value).toBeUndefined();
+    expect(jobs.retryNeeds(started.id)).toBeUndefined();
+    expect(JSON.stringify(view)).not.toContain('typed-again');
+  });
+
+  it('a job without a password retries as before, with nothing asked', async () => {
+    const store = new RunStore(':memory:');
+    const jobs = new Jobs(store);
+    let attempts = 0;
+    const started = jobs.start([{ id: 'a', label: 'A', run: async () => (++attempts === 1 ? fail() : ok()) }], { runId: store.start('x', {}), title: 'X' });
+    await settle(jobs, started.id);
+    expect(started.retryAsks).toBeUndefined();
+    expect(jobs.retryNeeds(started.id)).toBeUndefined();
+    jobs.retry(started.id);
+    expect((await settle(jobs, started.id)).status).toBe('done');
+  });
+
   it('undoes what the steps made, newest first, and keeps going past a failed undo', async () => {
     const store = new RunStore(':memory:');
     const jobs = new Jobs(store);

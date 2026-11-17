@@ -1,4 +1,5 @@
 import type { CheckFix, EnvironmentReport } from '@devmagic-panel/shared';
+import { TOOLS } from '@devmagic-panel/shared';
 
 /** The fixes that install something; the Install what is missing card gathers them. */
 const INSTALLS = new Set(['tools.install', 'php.package', 'system.install']);
@@ -27,13 +28,34 @@ export function missingInstalls(report: EnvironmentReport): MissingInstall[] {
     if (!fix) continue;
     const key = `${fix.action}:${JSON.stringify(fix.input)}`;
     const kind: InstallKind = check.optional ? 'optional' : check.recommended ? 'recommended' : 'required';
-    const label = fix.action === 'tools.install' ? 'GitHub CLI' : fix.action === 'php.package' ? `${check.label} for PHP ${String(fix.input.version)}` : check.label;
+    const label = fix.action === 'tools.install' ? toolName(fix.input.tool) : fix.action === 'php.package' ? `${check.label} for PHP ${String(fix.input.version)}` : check.label;
     const before = found.get(key);
     if (!before) found.set(key, { key, label, detail: check.detail, kind, fix });
     else if (RANK[kind] < RANK[before.kind]) found.set(key, { ...before, kind });
   }
   return [...found.values()].sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.label.localeCompare(b.label));
 }
+
+/** What a pinned tool is called (GitHub CLI, GitLab CLI, rclone), whichever check offers it. */
+function toolName(tool: unknown): string {
+  return typeof tool === 'string' && tool in TOOLS ? TOOLS[tool as keyof typeof TOOLS].name : String(tool);
+}
+
+/**
+ * The picks after a newer report: those still missing stay as you left them,
+ * and an install that was not offered before is ticked when the panel needs or
+ * recommends it, as on the first report.
+ */
+export function picksAfter(missing: readonly MissingInstall[], picked: ReadonlySet<string>, seen: ReadonlySet<string>): Set<string> {
+  return new Set(missing.filter((m) => picked.has(m.key) || (!seen.has(m.key) && m.kind !== 'optional')).map((m) => m.key));
+}
+
+/**
+ * Hide this hides the card for the installs offered then: once the panel needs
+ * or recommends one that was not among them, the card shows again.
+ */
+export const staysHidden = (missing: readonly MissingInstall[], hiddenFor: readonly string[] | null): boolean =>
+  hiddenFor !== null && missing.every((m) => m.kind === 'optional' || hiddenFor.includes(m.key));
 
 /** The card shows while two or more installs are offered, or any one the panel needs or recommends. */
 export const showsInstallCard = (missing: readonly MissingInstall[]): boolean => missing.length >= 2 || missing.some((m) => m.kind !== 'optional');

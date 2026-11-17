@@ -1,5 +1,14 @@
 # Changelog
 
+### v1.70.1 (2026-11-17)
+* **Aura:** Install what is missing names each tool: the GitLab CLI and rclone showed as GitHub CLI
+* **Aura:** a Google Drive sign-in for rclone that stopped before Google answered (its terminal closed) no longer counts as connected: rclone left the remote without a token, so dumps could not be listed. Machine checks say so and offer the sign-in again, under the same name; the Database step leaves that remote out. The panel reads this with rclone config redacted and never sees a token
+* **Aura:** optional parts that are not installed or signed in yet (nginx, Xdebug, phpMyAdmin, the GitHub and GitLab CLIs, Claude Code, rclone, the read-only MySQL account) show as info instead of a warning: they keep their install or sign-in, but no longer open their group or count as warnings. Problems with them (a GitLab host refusing SSH, a glab too old) are still warnings
+* **Aura:** the counts over Machine checks are filters (All, Failing, Warnings, Optional to set up, Passing): each keeps only the groups with such checks, opened, with only those checks in them, so optional parts spread over several groups show together
+* **Jobs:** Retry of an install with your sudo password (Install what is missing, Install with your password) asks for the password again on the job's page: the job lets go of it when a step fails, so Retry could not work before. It goes to sudo for that retry only and is never kept or logged; a failed install on the card links to its page
+* **Aura:** Check again ticks a needed install that is new on Install what is missing, and Hide this shows the card again once the panel needs or recommends an install it did not offer when you hid it
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.0 (2026-11-17)
 * **Windows:** one click updates both parts: when a release changes the Windows part too (the helper, the setup, its shortcuts), the Updates page says so and its Update runs that release's Windows setup, which installs the panel in the distro and the Windows part together (Windows may ask with UAC; the panel restarts for about a minute and the page reloads once it answers). A release that does not change the Windows part updates as before, and Apps and features follows by itself. Ubuntu is unchanged
 * **Updates:** a page you left open on another part of the panel during an update loads again by itself once the panel answers with the new version (when it comes back, when you sign in again, or when you return to the tab), instead of running the old page's code; on Ubuntu and Windows alike

@@ -69,6 +69,8 @@ const MIN_PHP = [8, 1] as const;
 type Check = Omit<CheckResult, 'group'>;
 const ok = (id: string, label: string, detail: string, extra: Partial<Check> = {}): Check => ({ id, label, status: 'ok', detail, ...extra });
 const warn = (id: string, label: string, detail: string, extra: Partial<Check> = {}): Check => ({ id, label, status: 'warn', detail, ...extra });
+/** An optional part that is not installed or signed in yet: no problem, so it neither counts as a warning nor opens its group. */
+const info = (id: string, label: string, detail: string, extra: Partial<Check> = {}): Check => ({ id, label, status: 'info', detail, optional: true, ...extra });
 const fail = (id: string, label: string, detail: string, extra: Partial<Check> = {}): Check => ({ id, label, status: 'fail', detail, ...extra });
 
 const firstLine = (text: string) => text.trim().split('\n')[0] ?? '';
@@ -126,7 +128,7 @@ async function nginxChecks(ctx: CheckContext): Promise<Check[]> {
   const { exec, config } = ctx;
   if (!nginxInstalled(config)) {
     return [
-      warn('nginx.installed', 'nginx', 'not installed: it can serve sites next to Apache, set up on Services, nginx once it is here', {
+      info('nginx.installed', 'nginx', 'not installed: it can serve sites next to Apache, set up on Services, nginx once it is here', {
         optional: true,
         fixes: installWithPassword('nginx', 'Installs nginx with apt; it stays off until you set it up next to Apache on Services, nginx.'),
       }),
@@ -138,7 +140,7 @@ async function nginxChecks(ctx: CheckContext): Promise<Check[]> {
     : ok('nginx.conflicts', 'nginx leaves Apache its ports', `no config made by hand listens on port 80 or 443 off ${config.NGINX_ADDRESS}`);
   if (!nginxSetUp(config)) {
     return [
-      warn('nginx.setUp', 'nginx next to Apache', `installed, not set up: open Services, nginx to run it on ${config.NGINX_ADDRESS} next to Apache`, { optional: true }),
+      info('nginx.setUp', 'nginx next to Apache', `installed, not set up: open Services, nginx to run it on ${config.NGINX_ADDRESS} next to Apache`, { optional: true }),
       ...(conflicts.length ? [conflictCheck] : []),
     ];
   }
@@ -243,7 +245,7 @@ async function readOnlyCheck(ctx: CheckContext): Promise<Check> {
   const label = 'Read-only MySQL account';
   const fixes: CheckFix[] = [{ action: 'mysql.makeReadOnlyAccount', input: {}, label: ctx.secrets?.mysqlReadOnly ? 'Make it again' : 'Make it' }];
   const account = ctx.secrets?.mysqlReadOnly;
-  if (!account) return warn('mysql.readonly', label, 'not made yet: the SQL runner on the Database tab needs it', { optional: true, fixes });
+  if (!account) return info('mysql.readonly', label, 'not made yet: the SQL runner on the Database tab needs it', { optional: true, fixes });
   const ping = await pingMysql(ctx.exec, account);
   return ping.code === 0
     ? ok('mysql.readonly', label, `${account.user}@${account.host} signs in, for the SQL runner`, { optional: true })
@@ -304,7 +306,7 @@ async function phpChecks(ctx: CheckContext): Promise<Check[]> {
   results.push(
     modules.has('xdebug')
       ? ok('php.xdebug', 'Xdebug', 'installed', { optional: true })
-      : warn('php.xdebug', 'Xdebug', 'not installed: step debugging and profiling need it', {
+      : info('php.xdebug', 'Xdebug', 'not installed: step debugging and profiling need it', {
           optional: true,
           fixes: install('xdebug', 'step debugging and profiling', ' Xdebug then runs in its default mode (develop) on every request, which makes PHP a little slower: pick its modes or turn it off on Services, PHP, Xdebug.'),
         }),
@@ -361,7 +363,7 @@ async function toolChecks(ctx: CheckContext): Promise<Check[]> {
   results.push(
     pma
       ? ok('tools.phpmyadmin', 'phpMyAdmin', `found at ${pma}`, { optional: true })
-      : warn('tools.phpmyadmin', 'phpMyAdmin', 'not installed: once it is, a site\'s Database tab opens its database and tables in it too', {
+      : info('tools.phpmyadmin', 'phpMyAdmin', 'not installed: once it is, a site\'s Database tab opens its database and tables in it too', {
           optional: true,
           fixes: installWithPassword('phpmyadmin', "Installs phpMyAdmin with apt, set up for Apache at /phpmyadmin, without a control database of its own (dpkg-reconfigure phpmyadmin adds one later); under PHP-FPM the panel gives it its pool."),
         }),
@@ -521,31 +523,31 @@ async function organizationChecks(ctx: CheckContext): Promise<Check[]> {
   const where = `Claude Code ${claude.version ?? ''} at ${claude.path ?? ''}`;
   return [
     !claude.found
-      ? warn('access.claudeCode', 'Claude Code', 'not found: installs from an organization read their repos with it (sign it in with claude auth login after)', {
+      ? info('access.claudeCode', 'Claude Code', 'not found: installs from an organization read their repos with it (sign it in with claude auth login after)', {
           optional: true,
           fixes: [{ action: 'claude.install', input: {}, label: 'Install Claude Code', confirm: "Installs the newest Claude Code as you, as Anthropic's installer does: the binary for this machine from downloads.claude.ai (about 370 MB), checked against the SHA-256 its manifest gives, then its own claude install (~/.local/bin/claude; it updates itself). Sign it in with claude auth login in a terminal after." }],
         })
       : !claude.signedIn
-        ? warn('access.claudeCode', 'Claude Code', `${where}, not signed in: sign it in with claude auth login`, { optional: true, fixes: [CLAUDE_LOGIN] })
+        ? info('access.claudeCode', 'Claude Code', `${where}, not signed in: sign it in with claude auth login`, { optional: true, fixes: [CLAUDE_LOGIN] })
         : !claude.claudeAi
-          ? warn('access.claudeCode', 'Claude Code', `${where}, signed in without claude.ai: it reads repos, but Asana and Google links need claude auth login with your claude.ai account`, { optional: true, fixes: [CLAUDE_LOGIN] })
+          ? info('access.claudeCode', 'Claude Code', `${where}, signed in without claude.ai: it reads repos, but Asana and Google links need claude auth login with your claude.ai account`, { optional: true, fixes: [CLAUDE_LOGIN] })
           : ok('access.claudeCode', 'Claude Code', `${where}, signed in with claude.ai; it reads repos and their Asana and Google links`, { optional: true }),
     gh.signedIn
       ? ok('access.githubCli', 'GitHub CLI', `signed in as ${gh.user}; it lists your organizations and their repos`, { optional: true })
       : !gh.installed
-        ? warn('access.githubCli', 'GitHub CLI', 'not installed: it lists the repos of your organizations, and GitHub repos clone through it without an SSH key', { optional: true, fixes: [INSTALL_GH] })
+        ? info('access.githubCli', 'GitHub CLI', 'not installed: it lists the repos of your organizations, and GitHub repos clone through it without an SSH key', { optional: true, fixes: [INSTALL_GH] })
         : /not signed in/.test(gh.problem ?? '')
-          ? warn('access.githubCli', 'GitHub CLI', 'not signed in: it lists the repos of your organizations', { optional: true, fixes: [SIGN_IN_GITHUB] })
+          ? info('access.githubCli', 'GitHub CLI', 'not signed in: it lists the repos of your organizations', { optional: true, fixes: [SIGN_IN_GITHUB] })
           : warn('access.githubCli', 'GitHub CLI', `${gh.problem ?? 'not set up'}: it lists the repos of your organizations`, { optional: true }),
     ...gitlabCliChecks(glab),
     rclone.remote
       ? ok('tools.rclone', 'rclone', `downloads database dumps from Google Drive through the ${rclone.remote} remote`, { optional: true })
       : rclone.installed
-        ? warn('tools.rclone', 'rclone', 'no Google Drive remote yet: dumps are downloaded in the browser until you connect one', {
+        ? info('tools.rclone', 'rclone', rclone.unsigned ? `the ${rclone.unsigned} remote never finished signing in to Google (the terminal closed first): connect it again` : 'no Google Drive remote yet: dumps are downloaded in the browser until you connect one', {
             optional: true,
             fixes: [{ action: 'machine.openTerminal', input: { run: 'rclone-drive' }, label: 'Connect Google Drive in a terminal', confirm: 'Opens a terminal running rclone config create gdrive drive scope=drive.readonly: rclone shows a Google sign-in link, you approve in your browser, and the remote can then only read your Drive, for dumps.' }],
           })
-        : warn('tools.rclone', 'rclone', 'not installed: dumps from Google Drive are downloaded in the browser instead', {
+        : info('tools.rclone', 'rclone', 'not installed: dumps from Google Drive are downloaded in the browser instead', {
             optional: true,
             fixes: [{ action: 'tools.install', input: { tool: 'rclone' }, label: 'Install rclone', confirm: `Downloads rclone ${TOOLS.rclone.version} from GitHub, checks it against its SHA-256 and keeps it in the panel's folder, linked into ~/.local/bin: no root, no apt source. Undo on the job removes it.` }],
           }),
@@ -557,7 +559,7 @@ function gitlabCliChecks(glab: NonNullable<Awaited<ReturnType<typeof glabOvervie
   const min = MIN_GLAB.join('.');
   if (!glab.installed) {
     return [
-      warn('access.gitlabCli', 'GitLab CLI', 'not installed: it lists the projects of your GitLab groups', {
+      info('access.gitlabCli', 'GitLab CLI', 'not installed: it lists the projects of your GitLab groups', {
         optional: true,
         fixes: [{ action: 'tools.install', input: { tool: 'glab' }, label: 'Install the GitLab CLI', confirm: `Downloads glab ${TOOLS.glab.version} from GitLab, checks it against its SHA-256 and keeps it in the panel's folder, linked into ~/.local/bin: no root, no apt source. Undo on the job removes it.` }],
       }),
@@ -570,7 +572,7 @@ function gitlabCliChecks(glab: NonNullable<Awaited<ReturnType<typeof glabOvervie
   return glab.hosts.map((h) =>
     h.signedIn
       ? ok(`access.gitlabCli.${h.host}`, `GitLab CLI on ${h.host}`, `${version}, signed in as ${h.user}; it lists your groups and their projects`, { optional: true })
-      : warn(`access.gitlabCli.${h.host}`, `GitLab CLI on ${h.host}`, `${version}, ${h.problem ?? 'not signed in'}: it lists the projects of your groups`, {
+      : (!h.problem || /^not signed in/.test(h.problem) ? info : warn)(`access.gitlabCli.${h.host}`, `GitLab CLI on ${h.host}`, `${version}, ${h.problem ?? 'not signed in'}: it lists the projects of your groups`, {
           optional: true,
           fixes: [
             { action: 'machine.openTerminal', input: { run: 'glab-login', host: h.host }, label: 'Sign in in a terminal' },

@@ -1,6 +1,6 @@
 import type { CheckFix, CheckResult, EnvironmentReport } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
-import { installRuns, missingInstalls, pickedAtFirst, showsInstallCard } from '../src/lib/install-missing.js';
+import { installRuns, missingInstalls, pickedAtFirst, picksAfter, showsInstallCard, staysHidden } from '../src/lib/install-missing.js';
 
 const report = (...checks: CheckResult[]): EnvironmentReport => ({ checkedAt: '2026-11-17T10:00:00Z', durationMs: 900, checks });
 const withPassword = (item: string): CheckFix => ({ action: 'system.install', input: { items: [item] }, label: 'Install with your password', needsPassword: true });
@@ -55,5 +55,34 @@ describe('Install what is missing', () => {
     expect(showsInstallCard(one(false))).toBe(true);
     expect(showsInstallCard(missingInstalls(FRESH))).toBe(true);
     expect(showsInstallCard([])).toBe(false);
+  });
+});
+
+describe('Install what is missing, after the first report', () => {
+  const tool = (id: string, tool: string, optional = true): CheckResult => ({ id, group: 'access', status: optional ? 'info' : 'warn', label: id, detail: 'not installed', optional, fixes: [{ action: 'tools.install', input: { tool }, label: 'Install' }] });
+
+  it('names each pinned tool by itself, whichever check offers it', () => {
+    const missing = missingInstalls(report(tool('access.githubCli', 'gh'), tool('access.gitlabCli', 'glab'), tool('tools.rclone', 'rclone')));
+    expect(missing.map((m) => m.label)).toEqual(['GitHub CLI', 'GitLab CLI', 'rclone']);
+  });
+
+  it('keeps your picks on Check again, and ticks a needed install that is new', () => {
+    const first = missingInstalls(FRESH);
+    const seen = new Set(first.map((m) => m.key));
+    // You untick Composer; a later check finds a needed install that was not offered before.
+    const picked = new Set([...pickedAtFirst(first)].filter((k) => !k.includes('composer')));
+    const later = missingInstalls({ ...FRESH, checks: [...FRESH.checks, tool('tools.rclone', 'rclone', false)] });
+    const after = picksAfter(later, picked, seen);
+    expect(later.filter((m) => after.has(m.key)).map((m) => m.label)).toEqual(['GitHub CLI', 'rclone', 'WP-CLI', 'Imagick for PHP 8.3']);
+  });
+
+  it('Hide this lasts until the panel needs an install it did not offer then', () => {
+    const missing = missingInstalls(FRESH);
+    const keys = missing.map((m) => m.key);
+    expect(staysHidden(missing, null)).toBe(false);
+    expect(staysHidden(missing, keys)).toBe(true);
+    // A new optional one keeps it hidden; a new needed one shows it again.
+    expect(staysHidden(missingInstalls({ ...FRESH, checks: [...FRESH.checks, tool('tools.rclone', 'rclone')] }), keys)).toBe(true);
+    expect(staysHidden(missingInstalls({ ...FRESH, checks: [...FRESH.checks, tool('tools.rclone', 'rclone', false)] }), keys)).toBe(false);
   });
 });

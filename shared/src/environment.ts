@@ -1,6 +1,8 @@
 import type { ActionId } from './actions.js';
 
 export type CheckStatus = 'ok' | 'warn' | 'fail';
+/** A machine check's status; info: an optional part that is not set up, so nothing is wrong, it only offers itself. */
+export type MachineCheckStatus = CheckStatus | 'info';
 
 export type CheckGroup = 'panel' | 'wsl' | 'apache' | 'nginx' | 'database' | 'php' | 'tools' | 'certificates' | 'hosts' | 'access';
 
@@ -20,7 +22,7 @@ export interface CheckResult {
   id: string;
   group: CheckGroup;
   label: string;
-  status: CheckStatus;
+  status: MachineCheckStatus;
   detail: string;
   /** True for components the panel works without (Xdebug, phpMyAdmin). */
   optional?: boolean;

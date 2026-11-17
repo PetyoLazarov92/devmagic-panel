@@ -76,13 +76,22 @@ entries, MySQL (with the read-only account the SQL runner uses, and whether
 its memory for InnoDB data fits the sites: a buffer pool far smaller than
 them gets a fix that sets it, as the MySQL page's Settings do), PHP, tools and
 access. Each check is marked required, recommended or optional, most have a
-one-click fix, and groups that all pass start closed.
+one-click fix, and groups that all pass start closed. An optional part that is
+not installed or signed in yet (nginx, Xdebug, phpMyAdmin, the GitHub and
+GitLab CLIs, Claude Code, rclone) shows as info, not as a warning: it offers its
+install or sign-in, but its group stays closed and the page counts it apart
+("optional to set up"). The counts over the groups are filters: All, Failing,
+Warnings, Optional to set up and Passing each keep only the groups that have
+such checks, opened, with only those checks in them (a link can pick one with
+`?show=fail`, `warn`, `info` or `ok`).
 
 What is missing installs from there, one by one or together: **Install what
 is missing**, at the top while tools are missing, lists every install below,
 the ones the panel needs or recommends ticked, and installs the ticked ones on
 one click (those that need your sudo password in one install, so it is asked
-once). **Hide this** keeps it to one line until you show it again.
+once). Check again keeps your ticks and ticks a needed install that is new.
+**Hide this** keeps it to one line in this browser, until you show it again or
+the panel needs or recommends an install it did not offer when you hid it.
 
 - **Imagick and Xdebug**: Install for PHP <version>, the command line's PHP,
   with Undo (Services, PHP for the other versions). No password.
@@ -113,7 +122,9 @@ typed in.
   release, checked against its SHA-256, as `/usr/local/bin/wp`. The password
   goes to sudo's stdin once for that install, is never saved, and run history
   shows it as (hidden); sudo keeps no cached sign-in from it. Under Windows it
-  is the Linux password you chose in the setup. A job follows the install;
+  is the Linux password you chose in the setup. A job follows the install; when
+  a step fails (a wrong password, apt interrupted) the job lets go of the
+  password at once, so its Retry, on the job's page, asks for it again;
   removing a package stays with apt. phpMyAdmin is set up for Apache at
   `/phpmyadmin` without a control database of its own (`sudo dpkg-reconfigure
   phpmyadmin` adds one), and when sites run through PHP-FPM the panel gives it

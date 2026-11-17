@@ -202,7 +202,7 @@ describe('the read-only account', () => {
     const base = healthyResponses();
     const run = (secrets: Secrets) => checkEnvironment({ config: tree.config, exec: fakeExec({ ...base, 'mysql --user': (c) => (c.env?.MYSQL_PWD === 'stale' ? { code: 1, stderr: "ERROR 1045 (28000): Access denied for user 'devmagic_panel_ro'@'localhost'" } : { stdout: '1\n' }) }).exec, secrets, paths: tree.hostPaths, dmpRoot: '/x' });
     const find = async (secrets: Secrets) => (await run(secrets)).checks.find((c) => c.id === 'mysql.readonly');
-    expect(await find({ panelPasswordHash: 'x', mysql: admin })).toMatchObject({ status: 'warn', optional: true, fixes: [{ action: 'mysql.makeReadOnlyAccount', label: 'Make it' }] });
+    expect(await find({ panelPasswordHash: 'x', mysql: admin })).toMatchObject({ status: 'info', optional: true, fixes: [{ action: 'mysql.makeReadOnlyAccount', label: 'Make it' }] });
     expect(await find({ panelPasswordHash: 'x', mysql: admin, mysqlReadOnly: readOnly })).toMatchObject({ status: 'ok' });
     expect(await find({ panelPasswordHash: 'x', mysql: admin, mysqlReadOnly: { ...readOnly, password: 'stale' } })).toMatchObject({ status: 'warn', fixes: [{ label: 'Make it again' }] });
   });

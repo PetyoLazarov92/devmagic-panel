@@ -2614,8 +2614,9 @@ export const mockApi: Api = {
     m.read = true;
     return { id: m.id, from: m.from, to: m.to, subject: m.subject, date: m.date, text: m.text, html: m.html };
   },
-  retryJob: async (id) => {
+  retryJob: async (id, password) => {
     const job = mockJobs.get(id) as JobView;
+    if (job.retryAsks && !password) throw new Error(`Retry needs ${job.retryAsks} again: the job let go of it when the step failed`);
     delete job.stopping;
     const failed = job.steps.find((s) => s.status === 'failed');
     if (failed) {

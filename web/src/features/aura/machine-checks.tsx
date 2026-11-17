@@ -4,13 +4,15 @@ import { lastLine } from '@/lib/site-actions';
 import { GithubKeys } from './github-keys';
 import { InstallMissing } from './install-missing';
 import { CHECK_GROUP_LABELS } from '@devmagic-panel/shared';
-import { ChevronRight, CircleAlert, CircleCheck, CircleX, KeyRound, SquareTerminal, Wrench } from 'lucide-react';
+import { ChevronRight, CircleAlert, CircleCheck, CircleX, Info, KeyRound, SquareTerminal, Wrench } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api';
-import { groupsOf, openAfterCheck } from '@/lib/environment';
+import { type CheckShow, openAfterCheck, parseShow, showOptions, shownGroups } from '@/lib/environment';
+import { FilterChips } from '@/components/ui/filter-chips';
+import { useQueryParam } from '@/lib/router';
 import { cn } from '@/lib/utils';
 import { CheckAgain, Notice } from '@/components/layout/page';
 import { CardsSkeleton } from '@/components/layout/skeletons';
@@ -21,6 +23,7 @@ import { TextLink } from '@/components/ui/text-link';
 
 const statusIcon = {
   ok: <CircleCheck className="size-4.5 text-success" aria-label="OK" />,
+  info: <Info className="size-4.5 text-muted-foreground" aria-label="Optional, not set up" />,
   warn: <CircleAlert className="size-4.5 text-warning" aria-label="Warning" />,
   fail: <CircleX className="size-4.5 text-danger" aria-label="Failing" />,
 };
@@ -35,8 +38,10 @@ interface FixState {
 function summaryOf(checks: CheckResult[]): string {
   const warn = checks.filter((c) => c.status === 'warn').length;
   const fail = checks.filter((c) => c.status === 'fail').length;
-  if (!warn && !fail) return checks.length === 1 ? 'Passes' : `All ${checks.length} pass`;
-  return [fail ? `${fail} failing` : '', warn ? (warn === 1 ? '1 warning' : `${warn} warnings`) : ''].filter(Boolean).join(', ');
+  const info = checks.filter((c) => c.status === 'info').length;
+  if (!warn && !fail && !info) return checks.length === 1 ? 'Passes' : `All ${checks.length} pass`;
+  const passing = checks.length - warn - fail - info;
+  return [fail ? `${fail} failing` : '', warn ? (warn === 1 ? '1 warning' : `${warn} warnings`) : '', !warn && !fail && passing ? `${passing} pass` : '', info ? `${info} optional to set up` : ''].filter(Boolean).join(', ');
 }
 
 /**
@@ -47,6 +52,10 @@ export function MachineChecks() {
   const tab = 'checks' as const;
   const [report, setReport] = useState<EnvironmentReport | null>(null);
   const [open, setOpen] = useState<ReadonlySet<CheckGroup>>(new Set());
+  // A filter: only the checks of one status, in their groups, each of those groups open (?show=warn from a link).
+  const [show, setShow] = useState<CheckShow>(parseShow(useQueryParam('show')));
+  const showRef = useRef(show);
+  showRef.current = show;
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fix, setFix] = useState<FixState | null>(null);
@@ -70,7 +79,8 @@ export function MachineChecks() {
     try {
       const next = await api.environment();
       setReport(next);
-      setOpen((prev) => openAfterCheck(prev, next));
+      // A filter on (from the address, or picked before Check again) keeps its groups open too.
+      setOpen((prev) => new Set([...openAfterCheck(prev, next), ...(showRef.current === 'all' ? [] : shownGroups(next, showRef.current).map((g) => g.group))]));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -144,10 +154,16 @@ export function MachineChecks() {
     void runFix(key, f);
   }
 
-  const counts = { ok: 0, warn: 0, fail: 0 };
-  report?.checks.forEach((c) => counts[c.status]++);
-
-  const groups = report ? groupsOf(report) : [];
+  const options = report ? showOptions(report) : [];
+  // A filter that has nothing left after Check again (the warnings fixed, say) goes back to All.
+  const showing: CheckShow = options.some((o) => o.value === show) ? show : 'all';
+  const groups = report ? shownGroups(report, showing) : [];
+  function pickShow(next: CheckShow) {
+    setShow(next);
+    if (!report) return;
+    // A filter opens every group it shows; All goes back to opening only those with a problem.
+    setOpen(next === 'all' ? openAfterCheck(new Set(), report) : new Set(shownGroups(report, next).map((g) => g.group)));
+  }
   function toggle(group: CheckGroup) {
     setOpen((prev) => {
       const next = new Set(prev);
@@ -172,9 +188,7 @@ export function MachineChecks() {
         <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
           {report && (
             <>
-              <Badge tone="success">{counts.ok} passing</Badge>
-              {counts.warn > 0 && <Badge tone="warning">{counts.warn === 1 ? '1 warning' : `${counts.warn} warnings`}</Badge>}
-              {counts.fail > 0 && <Badge tone="danger">{counts.fail} failing</Badge>}
+              <FilterChips label="Show" value={showing} onChange={pickShow} options={options} />
               <span className="text-xs text-muted-foreground">
                 Checked {new Date(report.checkedAt).toLocaleTimeString()} in {(report.durationMs / 1000).toFixed(1)} s
               </span>
@@ -183,8 +197,8 @@ export function MachineChecks() {
           <div className="ml-auto flex flex-wrap gap-1">
             {report && (
               <>
-                <Button size="sm" variant="soft" disabled={open.size === groups.length} onClick={() => setOpen(new Set(groups.map((g) => g.group)))}>Expand all</Button>
-                <Button size="sm" variant="soft" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</Button>
+                <Button size="sm" variant="soft" disabled={groups.every((g) => open.has(g.group))} onClick={() => setOpen(new Set(groups.map((g) => g.group)))}>Expand all</Button>
+                <Button size="sm" variant="soft" disabled={!groups.some((g) => open.has(g.group))} onClick={() => setOpen(new Set())}>Collapse all</Button>
                 <Button size="sm" variant="soft" disabled={terminal?.busy} onClick={() => void openShell()} title="A terminal in your home folder: Windows Terminal in this distro under WSL, your desktop's terminal on Ubuntu">
                   {terminal?.busy ? <Spinner /> : <SquareTerminal />}
                   Open terminal

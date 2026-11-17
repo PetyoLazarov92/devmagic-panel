@@ -51,6 +51,16 @@ export interface JobOptions {
   upload?: string;
   /** Stop may end it between batches or steps, failed, so Retry carries on and Undo puts back what it did. */
   stoppable?: boolean;
+  /**
+   * A password the steps read from held and let go of when one fails: Retry
+   * takes it again (label says what it is) and hands it to the same holder.
+   */
+  secret?: JobSecret;
+}
+
+export interface JobSecret {
+  held: { value: string | undefined };
+  label: string;
 }
 
 export type { JobView };
@@ -65,6 +75,7 @@ interface Job {
   onFailed?: () => void;
   onUndone?: () => void;
   upload?: string;
+  secret?: JobSecret;
 }
 
 /** Something that holds a lock: a job, or an action that runs without one, like deleting a trash entry. */
@@ -100,7 +111,7 @@ export class Jobs {
   constructor(private readonly store: RunStore) {}
 
   start(steps: JobStep[], options: JobOptions): JobView {
-    const { runId, title, target, kind, limit, onDone, onFailed, onUndone, upload, stoppable } = options;
+    const { runId, title, target, kind, limit, onDone, onFailed, onUndone, upload, stoppable, secret } = options;
     const id = randomUUID();
     const busy = kind && limit ? [...this.jobs.values()].filter((j) => j.view.kind === kind && j.view.status === 'running').length : 0;
     const job: Job = {
@@ -117,6 +128,7 @@ export class Jobs {
         startedAt: new Date().toISOString(),
         runId,
         ...(stoppable ? { stoppable } : {}),
+        ...(secret ? { retryAsks: secret.label } : {}),
       },
       steps,
       undos: [],
@@ -126,6 +138,7 @@ export class Jobs {
       ...(onFailed ? { onFailed } : {}),
       ...(onUndone ? { onUndone } : {}),
       ...(upload ? { upload } : {}),
+      ...(secret ? { secret } : {}),
     };
     this.jobs.set(id, job);
     this.prune();
@@ -192,10 +205,20 @@ export class Jobs {
     return structuredClone(job.view);
   }
 
-  /** Runs a failed job again from its failed step. */
-  retry(id: string): JobView | undefined {
+  /** What a retry of this failed job must be given again (its password was let go of), if anything. */
+  retryNeeds(id: string): string | undefined {
+    const job = this.jobs.get(id);
+    return job?.view.status === 'failed' && job.secret && job.secret.held.value === undefined ? job.secret.label : undefined;
+  }
+
+  /** Runs a failed job again from its failed step; a job that let go of its password takes it again here. */
+  retry(id: string, secret?: string): JobView | undefined {
     const job = this.jobs.get(id);
     if (!job || job.view.status !== 'failed') return undefined;
+    if (job.secret && job.secret.held.value === undefined) {
+      if (!secret) return undefined;
+      job.secret.held.value = secret;
+    }
     const from = job.view.steps.findIndex((s) => s.status === 'failed');
     delete job.view.stopping;
     job.view.status = 'running';

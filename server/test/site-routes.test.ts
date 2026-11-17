@@ -412,4 +412,28 @@ describe('uploads', () => {
   it('answer 404 for unknown jobs', async () => {
     expect((await get('/api/jobs/nope')).statusCode).toBe(404);
   });
+
+  it('ask for the sudo password again on Retry of an install that let go of it, and never show it', async () => {
+    const post = (url: string, payload: Record<string, unknown>) => app.inject({ method: 'POST', url, headers: { host: HOST, origin: ORIGIN, cookie }, payload });
+    // sudo is not there in the test: the first step fails, and the job lets go of the password.
+    const started = await post('/api/actions/system.install', { items: ['git'], password: 'first-try' });
+    expect(started.statusCode).toBe(200);
+    const id = /started ([0-9a-f-]{36})/.exec(started.body)?.[1] as string;
+    let view = (await get(`/api/jobs/${id}`)).json();
+    for (let i = 0; i < 100 && view.status === 'running'; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+      view = (await get(`/api/jobs/${id}`)).json();
+    }
+    expect(view).toMatchObject({ status: 'failed', retryAsks: 'your sudo password' });
+    const bare = await post(`/api/jobs/${id}/retry`, {});
+    expect(bare.statusCode).toBe(400);
+    expect(bare.json().error).toBe('Retry needs your sudo password again: the job let go of it when the step failed');
+    const again = await post(`/api/jobs/${id}/retry`, { password: 'second-try' });
+    expect(again.statusCode).toBe(200);
+    expect(again.body).not.toContain('second-try');
+    const runs = await get('/api/runs');
+    expect(runs.statusCode).toBe(200);
+    expect(runs.body).toContain('system.install');
+    expect(runs.body).not.toMatch(/first-try|second-try/);
+  });
 });

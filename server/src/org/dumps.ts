@@ -24,11 +24,32 @@ export function useRcloneBinary(path: string | null): void {
   rcloneProgram = path ?? 'rclone';
 }
 
-export async function rcloneRemote(exec: Executor): Promise<{ installed: boolean; remote?: string }> {
+export async function rcloneRemote(exec: Executor): Promise<{ installed: boolean; remote?: string; unsigned?: string }> {
   const r = await exec(rcloneProgram, ['listremotes', '--long'], { timeoutMs: 15_000 });
   if (r.code === 127) return { installed: false };
-  const remote = r.code === 0 ? /^([A-Za-z0-9_. -]+?):\s+drive\s*$/m.exec(r.stdout)?.[1] : undefined;
-  return { installed: true, ...(remote ? { remote } : {}) };
+  const drives = r.code === 0 ? [...r.stdout.matchAll(/^([A-Za-z0-9_. -]+?):\s+drive\s*$/gm)].map((m) => m[1] as string) : [];
+  const unsigned = drives.length ? await unsignedDrives(exec) : new Set<string>();
+  const remote = drives.find((d) => !unsigned.has(d));
+  const left = drives.find((d) => unsigned.has(d));
+  return { installed: true, ...(remote ? { remote } : left ? { unsigned: left } : {}) };
+}
+
+/**
+ * Drive remotes without a token: a sign-in in a terminal that closed before
+ * Google answered leaves the remote with its type and scope only, which rclone
+ * still lists but cannot read. Read from rclone config redacted, which shows a
+ * token as XXX: the panel never sees one. Empty when rclone cannot say (older
+ * than 1.64).
+ */
+export async function unsignedDrives(exec: Executor): Promise<Set<string>> {
+  const r = await exec(rcloneProgram, ['config', 'redacted'], { timeoutMs: 15_000 });
+  if (r.code !== 0) return new Set();
+  const out = new Set<string>();
+  for (const section of r.stdout.split(/^(?=\[)/m)) {
+    const name = /^\[([^\]\n]+)\]/.exec(section)?.[1];
+    if (name && /^type = drive\s*$/m.test(section) && !/^token = \S/m.test(section)) out.add(name);
+  }
+  return out;
 }
 
 /** Your Downloads folder: the one your desktop names in user-dirs.dirs, else ~/Downloads. */
@@ -156,8 +177,10 @@ function folderBytes(dir: string): number {
 export async function rcloneRemotes(exec: Executor): Promise<{ installed: boolean; remotes: Array<{ name: string; type: string }> }> {
   const r = await exec(rcloneProgram, ['listremotes', '--long'], { timeoutMs: 15_000 });
   if (r.code === 127) return { installed: false, remotes: [] };
-  const remotes = r.code === 0 ? [...r.stdout.matchAll(/^([A-Za-z0-9_][A-Za-z0-9_. -]{0,63}?):\s+(\S+)\s*$/gm)].map((m) => ({ name: m[1] as string, type: m[2] as string })) : [];
-  return { installed: true, remotes };
+  const all = r.code === 0 ? [...r.stdout.matchAll(/^([A-Za-z0-9_][A-Za-z0-9_. -]{0,63}?):\s+(\S+)\s*$/gm)].map((m) => ({ name: m[1] as string, type: m[2] as string })) : [];
+  // A Drive remote that never signed in cannot list anything: left out, and its name is free for the next sign-in.
+  const unsigned = all.some((x) => x.type === 'drive') ? await unsignedDrives(exec) : new Set<string>();
+  return { installed: true, remotes: all.filter((x) => !unsigned.has(x.name)) };
 }
 
 /** A folder or a dump in a remote, as the Database step lists them. */

@@ -58,8 +58,13 @@ export function registerCreateRoutes(api: FastifyInstance, deps: CreateRouteDeps
 
   api.get<{ Params: { id: string } }>('/api/jobs/:id', async (request, reply) => deps.jobs.get(request.params.id) ?? reply.code(404).send({ error: 'unknown job' }));
 
-  api.post<{ Params: { id: string } }>('/api/jobs/:id/retry', async (request, reply) => {
-    const view = deps.jobs.retry(request.params.id);
+  api.post<{ Params: { id: string }; Body: { password?: unknown } | undefined }>('/api/jobs/:id/retry', async (request, reply) => {
+    // A job that let go of its password (sudo) takes it again for this retry only; it is never logged or kept.
+    const given = request.body?.password;
+    const password = typeof given === 'string' && given !== '' && given.length <= 4096 ? given : undefined;
+    const needs = deps.jobs.retryNeeds(request.params.id);
+    if (needs && !password) return reply.code(400).send({ error: `Retry needs ${needs} again: the job let go of it when the step failed` });
+    const view = deps.jobs.retry(request.params.id, password);
     if (!view) return reply.code(409).send({ error: 'only a failed job can be retried' });
     deps.onContinue?.();
     return view;

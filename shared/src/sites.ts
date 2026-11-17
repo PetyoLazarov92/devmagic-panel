@@ -933,6 +933,11 @@ export interface JobView {
   stoppable?: boolean;
   /** Stop was asked for and the job ends at its next safe point. */
   stopping?: boolean;
+  /**
+   * What Retry asks for again, like "your sudo password": the job let go of it
+   * when a step failed (the panel never keeps a password), so a retry needs it.
+   */
+  retryAsks?: string;
 }
 
 /** One thing install.sh put on the machine, from its root-owned list. */

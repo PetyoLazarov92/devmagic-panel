@@ -70,6 +70,28 @@ describe('installing with your sudo password', () => {
     expect(held.value).toBeUndefined();
   });
 
+  it('Retry takes the password again after a wrong one, and gives sudo only the new one', async () => {
+    const s = setup({ 'sudo -k -S -p  true': (call) => (call.input === 'right\n' ? { stdout: '' } : { code: 1, stderr: 'Sorry, try again.\n' }) });
+    const store = new RunStore(':memory:');
+    const jobs = new Jobs(store);
+    const held: HeldPassword = { value: 'wrong' };
+    const started = jobs.start(planSystemInstall(s.ctx, ['git'], held, PIN), { runId: store.start('system.install', {}), title: 'Install git', secret: { held, label: 'your sudo password' } });
+    const settle = async () => {
+      for (let i = 0; i < 300; i++) {
+        const v = jobs.get(started.id) as JobView;
+        if (v.status !== 'running') return v;
+        await new Promise((r) => setTimeout(r, 2));
+      }
+      throw new Error('job did not settle');
+    };
+    expect((await settle()).status).toBe('failed');
+    expect(jobs.retryNeeds(started.id)).toBe('your sudo password');
+    jobs.retry(started.id, 'right');
+    expect((await settle()).status).toBe('done');
+    expect(s.fake.calls.filter((c) => c.file === 'sudo').map((c) => c.input)).toEqual(['wrong\n', 'right\n', 'right\n']);
+    expect(held.value).toBeUndefined();
+  });
+
   it('reads the package lists once when apt cannot find a package, then installs', async () => {
     let installs = 0;
     const s = setup({

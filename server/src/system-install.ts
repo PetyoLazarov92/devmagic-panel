@@ -80,7 +80,7 @@ export function planSystemInstall(
   const held: HeldPassword = typeof password === 'string' ? { value: password } : password;
   const wanted = SYSTEM_INSTALLS.filter((i) => items.includes(i));
   const packages = wanted.filter((i): i is Exclude<SystemInstall, 'wp-cli'> => i !== 'wp-cli').map((i) => APT_PACKAGES[i]);
-  const gone = () => failed('the password was used and is gone: start the install again with it');
+  const gone = () => failed('the password was let go of when a step failed: Retry asks for it again');
   const steps: JobStep[] = [
     {
       id: 'password',

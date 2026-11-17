@@ -32,6 +32,9 @@ domains.
 - Passwords go to MySQL and WP-CLI through the environment or stdin, never the
   command line.
 - Run history keeps passwords, row values and SQL that writes as `(hidden)`.
+- A job given your sudo password holds it in memory only while it runs and
+  lets go of it when it ends or a step fails; Retry asks for it again rather
+  than keep it.
 - The browser and password managers are not offered the sudo password, the
   computer password for a reset, the API key or the passwords for sites and
   databases: those fields are text drawn as dots, with each manager's ignore

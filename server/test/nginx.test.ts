@@ -175,15 +175,15 @@ describe('nginx on the Services page and in the machine checks', () => {
     return report.checks.filter((c) => c.group === 'nginx');
   };
 
-  it('offers to install nginx, as an optional warning, while it is not installed', async () => {
+  it('offers to install nginx, as optional info, while it is not installed', async () => {
     expect(await nginxChecks(tempTree())).toMatchObject([
-      { id: 'nginx.installed', status: 'warn', optional: true, fixes: [{ action: 'system.install', input: { items: ['nginx'] }, needsPassword: true }] },
+      { id: 'nginx.installed', status: 'info', optional: true, fixes: [{ action: 'system.install', input: { items: ['nginx'] }, needsPassword: true }] },
     ]);
   });
 
-  it('suggests setting nginx up once it is installed, as an optional warning', async () => {
+  it('suggests setting nginx up once it is installed, as optional info', async () => {
     const checks = await nginxChecks(nginxTree());
-    expect(checks.map((c) => [c.id, c.status, c.optional])).toEqual([['nginx.setUp', 'warn', true]]);
+    expect(checks.map((c) => [c.id, c.status, c.optional])).toEqual([['nginx.setUp', 'info', true]]);
   });
 
   it('passes when each server listens on its own address only', async () => {

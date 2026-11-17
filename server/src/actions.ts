@@ -346,7 +346,7 @@ async function trustBrowsers(ctx: ActionContext): Promise<ExecResult[]> {
 export const MAX_PARALLEL_INSTALLS = 2;
 
 /** Starts a job; the job finishes the run history row itself. */
-function startJob(ctx: ActionContext, steps: JobStep[], title: string, target: string, extra: Pick<JobOptions, 'onDone' | 'onUndone' | 'upload' | 'stoppable'> = {}): HandlerOutcome {
+function startJob(ctx: ActionContext, steps: JobStep[], title: string, target: string, extra: Pick<JobOptions, 'onDone' | 'onUndone' | 'upload' | 'stoppable' | 'secret'> = {}): HandlerOutcome {
   const view = ctx.jobs.start(steps, { runId: ctx.runId as number, title, target, ...(ctx.actionId ? { kind: ctx.actionId } : {}), ...extra });
   return { results: [{ code: 0, stdout: `started ${view.id}`, stderr: '' }], data: { jobId: view.id }, detached: true };
 }
@@ -385,7 +385,7 @@ async function terminalRun(ctx: ActionContext, run: TerminalRun, host?: string):
     const on = host ?? 'gitlab.com';
     return { argv: [program('glab', 'The GitLab CLI'), 'auth', 'login', '--hostname', on], said: `glab auth login for ${on}` };
   }
-  // A Google Drive remote that only reads, under a name not taken yet: the panel finds any drive remote.
+  // A Google Drive remote that only reads, under a name not taken yet (one that never signed in is taken over): the panel finds any drive remote.
   const taken = new Set((await rcloneRemotes(ctx.exec)).remotes.map((r) => r.name));
   const name = ['gdrive', ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `gdrive${n}`)].find((n) => !taken.has(n)) ?? 'gdrive10';
   return { argv: [program('rclone', 'rclone'), 'config', 'create', name, 'drive', 'scope=drive.readonly'], said: `rclone config create ${name} drive (read only): sign in to Google in the browser it shows` };
@@ -743,8 +743,10 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
       `Install the ${TOOLS[tool].name}`,
       `tool:${tool}`,
     ),
-  'system.install': async (ctx, { items, password }) =>
-    startJob(
+  'system.install': async (ctx, { items, password }) => {
+    // Held by the job while it runs; a failed step lets go of it, and Retry asks for it again.
+    const held: HeldPassword = { value: password };
+    return startJob(
       ctx,
       planSystemInstall(
         {
@@ -754,11 +756,13 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
           ...phpMyAdminPool(ctx),
         },
         items,
-        password,
+        held,
       ),
       `Install ${items.map((i) => SYSTEM_INSTALL_LABELS[i]).join(', ')}`,
       'system-install',
-    ),
+      { secret: { held, label: 'your sudo password' } },
+    );
+  },
   'machine.openTerminal': async (ctx, { run, host }) => {
     const command = run ? await terminalRun(ctx, run, host) : undefined;
     const windows = await windowsDesktop(ctx);

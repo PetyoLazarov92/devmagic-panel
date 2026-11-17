@@ -323,7 +323,8 @@ export interface Api {
   mailMessage: (id: string) => Promise<MailMessage>;
   /** Queued, running and recent jobs. */
   jobs: () => Promise<JobView[]>;
-  retryJob: (id: string) => Promise<JobView>;
+  /** password: what the job asks again (JobView.retryAsks), for this retry only. */
+  retryJob: (id: string, password?: string) => Promise<JobView>;
   /** Asks a stoppable job to end at its next safe point. */
   stopJob: (id: string) => Promise<JobView>;
   skipJob: (id: string) => Promise<JobView>;
@@ -572,7 +573,7 @@ const realApi: Api = {
   mail: (site, start) => request('GET', `/api/mail?${new URLSearchParams({ ...(site ? { site } : {}), ...(start ? { start: String(start) } : {}) })}`),
   mailMessage: (id) => request('GET', `/api/mail/${encodeURIComponent(id)}`),
   mailUnread: () => request('GET', '/api/mail/unread'),
-  retryJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/retry`, {}),
+  retryJob: (id, password) => request('POST', `/api/jobs/${encodeURIComponent(id)}/retry`, password ? { password } : {}),
   stopJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/stop`, {}),
   skipJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/skip`, {}),
   undoJob: (id) => request('POST', `/api/jobs/${encodeURIComponent(id)}/undo`, {}),
