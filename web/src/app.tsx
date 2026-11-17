@@ -135,6 +135,11 @@ export function App() {
     };
   }, []);
 
+  // And on each page change: a page you went to while the panel restarted on a newer release loads again.
+  useEffect(() => {
+    void api.health().then(reloadIfNewPanel, () => undefined);
+  }, [path]);
+
   // A session that ended here, or came back in another tab: a check when the tab returns or the computer wakes, and what the other tabs say.
   useEffect(() => {
     const backElsewhere = () => !signedIn.current && window.location.reload();

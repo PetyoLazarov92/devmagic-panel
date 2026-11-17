@@ -9,7 +9,7 @@ import { SecretInput } from '@/components/ui/secret-input';
 import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
-import { waitForRestart } from '@/lib/restart';
+import { followRestart, stopFollowingRestart } from '@/lib/restart';
 import { expectRestart } from '@/lib/session-watch';
 import { lastLine } from '@/lib/site-actions';
 import { Spinner } from '@/components/ui/spinner';
@@ -79,14 +79,22 @@ export function InstallProgress({ jobId, release, onAgain }: { jobId: string; re
     return () => window.clearTimeout(timer);
   }, [job, jobId, restarting]);
 
+  // The wait for the new panel starts with the install, so it goes on when you leave this page: the page you are on loads again.
   const installing = job?.steps.find((s) => s.id === 'install')?.status === 'running';
+  const failed = job?.status === 'failed';
+  useEffect(() => {
+    if (!failed) followRestart(api.health, ['/update'], { maxMs: 15 * 60_000 });
+  }, [jobId, failed]);
+  useEffect(() => {
+    if (failed) stopFollowingRestart();
+  }, [failed]);
   useEffect(() => {
     if (installing) expectRestart();
   }, [installing]);
   useEffect(() => {
     if (!restarting) return;
     expectRestart();
-    return waitForRestart(api.health, () => window.location.assign('/update'), { maxMs: 5 * 60_000 });
+    followRestart(api.health, ['/update'], { maxMs: 5 * 60_000 });
   }, [restarting]);
 
   const failedStep = job?.steps.find((s) => s.status === 'failed');

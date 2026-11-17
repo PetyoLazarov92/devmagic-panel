@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { draftHref } from '@/lib/drafts';
 import { stepsSkipped } from '@/lib/jobs';
-import { waitForRestart } from '@/lib/restart';
+import { followRestart, stopFollowingRestart } from '@/lib/restart';
 import { navigate } from '@/lib/router';
 import { expectRestart } from '@/lib/session-watch';
 import { lastLine, openWpAdmin } from '@/lib/site-actions';
@@ -50,14 +50,19 @@ export function JobScreen({ jobId, wordpress, wide = false }: { jobId: string; w
     };
   }, [job, jobId]);
 
-  // A finished update or switch restarts the panel a few seconds later; once the new one answers, the Updates page shows its version.
-  // A download for a terminal install restarts nothing.
-  const updated = (job?.kind === 'panel.update' || job?.kind === 'panel.switchRelease') && job.status === 'done' && job.steps.some((s) => s.id === 'restart');
+  // An update or switch restarts the panel a few seconds after it is done; once the new one answers, this page goes to the Updates
+  // page to show its version, and any page you went to meanwhile loads again. A download for a terminal install restarts nothing.
+  const restarts = (job?.kind === 'panel.update' || job?.kind === 'panel.switchRelease') && job.steps.some((s) => s.id === 'restart');
+  const updated = restarts && job?.status === 'done';
+  const updateFailed = restarts && job?.status === 'failed';
   useEffect(() => {
-    if (!updated) return;
-    expectRestart();
-    return waitForRestart(api.health, () => window.location.assign('/update'));
-  }, [updated]);
+    if (!restarts || updateFailed) return;
+    if (updated) expectRestart();
+    followRestart(api.health, [`/jobs/${encodeURIComponent(jobId)}`, '/update'], { maxMs: updated ? 5 * 60_000 : 15 * 60_000 });
+  }, [restarts, updated, updateFailed, jobId]);
+  useEffect(() => {
+    if (updateFailed) stopFollowingRestart();
+  }, [updateFailed]);
 
   function retryWithSecret(event: FormEvent) {
     event.preventDefault();

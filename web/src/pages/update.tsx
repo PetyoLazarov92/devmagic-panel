@@ -18,7 +18,7 @@ import { InstallForm, InstallProgress, LastInstall } from '@/features/updates/up
 import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
 import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
-import { waitForRestart } from '@/lib/restart';
+import { followRestart } from '@/lib/restart';
 import { expectRestart } from '@/lib/session-watch';
 
 /** The installer's command, for a terminal instead of the password field: folded, as the way most people never need. */
@@ -105,7 +105,7 @@ export function UpdatePage() {
       }
       setViaWindows(tag);
       expectRestart();
-      waitForRestart(api.health, () => window.location.assign('/update'), { maxMs: 10 * 60_000 });
+      followRestart(api.health, ['/update'], { maxMs: 10 * 60_000 });
     } catch (err) {
       setStartError((err as Error).message);
       setStarting(false);

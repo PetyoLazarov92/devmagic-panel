@@ -224,7 +224,10 @@ and its storage in all. Under them, one list at a time:
 When the panel does not answer (it restarts after an update, or Apache
 reloads), the heart icon says **Reconnecting...** until it is back. A page
 that reads asks once more after a second; a change that lost its answer
-says it is not known whether it ran, and Activity shows what did.
+says it is not known whether it ran, and Activity shows what did. After an
+update or a switch you started, the page you are on loads again once the
+new release answers, whichever page you went to meanwhile; the Updates page
+and the update's job go to the Updates page to show how it ended.
 
 ## Activity
 

@@ -1,5 +1,9 @@
 # Changelog
 
+### v1.70.5 (2026-11-17)
+* **Updates:** the page you are on loads again once the panel answers on the new release, also when you left the Updates page or the update's job while it ran. The wait for the restart ended with the page that started it, so another page kept the old panel's code and the update badge until you reloaded it. Every page change also checks the panel's version, and loads the page again on a newer one
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.4 (2026-11-17)
 * **Modes:** the popup for a mode you unlocked closes only with Later, Switch, its × or Escape. It comes up a moment after a page change, often while you are still clicking, and a click outside it closed it at once and marked the unlock seen, so it never came back. Unlocked modes are on the Modes page either way
 * Nothing changes in the root scripts or the Windows part. An update installs this release from the panel

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { notePanelVersion, waitForRestart } from '../src/lib/restart.js';
+import { followRestart, notePanelVersion, stopFollowingRestart, waitForRestart } from '../src/lib/restart.js';
 import { expectRestart, isSessionLost, noteStatus } from '../src/lib/session-watch.js';
 
 /** A /healthz that gives these answers in turn, then the last one forever. */
@@ -62,6 +62,25 @@ describe('waiting for the panel to restart', () => {
   });
 });
 
+describe('following an update to its restart, whatever page you are on', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    stopFollowingRestart();
+    vi.useRealTimers();
+  });
+  const page = (at: string) => ({ path: () => at, go: vi.fn(), reload: vi.fn(), now: () => Date.now(), from: '1.0.0' });
+
+  it('loads the page you went to again once the new panel answers, and goes on after the page that started it is gone', async () => {
+    const on = page('/sites');
+    followRestart(answers('1.0.0', '1.0.0', null, '1.1.0'), ['/jobs/j1', '/update'], on);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(on.reload).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(on.reload).toHaveBeenCalledTimes(1);
+    expect(on.go).not.toHaveBeenCalled();
+  });
+});
+
 describe('a restart the page expects', () => {
   it('opens no login dialog on a 401 meanwhile', () => {
     expectRestart();
@@ -82,5 +101,46 @@ describe('a page left open during an update', () => {
     expect(reloadIfNewPanel('1.70.0', () => reloads++)).toBe(true);
     expect(reloadIfNewPanel('1.70.0', () => reloads++)).toBe(false);
     expect(reloads).toBe(1);
+  });
+});
+
+describe('the update pages, when the panel is back', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    stopFollowingRestart();
+    vi.useRealTimers();
+  });
+  const page = (at: string) => ({ path: () => at, go: vi.fn(), reload: vi.fn(), now: () => Date.now(), from: '1.0.0' });
+
+  it('go to the Updates page from the job page, where nothing loads the job again', async () => {
+    const job = page('/jobs/j1');
+    followRestart(answers('1.0.0', '1.1.0'), ['/jobs/j1', '/update'], job);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(job.go).toHaveBeenCalledWith('/update');
+    expect(job.reload).not.toHaveBeenCalled();
+  });
+
+  it('one wait at a time: a second call adds its pages and polls once a second, not twice', async () => {
+    const health = answers('1.0.0');
+    const on = page('/update');
+    followRestart(health, ['/jobs/j1'], on);
+    followRestart(health, ['/update'], { ...on, maxMs: 3000 });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(health).toHaveBeenCalledTimes(3);
+    // Timed out on a page that shows the update: it goes to the Updates page to show how it ended.
+    expect(on.go).toHaveBeenCalledWith('/update');
+  });
+
+  it('leaves another page alone after the longest wait, and stops when the update failed', async () => {
+    const elsewhere = page('/sites');
+    followRestart(answers('1.0.0'), ['/update'], { ...elsewhere, maxMs: 3000 });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(elsewhere.reload).not.toHaveBeenCalled();
+    expect(elsewhere.go).not.toHaveBeenCalled();
+    const failed = page('/sites');
+    followRestart(answers('1.0.0', '1.1.0'), ['/update'], failed);
+    stopFollowingRestart();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(failed.reload).not.toHaveBeenCalled();
   });
 });
