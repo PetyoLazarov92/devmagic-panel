@@ -1765,6 +1765,8 @@ export const mockApi: Api = {
       const own = mockSitePools[`${site.domain}${site.path ?? ''}`];
       if (site.core.kind !== 'none') site.php = own ? { version: own.version, own: true } : { version: mockPhpMode.fpm ?? '8.3', own: false };
     }
+    // ?sites=none in the address shows the page before the first site.
+    if (new URLSearchParams(window.location.search).get('sites') === 'none') return [];
     // A made-up day each, in a mixed order, so the sort has something to sort.
     return sites.map((site, i) => withBusy({ ...site, addedAt: site.addedAt ?? new Date(Date.UTC(2026, 6, 1 + ((i * 7) % 23) * 4)).toISOString() }));
   },
@@ -2322,7 +2324,8 @@ export const mockApi: Api = {
     const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
     const ahead = (ms: number) => new Date(Date.now() + ms).toISOString();
     return {
-      version: '1.44.1',
+      // The mockup's own version: another one reads as a panel updated meanwhile, and the page loads again.
+      version: CURRENT,
       startedAt: ago(2 * 60 * 60_000 + 14 * 60_000),
       before: { startedAt: ago(14 * 60 * 60_000), stoppedAt: ago(2 * 60 * 60_000 + 15 * 60_000), ended: 'stopped' },
       memoryBytes: 182 * 1024 * 1024,

@@ -74,6 +74,11 @@ export function applyOrgAnswers(state: WizardState, upload: UploadResult, cores:
   };
 }
 
+/**
+ * How to sign in the CLIs that list repos. A warning while neither lists
+ * anything; once one is signed in, the others are an option and say so
+ * quietly, for whoever uses only GitHub or only GitLab.
+ */
 export function CliHints({ status, onRecheck }: { status: OrgStatus; onRecheck?: () => void }) {
   const lines: Array<{ host: string; text: ReactNode }> = [];
   if (!status.gh.signedIn) {
@@ -96,6 +101,22 @@ export function CliHints({ status, onRecheck }: { status: OrgStatus; onRecheck?:
     }
   }
   if (lines.length === 0) return null;
+  // One CLI is enough: with GitHub signed in, GitLab is an option (and the other way round), so a fact, never a warning.
+  const connected = [...(status.gh.signedIn ? ['GitHub'] : []), ...status.glab.hosts.filter((h) => h.signedIn).map((h) => (h.host === 'gitlab.com' ? 'GitLab' : h.host))];
+  if (connected.length > 0) {
+    return (
+      <Notice tone="info" size="inline" action={onRecheck && <CheckAgain size="sm" onClick={onRecheck} />}>
+        <div className="grid gap-1.5">
+          <p>Repos list from {connected.join(' and ')}. Only if you use {lines.map((l) => l.host).join(' or ')} too:</p>
+          {lines.map((l) => (
+            <p key={l.host}>
+              <span className="font-medium text-foreground">{l.host}:</span> {l.text}
+            </p>
+          ))}
+        </div>
+      </Notice>
+    );
+  }
   return (
     <Notice tone="warning" size="inline" action={onRecheck && <CheckAgain size="sm" onClick={onRecheck} />}>
       <div className="grid gap-1.5">

@@ -1,6 +1,6 @@
 import type { ClaudeRun, OrgRepo, OrgRepoList, OrgScanMode, OrgStatus, RepoTrustAnswer, Site, UseClaude } from '@devmagic-panel/shared';
 import { branchName, gitUrl, isShared, namespaceLabel, namespaceShortLabel, parseNamespaceRef, placementWarnings, REPO_KIND_LABELS, repoWeb, sameRepo } from '@devmagic-panel/shared';
-import { Check, CircleAlert, FolderGit2, FolderTree, Plus, RefreshCw, Search, ShieldAlert, Sparkles, Star, TriangleAlert, X } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, FolderGit2, FolderTree, Plus, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Sparkles, Star, TriangleAlert, X } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BranchPicker } from '@/features/site/branch-picker';
 import { CLAUDE_EFFORT_LABELS, CLAUDE_MODEL_LABELS, ClaudeRunFields } from '@/features/assistant/claude-run-fields';
@@ -423,16 +423,23 @@ function RepoList({ state, status, onRecheck, onPick, onUnpick }: { state: Wizar
             {selected.map((o) => <option key={o} value={o}>{namespaceLabel(o)}</option>)}
           </Select>
         </Field>
-        {anySignedIn && <Button variant="soft" size="sm" onClick={() => setEditing((v) => !v)}>{editing ? 'Done' : 'Which to scan'}</Button>}
+        {/* Beside a field, a button takes its height (h-10); the toggle keeps its name, so the row never shifts. */}
+        {anySignedIn && (
+          <Button variant="outline" className="h-10" aria-expanded={editing} aria-controls="code-scan-picker" onClick={() => setEditing((v) => !v)}>
+            <SlidersHorizontal />
+            Which to scan
+            <ChevronDown className={cn('text-muted-foreground transition-transform', editing && 'rotate-180')} />
+          </Button>
+        )}
         <span className="flex-1" />
         {signedIn && current && (
-          <Button variant="outline" size="sm" disabled={scanning !== null} onClick={() => void scan(current, 'check')}>
+          <Button variant="outline" className="h-10" disabled={scanning !== null} onClick={() => void scan(current, 'check')}>
             <RefreshCw className={cn(scanning && 'animate-spin')} />
             Check now
           </Button>
         )}
       </div>
-      {editing && <OrgPicker status={status} onRecheck={onRecheck} />}
+      {editing && <div id="code-scan-picker"><OrgPicker status={status} onRecheck={onRecheck} /></div>}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
