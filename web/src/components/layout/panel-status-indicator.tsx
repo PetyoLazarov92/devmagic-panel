@@ -11,6 +11,7 @@ import { timeAgo } from '@/lib/format';
 import { Link } from '@/lib/router';
 import { cn } from '@/lib/utils';
 import { useModeText } from '@/lib/modes';
+import { reloadIfNewPanel } from '@/lib/restart';
 
 /** How often the status is read while its card is open, and while the panel does not answer. */
 const OPEN_POLL_MS = 3000;
@@ -66,9 +67,11 @@ export function PanelStatusIndicator() {
         // Only the health check while the panel is away: it answers without a session, and once it does the rest comes back.
         const version = await api.health();
         if (stop) return;
+        // Back as a newer version (an update): this page loads again rather than run old code.
+        if (reloadIfNewPanel(version)) return;
         if (version) noteReached(true);
       } else {
-        await api.panelStatus().then((s) => !stop && setStatus(s), () => undefined);
+        await api.panelStatus().then((s) => !stop && !reloadIfNewPanel(s.version) && setStatus(s), () => undefined);
         if (stop) return;
       }
       timer = window.setTimeout(() => void tick(), open || down ? OPEN_POLL_MS : QUIET_POLL_MS);

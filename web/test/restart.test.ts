@@ -69,3 +69,18 @@ describe('a restart the page expects', () => {
     expect(isSessionLost()).toBe(false);
   });
 });
+
+describe('a page left open during an update', () => {
+  it('loads again, once, when the panel answers with a new version, and never for the same one or no answer', async () => {
+    const { isNewPanel, notePanelVersion, reloadIfNewPanel } = await import('../src/lib/restart.js');
+    notePanelVersion('1.69.0');
+    expect(isNewPanel('1.69.0')).toBe(false);
+    expect(isNewPanel(null)).toBe(false);
+    expect(isNewPanel('1.70.0')).toBe(true);
+    let reloads = 0;
+    expect(reloadIfNewPanel('1.69.0', () => reloads++)).toBe(false);
+    expect(reloadIfNewPanel('1.70.0', () => reloads++)).toBe(true);
+    expect(reloadIfNewPanel('1.70.0', () => reloads++)).toBe(false);
+    expect(reloads).toBe(1);
+  });
+});

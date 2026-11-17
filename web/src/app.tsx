@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { api, isMockup } from '@/lib/api';
 import { useApplyMode } from '@/lib/modes';
 import { movedTo } from '@/lib/moved';
-import { notePanelVersion } from '@/lib/restart';
+import { notePanelVersion, reloadIfNewPanel } from '@/lib/restart';
 import { match, navigate, usePath } from '@/lib/router';
 import { isSessionLost, listenToOtherTabs, onSessionChange, sessionBack, sessionLost, startSessionWatch, tellOtherTabs } from '@/lib/session-watch';
 import { type PanelStart, retryOnWake, startPanel } from '@/lib/startup';
@@ -34,6 +34,7 @@ import { SitesPage } from '@/pages/sites';
 import { UpdatePage } from '@/pages/update';
 import { Spinner } from '@/components/ui/spinner';
 import { ModeDefs } from '@/features/modes/mode-defs';
+import { isUnreachable, onConnectionChange } from '@/lib/connection';
 
 type Session = SessionInfo & { setupRequired: boolean };
 
@@ -119,6 +120,20 @@ export function App() {
   const lost = useSyncExternalStore(onSessionChange, isSessionLost);
   const signedIn = useRef(false);
   signedIn.current = session?.authenticated === true && !lost;
+
+  // An update while you were on another page: when the panel is back, signed in again or the tab is shown, a newer panel loads the page again.
+  useEffect(() => {
+    const check = () => void api.health().then(reloadIfNewPanel, () => undefined);
+    const stopConnection = onConnectionChange(() => !isUnreachable() && check());
+    const stopSession = onSessionChange(() => !isSessionLost() && check());
+    const shown = () => document.visibilityState === 'visible' && check();
+    document.addEventListener('visibilitychange', shown);
+    return () => {
+      stopConnection();
+      stopSession();
+      document.removeEventListener('visibilitychange', shown);
+    };
+  }, []);
 
   // A session that ended here, or came back in another tab: a check when the tab returns or the computer wakes, and what the other tabs say.
   useEffect(() => {

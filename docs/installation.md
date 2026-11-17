@@ -180,13 +180,17 @@ setup hands them over in a file only you can read, deleted as soon as it is
 read, and never on a command line.
 
 Updates come from the panel's Updates page, as on Ubuntu; the setup is only
-for the first install and repairs; Apps and features follows the panel's
-version by itself. When a release also changes the Windows
-part (the helper, the setup, its shortcuts or uninstall steps), Aura's Machine checks show "Windows part" with Update the Windows part:
-the helper downloads that release's setup from GitHub, checks it against the
-`.sha256` published with it, and runs it without a window (the panel restarts
-for a minute). Each release carries its setup for that, built by the release
-workflow.
+for the first install and repairs. A release that does not change the Windows
+part updates the panel only, and Apps and features follows its version by
+itself. A release that changes the Windows part too (the helper, the setup,
+its shortcuts or uninstall steps) says so on the Updates page, and its Update
+runs that release's Windows setup, which installs both in one go: the helper
+downloads it from GitHub, checks it against the `.sha256` published with it,
+and runs it without a window (Windows may ask with UAC; the panel restarts for
+about a minute, and the page reloads once it answers). Machine checks also
+show "Windows part" with Update the Windows part whenever Windows has another
+release's part than the panel, for example after switching releases. Each
+release carries its setup for that, built by the release workflow.
 
 When a new release is out, Windows shows a notification from devmagic-panel
 once for it (the panel looks every six hours); it opens the Updates page. You

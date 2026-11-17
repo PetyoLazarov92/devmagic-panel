@@ -318,3 +318,13 @@ export async function noticeWindowsUpdate(
   shown.set(tag);
   return `Windows shows that ${tag} is out`;
 }
+
+/**
+ * Whether an update to a release changes the Windows part this machine has:
+ * its fingerprint against the one the setup recorded. Only for an update the
+ * panel installs itself (mode panel); null when there is nothing to compare.
+ */
+export function windowsSideOf(update: { available: boolean; mode: string; windowsPart?: string }, installed: WindowsStatus | null): { changes: boolean } | null {
+  if (!update.available || update.mode !== 'panel' || !update.windowsPart || !installed) return null;
+  return { changes: installed.app?.part !== update.windowsPart };
+}

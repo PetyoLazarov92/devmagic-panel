@@ -11,13 +11,15 @@ import { shareUpdate } from '@/components/layout/update-indicator';
 import { api } from '@/lib/api';
 import { bytes, timeAgo } from '@/lib/format';
 import { navigate } from '@/lib/router';
-import { runWithToast } from '@/lib/site-actions';
+import { lastLine, runWithToast } from '@/lib/site-actions';
 import { useAsync } from '@/lib/use-async';
 import { cn } from '@/lib/utils';
 import { InstallForm, InstallProgress, LastInstall } from '@/features/updates/update-install';
 import { CheckAgain, Notice, PageHeader } from '@/components/layout/page';
 import { CardsSkeleton } from '@/components/layout/skeletons';
 import { Spinner } from '@/components/ui/spinner';
+import { waitForRestart } from '@/lib/restart';
+import { expectRestart } from '@/lib/session-watch';
 
 /** The installer's command, for a terminal instead of the password field: folded, as the way most people never need. */
 function TerminalWay({ command }: { command: string }) {
@@ -89,6 +91,27 @@ export function UpdatePage() {
     setTick((t) => t + 1);
   }
 
+  // A release that changes the Windows part: its Windows setup installs both; the page waits for the panel to answer with it.
+  const [viaWindows, setViaWindows] = useState<string | null>(null);
+  async function updateWithWindows(tag: string) {
+    setStarting(true);
+    setStartError(null);
+    try {
+      const r = await api.runAction('windows.update', { tag });
+      if (!r.ok) {
+        setStartError(lastLine(r.output) || 'The Windows setup did not start');
+        setStarting(false);
+        return;
+      }
+      setViaWindows(tag);
+      expectRestart();
+      waitForRestart(api.health, () => window.location.assign('/update'), { maxMs: 10 * 60_000 });
+    } catch (err) {
+      setStartError((err as Error).message);
+      setStarting(false);
+    }
+  }
+
   async function start(id: 'panel.update' | 'panel.switchRelease', input: Record<string, string>) {
     setStarting(true);
     setStartError(null);
@@ -125,7 +148,11 @@ export function UpdatePage() {
           open={confirming}
           onClose={() => setConfirming(false)}
           title={`Update to ${status.latest}?`}
-          description={`The panel downloads ${status.latest}${status.packageBytes ? ` (${bytes(status.packageBytes)})` : ''}, checks it, switches to it and restarts, so this page reconnects after a few seconds. It waits until running installs finish. The release you run now stays: switch back to it under Installed releases.`}
+          description={
+            status.windows?.changes
+              ? `${status.latest} changes the Windows part too, so its Windows setup installs both: it is downloaded from GitHub, checked against its .sha256 and run without a window (Windows may ask with UAC). It installs ${status.latest} in the distro, which restarts the panel for about a minute; this page reloads once it answers. The release you run now stays under Installed releases.`
+              : `The panel downloads ${status.latest}${status.packageBytes ? ` (${bytes(status.packageBytes)})` : ''}, checks it, switches to it and restarts, so this page reconnects after a few seconds. It waits until running installs finish. The release you run now stays: switch back to it under Installed releases.`
+          }
         >
           {status.installerChanged && (
             <p className="text-sm">
@@ -138,7 +165,8 @@ export function UpdatePage() {
               disabled={starting}
               onClick={() => {
                 setConfirming(false);
-                void start('panel.update', { version: status.latest as string });
+                if (status.windows?.changes) void updateWithWindows(status.latest as string);
+                else void start('panel.update', { version: status.latest as string });
               }}
             >
               <CircleArrowUp />
@@ -220,12 +248,24 @@ export function UpdatePage() {
             <Card>
               <CardHeader title={<>{status.latest} is out</>} meta={<CircleArrowUp className="size-4 text-primary" />} />
               <CardBody className="gap-3">
-                {status.mode === 'panel' && (
+                {status.mode === 'panel' && viaWindows && (
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <Spinner className="size-4 shrink-0 text-primary" />
+                    The Windows setup of {viaWindows} runs now without a window: it updates the Windows part and installs {viaWindows} in the distro. The panel restarts in a minute or two; this page reloads once it answers.
+                  </p>
+                )}
+                {status.mode === 'panel' && !viaWindows && (
                   <>
-                    <p className="text-muted-foreground">
-                      The panel downloads {status.latest}{status.packageBytes ? ` (${bytes(status.packageBytes)})` : ''}, checks its checksum, unpacks it next
-                      to the installed releases, switches to it and restarts. Nothing is built here. The page reconnects by itself.
-                    </p>
+                    {status.windows?.changes ? (
+                      <Notice tone="info" size="inline">
+                        {status.latest} changes the Windows part too (the helper, the setup, its shortcuts). Update runs its Windows setup, which installs both in one go: Windows may ask with UAC, and the panel restarts for about a minute.
+                      </Notice>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        The panel downloads {status.latest}{status.packageBytes ? ` (${bytes(status.packageBytes)})` : ''}, checks its checksum, unpacks it next
+                        to the installed releases, switches to it and restarts. Nothing is built here. The page reconnects by itself.
+                      </p>
+                    )}
                     {status.installerChanged && (
                       <Notice tone="warning" size="inline">
                         This release changes the installer too. The panel works after the update as it is; for the installer's own part, run{' '}

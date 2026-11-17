@@ -66,7 +66,7 @@ import { type Downloader, listMail, mailpitFetch, type MailpitFetch, mailpitPath
 import { cachedReport, forgetReport, keepReport, SharedReads } from './wordpress-report-cache.js';
 import { tableGrowth } from './table-growth.js';
 import { countAction, ModeProgress } from './modes.js';
-import { keepInterop, noticeWindowsUpdate, syncWindowsAppVersion, type WindowsPaths, windowsProfile } from './windows.js';
+import { keepInterop, noticeWindowsUpdate, syncWindowsAppVersion, type WindowsPaths, windowsProfile, windowsSideOf, windowsStatus } from './windows.js';
 import { ghBinary, useGhBinary } from './repo-hosts/github.js';
 import { GITHUB_CLONE_META, GITHUB_SSH_KEY_META, githubHttpsOn, githubSshKey, GITLAB_HTTPS_META, useGithubHttps, useGithubSshKey, useGitlabHttps, useGlabSignedIn } from './sites/git.js';
 import { resolveTool } from './tools.js';
@@ -1015,10 +1015,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
 
     // Whether a newer release is out; ?refresh=1 reads the releases again.
+    // Under WSL: whether the newest release changes the Windows part, asked of the helper once per release and five minutes.
+    let windowsSeen: { tag: string; at: number; side: { changes: boolean } | null } | null = null;
+    const windowsSide = async (status: UpdateStatus): Promise<{ changes: boolean } | null> => {
+      const windows = deps.windows;
+      const wsl = windows ? { ...(windows.kernelRelease ? { kernelRelease: windows.kernelRelease } : {}), ...(windows.binfmtDir ? { binfmtDir: windows.binfmtDir } : {}) } : null;
+      if (!windows || !wsl || wslVersion(wsl) !== 2 || !status.latest || !status.windowsPart || status.mode !== 'panel') return null;
+      if (windowsSeen?.tag === status.latest && Date.now() - windowsSeen.at < 5 * 60_000) return windowsSeen.side;
+      if (!interopOn(wsl)) return null;
+      const side = windowsSideOf(status, await windowsStatus(deps.exec, windows).catch(() => null));
+      windowsSeen = { tag: status.latest, at: Date.now(), side };
+      return side;
+    };
     api.get<{ Querystring: { refresh?: string } }>('/api/update', async (request): Promise<UpdateStatus> => {
       const [status, found] = await Promise.all([updates.status(request.query.refresh === '1'), install()]);
       const last = installStillNews(found, status.releases);
-      return last ? { ...status, install: last } : status;
+      const side = await windowsSide(status);
+      return { ...status, ...(last ? { install: last } : {}), ...(side ? { windows: side } : {}) };
     });
 
     // Mail the sites sent, read from Mailpit on 127.0.0.1; 503 while Mailpit is not running.

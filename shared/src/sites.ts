@@ -1072,6 +1072,10 @@ export interface UpdateStatus {
   reason?: string;
   /** The panel updates itself, but the release changes install.sh too: run `command` afterwards for that part. */
   installerChanged?: true;
+  /** The newest release's Windows part fingerprint (its release.json windowsPart). */
+  windowsPart?: string;
+  /** Under WSL: the newest release changes the Windows part (helper, setup, shortcuts), so Update runs its Windows setup, which installs both. */
+  windows?: { changes: boolean };
   /** For terminal: what to run once the panel downloaded it; with installerChanged, what to run after the update. */
   command?: string;
   /** The size of the release package, for the confirmation. */

@@ -1,5 +1,10 @@
 # Changelog
 
+### v1.70.0 (2026-11-17)
+* **Windows:** one click updates both parts: when a release changes the Windows part too (the helper, the setup, its shortcuts), the Updates page says so and its Update runs that release's Windows setup, which installs the panel in the distro and the Windows part together (Windows may ask with UAC; the panel restarts for about a minute and the page reloads once it answers). A release that does not change the Windows part updates as before, and Apps and features follows by itself. Ubuntu is unchanged
+* **Updates:** a page you left open on another part of the panel during an update loads again by itself once the panel answers with the new version (when it comes back, when you sign in again, or when you return to the tab), instead of running the old page's code; on Ubuntu and Windows alike
+* Nothing changes in the root scripts. An update installs this release from the panel; then Machine checks offer Update the Windows part
+
 ### v1.69.0 (2026-11-17)
 * **Windows:** a Windows notification says when a new release of the panel is out, once per release; it and its Open the Updates page button open the panel's Updates page, where the update runs as before. It needs the Windows part of this release, which Machine checks offer
 * **GitHub:** one sign-in lists your organizations' repos and clones them, with no SSH key: Machine checks install the GitHub CLI (gh 2.104.0, pinned and checked against its SHA-256, in your user folder and linked into ~/.local/bin; no root, and never over a gh of yours) and sign it in with GitHub's device sign-in, the job's page showing the one-time code and github.com/login/device. Without an SSH key on GitHub, GitHub repos then clone over HTTPS through gh, a site's repo keeping that for its own git pull and push; ~/.gitconfig stays as it is. GitHub over SSH is now GitHub access, and switches between the two

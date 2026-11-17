@@ -447,7 +447,7 @@ export async function checkUpdate(ctx: UpdateContext, now = () => new Date()): P
     .sort((a, b) => compareVersions(b.tag, a.tag))
     .map((r) => ({ version: r.tag, ...(r.date ? { date: r.date.slice(0, 10) } : {}), items: notesItems(r.notes) }));
   const size = latest.sizes?.[packageName(tag)];
-  const status: UpdateStatus = { ...base, latest: tag, available: true, changelog, ...(size ? { packageBytes: size } : {}) };
+  const status: UpdateStatus = { ...base, latest: tag, available: true, changelog, ...(size ? { packageBytes: size } : {}), ...(info.windowsPart ? { windowsPart: info.windowsPart } : {}) };
   const scripts = changedRootScripts(info, ctx.dmpRoot);
   if (scripts.length > 0) {
     return {

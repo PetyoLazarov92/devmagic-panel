@@ -1327,9 +1327,9 @@ export const actions = {
   'windows.update': {
     title: 'Update the Windows part',
     description:
-      "Under WSL, when the panel's release goes with another Windows helper than the one installed: the helper downloads this release's Windows setup (devmagic-panel-setup-<version>.exe) and its .sha256 from the repository written into it, checks it, and runs it without a window. It updates the helper and the setup in Windows and installs this release again in the distro, which restarts the panel; the distro, its user and the panel password stay. Only for a published release, not a development build.",
+      "Under WSL, when the panel's release goes with another Windows part than the one installed, or to update to a newer release (tag) that changes it: the helper downloads that release's Windows setup (devmagic-panel-setup-<version>.exe) and its .sha256 from the repository written into it, checks it, and runs it without a window. It updates the helper and the setup in Windows and installs that release in the distro, which restarts the panel; the distro, its user and the panel password stay. Only for a published release, never an older one than the panel runs.",
     changesSystem: true,
-    input: z.object({}),
+    input: z.object({ tag: z.string().regex(/^v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$/, 'A release tag, like v1.70.0').optional() }),
   },
   'wsl.repairInterop': {
     title: 'Let WSL start Windows programs again',

@@ -70,7 +70,7 @@ import type { RunStore } from './store.js';
 import { clearMail, type Downloader, mailpitFetch, type MailpitFetch, planInstallMailpit } from './mailpit.js';
 import { writeAutostart } from './autostart.js';
 import { planTrashRestore, TrashRefused } from './sites/trash.js';
-import { checkUpdate, installedReleases, installerCheck, panelCli, planSwitch, planUpdate, unpackRelease, type UpdateContext } from './update.js';
+import { checkUpdate, compareVersions, installedReleases, installerCheck, panelCli, planSwitch, planUpdate, unpackRelease, type UpdateContext } from './update.js';
 import { forgetOnFailure, type HeldPassword, installRunning, planInstallRelease } from './update-install.js';
 import { changeCrontab, type CronChange, type CronCommand, cronCommand, type CronContext, cronLockDir, CronRefused, findTask, newTaskId, type PanelTask, parseCrontab, readCrontab, taskArgs, tasksOf, undoCrontab } from './cron.js';
 import { runCronTask, taskRefusal } from './cron-run.js';
@@ -799,10 +799,11 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
   'windows.hostsSync': async (ctx) => [await windowsStep(ctx, 'hosts-sync', windowsHostsPairs(ctx.config))],
   'windows.trustCa': async (ctx) => [await windowsStep(ctx, 'ca-trust')],
   'windows.autostart': async (ctx) => [await windowsStep(ctx, 'autostart-install')],
-  'windows.update': async (ctx) => {
-    // Only a published release has its Windows setup on GitHub.
-    const tag = windowsReleaseTag(readVersion());
+  'windows.update': async (ctx, { tag: wanted }) => {
+    // Only a published release has its Windows setup on GitHub; a newer one installs the panel too (the Updates page's one click).
+    const tag = wanted ?? windowsReleaseTag(readVersion());
     if (!tag) throw new ActionInputError(`${readVersion()} is a development build, with no Windows setup on GitHub: run the setup of a release by hand`);
+    if (wanted && compareVersions(wanted, readVersion()) < 0) throw new ActionInputError(`${wanted} is older than the panel (${readVersion()}): switch back under Installed releases instead`);
     return [await windowsStep(ctx, 'update-windows', [tag])];
   },
   'windows.portproxy': async (ctx) => [

@@ -8,6 +8,7 @@ import { VHOST_MARKER } from '../src/sites/vhost.js';
 import { RunStore } from '../src/store.js';
 import { helperInstalled, helperPath, keepInterop, noticeWindowsUpdate, openWindowsTerminal, runHelper, syncWindowsAppVersion, windowsReleaseTag, windowsDrive, windowsDrives, windowsHostsPairs, windowsPath, windowsPortproxyRules, wslDistro } from '../src/windows.js';
 import { DMP, fakeExec, tempTree, wpSiteTree } from './helpers.js';
+import { actions } from '@devmagic-panel/shared';
 
 const HELPER = 'C:\\Program Files\\devmagic-panel\\dmp-win.ps1';
 
@@ -386,6 +387,31 @@ describe('the Windows part of a release', () => {
       expect(result).toMatchObject({ ok: false, output: expect.stringContaining('development build') });
       expect(call).toBeUndefined();
     }
+  });
+});
+
+describe('an update that changes the Windows part', () => {
+  it('says so when the release fingerprint differs from what the setup recorded, only for an update the panel installs', async () => {
+    const { windowsSideOf } = await import('../src/windows.js');
+    const installed = (part: string | null) => ({ hosts: { path: 'x', block: [] }, helper: { sha256: 'a'.repeat(64), repo: 'x' }, app: { version: '1.69.0', part } }) as never;
+    const update = { available: true, mode: 'panel', windowsPart: 'c'.repeat(64) };
+    expect(windowsSideOf(update, installed('d'.repeat(64)))).toEqual({ changes: true });
+    expect(windowsSideOf(update, installed('c'.repeat(64)))).toEqual({ changes: false });
+    expect(windowsSideOf(update, installed(null))).toEqual({ changes: true });
+    // Nothing to say: no update, one that needs the terminal, a release without the fingerprint, no helper answer.
+    expect(windowsSideOf({ ...update, available: false }, installed('d'.repeat(64)))).toBeNull();
+    expect(windowsSideOf({ ...update, mode: 'terminal' }, installed('d'.repeat(64)))).toBeNull();
+    expect(windowsSideOf({ available: true, mode: 'panel' }, installed('d'.repeat(64)))).toBeNull();
+    expect(windowsSideOf(update, null)).toBeNull();
+  });
+
+  it('windows.update takes a newer release to install both parts, never an older one', async () => {
+    const s = setup();
+    await runAction(s.ctx, 'windows.update', { tag: 'v99.0.0' });
+    expect(s.calls.find((c) => c.file.endsWith('powershell.exe'))?.args.slice(6)).toEqual(['update-windows', 'v99.0.0']);
+    const older = await runAction(setup().ctx, 'windows.update', { tag: 'v0.1.0' });
+    expect(older).toMatchObject({ ok: false, output: expect.stringContaining('older than the panel') });
+    expect(actions['windows.update'].input.safeParse({ tag: 'v1.70.0;calc' }).success).toBe(false);
   });
 });
 
