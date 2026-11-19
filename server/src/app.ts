@@ -52,7 +52,8 @@ import { fileTrashDir, pruneFileTrash } from './sites/file-changes.js';
 import { pruneStaged, stagedDir } from './sites/file-transfer.js';
 import { sitesByVersion } from './php/pools.js';
 import { registerPhpRoutes } from './php/routes.js';
-import { APT_LISTS_READ_KEY, APT_PATHS } from './php/versions.js';
+import { APT_LISTS_READ_KEY, APT_PATHS, installedVersions } from './php/versions.js';
+import { majorsOf, PHP_RELEASES_EVERY_MS, type PhpReleases } from './php/releases.js';
 import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
 import { readOrgSettings, registerOrgRoutes } from './org/routes.js';
 import { OrgScanner } from './org/scan.js';
@@ -108,6 +109,8 @@ export interface AppDeps {
   repo?: string;
   /** fetch, for the public way to the releases; tests pass a fake. */
   fetch?: typeof fetch;
+  /** php.net's PHP releases; the running panel passes the real one, tests a fake or none. */
+  phpReleases?: PhpReleases;
   /** The modes' clock; the real one reads /proc and learns GitHub's time from the update check. */
   clock?: PanelClock;
   /** The ways to the releases; tests pass their own. */
@@ -254,6 +257,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   // Known vulnerabilities of plugins and themes: a background task while the check is on, and Aura's Check now.
   const vulnerabilities = new VulnerabilityWatch(deps.store, deps.exec, deps.config);
+  // php.net's PHP releases: read by a timed task and the PHP tab; only the running panel passes them (tests pass a fake or none).
+  const phpReleases = deps.phpReleases;
   // The sites as the site routes read them, once those exist (the routes register later, the timers run later still).
   let siteList: (() => Promise<Site[]>) | null = null;
   // The panel's work on its own timers, listed on the Sanctum page with what each last did.
@@ -350,6 +355,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return `checked ${sites.length} sites: ${hit.length ? `${hit.length} with known vulnerabilities (${hit.map((x) => `${x.domain}${x.path ?? ''}`).join(', ')})` : 'none known'}`;
     }, 10 * 60_000);
     // The panel versions it does not run stay packed, a seventh of their room; switching back unpacks one first.
+    if (phpReleases) {
+      chores.every('php-releases', "Read PHP's releases from php.net", "Reads php.net's list of PHP release versions (nothing is sent), so the PHP tab and Machine checks say when one is out that apt's sources do not have yet. Switched off in Settings.", PHP_RELEASES_EVERY_MS, async () => {
+        const read = await phpReleases.refresh(majorsOf(installedVersions(deps.config).map((v) => v.version)));
+        return read === 'off' ? 'off: switch it on in Settings' : read === 'failed' ? 'php.net did not answer: the last list stays' : read === 'fresh' ? 'read less than 12 hours ago' : 'read';
+      }, 60_000);
+    }
     chores.every('versions', 'Pack older panel versions', 'Packs the panel versions it does not run into gzip archives; switching back to one unpacks it first.', 24 * 60 * 60_000, () => packOlderReleases(update), 2 * 60_000);
   }
   if (deps.checkUpdates) {
@@ -544,6 +555,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         dmpRoot: deps.dmpRoot,
         gitlabHosts,
         ...(deps.production ? { self: { repo: deps.repo ?? REPO_DIR, version: deps.version }, apt: { paths: APT_PATHS, readAt: () => deps.store.getMeta(APT_LISTS_READ_KEY) } } : {}),
+        ...(phpReleases ? { phpReleases: () => phpReleases.kept() } : {}),
       }),
     );
 
@@ -755,7 +767,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const run = /^\d{1,12}$/.test(request.params.run) ? deps.store.cronRun(Number(request.params.run)) : undefined;
       return run ?? reply.code(404).send({ error: 'No such run' });
     });
-    registerPhpRoutes(api, { config: deps.config, exec: deps.exec, dmpRoot: deps.dmpRoot, sitesByVersion: sitesByVersion(deps.config), store: deps.store, dataDir: dirname(deps.uploadsDir) });
+    registerPhpRoutes(api, { config: deps.config, exec: deps.exec, dmpRoot: deps.dmpRoot, sitesByVersion: sitesByVersion(deps.config), store: deps.store, dataDir: dirname(deps.uploadsDir), ...(phpReleases ? { releases: phpReleases } : {}) });
 
     // The hidden Developer options: versions, services, settings, installed files and logs.
     const developer: DeveloperContext = {

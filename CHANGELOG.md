@@ -1,5 +1,12 @@
 # Changelog
 
+### v1.73.0 (2026-11-19)
+* **PHP:** the panel compares your PHP with php.net's releases, so a release, a security fix above all, shows as soon as php.net has it: "8.5.13 out, not in apt yet" on the version's tile, and in its header whether it is a security release and since when. The PHP PPA usually builds one within a day; Check again reads php.net again
+* **PHP:** a new version final on php.net that apt's sources do not have yet shows under apt's line. Ubuntu's and Debian's own PHP get their fixes as new builds of the same release, so they are not compared
+* **Machine checks:** PHP releases says when php.net has a release apt's sources lack, and warns once a security release has been out a day, with apt's refresh as the fix
+* **Settings:** PHP releases switches the comparison off. The panel reads php.net's public list twice a day, versions only, and sends nothing
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.72.0 (2026-11-19)
 * **Jobs:** a job in the card that started it folds to one line a few seconds after it ends well, with Steps to open it again, its Undo and ×. Not while you point at it or read a step; a failed job stays open with what went wrong and Retry until you dismiss it. × only takes it off the card: Activity and Run history keep it
 * **Jobs:** a job still running when you come back to its page shows in its card again, on every page that starts one, not only the database pages; a finished one does not come back

@@ -22,6 +22,8 @@ import { formatBytes } from './sites/db.js';
 import { hostsKept, interopDisabled, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
 import { readRelease } from './update.js';
 import { aptListsAt, type AptPaths, aptPhpVersions, installedVersions, isPrerelease, packageVersions, updateLabel, upstreamVersion } from './php/versions.js';
+import { followsPhpNet, type KeptReleases, releasedFor, releasedNew } from './php/releases.js';
+import { PHP_RELEASE_WARN_MS } from '@devmagic-panel/shared';
 import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsPortproxyHeld, windowsPartCurrent, windowsPortproxyRules, windowsStatus, type WindowsPaths } from './windows.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
@@ -63,6 +65,8 @@ export interface CheckContext {
   totalMemory?: () => number;
   /** apt's paths and the panel's own last refresh, for the age of apt's lists; left out, that check is skipped. */
   apt?: { paths: AptPaths; readAt?: () => string | undefined; now?: () => number };
+  /** php.net's releases as the panel last read them; left out or null, they are not compared. */
+  phpReleases?: () => KeptReleases | null;
 }
 
 export const NSS_NICKNAME = 'devmagic-panel Local CA';
@@ -318,6 +322,39 @@ async function phpChecks(ctx: CheckContext): Promise<Check[]> {
   return results;
 }
 
+/**
+ * php.net against apt: an installed version (from the PHP PPA or
+ * packages.sury.org) with a newer release on php.net that apt's sources do
+ * not have yet, and a new version final there that apt does not offer. A
+ * note, or a warning once a security release has been out over a day
+ * without apt having it, with apt's refresh as the fix.
+ */
+function phpNetCheck(kept: KeptReleases, installed: string[], builds: Map<string, { installed?: string; candidate?: string }>, available: string[], now: number): Check[] {
+  const missing = installed.flatMap((v) => {
+    const b = builds.get(v);
+    const r = releasedFor(v, kept.releases, b?.installed, b?.candidate);
+    return r && !r.inApt ? [{ version: v, release: r }] : [];
+  });
+  const ppa = installed.some((v) => followsPhpNet(builds.get(v)?.installed ?? ''));
+  const fresh = ppa ? releasedNew(kept.releases, installed, available) : [];
+  if (missing.length === 0 && fresh.length === 0) return [];
+  const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
+  const late = missing.some((m) => m.release.security && now - day(m.release.date) > PHP_RELEASE_WARN_MS);
+  const parts = [
+    ...missing.map((m) => `PHP ${m.release.version}${m.release.security ? ' (security)' : ''} is out on php.net since ${m.release.date}`),
+    ...fresh.map((r) => `PHP ${r.version} is out on php.net since ${r.date}`),
+  ];
+  const detail = `${parts.join('; ')}: apt's sources do not have ${parts.length === 1 ? 'it' : 'them'} yet. The PHP PPA usually builds a release within a day.`;
+  const fix: CheckFix = {
+    action: 'system.aptUpdate',
+    input: {},
+    label: "Read apt's sources again with your password",
+    needsPassword: true,
+    confirm: "apt-get update reads the sources apt already has again and installs nothing. Your sudo password goes to sudo once, for this run; the panel never saves it.",
+  };
+  return [late ? warn('php.releases', 'PHP releases', detail, { fixes: [fix] }) : info('php.releases', 'PHP releases', detail, { fixes: [fix] })];
+}
+
 /** After this many days without a read of apt's sources, Machine checks warns. */
 const APT_LISTS_WARN_DAYS = 7;
 
@@ -363,6 +400,8 @@ async function phpBuildChecks(ctx: CheckContext): Promise<Check[]> {
       const candidate = offered.get(v)?.candidate;
       return candidate !== undefined && !isPrerelease(candidate);
     });
+    const kept = ctx.phpReleases?.() ?? null;
+    if (kept) out.push(...phpNetCheck(kept, installed, builds, released, ctx.apt?.now?.() ?? Date.now()));
     if (released.length > 0) {
       out.push(
         info('php.newVersion', 'New PHP version', `PHP ${released.join(' and ')} ${released.length === 1 ? 'is' : 'are'} out: it installs next to your versions, and no site moves until you give it one`, {

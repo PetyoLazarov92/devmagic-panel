@@ -122,6 +122,11 @@ const environment: EnvironmentReport = {
       id: 'php.updates', group: 'php', label: 'PHP updates', status: 'warn', detail: 'PHP 8.3: 8.3.14 is out (8.3.6 installed)',
       fixes: [{ action: 'php.upgrade', input: { version: '8.3' }, label: 'Update PHP 8.3', confirm: 'Updates every installed package of PHP 8.3 to 8.3.14 from the sources apt has, then restarts Apache when it runs PHP 8.3 and reloads its FPM. apt keeps no older build, so there is no Undo.' }],
     },
+    {
+      id: 'php.releases', group: 'php', label: 'PHP releases', status: 'info', optional: true,
+      detail: "PHP 8.5.13 (security) is out on php.net since today; PHP 8.6.0 is out on php.net since today: apt's sources do not have them yet. The PHP PPA usually builds a release within a day.",
+      fixes: [{ action: 'system.aptUpdate', input: {}, label: "Read apt's sources again with your password", needsPassword: true, confirm: "apt-get update reads the sources apt already has again and installs nothing. Your sudo password goes to sudo once, for this run; the panel never saves it." }],
+    },
     { id: 'php.aptLists', group: 'php', label: "apt's sources", status: 'ok', detail: 'last read 20 hours ago' },
     { id: 'php.imagick', group: 'php', label: 'Imagick', status: 'ok', detail: 'installed', recommended: true },
     { id: 'tools.wpcli', group: 'tools', label: 'WP-CLI', status: 'ok', detail: 'WP-CLI 2.11.0' },
@@ -1112,9 +1117,9 @@ let mockRemembered: RememberedRepo[] = [
 // Kept for the browser session, as the panel keeps them in its database.
 const mockPreferences: Preferences = (() => {
   try {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {}, ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false, checkPhpReleases: true, mode: 'classic', effects: {}, modeNames: {}, ...JSON.parse(sessionStorage.getItem('dmp-mock-preferences') ?? '{}') };
   } catch {
-    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} } as Preferences;
+    return { theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full' as const, checkVulnerabilities: false, checkPhpReleases: true, mode: 'classic', effects: {}, modeNames: {} } as Preferences;
   }
 })();
 
@@ -1572,7 +1577,7 @@ export const mockApi: Api = {
   },
   php: async () => {
     await wait(300);
-    return mockPhpReport();
+    return mockPhpReport(mockPreferences.checkPhpReleases);
   },
   phpIni: async (version) => {
     await wait(200);
@@ -2650,7 +2655,12 @@ export const mockApi: Api = {
     advance(job, 'steps');
     return id;
   },
-  job: async (id) => structuredClone(mockJobs.get(id) as JobView),
+  job: async (id) => {
+    const job = mockJobs.get(id);
+    // As the server answers 404: a sample on the Parts page links a job the mockup never ran.
+    if (!job) throw new Error('unknown job');
+    return structuredClone(job);
+  },
   jobs: async () => [...mockJobs.values()].map((j) => structuredClone(j)).reverse(),
   mail: async (site) => {
     await wait(200);

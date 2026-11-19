@@ -15,6 +15,7 @@ export const mockPhpVersions: PhpVersion[] = [
   {
     version: '8.5',
     patch: '8.5.1',
+    released: { version: '8.5.13', date: new Date().toISOString().slice(0, 10), security: true, inApt: false },
     sapis: ['cli'],
     apache: false,
     cli: true,
@@ -50,10 +51,12 @@ export const mockPhpVersions: PhpVersion[] = [
 /** When apt last read its sources in the mockup: yesterday, or when Read them again last ran. */
 export const mockAptLists = { at: Date.now() - 20 * 3_600_000 };
 
-export const mockPhpReport = (): PhpReport => ({
+/** The mockup's PHP; with php.net's releases (Settings) the 8.5 build is behind php.net, and 8.6 is out there but not in apt. */
+export const mockPhpReport = (releases = true): PhpReport => ({
   checkedAt: new Date().toISOString(),
   listsAt: new Date(mockAptLists.at).toISOString(),
-  versions: mockPhpVersions.map((v) => ({ ...v, modules: v.modules.map((m) => ({ ...m })), xdebug: { ...v.xdebug } })),
+  ...(releases ? { releasesAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), releasedNew: [{ version: '8.6.0', date: new Date().toISOString().slice(0, 10), security: false }] } : {}),
+  versions: mockPhpVersions.map(({ released, ...v }) => ({ ...v, ...(releases && released ? { released } : {}), modules: v.modules.map((m) => ({ ...m })), xdebug: { ...v.xdebug } })),
   defaultVersion: '8.3',
   available: mockPhpAvailable.filter((v) => !mockPhpVersions.some((x) => x.version === v)),
   sources: { php: mockPhpSources.ppa, distro: 'ubuntu' },

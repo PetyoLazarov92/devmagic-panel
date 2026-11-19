@@ -29,7 +29,7 @@ export { changedCount } from './php-settings';
  * once the tiles scroll away.
  */
 export function PhpTab({ refresh, onLoading, version: wanted, section }: { refresh: number; onLoading: (loading: boolean) => void; version?: string; section?: PhpSection }) {
-  const { data: report, error, loading, reload } = useAsync(() => api.php(), [refresh]);
+  const { data: report, error, loading, reload } = useAsync(() => api.php(refresh > 0), [refresh]);
   const [busy, setBusy] = useState<string | null>(null);
   // Bumped when the php.ini changes moved, so the settings read again.
   const [moved, setMoved] = useState(0);

@@ -6,6 +6,7 @@ import type { SystemConfig } from '../config.js';
 import type { Executor } from '../exec.js';
 import { hasSapi } from './ini.js';
 import { unitState } from '../services.js';
+import { isPrerelease, type KeptReleases, releasedFor, releasedNew, upstreamVersion } from './releases.js';
 
 /** Same file name as DMP_XDEBUG_INI_NAME in scripts/lib/php.sh. */
 export const XDEBUG_INI = '99-devmagic-panel-xdebug.ini';
@@ -223,11 +224,7 @@ export async function readPhpPackages(exec: Executor, version: string): Promise<
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Debian's package version, like 1:8.3.14-1+ubuntu24.04.1, as the PHP release it carries: 8.3.14. */
-export const upstreamVersion = (pkg: string): string => pkg.replace(/^\d+:/, '').split(/[-+~]/)[0] ?? pkg;
-
-/** A build of a release candidate, alpha or beta: Debian marks one with ~ in its upstream part, like 8.6.0~rc3-1. */
-export const isPrerelease = (pkg: string): boolean => (pkg.replace(/^\d+:/, '').split('-')[0] ?? '').includes('~');
+export { isPrerelease, upstreamVersion } from './releases.js';
 
 /**
  * Installed and candidate package versions from `apt-cache policy`, which
@@ -275,7 +272,7 @@ export function updateLabel(installed?: string, candidate?: string): string | un
 /** Sites whose pool runs a version, filled in once sites can have their own (see pools). */
 export type SitesByVersion = (version: string) => string[];
 
-export async function phpReport(config: SystemConfig, exec: Executor, sitesByVersion: SitesByVersion = () => [], now = Date.now, apt: AptPaths = APT_PATHS, panelReadAt?: string): Promise<PhpReport> {
+export async function phpReport(config: SystemConfig, exec: Executor, sitesByVersion: SitesByVersion = () => [], now = Date.now, apt: AptPaths = APT_PATHS, panelReadAt?: string, kept: KeptReleases | null = null): Promise<PhpReport> {
   const versions = installedVersions(config);
   const apache = apachePhpVersion(config);
   const offers = aptPhpVersions(exec).then(async (all) => {
@@ -298,10 +295,13 @@ export async function phpReport(config: SystemConfig, exec: Executor, sitesByVer
     const pkg = packages.get(version);
     const state = fpm[i];
     const update = updateLabel(pkg?.installed, pkg?.candidate);
+    const released = kept ? releasedFor(version, kept.releases, pkg?.installed, pkg?.candidate) : undefined;
     return {
       version,
       ...(pkg?.installed ? { patch: upstreamVersion(pkg.installed) } : {}),
       ...(update ? { update } : {}),
+      ...(released ? { released } : {}),
+      ...(kept && pkg?.installed && !/sury/.test(pkg.installed) ? { distroBuild: true as const } : {}),
       sapis,
       apache: apache === version,
       cli: cliVersion === version,
@@ -314,13 +314,18 @@ export async function phpReport(config: SystemConfig, exec: Executor, sitesByVer
   const fpmDefault = apache ? undefined : fpmDefaultVersion(config);
   const defaultVersion = apache ?? fpmDefault ?? cliVersion;
   const listsAt = aptListsAt(apt, panelReadAt);
+  const sources = readAptSources(apt);
+  // A new version only counts where apt can bring one: the PHP PPA or packages.sury.org is among its sources.
+  const fresh = kept && sources.php ? releasedNew(kept.releases, versions.map((v) => v.version), available) : [];
   return {
     checkedAt: new Date(now()).toISOString(),
     ...(listsAt ? { listsAt } : {}),
+    ...(kept ? { releasesAt: kept.at } : {}),
+    ...(fresh.length ? { releasedNew: fresh } : {}),
     versions: list,
     ...(defaultVersion ? { defaultVersion } : {}),
     available,
-    sources: readAptSources(apt),
+    sources,
     mode: apache ? 'mod_php' : fpmDefault ? 'fpm' : 'none',
     modPhp: modPhpVersions(config),
   };

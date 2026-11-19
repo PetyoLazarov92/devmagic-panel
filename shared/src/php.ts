@@ -28,6 +28,13 @@ export interface PhpXdebug {
   reason?: string;
 }
 
+/** A release of PHP on php.net: the version, its day (YYYY-MM-DD) and whether php.net tags it as a security release. */
+export interface PhpRelease {
+  version: string;
+  date: string;
+  security: boolean;
+}
+
 /** One installed PHP version, as the PHP tab shows it. */
 export interface PhpVersion {
   version: string;
@@ -35,6 +42,10 @@ export interface PhpVersion {
   patch?: string;
   /** A newer build apt can install, like 8.3.14, when there is one. */
   update?: string;
+  /** A newer release of this version on php.net than the installed one, from the PHP PPA or packages.sury.org builds only; inApt once apt's sources have it. */
+  released?: PhpRelease & { inApt: boolean };
+  /** Built by Ubuntu or Debian themselves: they fix security issues as new builds of the same release, so php.net's newer releases are not compared. */
+  distroBuild?: true;
   /** The parts of this version that have a config folder. */
   sapis: PhpSapi[];
   /** Apache's mod_php is this version. */
@@ -53,6 +64,10 @@ export interface PhpReport {
   checkedAt: string;
   /** When apt last read its sources, as far as the system shows: its lists' folders, Ubuntu's stamp, or a refresh the panel ran. */
   listsAt?: string;
+  /** When the panel last read php.net's releases; left out while that is switched off or never worked. */
+  releasesAt?: string;
+  /** New PHP versions final on php.net, newer than every installed one, that apt's sources do not have yet. */
+  releasedNew?: PhpRelease[];
   versions: PhpVersion[];
   /** The version sites run when they have no pool of their own: mod_php's, else the command line's. */
   defaultVersion?: string;
@@ -68,6 +83,9 @@ export interface PhpReport {
 
 /** The oldest PHP version the panel offers to install; newer ones come from apt as its sources publish them. */
 export const PHP_OLDEST_OFFERED = '7.4';
+
+/** A security release on php.net that apt's sources still lack after this long turns Machine checks' note into a warning. */
+export const PHP_RELEASE_WARN_MS = 24 * 3_600_000;
 
 /** apt's lists older than this many days may miss PHP updates: the PHP tab says so. */
 export const APT_LISTS_STALE_DAYS = 3;

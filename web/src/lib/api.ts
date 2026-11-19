@@ -119,7 +119,8 @@ export interface Api {
   /** Whether a new site can run on nginx, for the new site wizard. */
   nginxState: () => Promise<NginxState>;
   /** The installed PHP versions for the PHP tab, and per version its php.ini changes and PHP's own info. */
-  php: () => Promise<PhpReport>;
+  /** With refresh, php.net's releases are read again first when their list is over an hour old (Check again). */
+  php: (refresh?: boolean) => Promise<PhpReport>;
   phpIni: (version: string) => Promise<PhpIniReport>;
   phpInfo: (version: string, sapi: 'web' | 'cli') => Promise<PhpInfo>;
   phpFpmCheck: () => Promise<PhpFpmFinding[]>;
@@ -424,7 +425,7 @@ const realApi: Api = {
   nginx: () => request('GET', '/api/nginx'),
   nginxLog: () => request('GET', '/api/nginx/log'),
   nginxState: () => request('GET', '/api/nginx/state'),
-  php: () => request('GET', '/api/php'),
+  php: (refresh) => request('GET', refresh ? '/api/php?refresh=1' : '/api/php'),
   phpIni: (version) => request('GET', `/api/php/${encodeURIComponent(version)}/ini`),
   phpInfo: (version, sapi) => request('GET', `/api/php/${encodeURIComponent(version)}/info?sapi=${sapi}`),
   phpFpmCheck: () => request('GET', '/api/php/fpm-check'),

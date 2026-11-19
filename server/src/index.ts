@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
+import { PhpReleases } from './php/releases.js';
 import { DMP_ROOT, loadConfig, userPaths } from './config.js';
 import { coreStatusSource } from './core-status.js';
 import { defaultHostPaths } from './environment.js';
@@ -47,6 +48,8 @@ const app = await buildApp({
   settingsFile: join(paths.configDir, 'settings.json'),
   checkUpdates: production,
   housekeeping: production,
+  // php.net's PHP releases, read by a timed task and the PHP tab; only the running panel asks php.net.
+  ...(production ? { phpReleases: new PhpReleases(store) } : {}),
   // The Windows side under WSL 2 (found on the drives WSL mounts); nothing happens elsewhere.
   ...(production ? { windows: {} } : {}),
   ...(distro ? { wslDistro: distro } : {}),

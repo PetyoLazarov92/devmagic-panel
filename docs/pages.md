@@ -99,6 +99,12 @@ the panel needs or recommends an install it did not offer when you hid it.
   version, with **Update PHP <version>**; **New PHP version**, a note when a
   final release newer than every installed version is out, with **Install PHP
   <version>** (no site moves to it). Release candidates are left out.
+- **PHP releases**: a release on php.net that apt's sources do not have yet,
+  for versions from the PHP PPA or packages.sury.org (your system's own PHP
+  gets its fixes as new builds of the same release, so it is not compared),
+  and a new version final there. A note, or a warning once a security
+  release has been out a day without apt having it, with **Read apt's sources
+  again with your password**.
 - **apt's sources**: when apt last read them, a warning after 7 days, with
   **Read them again with your password** (`apt-get update`, nothing installed).
 - **The GitHub CLI, the GitLab CLI and rclone**: their pinned releases,
@@ -159,8 +165,9 @@ when it is missing.
 The panel password, the AI assistant, Claude Code for installs (whether new
 installs use it, and the model, effort and cap of its one step), the constants new
 sites get, what the wizard remembers per repo (**Remembered for new
-installs**, to edit or forget), and the repo owners you trusted, to take back
-(`/settings`). Ctrl+K's **Change the panel password** opens this page.
+installs**, to edit or forget), the repo owners you trusted, to take back,
+and **PHP releases**, the comparison with php.net's releases, on unless you
+switch it off (`/settings`). Ctrl+K's **Change the panel password** opens this page.
 
 ## Sanctum
 

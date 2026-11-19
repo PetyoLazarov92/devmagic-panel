@@ -84,7 +84,13 @@ export function MachineCard({ report, picked, busy, cliBusy, tilesRef, onPick, o
                 <span className="text-xs text-muted-foreground">
                   {v.patch ?? 'unknown'}
                   {' · '}
-                  {v.update ? <span className="text-warning">{v.update} available</span> : 'up to date'}
+                  {v.update ? (
+                    <span className="text-warning">{v.update} available</span>
+                  ) : v.released && !v.released.inApt ? (
+                    <span className={v.released.security ? 'text-warning' : undefined} title={`Out on php.net since ${v.released.date}; apt's sources do not have it yet`}>{v.released.version} out, not in apt yet</span>
+                  ) : (
+                    'up to date'
+                  )}
                 </span>
                 <span className="text-xs text-muted-foreground">{tileSites(v, report)}</span>
               </button>
@@ -162,6 +168,7 @@ export function VersionHeader({ report, version: v, busy, onUpgrade, onRemove, o
         <p className="text-sm text-muted-foreground">
           {v.patch ?? 'unknown release'} · {v.sapis.map((s) => SAPI_LABEL[s]).join(', ')}{v.cli ? ' (php)' : ''} · {sitesOf(v, report)}
         </p>
+        <ReleasedLine version={v} />
       </div>
       <div className="flex flex-wrap gap-2">
         {v.update && <Button size="sm" variant="outline" disabled={busy} onClick={onUpgrade}><RefreshCw />Update to {v.update.replace(/^a new build of /, '')}</Button>}
@@ -219,6 +226,26 @@ export function VersionHeader({ report, version: v, busy, onUpgrade, onRemove, o
       </Dialog>
     </div>
   );
+}
+
+/**
+ * What php.net says about the picked version: a newer release apt's sources
+ * do not have yet (the PHP PPA usually builds one within a day), or that
+ * Ubuntu's or Debian's own build gets its fixes as new builds of the same
+ * release. Nothing when php.net is not read, or the version is current.
+ */
+export function ReleasedLine({ version: v }: { version: PhpVersion }) {
+  if (v.released && !v.released.inApt) {
+    return (
+      <p className={cn('text-xs', v.released.security ? 'text-warning' : 'text-muted-foreground')}>
+        PHP {v.released.version}{v.released.security ? ', a security release,' : ''} is out on php.net since {v.released.date}; apt&apos;s sources do not have it yet. The PHP PPA usually builds it within a day: read apt&apos;s sources again later.
+      </p>
+    );
+  }
+  if (v.distroBuild) {
+    return <p className="text-xs text-muted-foreground">Your system&apos;s own build: its security fixes come as new builds of {v.patch ?? 'this release'}, so php.net&apos;s newer releases are not compared.</p>;
+  }
+  return null;
 }
 
 /** The slim strip that sticks to the top once the tiles scroll away: the versions, and a link to each section. */
@@ -315,6 +342,7 @@ export function AptLists({ report, busy, onRead }: { report: PhpReport; busy: bo
   const id = useId();
   const stale = report.listsAt !== undefined && Date.now() - Date.parse(report.listsAt) > APT_LISTS_STALE_DAYS * 86_400_000;
   const when = report.listsAt ? `apt last read its sources ${timeAgo(report.listsAt)}` : 'When apt last read its sources is not known';
+  const fresh = report.releasedNew ?? [];
   const ask = (
     <Button size="sm" variant="outline" disabled={busy || asking} onClick={() => setAsking(true)}>
       <RefreshCw />
@@ -336,7 +364,10 @@ export function AptLists({ report, busy, onRead }: { report: PhpReport; busy: bo
         </Notice>
       ) : (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{when}. PHP&apos;s updates and new versions show once apt has read them.</span>
+          <span>
+            {when}. PHP&apos;s updates and new versions show once apt has read them.
+            {report.releasesAt && ` php.net's releases read ${timeAgo(report.releasesAt)}.`}
+          </span>
           {!asking && (
             <Button size="xs" variant="soft" disabled={busy} onClick={() => setAsking(true)}>
               <RefreshCw />
@@ -344,6 +375,11 @@ export function AptLists({ report, busy, onRead }: { report: PhpReport; busy: bo
             </Button>
           )}
         </div>
+      )}
+      {fresh.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {fresh.map((r) => `PHP ${r.version}`).join(' and ')} {fresh.length === 1 ? 'is' : 'are'} out on php.net since {fresh[0]?.date}; apt&apos;s sources do not have {fresh.length === 1 ? 'it' : 'them'} yet, so Add a version offers {fresh.length === 1 ? 'it' : 'them'} once they do.
+        </p>
       )}
       {asking && (
         <Notice tone="info" size="inline">

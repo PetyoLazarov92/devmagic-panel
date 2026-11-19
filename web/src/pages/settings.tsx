@@ -3,6 +3,7 @@ import { ClaudeDefaultsCard } from '@/features/assistant/claude-defaults-card';
 import { LocalConstantsCard } from '@/features/settings/local-constants-card';
 import { PageHeader } from '@/components/layout/page';
 import { PanelPasswordCard } from '@/features/settings/panel-password-card';
+import { PhpReleasesCard } from '@/features/settings/php-releases-card';
 import { RememberedCard, TrustedOwnersCard } from '@/features/settings/remembered-card';
 
 /** The panel's own settings: its password, the AI assistant, Claude Code's defaults and the constants new sites get. */
@@ -14,6 +15,7 @@ export function SettingsPage() {
       <div className="mt-6 grid items-stretch gap-4 @4xl:grid-cols-2 @4xl:[&>:last-child:nth-child(odd)]:col-span-2">
         <PanelPasswordCard />
         <LocalConstantsCard />
+        <PhpReleasesCard />
         <AssistantCard />
         <ClaudeDefaultsCard />
         <RememberedCard />

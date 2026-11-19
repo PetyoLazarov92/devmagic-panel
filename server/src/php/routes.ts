@@ -12,6 +12,7 @@ import { SiteActionRefused, siteFor, SiteNotFoundError } from '../sites/site-act
 import { poolFolder, sitePool } from './pools.js';
 import { readPhpSettings } from './settings.js';
 import { defaultPhpVersion, readSitePhp } from './site-php.js';
+import { majorsOf, type PhpReleases } from './releases.js';
 import { apachePhpVersion, APT_LISTS_READ_KEY, APT_PATHS, type AptPaths, installedVersions, phpReport, readPhpPackages, type SitesByVersion } from './versions.js';
 
 export interface PhpRouteDeps {
@@ -23,13 +24,21 @@ export interface PhpRouteDeps {
   /** For a site's compatibility scans; the panel's data folder holds the scanner. */
   store?: RunStore;
   dataDir?: string;
+  /** php.net's releases, to say when one is out that apt's sources lack; left out, they are not compared. */
+  releases?: PhpReleases;
 }
 
 /** The Services page's PHP tab, read only; its changes are registry actions. */
 export function registerPhpRoutes(api: FastifyInstance, deps: PhpRouteDeps): void {
   const known = (version: string) => PHP_VERSION_PATTERN.test(version) && installedVersions(deps.config).some((v) => v.version === version);
 
-  api.get('/api/php', async (): Promise<PhpReport> => phpReport(deps.config, deps.exec, deps.sitesByVersion, Date.now, deps.apt ?? APT_PATHS, deps.store?.getMeta(APT_LISTS_READ_KEY)));
+  // Check again (refresh=1) reads php.net again once its list is over an hour old; an opening reads it in the background when it is due.
+  api.get<{ Querystring: { refresh?: string } }>('/api/php', async (request): Promise<PhpReport> => {
+    const majors = majorsOf(installedVersions(deps.config).map((v) => v.version));
+    if (deps.releases && request.query.refresh === '1') await deps.releases.refreshForced(majors);
+    else if (deps.releases) void deps.releases.refresh(majors);
+    return phpReport(deps.config, deps.exec, deps.sitesByVersion, Date.now, deps.apt ?? APT_PATHS, deps.store?.getMeta(APT_LISTS_READ_KEY), deps.releases?.kept() ?? null);
+  });
   api.get('/api/php/fpm-check', async (): Promise<PhpFpmFinding[]> => readFpmFindings(deps.config));
 
   api.get<{ Params: { version: string } }>('/api/php/:version/ini', async (request, reply): Promise<PhpIniReport> => {

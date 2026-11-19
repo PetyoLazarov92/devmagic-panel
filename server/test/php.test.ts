@@ -426,6 +426,35 @@ describe('installing, updating and removing versions', () => {
     expect(calls.map((c) => [c.file, ...c.args].join(' '))).toContain('apt-cache policy php7.4-common php8.4-common php8.6-common php9.0-common');
   });
 
+  it("compares the PHP PPA's builds with php.net's releases, never the system's own, and names a new version apt lacks", async () => {
+    const t = tempTree();
+    addVersion(t, '8.4', { fpm: [], cli: [] });
+    addVersion(t, '8.3', { apache2: [], cli: [] });
+    mkdirSync(join(t.root, 'sources'), { recursive: true });
+    writeFileSync(join(t.root, 'sources', 'ondrej-php.list'), 'deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble main\n');
+    const { exec } = fakeExec({
+      'apt-cache pkgnames php': { stdout: 'php8.3-common\nphp8.4-common\nphp8.6-common\n' },
+      'apt-cache policy php8.4-common': { stdout: 'php8.4-common:\n  Installed: 8.4.27-1+deb.sury.org+1\n  Candidate: 8.4.27-1+deb.sury.org+1\nphp8.3-common:\n  Installed: 8.3.6-0ubuntu0.24.04.5\n  Candidate: 8.3.6-0ubuntu0.24.04.5\n' },
+      'apt-cache policy php8.6-common': { stdout: 'php8.6-common:\n  Installed: (none)\n  Candidate: 8.6.0~rc3-1+deb.sury.org+1\n' },
+      php: { stdout: '8.4' },
+    });
+    const kept = { at: '2026-11-19T12:00:00.000Z', releases: [
+      { version: '8.6.0', date: '2026-11-19', security: false },
+      { version: '8.4.28', date: '2026-11-19', security: true },
+      { version: '8.3.37', date: '2026-11-19', security: true },
+    ] };
+    const report = await phpReport(t.config, exec, () => [], () => 0, { ...noApt(t), sourcesDir: join(t.root, 'sources') }, undefined, kept);
+    const v = (version: string) => report.versions.find((x) => x.version === version);
+    expect(v('8.4')).toMatchObject({ patch: '8.4.27', released: { version: '8.4.28', security: true, inApt: false } });
+    expect(v('8.4')?.distroBuild).toBeUndefined();
+    expect(v('8.3')).toMatchObject({ patch: '8.3.6', distroBuild: true });
+    expect(v('8.3')?.released).toBeUndefined();
+    expect(report.releasesAt).toBe('2026-11-19T12:00:00.000Z');
+    expect(report.releasedNew).toEqual([{ version: '8.6.0', date: '2026-11-19', security: false }]);
+    const without = await phpReport(t.config, exec, () => [], () => 0, noApt(t));
+    expect([without.releasesAt, without.releasedNew, without.versions.some((x) => x.released || x.distroBuild)]).toEqual([undefined, undefined, false]);
+  });
+
   it("reads when apt last read its sources: its stamp, the lists' folders or the panel's own refresh, the newest", () => {
     const t = tempTree();
     const lists = join(t.root, 'lists');

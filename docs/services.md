@@ -34,6 +34,14 @@ other:
   (never a new one) and installs nothing. The password goes to sudo's stdin
   once and is never saved. Your system usually reads them on its own (Ubuntu's
   daily apt timer, Mint's Update Manager).
+- **php.net's releases**: a version from the PHP PPA or packages.sury.org
+  shows when php.net has a newer release that apt's sources do not have yet
+  ("8.5.13 out, not in apt yet", and in the version's header whether it is a
+  security release and since when); the PPA usually builds one within a day.
+  A new version final on php.net shows under apt's line too. Ubuntu's and
+  Debian's own PHP keep their release and get fixes as new builds of it, so
+  they are not compared. Switched off in Settings, **PHP releases**; see
+  [What the panel asks php.net](security.md#what-the-panel-asks-phpnet).
 - **Packages**: module packages from apt per version.
 - **Parts and modules**: the parts installed (mod_php, PHP-FPM, command line),
   its modules, and Xdebug (any mix of debug, develop, profile, trace,

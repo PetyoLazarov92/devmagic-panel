@@ -88,6 +88,9 @@ GNU parallel is installed. Skip with `git commit --no-verify`.
    dialog wp-admin calls "View version details") are asked of WordPress.org
    by slug only, when you open them, and read into plain blocks on the
    server, so none of its HTML reaches the browser.
+   PHP's releases (`server/src/php/releases.ts`, on unless switched off in
+   Settings) are read from php.net's public list, versions only; nothing is
+   sent, and only the running panel asks (tests pass a fake).
    The vulnerability check (`server/src/vulnerabilities.ts`, off until
    switched on in Aura) sends WPVulnerability only slugs WordPress's own update
    check found on WordPress.org, never a version, a site name or a custom

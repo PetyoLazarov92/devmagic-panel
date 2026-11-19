@@ -280,15 +280,15 @@ describe('preferences', () => {
     const cookie = await login();
     const headers = { host: HOST, origin: ORIGIN, cookie };
     expect((await app.inject({ method: 'GET', url: '/api/preferences', headers: { host: HOST } })).statusCode).toBe(401);
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'system', sitesView: 'grid', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, checkPhpReleases: true, mode: 'classic', effects: {}, modeNames: {} });
     const saved = await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { theme: 'dark', sitesView: 'list' } });
-    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} });
+    expect(saved.json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'name', newSiteServer: 'apache', tablesSort: 'name', sidebar: 'full', useClaude: 'always', checkVulnerabilities: false, checkPhpReleases: true, mode: 'classic', effects: {}, modeNames: {} });
     await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload: { sitesSort: 'newest', tablesSort: 'size', sidebar: 'rail' } });
-    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} });
+    expect((await app.inject({ method: 'GET', url: '/api/preferences', headers })).json()).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, checkPhpReleases: true, mode: 'classic', effects: {}, modeNames: {} });
     for (const payload of [{ theme: 'neon' }, { sitesView: 'list', extra: 1 }, { tablesSort: 'rows' }, { sidebar: 'hidden' }, { useClaude: 'sometimes' }]) {
       expect((await app.inject({ method: 'PUT', url: '/api/preferences', headers, payload })).statusCode).toBe(400);
     }
-    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, mode: 'classic', effects: {}, modeNames: {} });
+    expect(JSON.parse(store.getMeta('preferences') ?? '{}')).toEqual({ theme: 'dark', sitesView: 'list', sitesSort: 'newest', newSiteServer: 'apache', tablesSort: 'size', sidebar: 'rail', useClaude: 'always', checkVulnerabilities: false, checkPhpReleases: true, mode: 'classic', effects: {}, modeNames: {} });
   });
 });
 

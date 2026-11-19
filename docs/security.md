@@ -58,6 +58,16 @@ the sign-in directly. The same goes for the GitLab CLI, which lists
 GitLab groups and merge requests, and for Claude Code and rclone in an install
 from an organization.
 
+## What the panel asks php.net
+
+To say when a PHP release is out that apt's sources do not have yet, the
+panel reads php.net's public list of releases
+(`https://www.php.net/releases/index.php?json&version=8`) twice a day, and
+when the PHP tab's Check again finds it over an hour old. Only release
+versions, their days and whether each is a security release come back;
+nothing is sent, no version of yours and no site. It is on unless you switch
+it off in Settings, **PHP releases**.
+
 ## What leaves the machine for vulnerability checks
 
 The vulnerability check in Aura is off until you switch it on. Then it asks
