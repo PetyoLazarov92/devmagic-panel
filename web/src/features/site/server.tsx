@@ -68,7 +68,7 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
   // Moving to nginx alone: the .htaccess rules as the panel would translate them, read when the dialog opens.
   const reviewing = open && target === 'nginx' && site.server !== 'nginx';
   const htaccess = useAsync(() => (reviewing ? api.htaccess(site.domain) : Promise.resolve(null)), [reviewing, site.domain]);
-  const job = useJob();
+  const job = useJob({ kinds: ['site.setServer'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
   const done = useRef<string | null>(null);
   const busy = job.job !== null && !settled(job.job);
   useEffect(() => {
@@ -136,7 +136,7 @@ export function ServerCard({ site, onChanged }: { site: Site; onChanged: () => v
         </div>
         {(job.job || job.error) && (
           <div className="grid gap-3">
-            {job.job && <JobBox job={job.job} onRetry={() => void job.retry()} />}
+            {job.job && <JobBox job={job.job} onRetry={() => void job.retry()} onDismiss={job.clear} />}
             {job.error && <p role="alert" className="text-danger">{job.error}</p>}
           </div>
         )}

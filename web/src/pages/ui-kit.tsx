@@ -24,6 +24,8 @@ import { StatTile, StatTiles } from '@/components/ui/stat-tile';
 import { Switch } from '@/components/ui/switch';
 import { Tabs } from '@/components/ui/tabs';
 import { TextLink } from '@/components/ui/text-link';
+import type { JobView } from '@devmagic-panel/shared';
+import { JobBox } from '@/features/jobs/job-box';
 
 /**
  * Only in the mockup: every part the screens are made of, with the rule for where it goes.
@@ -37,6 +39,26 @@ const SAMPLE_MENU: MenuItem[] = [
   { label: 'Delete', icon: <Trash2 />, onSelect: () => undefined, danger: true },
 ];
 
+/** A job in each state a page shows: running, done (it folds) and failed (it stays). */
+const sampleJob = (id: string, status: JobView['status'], steps: JobView['steps'], undoable: string[] = []): JobView => ({ id, title: 'Install PHP 8.5', status, steps, undo: [], undoable, progress: 0.5, startedAt: new Date().toISOString(), runId: 0 });
+const SAMPLE_JOBS: JobView[] = [
+  sampleJob('kit-running', 'running', [
+    { id: 'sources', label: "Check apt's sources", status: 'done', durationMs: 1_200, output: 'php8.5-common 8.5.12-1' },
+    { id: 'apt', label: 'Install with apt', status: 'running', progress: 0.4, note: 'Unpacking php8.5-fpm' },
+    { id: 'fpm', label: 'Reload PHP-FPM', status: 'pending' },
+  ]),
+  sampleJob('kit-done', 'done', [
+    { id: 'sources', label: "Check apt's sources", status: 'done', durationMs: 1_200, output: 'php8.5-common 8.5.12-1' },
+    { id: 'apt', label: 'Install with apt', status: 'done', durationMs: 41_000, output: 'Setting up php8.5-fpm (8.5.12-1)' },
+    { id: 'fpm', label: 'Reload PHP-FPM', status: 'done', durationMs: 400 },
+  ], ['PHP 8.5']),
+  sampleJob('kit-failed', 'failed', [
+    { id: 'password', label: 'Check your sudo password', status: 'done', durationMs: 300 },
+    { id: 'apt-update', label: "Read apt's sources again (apt-get update)", status: 'failed', durationMs: 2_100, output: 'E: Could not get lock /var/lib/apt/lists/lock' },
+    { id: 'done', label: 'Let go of your password', status: 'pending' },
+  ]),
+];
+
 export function UiKitPage() {
   const [tab, setTab] = useState<'overview' | 'logs' | 'files'>('overview');
   const [view, setView] = useState<'overview' | 'tables' | 'sql'>('tables');
@@ -45,6 +67,7 @@ export function UiKitPage() {
   const [mode, setMode] = useState<'compact' | 'details'>('compact');
   const [on, setOn] = useState(true);
   const [tick, setTick] = useState(false);
+  const [shownJobs, setShownJobs] = useState(() => SAMPLE_JOBS.map((j) => j.id));
   return (
     <div className="grid gap-8 pt-4">
       <div className="grid gap-3">
@@ -233,6 +256,27 @@ export function UiKitPage() {
         >
           <p className="text-sm">The dialog's content. Full screen makes room for a long review; × or Escape closes it.</p>
         </Dialog>
+      </Section>
+
+      <Section
+        title="Jobs"
+        rule="A job shows in the card whose button started it, as its footer (JobFooter) or under a line (JobBox): every step, the arrow only on a step with output to read, Stop when it can stop. Done, it folds to one line after 4 seconds (not while you point at it, read a step or opened it again), with Steps, its Undo and ×. Failed, it stays open with the failed step's output and Retry until you dismiss it. × takes it off this place only; Activity and Run history keep it. A job still running when you come back shows in its card again (useJob with resume); a finished one does not."
+      >
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))] items-start gap-4">
+          {SAMPLE_JOBS.map((sample) => (
+            <Card key={sample.id}>
+              <CardBody>
+                {shownJobs.includes(sample.id) ? (
+                  <JobBox job={sample} scroll={false} onRetry={() => undefined} onDismiss={() => setShownJobs((ids) => ids.filter((id) => id !== sample.id))} />
+                ) : (
+                  <Button variant="soft" size="sm" className="justify-self-start" onClick={() => setShownJobs((ids) => [...ids, sample.id])}>
+                    Show again
+                  </Button>
+                )}
+              </CardBody>
+            </Card>
+          ))}
+        </div>
       </Section>
 
       <Section title="Bars" rule="A view's bar: what it is about on the left, Check again on the right, when it was read under it.">

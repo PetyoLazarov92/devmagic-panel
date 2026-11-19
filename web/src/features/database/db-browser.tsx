@@ -92,7 +92,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
   const [asking, setAsking] = useState<{ table: string; how: 'empty' | 'drop' } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  const runner = useJob();
+  const runner = useJob({ kinds: ['mysql.emptyTable', 'mysql.dropTable'], targets: [`database ${database}`] });
   const done = useRef<string | null>(null);
   const { job } = runner;
   // An emptied or deleted table changes the list, and the clean-ups to undo.
@@ -159,7 +159,7 @@ function TablesList({ database, overview, loading, error, reload, onNavigate, he
       />
       {header}
       {/* A job started from a row's menu shows at the top of the list. */}
-      {job && <div className="px-5 pt-4"><JobBox job={job} onRetry={() => void runner.retry()} /></div>}
+      {job && <div className="px-5 pt-4"><JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} /></div>}
       {runner.error && <p role="alert" className="px-5 pt-4 text-sm text-danger">{runner.error}</p>}
       <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
         <label className="relative min-w-48 flex-1">

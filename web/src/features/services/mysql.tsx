@@ -1,5 +1,5 @@
 import type { ActionId, MysqlBackup, MysqlProcess, UploadResult, MysqlDatabase, MysqlDatabaseKind, MysqlReport, MysqlSiteRef, MysqlUser, MysqlUserKind } from '@devmagic-panel/shared';
-import { Archive, ArrowLeft, Database, Gauge, KeyRound, OctagonX, RotateCcw, Table2, Trash2, Upload, Users, Wand2 } from 'lucide-react';
+import { Archive, ArrowLeft, Database, Gauge, KeyRound, OctagonX, Table2, Trash2, Upload, Users, Wand2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { DatabaseBrowser, type DbLocation } from '@/features/database/db-browser';
 import { MysqlSettingsCard } from '@/features/services/mysql-settings';
@@ -7,7 +7,7 @@ import { type Look, NeedsALook } from '@/components/layout/needs-a-look';
 import { SlowQueries } from '@/features/site/slow-queries';
 import { SqlRunner, sqlSeed, sqlSeedState } from '@/features/database/sql-runner';
 import { Segmented } from '@/components/ui/segmented';
-import { settled, StepList, useJob } from '@/features/jobs/job-steps';
+import { settled, useJob } from '@/features/jobs/job-steps';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -22,7 +22,7 @@ import { Menu, type MenuItem } from '@/components/ui/menu';
 import { api } from '@/lib/api';
 import { bytes, shortDate, timeAgo } from '@/lib/format';
 import { Link, navigate, useQueryParam } from '@/lib/router';
-import { lastLine, runWithToast } from '@/lib/site-actions';
+import { runWithToast } from '@/lib/site-actions';
 import { siteHref, siteName } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { useAsync } from '@/lib/use-async';
@@ -126,7 +126,7 @@ function MysqlDatabaseView({ database, refresh, onLoading }: { database: string;
 
 function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (loading: boolean) => void }) {
   const report = useAsync(() => api.mysql(), [refresh]);
-  const runner = useJob();
+  const runner = useJob({ kinds: ['mysql.dropDatabase', 'mysql.optimize', 'mysql.dropUsers'] });
   const [filter, setFilter] = useState<DbFilter>('all');
   const [dropping, setDropping] = useState<MysqlDatabase | null>(null);
   const [optimizing, setOptimizing] = useState<MysqlDatabase | null>(null);
@@ -217,20 +217,8 @@ function MysqlOverview({ refresh, onLoading }: { refresh: number; onLoading: (lo
       {(runner.job || runner.error) && (
         <div ref={jobCard} className="scroll-mt-4">
           <Card>
-            <CardHeader title={runner.job?.title ?? 'Job'} meta={busy && <Spinner className="size-4 text-primary" />} />
             <CardBody className="gap-3">
-              {runner.job && <JobSteps steps={runner.job.steps} />}
-              {runner.job?.status === 'failed' && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="flex-1 text-sm text-danger">{lastLine(runner.job.steps.find((s) => s.status === 'failed')?.output ?? '')}</p>
-                  <Button variant="outline" onClick={() => void runner.retry()}><RotateCcw />Retry</Button>
-                </div>
-              )}
-              {runner.job && settled(runner.job) && runner.job.undoable.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  To take it back, use Undo on <Link href={`/jobs/${encodeURIComponent(runner.job.id)}`} className="font-medium text-foreground hover:underline">the job&apos;s page</Link>.
-                </p>
-              )}
+              {runner.job && <JobBox job={runner.job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
               {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
             </CardBody>
           </Card>
@@ -411,10 +399,6 @@ function BackupsCard({ backups, dir, onDeleted }: { backups: MysqlBackup[]; dir:
   );
 }
 
-function JobSteps({ steps }: { steps: Parameters<typeof StepList>[0]['steps'] }) {
-  const [open, setOpen] = useState<string | null>(null);
-  return <StepList steps={steps} open={open} setOpen={setOpen} />;
-}
 
 function DropDatabaseDialog({ database, onClose, onConfirm }: { database: MysqlDatabase | null; onClose: () => void; onConfirm: (d: MysqlDatabase) => void }) {
   const [typed, setTyped] = useState('');
@@ -612,7 +596,7 @@ function ImportDumpCard({ databases, onDone }: { databases: MysqlDatabase[]; onD
   const unused = databases.filter((d) => d.kind === 'unused');
   const [target, setTarget] = useState('');
   const [confirm, setConfirm] = useState('');
-  const runner = useJob();
+  const runner = useJob({ kinds: ['mysql.importDump'] });
   const { job } = runner;
   const done = useRef<string | null>(null);
   useEffect(() => {
@@ -691,7 +675,7 @@ function ImportDumpCard({ databases, onDone }: { databases: MysqlDatabase[]; onD
               </div>
             </>
           )}
-          {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+          {job && <JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
           {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
         </div>
       </Card>

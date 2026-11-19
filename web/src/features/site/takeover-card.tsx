@@ -29,7 +29,7 @@ export function TakeoverCard({ site, onChanged }: { site: Site; onChanged: () =>
   // ?takeover=1 in the address, from a hint elsewhere, opens the dialog at once.
   const asked = useQueryParam('takeover') === '1';
   const [open, setOpen] = useState<'take' | 'give' | null>(asked && !takenOver && !site.vhostManaged && !site.path ? 'take' : null);
-  const job = useJob();
+  const job = useJob({ kinds: ['site.takeOver'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
   useEffect(() => {
     if (job.job?.status === 'done') onChanged();
   }, [job.job?.status]);
@@ -65,7 +65,7 @@ export function TakeoverCard({ site, onChanged }: { site: Site; onChanged: () =>
           </>
         )}
       </CardBody>
-      <JobFooter job={job.job} error={job.error} onRetry={() => void job.retry()} />
+      <JobFooter job={job.job} error={job.error} onRetry={() => void job.retry()} onDismiss={job.clear} />
       {open === 'take' && <TakeOverDialog site={site} onClose={() => setOpen(null)} onStart={(input) => { setOpen(null); void job.follow(api.startJob('site.takeOver', input)); }} />}
       {open === 'give' && <GiveBackDialog site={site} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onChanged(); }} />}
     </Card>

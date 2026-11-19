@@ -193,7 +193,7 @@ export function WordpressDbView({ site, blog, onBlog, onTable }: Props) {
   }
 
   // A job is the footer of the card that started it; the clean-up card has two kinds.
-  const footerFor = (...slots: Slot[]) => (slot && slots.includes(slot) ? <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} onStop={() => void runner.stop()} /> : null);
+  const footerFor = (...slots: Slot[]) => (slot && slots.includes(slot) ? <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} onStop={() => void runner.stop()} onDismiss={runner.clear} /> : null);
   const r = report.report;
   if (!r && report.loading) return <WordpressDbSkeleton />;
   if (!r) return <Notice>{Object.values(report.errors)[0] ?? 'The panel could not read this database'}</Notice>;

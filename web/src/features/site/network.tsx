@@ -2,7 +2,8 @@ import type { Site } from '@devmagic-panel/shared';
 import { Check, ExternalLink, LogIn, Network, ShieldCheck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ListSkeleton } from '@/components/layout/skeletons';
-import { settled, StepList, useJob } from '@/features/jobs/job-steps';
+import { settled, useJob } from '@/features/jobs/job-steps';
+import { JobBox } from '@/features/jobs/job-box';
 import { NETWORK_TYPE_LABEL, siteUrl } from '@/components/layout/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button, ButtonLink } from '@/components/ui/button';
@@ -11,7 +12,6 @@ import { Dialog } from '@/components/ui/dialog';
 import { FilterChips } from '@/components/ui/filter-chips';
 import { openWpAdmin } from '@/lib/site-actions';
 import { api } from '@/lib/api';
-import { Link } from '@/lib/router';
 import { useAsync } from '@/lib/use-async';
 import { siteTarget } from '@/lib/site-ref';
 import { Spinner } from '@/components/ui/spinner';
@@ -121,8 +121,7 @@ export function NetworkCard({ site }: { site: Site }) {
 export function SuperAdminsDialog({ site, open, onClose }: { site: Site; open: boolean; onClose: () => void }) {
   const [refresh, setRefresh] = useState(0);
   const list = useAsync(() => (open ? api.networkAdmins(site.domain, site.path) : Promise.resolve(null)), [open, refresh, site.domain, site.path]);
-  const runner = useJob();
-  const [open_, setOpen] = useState<string | null>(null);
+  const runner = useJob({ kinds: ['network.addAdmin'], targets: [`${site.domain}${site.path ?? ''}`] });
   const lastDone = useRef<string | null>(null);
   const { job } = runner;
   const busy = job !== null && !settled(job);
@@ -165,12 +164,7 @@ export function SuperAdminsDialog({ site, open, onClose }: { site: Site; open: b
             ))}
           </ul>
         )}
-        {job && <StepList steps={job.steps} open={open_} setOpen={setOpen} />}
-        {job && settled(job) && job.undoable.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            To take it back, use Undo on <Link href={`/jobs/${encodeURIComponent(job.id)}`} className="font-medium text-foreground hover:underline">the job&apos;s page</Link>.
-          </p>
-        )}
+        {job && <JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
         {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
         <div className="flex justify-end">
           <Button variant="soft" onClick={onClose}>Close</Button>

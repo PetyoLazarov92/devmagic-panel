@@ -32,7 +32,7 @@ const rank = (r: Row) => (r.scan?.errors ? 0 : r.scan ? 2 : 1);
 export function SitesCompatCard({ version }: { version: string }) {
   const report = useAsync(() => api.phpVersionCompat(version), [version]);
   const [all, setAll] = useState(false);
-  const runner = useJob();
+  const runner = useJob({ kinds: ['php.checkCompatAll'] });
   const { job } = runner;
   const busy = job !== null && !settled(job);
   const done = useRef<string | null>(null);
@@ -87,7 +87,7 @@ export function SitesCompatCard({ version }: { version: string }) {
         )}
         {(job || runner.error) && (
           <div className="grid gap-3">
-            {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+            {job && <JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
             {runner.error && <Notice>{runner.error}</Notice>}
           </div>
         )}

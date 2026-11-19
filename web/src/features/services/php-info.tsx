@@ -69,7 +69,7 @@ export function FpmCheckSection() {
 
 export function FpmCheckView() {
   const { data, error, loading, reload } = useAsync(() => api.phpFpmCheck(), []);
-  const runner = useJob();
+  const runner = useJob({ kinds: ['php.matchFpm'] });
   const done = useRef<string | null>(null);
   const { job } = runner;
   useEffect(() => {
@@ -109,7 +109,7 @@ export function FpmCheckView() {
           <p className="w-full text-xs text-muted-foreground">Gives FPM the same modules, the panel&apos;s settings and Xdebug, and Apache&apos;s php.ini (FPM&apos;s own is saved, and Undo puts it back).</p>
         </div>
       )}
-      {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+      {job && <JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
       {runner.error && errorBox(runner.error)}
     </div>
   );

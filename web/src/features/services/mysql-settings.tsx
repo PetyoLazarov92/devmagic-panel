@@ -160,7 +160,7 @@ export function MysqlSettingsCard({ refresh: outer = 0 }: { refresh?: number }) 
           </div>
         </>
       )}
-      <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} />
+      <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} onDismiss={runner.clear} />
     </Card>
   );
 }

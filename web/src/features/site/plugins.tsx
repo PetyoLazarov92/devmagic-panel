@@ -90,7 +90,7 @@ const canUpdate = (p: SitePlugin) => Boolean(p.update) && !always(p) && !p.oneFi
  * under the bar, Undo puts the versions from before back, and the list reads again once it ends.
  */
 function useUpdates(site: Site, kind: 'plugins' | 'themes', onDone: () => void) {
-  const job = useJob();
+  const job = useJob({ kinds: ['site.updatePlugins'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
   const [snapshot, setSnapshot] = useState(true);
   const running = job.job !== null && !settled(job.job);
   const status = job.job?.status;
@@ -125,7 +125,7 @@ function UpdatesBar({ kind, names, updates }: { kind: 'plugins' | 'themes'; name
           </>
         )}
       </div>
-      <JobFooter job={updates.job.job} error={updates.job.error} onRetry={() => void updates.job.retry()} />
+      <JobFooter job={updates.job.job} error={updates.job.error} onRetry={() => void updates.job.retry()} onDismiss={updates.job.clear} />
     </Card>
   );
 }

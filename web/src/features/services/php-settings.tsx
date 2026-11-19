@@ -25,7 +25,7 @@ import { SapiPicker } from './php-info';
  */
 export function IniChangesCard({ version, onMoved }: { version: string; onMoved: () => void }) {
   const { data, error, loading, reload } = useAsync(() => api.phpIni(version), [version]);
-  const runner = useJob();
+  const runner = useJob({ kinds: ['php.adoptIni'] });
   const done = useRef<string | null>(null);
   const changed = (data?.sapis ?? []).some((d) => d.changes.length > 0);
   const busy = runner.job !== null && !settled(runner.job);
@@ -59,7 +59,7 @@ export function IniChangesCard({ version, onMoved }: { version: string; onMoved:
                 </Button>
               </div>
             )}
-            {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+            {job && <JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
             {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
           </div>
         )}

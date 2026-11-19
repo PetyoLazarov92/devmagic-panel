@@ -2,7 +2,8 @@ import type { CoreSecurity, CoresReport } from '@devmagic-panel/shared';
 import { coreVersion } from '@devmagic-panel/shared';
 import { Download, Layers, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { settled, StepList, useJob } from '@/features/jobs/job-steps';
+import { settled, useJob } from '@/features/jobs/job-steps';
+import { JobBox } from '@/features/jobs/job-box';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +14,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { Link } from '@/lib/router';
-import { lastLine, runWithToast } from '@/lib/site-actions';
+import { runWithToast } from '@/lib/site-actions';
 import { siteFromName, siteHref as siteRefHref, siteTarget } from '@/lib/site-ref';
 import { toast } from '@/lib/toast';
 import { timeAgo } from '@/lib/format';
@@ -58,7 +59,7 @@ export function CoresPage() {
     reload();
   };
   const unanswered = Boolean(askedAt && !loading && report && (!report.statusAt || Date.parse(report.statusAt) < askedAt - 5000));
-  const adding = useJob();
+  const adding = useJob({ kinds: ['core.add'] });
   const lastJob = useRef<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);
@@ -175,7 +176,7 @@ export function CoresPage() {
               busy={busy}
               onAdd={(version) => (report.insecure.includes(version) ? setInsecure(version) : void adding.follow(api.startJob('core.add', { version })))}
             />
-            {(job || adding.error) && <AddProgress job={job} error={adding.error} />}
+            {(job || adding.error) && <AddProgress job={job} error={adding.error} onRetry={() => void adding.retry()} onDismiss={adding.clear} />}
           </div>
         </div>
       )}
@@ -234,13 +235,10 @@ function AddCard({ report, busy, onAdd }: { report: CoresReport; busy: boolean; 
   );
 }
 
-function AddProgress({ job, error }: { job: ReturnType<typeof useJob>['job']; error: string | null }) {
-  const [open, setOpen] = useState<string | null>(null);
-  const failed = job?.steps.find((s) => s.status === 'failed');
+function AddProgress({ job, error, onRetry, onDismiss }: { job: ReturnType<typeof useJob>['job']; error: string | null; onRetry: () => void; onDismiss: () => void }) {
   return (
     <div className="grid gap-2">
-      {job && <StepList steps={job.steps} open={open} setOpen={setOpen} />}
-      {failed?.output && <p className="text-sm text-danger">{lastLine(failed.output)}</p>}
+      {job && <JobBox job={job} onRetry={onRetry} onDismiss={onDismiss} />}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </div>
   );

@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { duration } from '@/lib/format';
 import { loadThroughRestart } from '@/lib/startup';
 import { cn } from '@/lib/utils';
+import { type ResumeJobs, runningJobOf } from '@/lib/job-view';
 import { Card } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 
@@ -60,11 +61,31 @@ export const settled = (job: JobView | null) => job !== null && job.status !== '
 /**
  * Follows a server job: start it with a promise of its id, then the view
  * refreshes until it settles. The server keeps working if the page closes.
+ * With `resume`, a job of those kinds that still runs when the place opens
+ * shows again where it was started; a finished one never comes back there.
  */
-export function useJob() {
+export function useJob(resume?: ResumeJobs) {
   const [job, setJob] = useState<JobView | null>(null);
   const [error, setError] = useState<string | null>(null);
   useFollowed(job?.id);
+  const resumeKey = resume ? JSON.stringify(resume) : '';
+  const jobRef = useRef(job);
+  jobRef.current = job;
+  useEffect(() => {
+    if (!resumeKey) return;
+    const wanted = JSON.parse(resumeKey) as ResumeJobs;
+    let live = true;
+    api.jobs().then(
+      (list) => {
+        const found = runningJobOf(list, wanted);
+        if (live && found && !jobRef.current) setJob(found);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [resumeKey]);
 
   useEffect(() => {
     if (!job || settled(job)) return;
@@ -150,7 +171,8 @@ export function StepList({ steps, open, setOpen }: { steps: RunStep[]; open: str
                 {s.status === 'running' && !s.note && s.activity?.length ? <span className="truncate text-xs text-muted-foreground">{s.activity.at(-1)}</span> : null}
               </span>
               {s.durationMs !== undefined && <span className="text-xs text-muted-foreground tabular-nums">{duration(s.durationMs)}</span>}
-              {s.output && <ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open === s.id && 'rotate-90')} />}
+              {/* The arrow says there is output to read; a step without any keeps its place, so the times line up. */}
+              {s.output ? <ChevronRight className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open === s.id && 'rotate-90')} /> : <span className="size-4 shrink-0" aria-hidden />}
             </button>
             {s.output && open === s.id && (
               <pre className={cn('mx-4 mb-3 max-h-64 overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap [overflow-wrap:anywhere]', s.status === 'failed' && 'text-danger')}><AnsiText text={s.output} /></pre>

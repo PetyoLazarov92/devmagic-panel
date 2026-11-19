@@ -94,7 +94,7 @@ function CompatView({ site, compat, current, ask, onChanged }: { site: Site; com
   const [version, setVersion] = useState(() => versions.filter((v) => current && newer(v, current)).at(-1) ?? versions[0] ?? '');
   const [all, setAll] = useState(false);
   const [shown, setShown] = useState<string | undefined>(compat.scans[0]?.version);
-  const runner = useJob();
+  const runner = useJob({ kinds: ['php.checkCompat'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
   const { job } = runner;
   const busy = job !== null && !settled(job);
   const done = useRef<string | null>(null);
@@ -166,7 +166,7 @@ function CompatView({ site, compat, current, ask, onChanged }: { site: Site; com
         {!compat.installed && compat.composer && <p className="text-xs text-muted-foreground">The first check fetches the scanner (about 8 MB) with Composer into the panel&apos;s data folder. Nothing goes into the site.</p>}
         {(job || runner.error) && (
           <div className="grid gap-3">
-            {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+            {job && <JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
             {runner.error && <Notice>{runner.error}</Notice>}
           </div>
         )}

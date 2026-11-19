@@ -93,7 +93,18 @@ lowers one lowers the baseline there too.
   card of its own between cards: the cards around it stay where they are. A
   job started from a row's menu in a long list shows at the top of that list,
   inside its card. The header's jobs indicator is the view of every job; a
-  page never adds a second place for the same job.
+  page never adds a second place for the same job. Always `JobBox` or
+  `JobFooter`, never a `StepList` of its own (the job's page and the update
+  screen are the job's own views). In it: a step shows the arrow only when
+  it has output to read, in a slot that keeps the times lined up; a job that
+  ended well folds to one line after `JOB_FOLD_MS` (not while the pointer or
+  focus is in it, a step is open, or you opened it again); a failed one stays
+  open with its failed step's output and Retry and never folds; × (`onDismiss`,
+  the runner's `clear`) takes it off this place only, as Activity and Run
+  history keep it. Pass `useJob({ kinds, targets })` the actions the place
+  starts, so a job still running when you come back shows there again; a
+  finished one never comes back. The Parts page (`/mockup/parts`) shows each
+  state.
 - **Changes you can undo is the last card of its view**, full width, and only
   there while something can be undone (`CleanupsCard`, `RowChangesCard`): at
   the bottom it never pushes another card when it appears. The toast after a

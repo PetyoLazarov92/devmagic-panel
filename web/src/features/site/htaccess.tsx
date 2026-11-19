@@ -147,7 +147,7 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
   const [open, setOpen] = useState(false);
   const [skip, setSkip] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
-  const job = useJob();
+  const job = useJob({ kinds: ['site.applyHtaccessRules'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
   const done = useRef<string | null>(null);
   const busy = job.job !== null && !settled(job.job);
   useEffect(() => {
@@ -249,7 +249,7 @@ export function HtaccessCard({ site, onChanged }: { site: Site; onChanged: () =>
         )}
         {(job.job || job.error) && (
           <div className="grid gap-3">
-            {job.job && <JobBox job={job.job} onRetry={() => void job.retry()} />}
+            {job.job && <JobBox job={job.job} onRetry={() => void job.retry()} onDismiss={job.clear} />}
             {job.error && <p role="alert" className="text-danger">{job.error}</p>}
           </div>
         )}

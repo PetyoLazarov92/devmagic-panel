@@ -1,7 +1,8 @@
 import type { ArchiveReason, TrashEntry } from '@devmagic-panel/shared';
 import { Archive, ArchiveRestore, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { settled, StepList, useJob } from '@/features/jobs/job-steps';
+import { settled, useJob } from '@/features/jobs/job-steps';
+import { JobBox } from '@/features/jobs/job-box';
 import { installLabel } from '@/components/layout/site-bits';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
 import { bytes, dateTime } from '@/lib/format';
 import { Link, navigate } from '@/lib/router';
-import { lastLine, runWithToast } from '@/lib/site-actions';
+import { runWithToast } from '@/lib/site-actions';
 import { toast } from '@/lib/toast';
 import { useReloadWhileBusy } from '@/lib/jobs';
 import { cn } from '@/lib/utils';
@@ -98,8 +99,7 @@ export function RemovedSites({ entries, error, loading, reload, query }: { entri
 }
 
 function TrashRow({ entry, onDelete, onRestored }: { entry: TrashEntry; onDelete: () => void; onRestored: () => void }) {
-  const job = useJob();
-  const [open, setOpen] = useState<string | null>(null);
+  const job = useJob({ kinds: ['trash.restore'], targets: [entry.domain] });
   const [starting, setStarting] = useState(false);
   const [confirming, setConfirming] = useState(false);
   // Held from the click on, and while any job works on this domain (its restore, started here or elsewhere).
@@ -114,7 +114,6 @@ function TrashRow({ entry, onDelete, onRestored }: { entry: TrashEntry; onDelete
       setStarting(false);
     }
   }
-  const failed = job.job?.steps.find((s) => s.status === 'failed');
 
   useEffect(() => {
     if (job.job?.status !== 'done') return;
@@ -150,8 +149,7 @@ function TrashRow({ entry, onDelete, onRestored }: { entry: TrashEntry; onDelete
         </Button>
         <Button size="sm" variant="soft" disabled={running} onClick={onDelete}><Trash2 />Delete now</Button>
       </div>
-      {job.job && (running || failed) && <StepList steps={job.job.steps} open={open} setOpen={setOpen} />}
-      {failed?.output && <p className="text-xs text-danger">{lastLine(failed.output)}</p>}
+      {job.job && <JobBox job={job.job} onRetry={() => void job.retry()} onDismiss={job.clear} />}
       {job.error && <p role="alert" className="text-xs text-danger">{job.error}</p>}
 
       <Dialog

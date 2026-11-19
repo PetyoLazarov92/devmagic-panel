@@ -101,7 +101,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
   const [originalsOnly, setOriginalsOnly] = useState(false);
   const [maxMb, setMaxMb] = useState('');
   const [changed, setChanged] = useState(false);
-  const copy = useJob();
+  const copy = useJob({ kinds: ['site.copyUploads'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
 
   const readHere = () => void api.uploadsHere(site.domain, site.path).then(setHere, () => setHere(null));
   useEffect(() => {
@@ -332,7 +332,7 @@ export function UploadsFromProduction({ site }: { site: Site }) {
               <p className="text-xs text-muted-foreground">Files are only added here: one that is here already is left as it is{changed ? ', unless it changed on production' : ''}. Stop keeps what came, and a new run brings the rest.</p>
             </div>
           </CardBody>
-          <JobFooter job={copy.job} error={copy.error} onRetry={() => void copy.retry()} onStop={() => void copy.stop()} stopNote="What came so far is kept, and a new run brings the rest." />
+          <JobFooter job={copy.job} error={copy.error} onRetry={() => void copy.retry()} onStop={() => void copy.stop()} onDismiss={copy.clear} stopNote="What came so far is kept, and a new run brings the rest." />
         </Card>
       )}
     </div>

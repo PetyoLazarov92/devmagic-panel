@@ -429,7 +429,7 @@ export function TaskList({ tasks, site, onChanged, empty }: { tasks: CronTaskVie
   const [editing, setEditing] = useState<CronTaskView | 'new' | null>(null);
   const [removing, setRemoving] = useState<CronTaskView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const runner = useJob();
+  const runner = useJob({ kinds: ['cron.runNow'], targets: tasks.map((t) => `cron task ${t.id}`) });
   const { job } = runner;
   const settledJob = job && job.status !== 'running' && job.status !== 'queued';
   useEffect(() => {
@@ -443,7 +443,7 @@ export function TaskList({ tasks, site, onChanged, empty }: { tasks: CronTaskVie
       </div>
       {(job || runner.error) && (
         <div className="px-5 pt-4">
-          {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+          {job && <JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
           {runner.error && <p role="alert" className="text-sm text-danger">{runner.error}</p>}
         </div>
       )}

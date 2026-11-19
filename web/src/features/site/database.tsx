@@ -126,7 +126,7 @@ function DatabaseTools({ site }: { site: Site }) {
   }
 
   // A job is the footer of the card that started it.
-  const jobIn = (card: JobCardSlot) => (JOB_CARD[kind ?? 'replace'] === card ? <JobFooter job={runner.job} error={runner.error} onRetry={() => void runner.retry()} onStop={() => void runner.stop()} /> : null);
+  const jobIn = (card: JobCardSlot) => (JOB_CARD[kind ?? 'replace'] === card ? <JobFooter job={runner.job} error={runner.error} onRetry={() => void runner.retry()} onStop={() => void runner.stop()} onDismiss={runner.clear} /> : null);
 
   const reading = list.loading || copies.loading || kept.loading || preview.loading;
   const readAgain = () => {

@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.72.0 (2026-11-19)
+* **Jobs:** a job in the card that started it folds to one line a few seconds after it ends well, with Steps to open it again, its Undo and ×. Not while you point at it or read a step; a failed job stays open with what went wrong and Retry until you dismiss it. × only takes it off the card: Activity and Run history keep it
+* **Jobs:** a job still running when you come back to its page shows in its card again, on every page that starts one, not only the database pages; a finished one does not come back
+* **Jobs:** a failed step shows its output without a click, and the steps' times line up whether or not a step has output to open. Network admins, WordPress cores, removed sites, Mailpit and MySQL's overview show their jobs the same way as every other card
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.71.0 (2026-11-19)
 * **PHP:** the versions you can add come from apt's sources instead of a fixed list, so a new PHP version shows as soon as its final release is there. Release candidates are never offered, as a version or as an update: only final releases and their patches
 * **PHP:** the PHP tab says when apt last read its sources, since updates show only once apt has read them, and warns after 3 days. **Read them again** runs apt-get update with your sudo password, which goes to sudo once and is never saved; nothing is installed

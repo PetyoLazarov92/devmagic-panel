@@ -53,8 +53,8 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
   const [secret, setSecret] = useState('');
   const [asking, setAsking] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const install = useJob();
-  const copy = useJob();
+  const install = useJob({ kinds: ['site.installPlugins'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
+  const copy = useJob({ kinds: ['site.copyFromServer'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
   // The scan runs on the server: the last result shows at once, a running one is asked about again until it ends.
   const [state, setState] = useState<MissingScanState | null>(null);
   const shown = useRef<string | null>(null);
@@ -373,8 +373,8 @@ export function MissingPluginsCard({ site, show, onChanged }: { site: Site; /** 
           </div>
         </div>
       )}
-      <JobFooter job={install.job} error={install.error} onRetry={() => void install.retry()} />
-      <JobFooter job={copy.job} error={copy.error} onRetry={() => void copy.retry()} />
+      <JobFooter job={install.job} error={install.error} onRetry={() => void install.retry()} onDismiss={install.clear} />
+      <JobFooter job={copy.job} error={copy.error} onRetry={() => void copy.retry()} onDismiss={copy.clear} />
     </Card>
   );
 }

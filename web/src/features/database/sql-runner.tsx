@@ -107,7 +107,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
   const [checked, setChecked] = useState<WriteCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  const runner = useJob();
+  const runner = useJob({ kinds: ['mysql.runSql'], targets: [`database ${database}`] });
   const done = useRef<string | null>(null);
   const { job } = runner;
   const [sql, setSql] = useState(seed?.sql ?? '');
@@ -278,7 +278,7 @@ export function SqlRunner({ database, placeholder, canWrite = false, seed }: { d
             </Notice>
           )}
         </CardBody>
-        <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} />
+        <JobFooter job={job} error={runner.error} onRetry={() => void runner.retry()} onDismiss={runner.clear} />
       </Card>
       {result && <ResultCard result={result} onOpen={setOpen} onCsv={download} />}
       {canWrite && <CleanupsCard database={database} refresh={refresh} onUndone={() => schema.reload()} />}

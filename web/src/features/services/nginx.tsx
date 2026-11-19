@@ -44,7 +44,7 @@ export function NginxTab({ refresh, onLoading }: { refresh: number; onLoading: (
   const report = useAsync(() => api.nginx(), [refresh]);
   const installed = report.data?.installed ?? false;
   const log = useAsync(() => (installed ? api.nginxLog() : Promise.resolve(null)), [refresh, installed]);
-  const job = useJob();
+  const job = useJob({ kinds: ['nginx.setup', 'nginx.teardown', 'sites.setServerAll'] });
   const jobDone = useRef<string | null>(null);
   const jobBusy = job.job !== null && !settled(job.job);
   useEffect(() => onLoading(report.loading), [report.loading, onLoading]);
@@ -67,7 +67,7 @@ export function NginxTab({ refresh, onLoading }: { refresh: number; onLoading: (
       <SetupCard report={data} busy={jobBusy} onStart={start}>
         {(job.job || job.error) && (
           <div className="grid gap-3 text-sm">
-            {job.job && <JobBox job={job.job} onRetry={() => void job.retry()} />}
+            {job.job && <JobBox job={job.job} onRetry={() => void job.retry()} onDismiss={job.clear} />}
             {job.error && <p role="alert" className="text-danger">{job.error}</p>}
           </div>
         )}

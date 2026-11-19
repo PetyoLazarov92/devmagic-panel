@@ -33,7 +33,7 @@ export function PhpTab({ site }: { site: Site }) {
   const target = siteTarget(site);
   const php = useAsync(() => api.sitePhp(target.domain, target.path), [site.domain, site.path]);
   // Above the form, which starts over with what the job left: its steps and Undo stay in view.
-  const runner = useJob();
+  const runner = useJob({ kinds: ['site.setPhp'], targets: [`${site.domain}${site.path ?? ''}`, site.domain] });
   if (php.loading && !php.data) return <CardsSkeleton reading="Reading the site's PHP version and settings..." cards={[3, 6]} columns={1} />;
   if (php.error) return errorBox(php.error);
   if (!php.data) return null;
@@ -148,7 +148,7 @@ function PhpForm({ site, php, runner, onChanged }: { site: Site; php: SitePhp; r
         </CardBody>
         {(job || runner.error) && (
           <div className="grid gap-3 border-t px-5 py-4 text-sm">
-            {job && <JobBox job={job} onRetry={() => void runner.retry()} />}
+            {job && <JobBox job={job} onRetry={() => void runner.retry()} onDismiss={runner.clear} />}
             {runner.error && errorBox(runner.error)}
           </div>
         )}

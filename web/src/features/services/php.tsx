@@ -34,7 +34,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
   // Bumped when the php.ini changes moved, so the settings read again.
   const [moved, setMoved] = useState(0);
   // Installs, updates, removals and the switch: shown under the machine card, or under the version's header for its own.
-  const machine = useJob();
+  const machine = useJob({ kinds: ['php.install', 'php.upgrade', 'php.remove', 'php.package', 'php.switchToFpm', 'php.switchToModPhp', 'system.aptUpdate'] });
   const machineDone = useRef<string | null>(null);
   const machineBusy = machine.job !== null && !settled(machine.job);
   const [jobAt, setJobAt] = useState<'machine' | 'version'>('machine');
@@ -76,7 +76,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
   const pick = (version: string) => navigate(`/services/php/${version}`, { scroll: false });
   const jobBox = (machine.job || machine.error) && (
     <div className="grid gap-3 text-sm">
-      {machine.job && <JobBox job={machine.job} onRetry={() => void machine.retry()} />}
+      {machine.job && <JobBox job={machine.job} onRetry={() => void machine.retry()} onDismiss={machine.clear} />}
       {machine.error && errorBox(machine.error)}
     </div>
   );

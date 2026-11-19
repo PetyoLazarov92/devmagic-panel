@@ -239,6 +239,14 @@ and the update's job go to the Updates page to show how it ended.
 
 What the panel did, on two tabs.
 
+A job also shows in the card whose button started it, with every step (an
+arrow on a step that has output to read). Once it ends well it folds to one
+line after a few seconds, unless you are reading it, with Steps to open it
+again, its Undo and ×; a failed one stays open with what went wrong and Retry
+until you dismiss it. × only takes it off that card. A job still running when
+you come back to the page shows in its card again; a finished one does not,
+and both stay here.
+
 - **Jobs** (`/activity`): installs, imports, restores and other long actions
   since the panel last started, running ones first. A job's own page is
   `/jobs/<id>`.
