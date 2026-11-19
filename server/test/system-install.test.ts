@@ -6,7 +6,7 @@ import { WP_CLI_RELEASE } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
 import { Jobs, type JobView } from '../src/jobs.js';
 import { RunStore } from '../src/store.js';
-import { planSystemInstall } from '../src/system-install.js';
+import { planAptUpdate, planSystemInstall } from '../src/system-install.js';
 import type { HeldPassword } from '../src/update-install.js';
 import { fakeExec } from './helpers.js';
 
@@ -148,5 +148,43 @@ describe('installing with your sudo password', () => {
     expect(s.fake.calls.at(-1)?.args).toEqual(['-n', '/dmp-root', 'php-switch-fpm', '8.3']);
     const git = await run(planSystemInstall({ ...s.ctx, fpm: { version: '8.3', dmpRoot: '/dmp-root' } }, ['git'], 'pw', PIN));
     expect(git.steps.map((x) => x.id)).toEqual(['password', 'apt', 'done']);
+  });
+});
+
+describe("reading apt's sources again with your sudo password", () => {
+  it('checks the password, runs apt-get update with it on stdin only, notes the read and lets the password go', async () => {
+    const fake = fakeExec({ 'sudo -k -S -p  true': { stdout: '' }, 'sudo -k -S -p  env': { stdout: 'Hit:1 http://archive.ubuntu.example noble InRelease\nReading package lists...\n' } });
+    let read = 0;
+    const held: HeldPassword = { value: 's3cret' };
+    const view = await run(planAptUpdate({ exec: fake.exec, onRead: () => read++ }, held));
+    expect(view.status).toBe('done');
+    const lines = fake.calls.map((c) => [c.file, ...c.args].join(' '));
+    expect(lines).toEqual([
+      'sudo -k -S -p  true',
+      'sudo -k -S -p  env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -y -q -o DPkg::Lock::Timeout=300 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold update',
+    ]);
+    for (const c of fake.calls) expect(c.input).toBe('s3cret\n');
+    expect(lines.join(' ')).not.toContain('s3cret');
+    expect(read).toBe(1);
+    expect(held.value).toBeUndefined();
+  });
+
+  it('stops at a wrong password, reads nothing and lets the password go', async () => {
+    const fake = fakeExec({ 'sudo -k -S -p  true': { code: 1, stderr: 'Sorry, try again.\nsudo: 1 incorrect password attempt' } });
+    let read = 0;
+    const held: HeldPassword = { value: 'wrong' };
+    const view = await run(planAptUpdate({ exec: fake.exec, onRead: () => read++ }, held));
+    expect(view.status).toBe('failed');
+    expect(fake.calls).toHaveLength(1);
+    expect(read).toBe(0);
+    expect(held.value).toBeUndefined();
+  });
+
+  it('notes no read when apt-get update fails', async () => {
+    const fake = fakeExec({ 'sudo -k -S -p  true': { stdout: '' }, 'sudo -k -S -p  env': { code: 100, stderr: 'E: Could not get lock /var/lib/apt/lists/lock' } });
+    let read = 0;
+    const view = await run(planAptUpdate({ exec: fake.exec, onRead: () => read++ }, 's3cret'));
+    expect(view.status).toBe('failed');
+    expect(read).toBe(0);
   });
 });

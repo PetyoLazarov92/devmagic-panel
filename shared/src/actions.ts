@@ -1233,6 +1233,13 @@ export const actions = {
     changesSystem: true,
     input: z.object({ items: z.array(z.enum(SYSTEM_INSTALLS)).min(1).max(SYSTEM_INSTALLS.length), password: z.string().max(1024) }),
   },
+  'system.aptUpdate': {
+    title: "Read apt's sources again with your sudo password",
+    description:
+      "Runs apt-get update with your sudo password, so apt reads the sources it already has again (never a new one) and the PHP tab and Machine checks show PHP's newest builds and new versions. It installs and removes nothing. Your sudo password goes to sudo's stdin only (sudo -k: no cached sign-in used or kept), is held only while the job runs, never saved, and run history shows it as (hidden). A job; nothing to undo.",
+    changesSystem: true,
+    input: z.object({ password: z.string().max(1024) }),
+  },
   'machine.openTerminal': {
     title: 'Open a terminal on this machine',
     description:

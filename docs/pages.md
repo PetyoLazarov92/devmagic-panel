@@ -95,6 +95,12 @@ the panel needs or recommends an install it did not offer when you hid it.
 
 - **Imagick and Xdebug**: Install for PHP <version>, the command line's PHP,
   with Undo (Services, PHP for the other versions). No password.
+- **PHP updates**: a warning when apt has a newer final build of an installed
+  version, with **Update PHP <version>**; **New PHP version**, a note when a
+  final release newer than every installed version is out, with **Install PHP
+  <version>** (no site moves to it). Release candidates are left out.
+- **apt's sources**: when apt last read them, a warning after 7 days, with
+  **Read them again with your password** (`apt-get update`, nothing installed).
 - **The GitHub CLI, the GitLab CLI and rclone**: their pinned releases,
   checked, in your user folder. No password; see
   [GitHub access](new-site.md#github-access). The GitLab CLI is offered even

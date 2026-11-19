@@ -1,6 +1,6 @@
-import type { PhpReport, PhpVersion } from '@devmagic-panel/shared';
-import { Check, Copy, Download, Plus, RefreshCw, Server, SquareTerminal, Star, Trash2 } from 'lucide-react';
-import { type ReactNode, type RefObject, useState } from 'react';
+import { APT_LISTS_STALE_DAYS, type PhpReport, type PhpVersion } from '@devmagic-panel/shared';
+import { Check, Copy, Download, KeyRound, Plus, RefreshCw, Server, SquareTerminal, Star, Trash2 } from 'lucide-react';
+import { type FormEvent, type ReactNode, type RefObject, useId, useState } from 'react';
 import { ScopeLabel } from '@/components/layout/scope-label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 import { Notice } from '@/components/layout/page';
 import { scrollToCard } from '@/lib/scroll-to';
 import { Spinner } from '@/components/ui/spinner';
+import { SecretInput } from '@/components/ui/secret-input';
+import { timeAgo } from '@/lib/format';
 import { PHP_SECTIONS, type PhpSection, SAPI_LABEL, sectionId } from './php-shared';
 import { FpmCheckSection } from './php-info';
 
@@ -43,7 +45,7 @@ export function MachineCard({ report, picked, busy, cliBusy, tilesRef, onPick, o
   cliBusy: boolean;
   tilesRef: RefObject<HTMLDivElement | null>;
   onPick: (version: string) => void;
-  onStart: (id: 'php.install' | 'php.switchToFpm' | 'php.switchToModPhp', input: Record<string, unknown>) => void;
+  onStart: (id: 'php.install' | 'php.switchToFpm' | 'php.switchToModPhp' | 'system.aptUpdate', input: Record<string, unknown>) => void;
   onCli: (version: string) => void;
   children?: ReactNode;
 }) {
@@ -101,6 +103,7 @@ export function MachineCard({ report, picked, busy, cliBusy, tilesRef, onPick, o
           )}
         </div>
         {adding && <AddVersion report={report} busy={busy} onInstall={(version) => onStart('php.install', { version })} />}
+        <AptLists report={report} busy={busy} onRead={(password) => onStart('system.aptUpdate', { password })} />
         {report.mode !== 'fpm' && <FpmCheckSection />}
       </CardBody>
       {children}
@@ -300,6 +303,73 @@ export function ModeSwitch({ report, busy, onSwitch }: { report: PhpReport; busy
   );
 }
 
+/**
+ * How long ago apt read its sources, since PHP's updates and new versions
+ * here are only what apt last read, and reading them again with your sudo
+ * password (apt-get update, nothing installed). A quiet line, or a warning
+ * once the lists are older than APT_LISTS_STALE_DAYS.
+ */
+export function AptLists({ report, busy, onRead }: { report: PhpReport; busy: boolean; onRead: (password: string) => void }) {
+  const [asking, setAsking] = useState(false);
+  const [secret, setSecret] = useState('');
+  const id = useId();
+  const stale = report.listsAt !== undefined && Date.now() - Date.parse(report.listsAt) > APT_LISTS_STALE_DAYS * 86_400_000;
+  const when = report.listsAt ? `apt last read its sources ${timeAgo(report.listsAt)}` : 'When apt last read its sources is not known';
+  const ask = (
+    <Button size="sm" variant="outline" disabled={busy || asking} onClick={() => setAsking(true)}>
+      <RefreshCw />
+      Read them again
+    </Button>
+  );
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const password = secret;
+    setSecret('');
+    setAsking(false);
+    onRead(password);
+  }
+  return (
+    <div className="grid gap-2">
+      {stale ? (
+        <Notice tone="warning" size="inline" action={ask}>
+          PHP updates may be missing: {when}. The builds and versions here are what apt last read.
+        </Notice>
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{when}. PHP&apos;s updates and new versions show once apt has read them.</span>
+          {!asking && (
+            <Button size="xs" variant="soft" disabled={busy} onClick={() => setAsking(true)}>
+              <RefreshCw />
+              Read them again
+            </Button>
+          )}
+        </div>
+      )}
+      {asking && (
+        <Notice tone="info" size="inline">
+          <form className="grid gap-2" onSubmit={submit} autoComplete="off">
+            <p>apt-get update reads the sources apt already has again and installs nothing. Your sudo password goes to sudo once, for this run; the panel never saves it.</p>
+            <label htmlFor={id} className="text-sm font-medium">Your sudo password</label>
+            <div className="sm:max-w-xs">
+              <SecretInput id={id} value={secret} onChange={(e) => setSecret(e.target.value)} autoFocus />
+            </div>
+            <p className="text-xs text-muted-foreground">The password you log in to this computer with. Leave it empty if sudo asks you for none.</p>
+            <div className="flex gap-2">
+              <Button size="sm" type="submit" disabled={busy}>
+                <KeyRound />
+                Read apt&apos;s sources
+              </Button>
+              <Button size="sm" variant="soft" type="button" onClick={() => { setSecret(''); setAsking(false); }}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Notice>
+      )}
+    </div>
+  );
+}
+
 /** The versions apt can install, or how to give apt the PPA they come from. */
 export function AddVersion({ report, busy, onInstall }: { report: PhpReport; busy: boolean; onInstall: (version: string) => void }) {
   const [copied, setCopied] = useState(false);
@@ -316,7 +386,7 @@ export function AddVersion({ report, busy, onInstall }: { report: PhpReport; bus
                 Install PHP {v}
               </Button>
             ))}
-            <p className="w-full text-xs text-muted-foreground">With PHP-FPM, the command line and the common modules. No site changes until you give one this version on its Server and PHP tab.</p>
+            <p className="w-full text-xs text-muted-foreground">With PHP-FPM, the command line and the common modules. No site changes until you give one this version on its Server and PHP tab. A new PHP version shows here once its final release is in apt&apos;s sources.</p>
           </div>
         )}
         {!report.sources.php && (

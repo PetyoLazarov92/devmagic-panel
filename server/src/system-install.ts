@@ -177,3 +177,54 @@ export function planSystemInstall(
   });
   return steps.map((step) => holding(held, step));
 }
+
+/**
+ * apt update with your sudo password, from the PHP tab or Machine checks: apt
+ * reads the sources it already has again (never a new one) and installs
+ * nothing, so PHP updates and new versions show. The password goes to sudo's
+ * stdin only and the job lets go of it at the end, or at once when a step
+ * fails. `onRead` keeps when it worked, as the lists' folders change only
+ * when a source brought something new.
+ */
+export function planAptUpdate(ctx: { exec: Executor; onRead: () => void }, password: string | HeldPassword): JobStep[] {
+  const held: HeldPassword = typeof password === 'string' ? { value: password } : password;
+  const gone = () => failed('the password was let go of when a step failed: Retry asks for it again');
+  const steps: JobStep[] = [
+    {
+      id: 'password',
+      label: 'Check your sudo password',
+      run: async () => {
+        if (held.value === undefined) return gone();
+        const r = await sudo(ctx.exec, held.value, ['true'], 30_000);
+        if (r.code !== 0) return failed(/incorrect password|Sorry, try again|authentication failure/i.test(r.stderr) ? "sudo did not take that password: apt's sources were not read" : `sudo refused: ${r.stderr.trim() || 'no answer'}`);
+        return ok('sudo takes it');
+      },
+    },
+    {
+      id: 'apt-update',
+      label: "Read apt's sources again (apt-get update)",
+      weight: 3,
+      run: async (job) => {
+        if (held.value === undefined) return gone();
+        let lines = 0;
+        const r = await sudo(ctx.exec, held.value, [...APT, 'update'], 10 * 60_000, (chunk) => {
+          lines += chunk.split('\n').length - 1;
+          const last = chunk.trim().split('\n').at(-1);
+          if (last) job.progress(Math.min(0.95, lines / 40), last.slice(0, 120));
+        });
+        if (r.code !== 0) return { ...r, stderr: r.stderr.trim() || "apt-get could not read its sources" };
+        ctx.onRead();
+        return ok("apt read its sources: PHP's updates and new versions show on the PHP tab");
+      },
+    },
+    {
+      id: 'done',
+      label: 'Let go of your password',
+      run: async () => {
+        held.value = undefined;
+        return ok('the job holds your password no more');
+      },
+    },
+  ];
+  return steps.map((step) => holding(held, step));
+}

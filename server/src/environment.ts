@@ -21,6 +21,7 @@ import { bufferPoolTarget } from './mysql-limits.js';
 import { formatBytes } from './sites/db.js';
 import { hostsKept, interopDisabled, interopOn, listensOffAddress, wslVersion, type WslPaths } from './wsl.js';
 import { readRelease } from './update.js';
+import { aptListsAt, type AptPaths, aptPhpVersions, installedVersions, isPrerelease, packageVersions, updateLabel, upstreamVersion } from './php/versions.js';
 import { helperInstalled, windowsBlockPairs, windowsHostsPairs, windowsPortproxyHeld, windowsPartCurrent, windowsPortproxyRules, windowsStatus, type WindowsPaths } from './windows.js';
 
 /** Paths outside config.env, overridable so tests run against a temp tree. */
@@ -60,6 +61,8 @@ export interface CheckContext {
   gitlabHosts?: () => Promise<string[]>;
   /** The machine's memory in bytes; the system's own when not given. */
   totalMemory?: () => number;
+  /** apt's paths and the panel's own last refresh, for the age of apt's lists; left out, that check is skipped. */
+  apt?: { paths: AptPaths; readAt?: () => string | undefined; now?: () => number };
 }
 
 export const NSS_NICKNAME = 'devmagic-panel Local CA';
@@ -298,6 +301,7 @@ async function phpChecks(ctx: CheckContext): Promise<Check[]> {
       confirm: `Installs php${cli}-${name} (${what}) from the sources apt has; Apache restarts when it runs PHP ${cli}, and PHP ${cli}'s FPM reloads.${after} Undo on the job removes it again. Other PHP versions get it on Services, PHP.`,
     },
   ];
+  results.push(...(await phpBuildChecks(ctx)));
   results.push(
     modules.has('imagick')
       ? ok('php.imagick', 'Imagick', 'installed', { recommended: true })
@@ -312,6 +316,88 @@ async function phpChecks(ctx: CheckContext): Promise<Check[]> {
         }),
   );
   return results;
+}
+
+/** After this many days without a read of apt's sources, Machine checks warns. */
+const APT_LISTS_WARN_DAYS = 7;
+
+/** How long ago, in words: less than an hour, hours, or days. */
+function agoWords(ms: number): string {
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return 'less than an hour ago';
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  return `${Math.floor(hours / 24)} days ago`;
+}
+
+/**
+ * PHP from apt's point of view: a newer final build of an installed version
+ * (never a release candidate), a final release newer than every installed
+ * version, and how long ago apt last read its sources, which is all apt knows.
+ */
+async function phpBuildChecks(ctx: CheckContext): Promise<Check[]> {
+  const installed = installedVersions(ctx.config).map((v) => v.version);
+  const out: Check[] = [];
+  if (installed.length > 0) {
+    const [builds, all] = await Promise.all([packageVersions(ctx.exec, installed), aptPhpVersions(ctx.exec)]);
+    const updates = installed.flatMap((version) => {
+      const b = builds.get(version);
+      const to = updateLabel(b?.installed, b?.candidate);
+      return to ? [{ version, to, from: b?.installed ? upstreamVersion(b.installed) : undefined }] : [];
+    });
+    out.push(
+      updates.length > 0
+        ? warn('php.updates', 'PHP updates', updates.map((u) => `PHP ${u.version}: ${u.to.startsWith('a new build') ? u.to : `${u.to} is out`}${u.from && !u.to.startsWith('a new build') ? ` (${u.from} installed)` : ''}`).join('; '), {
+            fixes: updates.map((u) => ({
+              action: 'php.upgrade' as const,
+              input: { version: u.version },
+              label: `Update PHP ${u.version}`,
+              confirm: `Updates every installed package of PHP ${u.version} to ${u.to.replace(/^a new build of /, '')} from the sources apt has, then restarts Apache when it runs PHP ${u.version} and reloads its FPM. apt keeps no older build, so there is no Undo.`,
+            })),
+          })
+        : ok('php.updates', 'PHP updates', 'every version has the newest build apt knows of'),
+    );
+    const newest = [...installed].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).at(-1) as string;
+    const newer = all.filter((v) => v.localeCompare(newest, undefined, { numeric: true }) > 0);
+    const offered = await packageVersions(ctx.exec, newer);
+    const released = newer.filter((v) => {
+      const candidate = offered.get(v)?.candidate;
+      return candidate !== undefined && !isPrerelease(candidate);
+    });
+    if (released.length > 0) {
+      out.push(
+        info('php.newVersion', 'New PHP version', `PHP ${released.join(' and ')} ${released.length === 1 ? 'is' : 'are'} out: it installs next to your versions, and no site moves until you give it one`, {
+          fixes: released.map((v) => ({
+            action: 'php.install' as const,
+            input: { version: v },
+            label: `Install PHP ${v}`,
+            confirm: `Installs PHP ${v} from the sources apt has, with PHP-FPM, the command line and the common modules. No site changes until you give one this version on its Server and PHP tab.`,
+          })),
+        }),
+      );
+    }
+  }
+  if (ctx.apt) {
+    const at = aptListsAt(ctx.apt.paths, ctx.apt.readAt?.());
+    if (at) {
+      const age = (ctx.apt.now?.() ?? Date.now()) - Date.parse(at);
+      out.push(
+        age > APT_LISTS_WARN_DAYS * 86_400_000
+          ? warn('php.aptLists', "apt's sources", `last read ${agoWords(age)}: PHP updates since then do not show`, {
+              fixes: [
+                {
+                  action: 'system.aptUpdate',
+                  input: {},
+                  label: 'Read them again with your password',
+                  needsPassword: true,
+                  confirm: "apt-get update reads the sources apt already has again and installs nothing. Your sudo password goes to sudo once, for this run; the panel never saves it.",
+                },
+              ],
+            })
+          : ok('php.aptLists', "apt's sources", `last read ${agoWords(age)}`),
+      );
+    }
+  }
+  return out;
 }
 
 function wpcoreCheck(ctx: CheckContext): Check {

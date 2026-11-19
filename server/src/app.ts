@@ -52,6 +52,7 @@ import { fileTrashDir, pruneFileTrash } from './sites/file-changes.js';
 import { pruneStaged, stagedDir } from './sites/file-transfer.js';
 import { sitesByVersion } from './php/pools.js';
 import { registerPhpRoutes } from './php/routes.js';
+import { APT_LISTS_READ_KEY, APT_PATHS } from './php/versions.js';
 import { pruneUploads, removeUnfinishedUploads, UPLOAD_KEEP_MS } from './sites/uploads.js';
 import { readOrgSettings, registerOrgRoutes } from './org/routes.js';
 import { OrgScanner } from './org/scan.js';
@@ -542,7 +543,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         paths: deps.hostPaths,
         dmpRoot: deps.dmpRoot,
         gitlabHosts,
-        ...(deps.production ? { self: { repo: deps.repo ?? REPO_DIR, version: deps.version } } : {}),
+        ...(deps.production ? { self: { repo: deps.repo ?? REPO_DIR, version: deps.version }, apt: { paths: APT_PATHS, readAt: () => deps.store.getMeta(APT_LISTS_READ_KEY) } } : {}),
       }),
     );
 

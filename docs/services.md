@@ -24,7 +24,16 @@ other:
   build apt offers (**Update** in one click); versions apt can install
   (**Install**, with PHP-FPM, the command line and the common modules; the
   one-time command for the ondrej/php PPA when apt has no other version); and
-  **Remove** for one nothing uses.
+  **Remove** for one nothing uses. The versions come from apt's sources, from
+  7.4 up, so a new PHP version shows as soon as its final release is there; a
+  release candidate is never offered, as a version or as an update.
+- **apt's sources**: updates and new versions are only what apt last read, so
+  the tab says when that was ("apt last read its sources 20 hours ago"), as a
+  warning once it is more than 3 days ago. **Read them again** runs `apt-get
+  update` with your sudo password: apt reads the sources it already has
+  (never a new one) and installs nothing. The password goes to sudo's stdin
+  once and is never saved. Your system usually reads them on its own (Ubuntu's
+  daily apt timer, Mint's Update Manager).
 - **Packages**: module packages from apt per version.
 - **Parts and modules**: the parts installed (mod_php, PHP-FPM, command line),
   its modules, and Xdebug (any mix of debug, develop, profile, trace,

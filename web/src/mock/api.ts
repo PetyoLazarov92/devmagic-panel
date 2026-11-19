@@ -10,7 +10,7 @@ import { mockUploadsCompare, mockUploadsCopied, mockUploadsHere } from './upload
 import { mockProfile, mockProfileFiles, mockProfiles } from './profiles';
 import { killedProcesses, mockDbCell, mockDbOverview, mockDbQuery, mockDbRows, mockDbStructure, mockCheckWrite, mockCleanups, mockCleanupStarted, mockDbSchema, mockProcesses, mockSlowQueries, slowQueriesReset, mockRowAction, mockUndoCleanup, mockPluginGone, mockRowChangeDetail, mockRowChanges, mockTableFixed, mockWordpressDb } from './db-browser';
 import { mockCron, mockCronAction, mockCronRun, mockCronRunNow, mockCronRuns, mockWpCron } from './cron';
-import { mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
+import { mockAptLists, mockFpmFindings, mockIniChanges, mockPhpInfo, mockPhpIni, mockPhpReport, mockPhpSettings, mockPhpVersions, mockPhpJob, mockPhpMode, mockPhpPackages, mockCheckCompat, mockCheckCompatAll, mockDeleteCompat, mockSetSitePhp, mockVersionCompat, mockSiteCompat, mockSitePhp, mockSitePhpInfo, mockSitePools } from './php';
 
 /**
  * The panel's own version, so the mockup and the demo show the release they come from, with two
@@ -118,6 +118,11 @@ const environment: EnvironmentReport = {
       detail: '128 MB for 6.4 GB of InnoDB data: big sites read from the disk on every page. Set innodb_buffer_pool_size = 7680M under [mysqld] in /etc/mysql/mysql.conf.d/mysqld.cnf, then sudo systemctl restart mysql',
     },
     { id: 'php.version', group: 'php', label: 'PHP', status: 'ok', detail: '8.3.6' },
+    {
+      id: 'php.updates', group: 'php', label: 'PHP updates', status: 'warn', detail: 'PHP 8.3: 8.3.14 is out (8.3.6 installed)',
+      fixes: [{ action: 'php.upgrade', input: { version: '8.3' }, label: 'Update PHP 8.3', confirm: 'Updates every installed package of PHP 8.3 to 8.3.14 from the sources apt has, then restarts Apache when it runs PHP 8.3 and reloads its FPM. apt keeps no older build, so there is no Undo.' }],
+    },
+    { id: 'php.aptLists', group: 'php', label: "apt's sources", status: 'ok', detail: 'last read 20 hours ago' },
     { id: 'php.imagick', group: 'php', label: 'Imagick', status: 'ok', detail: 'installed', recommended: true },
     { id: 'tools.wpcli', group: 'tools', label: 'WP-CLI', status: 'ok', detail: 'WP-CLI 2.11.0' },
     { id: 'tools.git', group: 'tools', label: 'git', status: 'ok', detail: 'git version 2.43.0' },
@@ -665,6 +670,11 @@ function mockDbJob(id: string, input: Record<string, unknown>): string {
     ],
     'php.install': [{ id: 'install', label: `Install PHP ${String(input.version)} with PHP-FPM, the command line and the common modules` }],
     'php.upgrade': [{ id: 'upgrade', label: `Update PHP ${String(input.version)} to the newest build apt has` }],
+    'system.aptUpdate': [
+      { id: 'password', label: 'Check your sudo password' },
+      { id: 'apt-update', label: "Read apt's sources again (apt-get update)" },
+      { id: 'done', label: 'Let go of your password' },
+    ],
     'php.remove': [{ id: 'remove', label: `Remove PHP ${String(input.version)} (its settings stay in /etc/php/${String(input.version)})` }],
     'php.package': [{ id: String(input.how), label: `${input.how === 'install' ? 'Install' : 'Remove'} php${String(input.version)}-${String(input.name)}` }],
     'php.matchFpm': [{ id: 'match', label: `Give PHP-FPM ${String(input.version)} the modules, settings and php.ini of Apache's PHP ${String(input.version)}` }],
@@ -1993,6 +2003,7 @@ export const mockApi: Api = {
     if (id === 'site.updatePlugins') [...((input.plugins as string[] | undefined) ?? []), ...((input.themes as string[] | undefined) ?? [])].forEach((slug) => mockUpdated.add(slug));
     // The mockup's Mailpit "runs" once its install job has had time to finish.
     if (id === 'mailpit.install') window.setTimeout(() => (mailpitRunning = true), 3500);
+    if (id === 'system.aptUpdate') window.setTimeout(() => (mockAptLists.at = Date.now()), 2500);
     if (id === 'nginx.setup' || id === 'nginx.teardown') window.setTimeout(() => (mockNginxSetUp = id === 'nginx.setup'), 3500);
     mockCleanupStarted(id, input);
     if (id === 'sites.setServerAll') {

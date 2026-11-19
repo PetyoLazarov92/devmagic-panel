@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ERROR_REPORTING_CHOICES, PHP_INI_SETTINGS } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
@@ -6,7 +6,7 @@ import { readFpmFindings, phpDirectivesOutsideModPhp } from '../src/php/fpm-chec
 import { cliInfo, infoScript, PhpInfoUnavailable, webInfo } from '../src/php/info.js';
 import { diffIni, parseIni, readIniReport } from '../src/php/ini.js';
 import { planInstallVersion, planPhpPackage, planRemoveVersion, planUpgradeVersion, setCliVersion } from '../src/php/apt.js';
-import { apachePhpVersion, installedVersions, packageVersions, phpReport, readAptSources, readPhpModules, readPhpPackages, readXdebug, updateLabel, upstreamVersion, webSapi, XDEBUG_INI } from '../src/php/versions.js';
+import { apachePhpVersion, aptListsAt, installedVersions, isPrerelease, packageVersions, phpReport, readAptSources, readPhpModules, readPhpPackages, readXdebug, updateLabel, upstreamVersion, webSapi, XDEBUG_INI } from '../src/php/versions.js';
 import { ActionInputError, runAction, type ActionContext } from '../src/actions.js';
 import { Jobs, type JobStep } from '../src/jobs.js';
 import { normalizeIniValue, PhpSettingsRefused, planAdoptIni, planAdoption, readPhpSettings } from '../src/php/settings.js';
@@ -111,6 +111,12 @@ describe('versions', () => {
     expect(updateLabel('8.3.6-0ubuntu0.24.04.4', '8.3.6-0ubuntu0.24.04.5')).toBe('a new build of 8.3.6');
     expect(updateLabel('8.3.6-1', '8.3.6-1')).toBeUndefined();
     expect(updateLabel('8.3.14-1', '8.3.6-1')).toBeUndefined();
+    // Final releases and their patches only: a release candidate is never an update.
+    expect(updateLabel('8.3.13-1', '8.3.14~rc1-1')).toBeUndefined();
+    expect(updateLabel('8.6.0~rc3-1+ubuntu24.04.1', '8.6.0~rc4-1+ubuntu24.04.1')).toBeUndefined();
+    expect(updateLabel('8.6.0~rc4-1+ubuntu24.04.1', '8.6.0-1+ubuntu24.04.1')).toBe('8.6.0');
+    expect(isPrerelease('8.6.0~rc3-1+ubuntu24.04.1+deb.sury.org+1')).toBe(true);
+    expect(isPrerelease('1:8.5.12-1+ubuntu24.04.1~backport')).toBe(false);
   });
 
   it('builds the report: patch, update, FPM state, the command line and the default', async () => {
@@ -401,17 +407,40 @@ describe('installing, updating and removing versions', () => {
     ]);
   });
 
-  it('offers the versions apt has that are not installed', async () => {
+  const noApt = (t: Tree) => ({ sourcesDir: join(t.root, 'none'), osRelease: join(t.root, 'none'), listsDir: join(t.root, 'none'), updateStamp: join(t.root, 'none') });
+
+  it('offers the final releases apt has from 7.4 up that are not installed, new ones included, never a release candidate', async () => {
     const t = tempTree();
     addVersion(t, '8.3', { apache2: [], cli: [] });
-    const { exec } = fakeExec({
+    const policy = (v: string, candidate: string) => `php${v}-common:\n  Installed: (none)\n  Candidate: ${candidate}\n`;
+    const { exec, calls } = fakeExec({
+      'apt-cache pkgnames php': { stdout: ['php5.6-common', 'php7.3-common', 'php7.4-common', 'php8.3-common', 'php8.4-common', 'php8.4-fpm', 'php8.6-common', 'php9.0-common', 'php8.10-common', 'phpmyadmin'].join('\n') },
       'apt-cache policy php8.3-common': { stdout: 'php8.3-common:\n  Installed: 8.3.6-1\n  Candidate: 8.3.6-1\n' },
-      'apt-cache policy php7.4-common': { stdout: 'php7.4-common:\n  Installed: (none)\n  Candidate: (none)\nphp8.4-common:\n  Installed: (none)\n  Candidate: 8.4.1-1\n' },
+      'apt-cache policy php7.4-common': { stdout: [policy('7.4', '(none)'), policy('8.4', '8.4.1-1'), policy('8.6', '8.6.0~rc3-1+ubuntu24.04.1'), policy('9.0', '9.0.0-1')].join('') },
       php: { stdout: '8.3' },
     });
-    const report = await phpReport(t.config, exec, () => [], () => 0, { sourcesDir: join(t.root, 'none'), osRelease: join(t.root, 'none') });
-    expect(report.available).toEqual(['8.4']);
+    const report = await phpReport(t.config, exec, () => [], () => 0, noApt(t));
+    expect(report.available).toEqual(['8.4', '9.0']);
     expect(report.sources).toEqual({ php: false, distro: 'other' });
+    expect(report.listsAt).toBeUndefined();
+    expect(calls.map((c) => [c.file, ...c.args].join(' '))).toContain('apt-cache policy php7.4-common php8.4-common php8.6-common php9.0-common');
+  });
+
+  it("reads when apt last read its sources: its stamp, the lists' folders or the panel's own refresh, the newest", () => {
+    const t = tempTree();
+    const lists = join(t.root, 'lists');
+    mkdirSync(join(lists, 'partial'), { recursive: true });
+    const stamp = join(t.root, 'update-success-stamp');
+    writeFileSync(stamp, '');
+    const at = (iso: string) => new Date(iso);
+    utimesSync(lists, at('2026-11-10T08:00:00Z'), at('2026-11-10T08:00:00Z'));
+    utimesSync(join(lists, 'partial'), at('2026-11-12T08:00:00Z'), at('2026-11-12T08:00:00Z'));
+    utimesSync(stamp, at('2026-11-11T08:00:00Z'), at('2026-11-11T08:00:00Z'));
+    const paths = { ...noApt(t), listsDir: lists, updateStamp: stamp };
+    expect(aptListsAt(paths)).toBe('2026-11-12T08:00:00.000Z');
+    expect(aptListsAt(paths, '2026-11-15T09:30:00.000Z')).toBe('2026-11-15T09:30:00.000Z');
+    expect(aptListsAt(paths, 'not a time')).toBe('2026-11-12T08:00:00.000Z');
+    expect(aptListsAt(noApt(t))).toBeUndefined();
   });
 
   function aptCtx(t: Tree, cli = '8.3') {

@@ -384,7 +384,8 @@ describe('a terminal in Windows', () => {
     const { windows: _windows, ...desktopCtx } = { ...wsl.ctx, config: t.config, exec: linux.exec };
     const result = await runAction(desktopCtx, 'site.openTerminal', { domain: 'local.shop.com' });
     expect(linux.calls.some((c) => c.file.endsWith('cmd.exe'))).toBe(false);
-    expect(result.ok === false ? result.output : '').toMatch(/desktop session|No terminal found|Opened/);
+    // Whatever the machine running the tests has: no desktop, no terminal, or a terminal the fake does not start.
+    expect(result.ok === false ? result.output : '').toMatch(/desktop session|No terminal found|Opened|did not start/);
   });
 });
 

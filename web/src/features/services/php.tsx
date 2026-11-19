@@ -62,7 +62,7 @@ export function PhpTab({ refresh, onLoading, version: wanted, section }: { refre
     const timer = window.setTimeout(() => scrollToCard(sectionId(section)), 600);
     return () => window.clearTimeout(timer);
   }, [report, section, wanted]);
-  const start = (at: 'machine' | 'version', id: 'php.install' | 'php.upgrade' | 'php.remove' | 'php.package' | 'php.switchToFpm' | 'php.switchToModPhp', input: Record<string, unknown>) => {
+  const start = (at: 'machine' | 'version', id: 'php.install' | 'php.upgrade' | 'php.remove' | 'php.package' | 'php.switchToFpm' | 'php.switchToModPhp' | 'system.aptUpdate', input: Record<string, unknown>) => {
     setJobAt(at);
     void machine.follow(api.startJob(id, input));
   };

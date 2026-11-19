@@ -51,10 +51,12 @@ export interface PhpVersion {
 
 export interface PhpReport {
   checkedAt: string;
+  /** When apt last read its sources, as far as the system shows: its lists' folders, Ubuntu's stamp, or a refresh the panel ran. */
+  listsAt?: string;
   versions: PhpVersion[];
   /** The version sites run when they have no pool of their own: mod_php's, else the command line's. */
   defaultVersion?: string;
-  /** Versions apt can install from the sources it has, not installed yet. */
+  /** Versions apt can install from the sources it has, not installed yet: final releases from PHP_OLDEST_OFFERED up, never a release candidate. */
   available: string[];
   /** Whether apt has a source of PHP versions (the ondrej PPA, or packages.sury.org on Debian), and the family of this system. */
   sources: { php: boolean; distro: 'ubuntu' | 'debian' | 'other' };
@@ -64,8 +66,11 @@ export interface PhpReport {
   modPhp: string[];
 }
 
-/** The PHP versions the panel offers to install when apt has them. */
-export const PHP_OFFERED_VERSIONS = ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4', '8.5'] as const;
+/** The oldest PHP version the panel offers to install; newer ones come from apt as its sources publish them. */
+export const PHP_OLDEST_OFFERED = '7.4';
+
+/** apt's lists older than this many days may miss PHP updates: the PHP tab says so. */
+export const APT_LISTS_STALE_DAYS = 3;
 
 /** One php<version>-<name> package apt has, for a version's module list. */
 export interface PhpPackage {

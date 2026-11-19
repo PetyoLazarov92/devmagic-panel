@@ -47,8 +47,12 @@ export const mockPhpVersions: PhpVersion[] = [
   },
 ];
 
+/** When apt last read its sources in the mockup: yesterday, or when Read them again last ran. */
+export const mockAptLists = { at: Date.now() - 20 * 3_600_000 };
+
 export const mockPhpReport = (): PhpReport => ({
   checkedAt: new Date().toISOString(),
+  listsAt: new Date(mockAptLists.at).toISOString(),
   versions: mockPhpVersions.map((v) => ({ ...v, modules: v.modules.map((m) => ({ ...m })), xdebug: { ...v.xdebug } })),
   defaultVersion: '8.3',
   available: mockPhpAvailable.filter((v) => !mockPhpVersions.some((x) => x.version === v)),

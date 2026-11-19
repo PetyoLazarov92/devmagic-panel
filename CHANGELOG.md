@@ -1,5 +1,11 @@
 # Changelog
 
+### v1.71.0 (2026-11-19)
+* **PHP:** the versions you can add come from apt's sources instead of a fixed list, so a new PHP version shows as soon as its final release is there. Release candidates are never offered, as a version or as an update: only final releases and their patches
+* **PHP:** the PHP tab says when apt last read its sources, since updates show only once apt has read them, and warns after 3 days. **Read them again** runs apt-get update with your sudo password, which goes to sudo once and is never saved; nothing is installed
+* **Machine checks:** PHP updates warns when an installed version has a newer build, with Update PHP 8.3; New PHP version says when a newer final release is out, with Install; apt's sources warns after a week without a read, with a refresh that takes your password
+* Nothing changes in the root scripts or the Windows part. An update installs this release from the panel
+
 ### v1.70.10 (2026-11-18)
 * **New site:** the repo list says what it reads and why, under the list: Checking wandworks for new repos (last check 3 hours ago), or Reading every repo of wandworks for the first time. When nothing is due, nothing spins
 * **New site:** reading every repo of an organization or group (the first time, then every 7 days) is a job, with how far it is (Read 120 of 300 repos) in the list, the top bar and Activity. It goes on whatever page you are on, and coming back follows the one that runs instead of starting another. A quick check for new pushes stays a plain request

@@ -82,8 +82,8 @@ import { cleanStorage } from './storage-clean.js';
 import { helperInstalled, openWindowsTerminal, runHelper, type WindowsHelperCommand, windowsHostsDiffer, windowsHostsPairs, type WindowsPaths, windowsPortproxyDiffers, windowsProfile, windowsReleaseTag } from './windows.js';
 import { interopOn, wslVersion } from './wsl.js';
 import { keyFiles, planAddSshKey, planCopyWindowsKey, planMakeSshKey, sshDir, publicWithoutPassphrase } from './ssh-keys.js';
-import { planSystemInstall, SYSTEM_INSTALL_LABELS } from './system-install.js';
-import { apachePhpVersion, fpmDefaultVersion } from './php/versions.js';
+import { planAptUpdate, planSystemInstall, SYSTEM_INSTALL_LABELS } from './system-install.js';
+import { apachePhpVersion, APT_LISTS_READ_KEY, fpmDefaultVersion } from './php/versions.js';
 import { glabSignIn, useGlabBinary } from './repo-hosts/gitlab.js';
 import { planInstallClaude } from './claude-install.js';
 
@@ -787,6 +787,16 @@ const handlers: { [Id in ActionId]: Handler<Id> } = {
         held,
       ),
       `Install ${items.map((i) => SYSTEM_INSTALL_LABELS[i]).join(', ')}`,
+      'system-install',
+      { secret: { held, label: 'your sudo password' } },
+    );
+  },
+  'system.aptUpdate': async (ctx, { password }) => {
+    const held: HeldPassword = { value: password };
+    return startJob(
+      ctx,
+      planAptUpdate({ exec: ctx.exec, onRead: () => ctx.store.setMeta(APT_LISTS_READ_KEY, new Date().toISOString()) }, held),
+      "Read apt's sources again",
       'system-install',
       { secret: { held, label: 'your sudo password' } },
     );

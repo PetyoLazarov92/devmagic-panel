@@ -1,7 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { PhpModule, PhpPackage, PhpReport, PhpSapi, PhpVersion, PhpXdebug } from '@devmagic-panel/shared';
-import { PHP_OFFERED_VERSIONS, PHP_REQUIRED_MODULES, PHP_SAPIS, PHP_VERSION_PATTERN } from '@devmagic-panel/shared';
+import { PHP_OLDEST_OFFERED, PHP_REQUIRED_MODULES, PHP_SAPIS, PHP_VERSION_PATTERN } from '@devmagic-panel/shared';
 import type { SystemConfig } from '../config.js';
 import type { Executor } from '../exec.js';
 import { hasSapi } from './ini.js';
@@ -128,15 +128,65 @@ export function readPhpModules(config: SystemConfig, version: string, extDir?: s
     });
 }
 
-/** Where apt keeps its sources and what system this is; tests point them at a temp tree. */
+/** Where apt keeps its sources and lists and what system this is; tests point them at a temp tree. */
 export interface AptPaths {
   sourcesDir: string;
   osRelease: string;
+  /** apt's package lists; the folder and its partial folder change when apt update brings anything new. */
+  listsDir: string;
+  /** Touched by Ubuntu and Debian after every apt update that worked, where APT's periodic setup is on. */
+  updateStamp: string;
 }
-export const APT_PATHS: AptPaths = { sourcesDir: '/etc/apt/sources.list.d', osRelease: '/etc/os-release' };
+export const APT_PATHS: AptPaths = {
+  sourcesDir: '/etc/apt/sources.list.d',
+  osRelease: '/etc/os-release',
+  listsDir: '/var/lib/apt/lists',
+  updateStamp: '/var/lib/apt/periodic/update-success-stamp',
+};
+
+/** The panel's database row with the time its own refresh of apt's lists (system.aptUpdate) last worked. */
+export const APT_LISTS_READ_KEY = 'apt-lists-read-at';
+
+/**
+ * When apt last read its sources, as an ISO time: the newest of Ubuntu's
+ * stamp, the lists folder and its partial folder (both change when an
+ * update brings anything new, whoever ran it), and the last refresh the panel
+ * ran itself. Undefined when none can be read. Needs no root.
+ */
+export function aptListsAt(paths: AptPaths, panelReadAt?: string): string | undefined {
+  const times = [paths.updateStamp, paths.listsDir, join(paths.listsDir, 'partial')].map((p) => {
+    try {
+      return statSync(p).mtimeMs;
+    } catch {
+      return 0;
+    }
+  });
+  const panel = panelReadAt ? Date.parse(panelReadAt) : 0;
+  const at = Math.max(...times, Number.isFinite(panel) ? panel : 0);
+  return at > 0 ? new Date(at).toISOString() : undefined;
+}
+
+const byVersion = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+
+/**
+ * The PHP versions apt's sources have, from PHP_OLDEST_OFFERED up, oldest
+ * first: every php<x.y>-common package name, so a new version shows as soon
+ * as the sources publish it. Whether it is a final release is up to its build
+ * (isPrerelease).
+ */
+export async function aptPhpVersions(exec: Executor): Promise<string[]> {
+  const r = await exec('apt-cache', ['pkgnames', 'php'], { timeoutMs: 20_000 });
+  if (r.code !== 0) return [];
+  const found = new Set<string>();
+  for (const line of r.stdout.split('\n')) {
+    const version = /^php(\d\.\d)-common$/.exec(line.trim())?.[1];
+    if (version && byVersion(version, PHP_OLDEST_OFFERED) >= 0) found.add(version);
+  }
+  return [...found].sort(byVersion);
+}
 
 /** Whether apt has a source of PHP versions, and whether this is an Ubuntu (Mint too) or a Debian system. */
-export function readAptSources(paths: AptPaths): PhpReport['sources'] {
+export function readAptSources(paths: Pick<AptPaths, 'sourcesDir' | 'osRelease'>): PhpReport['sources'] {
   let php = false;
   if (existsSync(paths.sourcesDir)) {
     for (const file of readdirSync(paths.sourcesDir).filter((f) => f.endsWith('.list') || f.endsWith('.sources'))) {
@@ -176,6 +226,9 @@ export async function readPhpPackages(exec: Executor, version: string): Promise<
 /** Debian's package version, like 1:8.3.14-1+ubuntu24.04.1, as the PHP release it carries: 8.3.14. */
 export const upstreamVersion = (pkg: string): string => pkg.replace(/^\d+:/, '').split(/[-+~]/)[0] ?? pkg;
 
+/** A build of a release candidate, alpha or beta: Debian marks one with ~ in its upstream part, like 8.6.0~rc3-1. */
+export const isPrerelease = (pkg: string): boolean => (pkg.replace(/^\d+:/, '').split('-')[0] ?? '').includes('~');
+
 /**
  * Installed and candidate package versions from `apt-cache policy`, which
  * needs no root. One call for every version's php<v>-common.
@@ -203,26 +256,39 @@ export async function packageVersions(exec: Executor, versions: string[]): Promi
   return out;
 }
 
-/** The new build apt offers, like 8.3.14, or "a new build of 8.3.6" when only the package revision moved. */
+/**
+ * The new build apt offers, like 8.3.14, or "a new build of 8.3.6" when only
+ * the package revision moved. Final releases and their patches only: a
+ * release candidate is never offered as an update.
+ */
 export function updateLabel(installed?: string, candidate?: string): string | undefined {
-  if (!installed || !candidate || installed === candidate) return undefined;
+  if (!installed || !candidate || installed === candidate || isPrerelease(candidate)) return undefined;
   const from = upstreamVersion(installed);
   const to = upstreamVersion(candidate);
   // apt-cache only offers a candidate it would install; a lower one means the installed came from elsewhere.
-  if (to.localeCompare(from, undefined, { numeric: true }) < 0) return undefined;
-  return to === from ? `a new build of ${to}` : to;
+  if (byVersion(to, from) < 0) return undefined;
+  // From a release candidate installed by hand to the final release of the same version.
+  if (to === from) return isPrerelease(installed) ? to : `a new build of ${to}`;
+  return to;
 }
 
 /** Sites whose pool runs a version, filled in once sites can have their own (see pools). */
 export type SitesByVersion = (version: string) => string[];
 
-export async function phpReport(config: SystemConfig, exec: Executor, sitesByVersion: SitesByVersion = () => [], now = Date.now, apt: AptPaths = APT_PATHS): Promise<PhpReport> {
+export async function phpReport(config: SystemConfig, exec: Executor, sitesByVersion: SitesByVersion = () => [], now = Date.now, apt: AptPaths = APT_PATHS, panelReadAt?: string): Promise<PhpReport> {
   const versions = installedVersions(config);
   const apache = apachePhpVersion(config);
-  const offered = PHP_OFFERED_VERSIONS.filter((v) => !versions.some((i) => i.version === v));
-  const [packages, offers, cli, extDirs, ...fpm] = await Promise.all([
+  const offers = aptPhpVersions(exec).then(async (all) => {
+    const offered = all.filter((v) => !versions.some((i) => i.version === v));
+    const builds = await packageVersions(exec, offered);
+    return offered.filter((v) => {
+      const candidate = builds.get(v)?.candidate;
+      return candidate !== undefined && !isPrerelease(candidate);
+    });
+  });
+  const [packages, available, cli, extDirs, ...fpm] = await Promise.all([
     packageVersions(exec, versions.map((v) => v.version)),
-    packageVersions(exec, offered),
+    offers,
     exec('php', ['-r', 'echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION;']),
     Promise.all(versions.map((v) => (v.sapis.includes('cli') ? extensionDir(exec, v.version) : Promise.resolve(undefined)))),
     ...versions.map((v) => (v.sapis.includes('fpm') ? unitState(exec, `php${v.version}-fpm`) : Promise.resolve('missing' as const))),
@@ -247,9 +313,10 @@ export async function phpReport(config: SystemConfig, exec: Executor, sitesByVer
   });
   const fpmDefault = apache ? undefined : fpmDefaultVersion(config);
   const defaultVersion = apache ?? fpmDefault ?? cliVersion;
-  const available = offered.filter((v) => offers.get(v)?.candidate);
+  const listsAt = aptListsAt(apt, panelReadAt);
   return {
     checkedAt: new Date(now()).toISOString(),
+    ...(listsAt ? { listsAt } : {}),
     versions: list,
     ...(defaultVersion ? { defaultVersion } : {}),
     available,

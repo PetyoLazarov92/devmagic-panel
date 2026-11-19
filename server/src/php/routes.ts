@@ -12,7 +12,7 @@ import { SiteActionRefused, siteFor, SiteNotFoundError } from '../sites/site-act
 import { poolFolder, sitePool } from './pools.js';
 import { readPhpSettings } from './settings.js';
 import { defaultPhpVersion, readSitePhp } from './site-php.js';
-import { apachePhpVersion, APT_PATHS, type AptPaths, installedVersions, phpReport, readPhpPackages, type SitesByVersion } from './versions.js';
+import { apachePhpVersion, APT_LISTS_READ_KEY, APT_PATHS, type AptPaths, installedVersions, phpReport, readPhpPackages, type SitesByVersion } from './versions.js';
 
 export interface PhpRouteDeps {
   config: SystemConfig;
@@ -29,7 +29,7 @@ export interface PhpRouteDeps {
 export function registerPhpRoutes(api: FastifyInstance, deps: PhpRouteDeps): void {
   const known = (version: string) => PHP_VERSION_PATTERN.test(version) && installedVersions(deps.config).some((v) => v.version === version);
 
-  api.get('/api/php', async (): Promise<PhpReport> => phpReport(deps.config, deps.exec, deps.sitesByVersion, Date.now, deps.apt ?? APT_PATHS));
+  api.get('/api/php', async (): Promise<PhpReport> => phpReport(deps.config, deps.exec, deps.sitesByVersion, Date.now, deps.apt ?? APT_PATHS, deps.store?.getMeta(APT_LISTS_READ_KEY)));
   api.get('/api/php/fpm-check', async (): Promise<PhpFpmFinding[]> => readFpmFindings(deps.config));
 
   api.get<{ Params: { version: string } }>('/api/php/:version/ini', async (request, reply): Promise<PhpIniReport> => {

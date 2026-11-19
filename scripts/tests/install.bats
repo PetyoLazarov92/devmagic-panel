@@ -378,6 +378,9 @@ installed_machine() {
 
 @test "under WSL 2 it keeps /etc/hosts, keeps Apache on its address after the panel's site, lingers and installs Mailpit" {
   on_wsl
+  # A home of its own: Mailpit's unit in the real one would make the run skip it.
+  export HOME="$BATS_TEST_TMPDIR/home"
+  mkdir -p "$HOME"
   run "$INSTALL" --dry-run --yes
   [ "$status" -eq 0 ]
   [[ "$output" != *"CALLED "* ]]

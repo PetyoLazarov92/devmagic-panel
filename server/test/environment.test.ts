@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { actions } from '@devmagic-panel/shared';
 import { describe, expect, it } from 'vitest';
@@ -326,6 +326,56 @@ describe('checkEnvironment', () => {
       const fix = byId(report, id)!.fixes![0]!;
       expect(actions[fix.action as keyof typeof actions].input.safeParse(fix.input).success).toBe(true);
     }
+  });
+
+  it('says when a PHP version has a newer final build or a new final version is out, never a release candidate, with fixes the actions take', async () => {
+    const tree = healthyTree();
+    for (const v of ['8.3', '8.4']) {
+      mkdirSync(join(tree.config.PHP_CONF_DIR, v, 'mods-available'), { recursive: true });
+      mkdirSync(join(tree.config.PHP_CONF_DIR, v, 'fpm', 'conf.d'), { recursive: true });
+      mkdirSync(join(tree.config.PHP_LIB_DIR, v, 'sapi'), { recursive: true });
+      writeFileSync(join(tree.config.PHP_LIB_DIR, v, 'sapi', 'fpm'), '');
+    }
+    const policy = (v: string, installed: string, candidate: string) => `php${v}-common:\n  Installed: ${installed}\n  Candidate: ${candidate}\n`;
+    const { exec } = fakeExec({
+      ...healthyResponses(),
+      'php -r': { stdout: '8.4.2' },
+      'php -m': { stdout: 'curl\ngd\nintl\nmbstring\nmysqli\nxml\nzip\nimagick\n' },
+      'apt-cache pkgnames php': { stdout: 'php8.3-common\nphp8.4-common\nphp8.5-common\nphp8.6-common\n' },
+      'apt-cache policy php8.4-common php8.3-common': { stdout: policy('8.4', '8.4.2-1', '8.4.3-1') + policy('8.3', '8.3.14-1', '8.3.15~rc1-1') },
+      'apt-cache policy php8.5-common': { stdout: policy('8.5', '(none)', '8.5.1-1') + policy('8.6', '(none)', '8.6.0~rc3-1') },
+    });
+    const report = await checkEnvironment({ config: tree.config, exec, secrets, paths: tree.hostPaths, dmpRoot: DMP });
+    expect(byId(report, 'php.updates')).toMatchObject({
+      status: 'warn',
+      detail: 'PHP 8.4: 8.4.3 is out (8.4.2 installed)',
+      fixes: [{ action: 'php.upgrade', input: { version: '8.4' }, label: 'Update PHP 8.4' }],
+    });
+    expect(byId(report, 'php.newVersion')).toMatchObject({ status: 'info', detail: expect.stringMatching(/^PHP 8\.5 is out/), fixes: [{ action: 'php.install', input: { version: '8.5' } }] });
+    for (const id of ['php.updates', 'php.newVersion']) {
+      for (const fix of byId(report, id)!.fixes!) expect(actions[fix.action as keyof typeof actions].input.safeParse(fix.input).success).toBe(true);
+    }
+    // apt's lists are not looked at unless their paths are given.
+    expect(byId(report, 'php.aptLists')).toBeUndefined();
+  });
+
+  it("warns when apt last read its sources over a week ago, with a refresh that takes your sudo password", async () => {
+    const tree = healthyTree();
+    const lists = join(tree.root, 'apt-lists');
+    mkdirSync(join(lists, 'partial'), { recursive: true });
+    const ten = new Date('2026-11-09T10:00:00Z');
+    utimesSync(lists, ten, ten);
+    utimesSync(join(lists, 'partial'), ten, ten);
+    const apt = (readAt?: string) => ({ paths: { sourcesDir: lists, osRelease: lists, listsDir: lists, updateStamp: join(lists, 'none') }, readAt: () => readAt, now: () => Date.parse('2026-11-19T10:00:00Z') });
+    const stale = await checkEnvironment({ config: tree.config, exec: fakeExec(healthyResponses()).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, apt: apt() });
+    expect(byId(stale, 'php.aptLists')).toMatchObject({
+      status: 'warn',
+      detail: 'last read 10 days ago: PHP updates since then do not show',
+      fixes: [{ action: 'system.aptUpdate', input: {}, needsPassword: true, confirm: expect.stringContaining('never saves it') }],
+    });
+    expect(actions['system.aptUpdate'].input.safeParse({ ...byId(stale, 'php.aptLists')!.fixes![0]!.input, password: 'x' }).success).toBe(true);
+    const fresh = await checkEnvironment({ config: tree.config, exec: fakeExec(healthyResponses()).exec, secrets, paths: tree.hostPaths, dmpRoot: DMP, apt: apt('2026-11-19T07:00:00Z') });
+    expect(byId(fresh, 'php.aptLists')).toMatchObject({ status: 'ok', detail: 'last read 3 hours ago' });
   });
 
   it('says whether Claude Code is signed in, and with claude.ai', async () => {
